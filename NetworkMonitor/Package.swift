@@ -17,8 +17,7 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("Foundation"),
-                .linkedFramework("ServiceManagement"),
-                .linkedFramework("CoreWLAN")
+                .linkedFramework("ServiceManagement")
             ]
         ),
         .executableTarget(

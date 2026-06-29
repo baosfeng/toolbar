@@ -1,7 +1,6 @@
 import AppKit
 import Darwin
 import ServiceManagement
-import CoreWLAN
 import NetworkMonitorCore
 
 // MARK: - Network Speed Monitor
@@ -342,6 +341,46 @@ final class MenuBarManager: NSObject {
 
     private var logEntries: [NetworkLogEntry] = []
 
+    /// Cached Wi-Fi name, refreshed every 30 seconds.
+    private var cachedWiFi: String?
+    private var lastWiFiFetch: Date = .distantPast
+
+    /// Get Wi-Fi SSID via networksetup (no entitlement needed).
+    private func getWiFiName() -> String? {
+        // Refresh cache every 30 seconds
+        if Date().timeIntervalSince(lastWiFiFetch) < 30, let cached = cachedWiFi {
+            return cached
+        }
+        lastWiFiFetch = Date()
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
+        process.arguments = ["-getairportnetwork", "en0"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        try? process.run()
+        process.waitUntilExit()
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8) else {
+            cachedWiFi = nil
+            return nil
+        }
+
+        // Output: "Current Wi-Fi Network: TP-LINK_5G\n"
+        let prefix = "Current Wi-Fi Network: "
+        if let range = output.range(of: prefix) {
+            let name = output[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+            cachedWiFi = name.isEmpty ? nil : name
+        } else {
+            cachedWiFi = nil
+        }
+        return cachedWiFi
+    }
+
     override init() {
         let savedRx = UInt64(UserDefaults.standard.integer(forKey: Self.totalRxKey))
         let savedTx = UInt64(UserDefaults.standard.integer(forKey: Self.totalTxKey))
@@ -485,7 +524,7 @@ final class MenuBarManager: NSObject {
         processMonitor.poll()
         let processes = processMonitor.processSpeeds
         let ip = getLocalIPAddress()
-        let wifi = CWWiFiClient.shared().interface()?.ssid()
+        let wifi = getWiFiName()
 
         guard let menu = statusItem.menu else { return }
 
@@ -574,7 +613,7 @@ final class MenuBarManager: NSObject {
                 downSpeed: max(monitor.downloadSpeed, 0),
                 upSpeed: max(monitor.uploadSpeed, 0),
                 totalRx: monitor.totalRx, totalTx: monitor.totalTx,
-                ip: getLocalIPAddress(), wifi: CWWiFiClient.shared().interface()?.ssid(),
+                ip: getLocalIPAddress(), wifi: getWiFiName(),
                 processes: processMonitor.processSpeeds
             )
             panel.makeKeyAndOrderFront(nil)
@@ -584,7 +623,7 @@ final class MenuBarManager: NSObject {
 
     @objc private func copyNetworkInfo() {
         let ip = getLocalIPAddress() ?? "未连接"
-        let wifi = CWWiFiClient.shared().interface()?.ssid() ?? "—"
+        let wifi = getWiFiName() ?? "—"
         let down = formatBytesFull(UInt64(monitor.downloadSpeed)) + "/s"
         let up = formatBytesFull(UInt64(monitor.uploadSpeed)) + "/s"
         let totalDown = formatBytesFull(monitor.totalRx)
