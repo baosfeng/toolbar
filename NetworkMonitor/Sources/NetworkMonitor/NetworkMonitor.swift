@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import ServiceManagement
+import CoreWLAN
 import NetworkMonitorCore
 
 // MARK: - Network Speed Monitor
@@ -105,12 +106,20 @@ final class ProcessNetworkMonitor {
     }
 }
 
-// MARK: - Two-Line Label View
+// MARK: - Dual-Label Status Bar View (with color)
 
 @MainActor
 final class DualLabelView: NSView {
-    let uploadLabel = NSTextField(labelWithString: "▲ 0")
-    let downloadLabel = NSTextField(labelWithString: "▼ 0")
+    let uploadLabel: NSTextField = {
+        let l = NSTextField(labelWithString: "▲ 0")
+        l.textColor = .systemOrange
+        return l
+    }()
+    let downloadLabel: NSTextField = {
+        let l = NSTextField(labelWithString: "▼ 0")
+        l.textColor = .systemGreen
+        return l
+    }()
 
     override var intrinsicContentSize: NSSize {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
@@ -137,7 +146,6 @@ final class DualLabelView: NSView {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
         for label in [uploadLabel, downloadLabel] {
             label.font = font
-            label.textColor = .labelColor
             label.alignment = .center
             label.isBezeled = false
             label.isEditable = false
@@ -163,6 +171,139 @@ final class DualLabelView: NSView {
     }
 }
 
+// MARK: - Detail Panel
+
+@MainActor
+final class DetailPanel: NSPanel {
+    private let downSpeedLabel = NSTextField(labelWithString: "↓ 0 KB/s")
+    private let upSpeedLabel = NSTextField(labelWithString: "↑ 0 KB/s")
+    private let totalLabel = NSTextField(labelWithString: "总计：")
+    private let ipLabel = NSTextField(labelWithString: "IP: —")
+    private let wifiLabel = NSTextField(labelWithString: "Wi-Fi: —")
+    private let processList = NSTextField(labelWithString: "")
+
+    init() {
+        super.init(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 360),
+            styleMask: [.titled, .closable, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+
+        title = "网络监控详情"
+        isFloatingPanel = true
+        level = .floating
+        hidesOnDeactivate = false
+
+        setupViews()
+    }
+
+    private func setupViews() {
+        let bigFont = NSFont.monospacedDigitSystemFont(ofSize: 28, weight: .bold)
+        let normalFont = NSFont.systemFont(ofSize: 13)
+        let smallFont = NSFont.systemFont(ofSize: 11)
+
+        // Download speed — green
+        downSpeedLabel.font = bigFont
+        downSpeedLabel.textColor = .systemGreen
+        downSpeedLabel.alignment = .center
+        downSpeedLabel.isBezeled = false
+        downSpeedLabel.isEditable = false
+        downSpeedLabel.drawsBackground = false
+        downSpeedLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView?.addSubview(downSpeedLabel)
+
+        // Upload speed — orange
+        upSpeedLabel.font = bigFont
+        upSpeedLabel.textColor = .systemOrange
+        upSpeedLabel.alignment = .center
+        upSpeedLabel.isBezeled = false
+        upSpeedLabel.isEditable = false
+        upSpeedLabel.drawsBackground = false
+        upSpeedLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView?.addSubview(upSpeedLabel)
+
+        let separator = NSBox()
+        separator.boxType = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        contentView?.addSubview(separator)
+
+        for label in [totalLabel, ipLabel, wifiLabel] {
+            label.font = normalFont
+            label.textColor = .secondaryLabelColor
+            label.isBezeled = false
+            label.isEditable = false
+            label.drawsBackground = false
+            label.translatesAutoresizingMaskIntoConstraints = false
+            contentView?.addSubview(label)
+        }
+
+        // Process list
+        processList.font = smallFont
+        processList.textColor = .labelColor
+        processList.isBezeled = false
+        processList.isEditable = false
+        processList.drawsBackground = false
+        processList.translatesAutoresizingMaskIntoConstraints = false
+        contentView?.addSubview(processList)
+
+        guard let content = contentView else { return }
+
+        NSLayoutConstraint.activate([
+            downSpeedLabel.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
+            downSpeedLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            downSpeedLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+
+            upSpeedLabel.topAnchor.constraint(equalTo: downSpeedLabel.bottomAnchor, constant: 4),
+            upSpeedLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            upSpeedLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+
+            separator.topAnchor.constraint(equalTo: upSpeedLabel.bottomAnchor, constant: 12),
+            separator.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            separator.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+
+            ipLabel.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
+            ipLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            ipLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+
+            wifiLabel.topAnchor.constraint(equalTo: ipLabel.bottomAnchor, constant: 4),
+            wifiLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            wifiLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+
+            totalLabel.topAnchor.constraint(equalTo: wifiLabel.bottomAnchor, constant: 4),
+            totalLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            totalLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+
+            processList.topAnchor.constraint(equalTo: totalLabel.bottomAnchor, constant: 10),
+            processList.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            processList.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            processList.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -16),
+        ])
+    }
+
+    func update(downSpeed: Double, upSpeed: Double, totalRx: UInt64, totalTx: UInt64,
+                ip: String?, wifi: String?, processes: [ProcessNetUsage]) {
+        let downFull = formatBytesFull(UInt64(downSpeed)) + "/s"
+        let upFull = formatBytesFull(UInt64(upSpeed)) + "/s"
+        downSpeedLabel.stringValue = "↓ \(downFull)"
+        upSpeedLabel.stringValue = "↑ \(upFull)"
+        ipLabel.stringValue = "IP: \(ip ?? "未连接")"
+        wifiLabel.stringValue = "Wi-Fi: \(wifi ?? "—")"
+        totalLabel.stringValue = "总计：↓\(formatBytesFull(totalRx))  ↑\(formatBytesFull(totalTx))"
+
+        // Top 15 processes
+        let top = processes.prefix(15)
+        if top.isEmpty {
+            processList.stringValue = "暂无活跃流量"
+        } else {
+            let lines = top.map { p -> String in
+                "\(p.name)  ↓\(formatSpeedShort(Double(p.bytesIn)))  ↑\(formatSpeedShort(Double(p.bytesOut)))"
+            }
+            processList.stringValue = lines.joined(separator: "\n")
+        }
+    }
+}
+
 // MARK: - Menu Bar Manager
 
 @MainActor
@@ -172,20 +313,18 @@ final class MenuBarManager: NSObject {
     private let monitor = NetworkSpeedMonitor()
     private let processMonitor = ProcessNetworkMonitor()
     private var timer: Timer?
+    private var detailPanel: DetailPanel?
 
     private let processSectionTag: Int = 2000
     private let launchAtStartupTag: Int = 3001
     private let maxProcessItems: Int = 10
 
-    /// UserDefaults key for launch-at-startup preference.
     private static let launchPrefKey = "launchAtStartup"
 
-    /// Trend history (last 60 seconds)
     private var downHistory: [Double] = []
     private var upHistory: [Double] = []
     private let maxHistory: Int = 60
 
-    /// Log entries for export
     private var logEntries: [NetworkLogEntry] = []
 
     override init() {
@@ -207,6 +346,11 @@ final class MenuBarManager: NSObject {
             labelView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
             labelView.bottomAnchor.constraint(equalTo: button.bottomAnchor),
         ])
+
+        // Double-click opens detail panel
+        let clickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(toggleDetailPanel))
+        clickRecognizer.numberOfClicksRequired = 2
+        button.addGestureRecognizer(clickRecognizer)
     }
 
     private func setupMenu() {
@@ -221,6 +365,11 @@ final class MenuBarManager: NSObject {
         ipItem.tag = 1002
         menu.addItem(ipItem)
 
+        let wifiItem = NSMenuItem(title: "Wi-Fi: —", action: nil, keyEquivalent: "")
+        wifiItem.isEnabled = false
+        wifiItem.tag = 1004
+        menu.addItem(wifiItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let detailsItem = NSMenuItem(title: "▼ 0 KB/s  ▲ 0 KB/s", action: nil, keyEquivalent: "")
@@ -228,7 +377,6 @@ final class MenuBarManager: NSObject {
         detailsItem.tag = 1001
         menu.addItem(detailsItem)
 
-        // Trend mini-chart
         let trendItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         trendItem.isEnabled = false
         trendItem.tag = 1003
@@ -236,7 +384,6 @@ final class MenuBarManager: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
-        // Process list header
         let procHeader = NSMenuItem(title: "活跃进程", action: nil, keyEquivalent: "")
         procHeader.isEnabled = false
         procHeader.tag = processSectionTag
@@ -244,12 +391,14 @@ final class MenuBarManager: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
-        // Copy info
+        let detailItem = NSMenuItem(title: "打开详情面板", action: #selector(toggleDetailPanel), keyEquivalent: "d")
+        detailItem.target = self
+        menu.addItem(detailItem)
+
         let copyItem = NSMenuItem(title: "复制网络信息", action: #selector(copyNetworkInfo), keyEquivalent: "c")
         copyItem.target = self
         menu.addItem(copyItem)
 
-        // Export log
         let exportItem = NSMenuItem(title: "导出流量日志…", action: #selector(exportLog), keyEquivalent: "e")
         exportItem.target = self
         menu.addItem(exportItem)
@@ -293,62 +442,53 @@ final class MenuBarManager: NSObject {
 
         labelView.setSpeeds(upload: upStr, download: downStr)
 
-        // Trend history
         downHistory.append(downSpeed)
         upHistory.append(upSpeed)
         if downHistory.count > maxHistory { downHistory.removeFirst() }
         if upHistory.count > maxHistory { upHistory.removeFirst() }
 
-        // Log every 5 seconds to keep file size manageable
         let shouldLog = logEntries.isEmpty || Date().timeIntervalSince(logEntries.last!.timestamp) >= 5
         if shouldLog {
             logEntries.append(NetworkLogEntry(
                 timestamp: Date(),
-                downSpeed: downSpeed,
-                upSpeed: upSpeed,
-                totalRx: monitor.totalRx,
-                totalTx: monitor.totalTx,
+                downSpeed: downSpeed, upSpeed: upSpeed,
+                totalRx: monitor.totalRx, totalTx: monitor.totalTx,
                 ip: getLocalIPAddress()
             ))
         }
 
-        // Per-process
         processMonitor.poll()
         let processes = processMonitor.processSpeeds
+        let ip = getLocalIPAddress()
+        let wifi = CWWiFiClient.shared().interface()?.ssid()
 
         guard let menu = statusItem.menu else { return }
 
-        // Launch-at-startup
         if let launchItem = menu.item(withTag: launchAtStartupTag) {
             launchItem.state = isLaunchAtStartupEnabled ? .on : .off
         }
 
-        // IP address
         if let ipItem = menu.item(withTag: 1002) {
-            if let ip = getLocalIPAddress() {
-                ipItem.title = "IP: \(ip)"
-            } else {
-                ipItem.title = "IP: 未连接"
-            }
+            ipItem.title = ip.map { "IP: \($0)" } ?? "IP: 未连接"
         }
 
-        // Detail item
+        if let wifiItem = menu.item(withTag: 1004) {
+            wifiItem.title = wifi.map { "Wi-Fi: \($0)" } ?? "Wi-Fi: 未连接"
+        }
+
         if let detailsItem = menu.item(withTag: 1001) {
             let downFull = formatBytesFull(UInt64(downSpeed)) + "/s"
             let upFull = formatBytesFull(UInt64(upSpeed)) + "/s"
             detailsItem.title = "▼ \(downFull)  ▲ \(upFull)"
         }
 
-        // Trend sparkline
         if let trendItem = menu.item(withTag: 1003) {
             let totalHistory = zip(downHistory, upHistory).map { $0 + $1 }
             if !totalHistory.isEmpty {
-                let line = sparkline(from: totalHistory)
-                trendItem.title = "趋势  \(line)"
+                trendItem.title = "趋势  \(sparkline(from: totalHistory))"
             }
         }
 
-        // Header total
         if let headerItem = menu.item(at: 0) {
             let totalDown = formatBytesFull(monitor.totalRx)
             let totalUp = formatBytesFull(monitor.totalTx)
@@ -356,6 +496,15 @@ final class MenuBarManager: NSObject {
         }
 
         updateProcessItems(menu: menu, processes: processes)
+
+        // Update detail panel if open
+        if let panel = detailPanel, panel.isVisible {
+            panel.update(
+                downSpeed: downSpeed, upSpeed: upSpeed,
+                totalRx: monitor.totalRx, totalTx: monitor.totalTx,
+                ip: ip, wifi: wifi, processes: processes
+            )
+        }
     }
 
     private func updateProcessItems(menu: NSMenu, processes: [ProcessNetUsage]) {
@@ -390,8 +539,27 @@ final class MenuBarManager: NSObject {
 
     // MARK: - Actions
 
+    @objc private func toggleDetailPanel() {
+        if let panel = detailPanel, panel.isVisible {
+            panel.close()
+            detailPanel = nil
+        } else {
+            let panel = DetailPanel()
+            panel.update(
+                downSpeed: max(monitor.downloadSpeed, 0),
+                upSpeed: max(monitor.uploadSpeed, 0),
+                totalRx: monitor.totalRx, totalTx: monitor.totalTx,
+                ip: getLocalIPAddress(), wifi: CWWiFiClient.shared().interface()?.ssid(),
+                processes: processMonitor.processSpeeds
+            )
+            panel.makeKeyAndOrderFront(nil)
+            detailPanel = panel
+        }
+    }
+
     @objc private func copyNetworkInfo() {
         let ip = getLocalIPAddress() ?? "未连接"
+        let wifi = CWWiFiClient.shared().interface()?.ssid() ?? "—"
         let down = formatBytesFull(UInt64(monitor.downloadSpeed)) + "/s"
         let up = formatBytesFull(UInt64(monitor.uploadSpeed)) + "/s"
         let totalDown = formatBytesFull(monitor.totalRx)
@@ -400,6 +568,7 @@ final class MenuBarManager: NSObject {
         let text = """
         网络监控
         IP: \(ip)
+        Wi-Fi: \(wifi)
         下载: \(down)
         上传: \(up)
         累计下载: \(totalDown)
@@ -439,7 +608,6 @@ final class MenuBarManager: NSObject {
         SMAppService.mainApp.status == .enabled
     }
 
-    /// On first launch, re-register if the user had previously enabled this.
     private func restoreLaunchAtStartup() {
         guard UserDefaults.standard.bool(forKey: Self.launchPrefKey) else { return }
         if SMAppService.mainApp.status != .enabled {
