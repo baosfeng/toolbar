@@ -239,7 +239,7 @@ final class MenuBarManager: NSObject {
     private func setupMenu() {
         let menu = NSMenu()
 
-        let headerItem = NSMenuItem(title: "Network Monitor", action: nil, keyEquivalent: "")
+        let headerItem = NSMenuItem(title: "网络监控", action: nil, keyEquivalent: "")
         headerItem.isEnabled = false
         menu.addItem(headerItem)
 
@@ -262,7 +262,7 @@ final class MenuBarManager: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
-        let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -308,7 +308,7 @@ final class MenuBarManager: NSObject {
         if let headerItem = menu.item(at: 0) {
             let totalDown = formatter.string(fromByteCount: Int64(monitor.totalRx))
             let totalUp = formatter.string(fromByteCount: Int64(monitor.totalTx))
-            headerItem.title = "Total: ↓\(totalDown)  ↑\(totalUp)"
+            headerItem.title = "总计：↓\(totalDown)  ↑\(totalUp)"
         }
 
         // Rebuild process items
