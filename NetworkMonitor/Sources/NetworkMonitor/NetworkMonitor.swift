@@ -364,7 +364,6 @@ final class MenuBarManager: NSObject {
         super.init()
         setupButton()
         setupMenu()
-        restoreLaunchAtStartup()
         setupTimer()
     }
 
@@ -649,16 +648,6 @@ final class MenuBarManager: NSObject {
 
     private var isLaunchAtStartupEnabled: Bool {
         SMAppService.mainApp.status == .enabled
-    }
-
-    private func restoreLaunchAtStartup() {
-        guard UserDefaults.standard.bool(forKey: Self.launchPrefKey) else { return }
-        // 先清理可能残留的旧启动项（重装后路径/签名变化会导致重复），再重新注册
-        try? SMAppService.mainApp.unregister()
-        try? SMAppService.mainApp.register()
-        if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
-            item.state = isLaunchAtStartupEnabled ? .on : .off
-        }
     }
 
     @objc private func toggleLaunchAtStartup() {
