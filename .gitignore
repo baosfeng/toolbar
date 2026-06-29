@@ -1,2 +1,30 @@
 .reasonix
 .scan-cache/
+
+# Swift Package Manager
+.build/
+.build-*
+Packages/
+*.swp
+*.swo
+*~
+
+# Xcode
+*.xcworkspace
+*.xcuserdata
+DerivedData/
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build artifacts
+dist/*.dmg
+*.ipa
+*.dSYM.zip
+*.dSYM
