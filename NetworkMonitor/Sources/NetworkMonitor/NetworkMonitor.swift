@@ -177,6 +177,9 @@ final class MenuBarManager: NSObject {
     private let launchAtStartupTag: Int = 3001
     private let maxProcessItems: Int = 10
 
+    /// UserDefaults key for launch-at-startup preference.
+    private static let launchPrefKey = "launchAtStartup"
+
     /// Trend history (last 60 seconds)
     private var downHistory: [Double] = []
     private var upHistory: [Double] = []
@@ -190,6 +193,7 @@ final class MenuBarManager: NSObject {
         super.init()
         setupButton()
         setupMenu()
+        restoreLaunchAtStartup()
         setupTimer()
     }
 
@@ -435,12 +439,25 @@ final class MenuBarManager: NSObject {
         SMAppService.mainApp.status == .enabled
     }
 
+    /// On first launch, re-register if the user had previously enabled this.
+    private func restoreLaunchAtStartup() {
+        guard UserDefaults.standard.bool(forKey: Self.launchPrefKey) else { return }
+        if SMAppService.mainApp.status != .enabled {
+            try? SMAppService.mainApp.register()
+        }
+        if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
+            item.state = isLaunchAtStartupEnabled ? .on : .off
+        }
+    }
+
     @objc private func toggleLaunchAtStartup() {
         do {
             if isLaunchAtStartupEnabled {
                 try SMAppService.mainApp.unregister()
+                UserDefaults.standard.set(false, forKey: Self.launchPrefKey)
             } else {
                 try SMAppService.mainApp.register()
+                UserDefaults.standard.set(true, forKey: Self.launchPrefKey)
             }
         } catch {
             print("Failed to toggle launch-at-startup: \(error)")
