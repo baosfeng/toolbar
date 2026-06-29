@@ -555,7 +555,11 @@ final class MenuBarManager: NSObject {
         for process in top {
             let downStr = formatSpeedShort(Double(process.bytesIn))
             let upStr = formatSpeedShort(Double(process.bytesOut))
-            let title = "\(process.name)  ▼\(downStr)  ▲\(upStr)"
+            // Truncate process name to 12 chars so the line doesn't widen the menu
+            let shortName = process.name.count > 12
+                ? String(process.name.prefix(11)) + "…"
+                : process.name
+            let title = "\(shortName)  ▼\(downStr)  ▲\(upStr)"
             let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             item.isEnabled = false
             item.tag = processSectionTag + 1
@@ -649,9 +653,10 @@ final class MenuBarManager: NSObject {
 
     private func restoreLaunchAtStartup() {
         guard UserDefaults.standard.bool(forKey: Self.launchPrefKey) else { return }
-        // Always re-register on launch — handles updates where the old
-        // login item was invalidated by a changed app bundle signature.
-        try? SMAppService.mainApp.register()
+        // Only register if not already enabled — avoid duplicate login items
+        if SMAppService.mainApp.status != .enabled {
+            try? SMAppService.mainApp.register()
+        }
         if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
             item.state = isLaunchAtStartupEnabled ? .on : .off
         }
