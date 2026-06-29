@@ -8,12 +8,20 @@ let package = Package(
         .macOS(.v14)
     ],
     targets: [
+        .target(
+            name: "NetworkMonitorCore"
+        ),
         .executableTarget(
             name: "NetworkMonitor",
+            dependencies: ["NetworkMonitorCore"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("Foundation")
             ]
+        ),
+        .executableTarget(
+            name: "TestRunner",
+            dependencies: ["NetworkMonitorCore"]
         ),
     ],
     swiftLanguageModes: [.v6]

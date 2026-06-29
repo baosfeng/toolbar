@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import NetworkMonitorCore
 
 // MARK: - Network Speed Monitor
 
@@ -83,8 +84,21 @@ final class StatusBarView: NSView {
     private let uploadLabel = NSTextField(labelWithString: "▲ 0")
     private let downloadLabel = NSTextField(labelWithString: "▼ 0")
 
-    /// Reference to the status item so we can show the menu.
-    weak var statusItem: NSStatusItem?
+    /// The menu to show when the view is clicked.
+    weak var statusMenu: NSMenu?
+
+    // MARK: - Intrinsic size (used by NSStatusItem to set width)
+
+    override var intrinsicContentSize: NSSize {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        // Widest possible text: "▲ 1.2G" / "▼ 1.2G" → roughly 54pt wide
+        let sample = "▲ 1.2G" as NSString
+        let textWidth = sample.size(withAttributes: [.font: font]).width
+        let width = ceil(textWidth) + 12  // 4pt leading + 4pt trailing + some margin
+        let lineHeight = font.leading + font.capHeight + font.descender + 2
+        let height = ceil(lineHeight * 2) + 4  // two lines + top/bottom padding
+        return NSSize(width: width, height: height)
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -97,7 +111,6 @@ final class StatusBarView: NSView {
     }
 
     private func setup() {
-        // Make the view transparent
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
 
@@ -130,16 +143,16 @@ final class StatusBarView: NSView {
     func setSpeeds(upload: String, download: String) {
         uploadLabel.stringValue = "▲ \(upload)"
         downloadLabel.stringValue = "▼ \(download)"
+        invalidateIntrinsicContentSize()
     }
 
     // MARK: - Mouse handling
 
     override func mouseDown(with event: NSEvent) {
-        statusItem?.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: bounds.height + 5), in: self)
-    }
-
-    override func rightMouseDown(with event: NSEvent) {
-        mouseDown(with: event)
+        guard let m = statusMenu else { return }
+        // Position the menu below the status item
+        let point = NSPoint(x: 0, y: bounds.height + 5)
+        m.popUp(positioning: nil, at: point, in: self)
     }
 }
 
@@ -155,7 +168,6 @@ final class MenuBarManager: NSObject {
     /// Formats full byte counts (e.g., "1.2 MB").
     private let formatter: ByteCountFormatter = {
         let f = ByteCountFormatter()
-        // Use decimal (1000-based) to match networking conventions and formatSpeedShort
         f.countStyle = .decimal
         f.includesUnit = true
         f.includesCount = true
@@ -167,9 +179,11 @@ final class MenuBarManager: NSObject {
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
-        statusView.statusItem = statusItem
-        statusItem.view = statusView
         setupMenu()
+        statusView.statusMenu = statusItem.menu
+        statusItem.view = statusView
+        // Ensure the view gets the correct initial size
+        statusView.invalidateIntrinsicContentSize()
         setupTimer()
     }
 
@@ -200,7 +214,6 @@ final class MenuBarManager: NSObject {
                 self?.update()
             }
         }
-        // Use .common mode so the timer fires even while the menu is open
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }
@@ -211,7 +224,6 @@ final class MenuBarManager: NSObject {
         let downSpeed = max(monitor.downloadSpeed, 0)
         let upSpeed = max(monitor.uploadSpeed, 0)
 
-        // Format speeds for menu bar display
         let downStr = formatSpeedShort(downSpeed)
         let upStr = formatSpeedShort(upSpeed)
 
@@ -231,21 +243,6 @@ final class MenuBarManager: NSObject {
             let totalDown = formatter.string(fromByteCount: Int64(monitor.totalRx))
             let totalUp = formatter.string(fromByteCount: Int64(monitor.totalTx))
             headerItem.title = "Total: ↓\(totalDown)  ↑\(totalUp)"
-        }
-    }
-
-    /// Formats a byte-per-second value into a short string like "1.2M", "340K", "500B".
-    private func formatSpeedShort(_ bps: Double) -> String {
-        let absBps = abs(bps)
-        switch absBps {
-        case 1_000_000_000...:
-            return String(format: "%.1fG", absBps / 1_000_000_000)
-        case 1_000_000...:
-            return String(format: "%.1fM", absBps / 1_000_000)
-        case 1_000...:
-            return String(format: "%.0fK", absBps / 1_000)
-        default:
-            return String(format: "%.0fB", absBps)
         }
     }
 
