@@ -37,6 +37,10 @@ final class NetworkSpeedMonitor {
             previousData[iface] = (rx, tx)
         }
 
+        // Remove interfaces that are no longer active
+        let currentIfaces = Set(current.keys)
+        previousData = previousData.filter { currentIfaces.contains($0.key) }
+
         downloadSpeed = Double(totalRxDiff) / elapsed
         uploadSpeed = Double(totalTxDiff) / elapsed
         previousTimestamp = now
@@ -103,6 +107,10 @@ final class ProcessNetworkMonitor {
         }
         speeds.sort(by: { $0.total > $1.total })
         processSpeeds = speeds
+
+        // Remove stale PIDs that are no longer in the snapshot
+        let currentPids = Set(snapshot.map { $0.pid })
+        previous = previous.filter { currentPids.contains($0.key) }
     }
 }
 
@@ -455,6 +463,10 @@ final class MenuBarManager: NSObject {
                 totalRx: monitor.totalRx, totalTx: monitor.totalTx,
                 ip: getLocalIPAddress()
             ))
+            // Keep at most 1000 entries (~1.4 hours of 5-second logging)
+            if logEntries.count > 1000 {
+                logEntries.removeFirst(logEntries.count - 1000)
+            }
         }
 
         processMonitor.poll()
