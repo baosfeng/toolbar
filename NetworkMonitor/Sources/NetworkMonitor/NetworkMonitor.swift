@@ -74,11 +74,81 @@ final class NetworkSpeedMonitor {
     }
 }
 
+// MARK: - Custom Status Bar View
+
+/// A two-line custom view for the menu bar button.
+/// Top line: upload speed (▲); bottom line: download speed (▼).
+@MainActor
+final class StatusBarView: NSView {
+    private let uploadLabel = NSTextField(labelWithString: "▲ 0")
+    private let downloadLabel = NSTextField(labelWithString: "▼ 0")
+
+    /// Reference to the status item so we can show the menu.
+    weak var statusItem: NSStatusItem?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+
+    private func setup() {
+        // Make the view transparent
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        for label in [uploadLabel, downloadLabel] {
+            label.font = font
+            label.textColor = .labelColor
+            label.alignment = .center
+            label.isBezeled = false
+            label.isEditable = false
+            label.drawsBackground = false
+            label.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(label)
+        }
+
+        // Layout: upload on top, download below
+        NSLayoutConstraint.activate([
+            uploadLabel.topAnchor.constraint(equalTo: topAnchor, constant: 1),
+            uploadLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            uploadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+
+            downloadLabel.topAnchor.constraint(equalTo: uploadLabel.bottomAnchor, constant: -2),
+            downloadLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            downloadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            downloadLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+        ])
+    }
+
+    /// Update the displayed speeds.
+    func setSpeeds(upload: String, download: String) {
+        uploadLabel.stringValue = "▲ \(upload)"
+        downloadLabel.stringValue = "▼ \(download)"
+    }
+
+    // MARK: - Mouse handling
+
+    override func mouseDown(with event: NSEvent) {
+        statusItem?.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: bounds.height + 5), in: self)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        mouseDown(with: event)
+    }
+}
+
 // MARK: - Menu Bar Manager
 
 @MainActor
 final class MenuBarManager: NSObject {
     private let statusItem: NSStatusItem
+    private let statusView = StatusBarView()
     private let monitor = NetworkSpeedMonitor()
     private var timer: Timer?
 
@@ -97,13 +167,13 @@ final class MenuBarManager: NSObject {
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+        statusView.statusItem = statusItem
+        statusItem.view = statusView
         setupMenu()
         setupTimer()
     }
 
     private func setupMenu() {
-        statusItem.button?.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-
         let menu = NSMenu()
 
         let headerItem = NSMenuItem(title: "Network Monitor", action: nil, keyEquivalent: "")
@@ -122,9 +192,6 @@ final class MenuBarManager: NSObject {
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
 
         statusItem.menu = menu
-
-        // Initial display
-        statusItem.button?.title = "⟐ 0"
     }
 
     private func setupTimer() {
@@ -148,8 +215,8 @@ final class MenuBarManager: NSObject {
         let downStr = formatSpeedShort(downSpeed)
         let upStr = formatSpeedShort(upSpeed)
 
-        // Update menu bar title
-        statusItem.button?.title = "▼\(downStr) ▲\(upStr)"
+        // Update two-line custom view: upload on top, download below
+        statusView.setSpeeds(upload: upStr, download: downStr)
 
         // Update dropdown detail menu items
         guard let menu = statusItem.menu else { return }
