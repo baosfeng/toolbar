@@ -88,4 +88,35 @@ assertEqual(header, nil, "header should return nil")
 let empty = parseNettopLine("")
 assertEqual(empty, nil, "empty should return nil")
 
+// MARK: - Test sparkline
+
+print("\n🧪 Testing sparkline...")
+
+// Empty
+assertEqual(sparkline(from: []), "", "empty")
+
+// Equal values → all lowest
+let allSame = sparkline(from: [0, 0, 0])
+assertEqual(allSame, "▁▁▁", "all zero")
+
+// Linear range
+let linear = sparkline(from: [0, 1, 2, 3, 4, 5, 6, 7])
+assertEqual(linear, "▁▂▃▄▅▆▇█", "linear 0-7")
+
+// Single value
+let single = sparkline(from: [42])
+assertEqual(single, "█", "single peak")
+
+// Descending
+let desc = sparkline(from: [5, 4, 3, 2, 1, 0])
+assertEqual(desc, "█▆▅▃▂▁", "descending")
+
+// MARK: - Test formatBytesFull
+
+print("\n🧪 Testing formatBytesFull...")
+assertEqual(formatBytesFull(0), "Zero KB")
+assertEqual(formatBytesFull(1024), "1 KB")
+assertEqual(formatBytesFull(1_000_000), "1 MB")
+assertEqual(formatBytesFull(2_500_000_000), "2.5 GB")
+
 print("\n🎉 所有测试通过！")

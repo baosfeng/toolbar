@@ -5,22 +5,16 @@ import NetworkMonitorCore
 
 // MARK: - Network Speed Monitor
 
-/// Monitors network interface byte counters and computes upload/download speeds.
 @MainActor
 final class NetworkSpeedMonitor {
     private var previousData: [String: (rx: UInt64, tx: UInt64)] = [:]
     private var previousTimestamp: Date = Date()
 
-    /// Current download speed in bytes per second.
     private(set) var downloadSpeed: Double = 0
-    /// Current upload speed in bytes per second.
     private(set) var uploadSpeed: Double = 0
-    /// Total bytes received since app launch.
     private(set) var totalRx: UInt64 = 0
-    /// Total bytes sent since app launch.
     private(set) var totalTx: UInt64 = 0
 
-    /// Polls the latest speeds. Call this periodically (e.g., every 1s).
     func poll() {
         let current = readInterfaceBytes()
         let now = Date()
@@ -47,20 +41,15 @@ final class NetworkSpeedMonitor {
         previousTimestamp = now
     }
 
-    /// Reads bytes received/sent for all active non-loopback interfaces using getifaddrs.
     private func readInterfaceBytes() -> [String: (rx: UInt64, tx: UInt64)] {
         var result: [String: (rx: UInt64, tx: UInt64)] = [:]
-
         var ifaddr: UnsafeMutablePointer<ifaddrs>? = nil
-        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else {
-            return result
-        }
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return result }
         defer { freeifaddrs(ifaddr) }
 
         var ptr: UnsafeMutablePointer<ifaddrs>? = first
         while let current = ptr {
             let name = String(cString: current.pointee.ifa_name)
-            // Skip loopback
             if name != "lo0",
                let addr = current.pointee.ifa_addr,
                addr.pointee.sa_family == AF_LINK,
@@ -71,62 +60,46 @@ final class NetworkSpeedMonitor {
             }
             ptr = current.pointee.ifa_next
         }
-
         return result
     }
 }
 
 // MARK: - Per-Process Network Monitor
 
-/// Tracks per-process network usage by polling `nettop` and computing deltas.
 @MainActor
 final class ProcessNetworkMonitor {
-    /// Previous cumulative snapshot: pid → (bytesIn, bytesOut)
     private var previous: [Int32: (UInt64, UInt64)] = [:]
-
-    /// Current process speeds: pid → (downloadSpeed, uploadSpeed) in B/s
     private(set) var processSpeeds: [ProcessNetUsage] = []
-
-    /// Time of last successful update.
     private var lastUpdateTime: Date?
 
-    /// Fetch latest snapshot and compute deltas. Should be called every ~1s.
     func poll() {
-        guard let snapshot = try? runNettopSnapshot(), !snapshot.isEmpty else {
-            return
-        }
+        guard let snapshot = try? runNettopSnapshot(), !snapshot.isEmpty else { return }
 
         let now = Date()
         let elapsed: Double
         if let last = lastUpdateTime {
             elapsed = now.timeIntervalSince(last)
         } else {
-            elapsed = 1.0  // assume 1s on first run
+            elapsed = 1.0
         }
         lastUpdateTime = now
 
         var speeds: [ProcessNetUsage] = []
-
         for current in snapshot {
             if let prev = previous[current.pid] {
-                let deltaIn = current.bytesIn >= prev.0 ? current.bytesIn - prev.0 : current.bytesIn
-                let deltaOut = current.bytesOut >= prev.1 ? current.bytesOut - prev.1 : current.bytesOut
+                let deltaIn = current.bytesIn >= prev.0 ? current.bytesIn - prev.0 : 0
+                let deltaOut = current.bytesOut >= prev.1 ? current.bytesOut - prev.1 : 0
                 let speedIn = Double(deltaIn) / elapsed
                 let speedOut = Double(deltaOut) / elapsed
-                // Only include processes with non-zero activity
                 if speedIn > 0 || speedOut > 0 {
                     speeds.append(ProcessNetUsage(
-                        name: current.name,
-                        pid: current.pid,
-                        bytesIn: UInt64(speedIn),
-                        bytesOut: UInt64(speedOut)
+                        name: current.name, pid: current.pid,
+                        bytesIn: UInt64(speedIn), bytesOut: UInt64(speedOut)
                     ))
                 }
             }
             previous[current.pid] = (current.bytesIn, current.bytesOut)
         }
-
-        // Sort by total bytes (descending)
         speeds.sort(by: { $0.total > $1.total })
         processSpeeds = speeds
     }
@@ -134,8 +107,6 @@ final class ProcessNetworkMonitor {
 
 // MARK: - Two-Line Label View
 
-/// A simple view with two labels: upload on top, download below.
-/// Attached as a subview of the status item button so the button handles clicks natively.
 @MainActor
 final class DualLabelView: NSView {
     let uploadLabel = NSTextField(labelWithString: "▲ 0")
@@ -202,20 +173,17 @@ final class MenuBarManager: NSObject {
     private let processMonitor = ProcessNetworkMonitor()
     private var timer: Timer?
 
-    /// Tags for dynamic process menu items.
     private let processSectionTag: Int = 2000
     private let launchAtStartupTag: Int = 3001
     private let maxProcessItems: Int = 10
 
-    private let formatter: ByteCountFormatter = {
-        let f = ByteCountFormatter()
-        f.countStyle = .decimal
-        f.includesUnit = true
-        f.includesCount = true
-        f.allowedUnits = [.useAll]
-        f.isAdaptive = true
-        return f
-    }()
+    /// Trend history (last 60 seconds)
+    private var downHistory: [Double] = []
+    private var upHistory: [Double] = []
+    private let maxHistory: Int = 60
+
+    /// Log entries for export
+    private var logEntries: [NetworkLogEntry] = []
 
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -229,7 +197,6 @@ final class MenuBarManager: NSObject {
         guard let button = statusItem.button else { return }
         button.title = ""
         button.addSubview(labelView)
-
         NSLayoutConstraint.activate([
             labelView.topAnchor.constraint(equalTo: button.topAnchor),
             labelView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
@@ -245,12 +212,23 @@ final class MenuBarManager: NSObject {
         headerItem.isEnabled = false
         menu.addItem(headerItem)
 
+        let ipItem = NSMenuItem(title: "IP: 获取中…", action: nil, keyEquivalent: "")
+        ipItem.isEnabled = false
+        ipItem.tag = 1002
+        menu.addItem(ipItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let detailsItem = NSMenuItem(title: "▼ 0 KB/s  ▲ 0 KB/s", action: nil, keyEquivalent: "")
         detailsItem.isEnabled = false
         detailsItem.tag = 1001
         menu.addItem(detailsItem)
+
+        // Trend mini-chart
+        let trendItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        trendItem.isEnabled = false
+        trendItem.tag = 1003
+        menu.addItem(trendItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -260,7 +238,17 @@ final class MenuBarManager: NSObject {
         procHeader.tag = processSectionTag
         menu.addItem(procHeader)
 
-        // Dynamic process items will go here (tags processSectionTag+1 ...)
+        menu.addItem(NSMenuItem.separator())
+
+        // Copy info
+        let copyItem = NSMenuItem(title: "复制网络信息", action: #selector(copyNetworkInfo), keyEquivalent: "c")
+        copyItem.target = self
+        menu.addItem(copyItem)
+
+        // Export log
+        let exportItem = NSMenuItem(title: "导出流量日志…", action: #selector(exportLog), keyEquivalent: "e")
+        exportItem.target = self
+        menu.addItem(exportItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -277,7 +265,6 @@ final class MenuBarManager: NSObject {
 
         statusItem.menu = menu
 
-        // Set initial launch-at-startup state
         if let launchItem = menu.item(withTag: launchAtStartupTag) {
             launchItem.state = isLaunchAtStartupEnabled ? .on : .off
         }
@@ -294,54 +281,84 @@ final class MenuBarManager: NSObject {
     }
 
     @objc private func update() {
-        // Interface-level speed
         monitor.poll()
         let downSpeed = max(monitor.downloadSpeed, 0)
         let upSpeed = max(monitor.uploadSpeed, 0)
         let downStr = formatSpeedShort(downSpeed)
         let upStr = formatSpeedShort(upSpeed)
 
-        // Update status bar display
         labelView.setSpeeds(upload: upStr, download: downStr)
 
-        // Per-process speed
+        // Trend history
+        downHistory.append(downSpeed)
+        upHistory.append(upSpeed)
+        if downHistory.count > maxHistory { downHistory.removeFirst() }
+        if upHistory.count > maxHistory { upHistory.removeFirst() }
+
+        // Log every 5 seconds to keep file size manageable
+        let shouldLog = logEntries.isEmpty || Date().timeIntervalSince(logEntries.last!.timestamp) >= 5
+        if shouldLog {
+            logEntries.append(NetworkLogEntry(
+                timestamp: Date(),
+                downSpeed: downSpeed,
+                upSpeed: upSpeed,
+                totalRx: monitor.totalRx,
+                totalTx: monitor.totalTx,
+                ip: getLocalIPAddress()
+            ))
+        }
+
+        // Per-process
         processMonitor.poll()
         let processes = processMonitor.processSpeeds
 
-        // Update menu items
         guard let menu = statusItem.menu else { return }
 
-        // Refresh launch-at-startup state
+        // Launch-at-startup
         if let launchItem = menu.item(withTag: launchAtStartupTag) {
             launchItem.state = isLaunchAtStartupEnabled ? .on : .off
         }
 
-        // Update detail item
+        // IP address
+        if let ipItem = menu.item(withTag: 1002) {
+            if let ip = getLocalIPAddress() {
+                ipItem.title = "IP: \(ip)"
+            } else {
+                ipItem.title = "IP: 未连接"
+            }
+        }
+
+        // Detail item
         if let detailsItem = menu.item(withTag: 1001) {
-            let downFull = formatter.string(fromByteCount: Int64(downSpeed)) + "/s"
-            let upFull = formatter.string(fromByteCount: Int64(upSpeed)) + "/s"
+            let downFull = formatBytesFull(UInt64(downSpeed)) + "/s"
+            let upFull = formatBytesFull(UInt64(upSpeed)) + "/s"
             detailsItem.title = "▼ \(downFull)  ▲ \(upFull)"
         }
 
-        // Update header total
+        // Trend sparkline
+        if let trendItem = menu.item(withTag: 1003) {
+            let totalHistory = zip(downHistory, upHistory).map { $0 + $1 }
+            if !totalHistory.isEmpty {
+                let line = sparkline(from: totalHistory)
+                trendItem.title = "趋势  \(line)"
+            }
+        }
+
+        // Header total
         if let headerItem = menu.item(at: 0) {
-            let totalDown = formatter.string(fromByteCount: Int64(monitor.totalRx))
-            let totalUp = formatter.string(fromByteCount: Int64(monitor.totalTx))
+            let totalDown = formatBytesFull(monitor.totalRx)
+            let totalUp = formatBytesFull(monitor.totalTx)
             headerItem.title = "总计：↓\(totalDown)  ↑\(totalUp)"
         }
 
-        // Rebuild process items
         updateProcessItems(menu: menu, processes: processes)
     }
 
-    /// Remove old process items and insert new ones sorted by traffic (descending).
     private func updateProcessItems(menu: NSMenu, processes: [ProcessNetUsage]) {
-        // Remove old process items (everything between process header and last separator)
         while let item = menu.item(withTag: processSectionTag + 1) {
             menu.removeItem(item)
         }
 
-        // Insert new items (up to maxProcessItems)
         let top = processes.prefix(maxProcessItems)
         for process in top {
             let downStr = formatSpeedShort(Double(process.bytesIn))
@@ -349,15 +366,13 @@ final class MenuBarManager: NSObject {
             let title = "\(process.name)  ▼\(downStr)  ▲\(upStr)"
             let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             item.isEnabled = false
-            item.tag = processSectionTag + 1  // will be removed next cycle
-            // Insert after the process header
+            item.tag = processSectionTag + 1
             let headerIndex = menu.indexOfItem(withTag: processSectionTag)
             if headerIndex >= 0 {
                 menu.insertItem(item, at: headerIndex + 1)
             }
         }
 
-        // If no processes, show a note
         if top.isEmpty {
             let item = NSMenuItem(title: "（暂无活跃流量）", action: nil, keyEquivalent: "")
             item.isEnabled = false
@@ -369,16 +384,57 @@ final class MenuBarManager: NSObject {
         }
     }
 
+    // MARK: - Actions
+
+    @objc private func copyNetworkInfo() {
+        let ip = getLocalIPAddress() ?? "未连接"
+        let down = formatBytesFull(UInt64(monitor.downloadSpeed)) + "/s"
+        let up = formatBytesFull(UInt64(monitor.uploadSpeed)) + "/s"
+        let totalDown = formatBytesFull(monitor.totalRx)
+        let totalUp = formatBytesFull(monitor.totalTx)
+
+        let text = """
+        网络监控
+        IP: \(ip)
+        下载: \(down)
+        上传: \(up)
+        累计下载: \(totalDown)
+        累计上传: \(totalUp)
+        """
+
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+    }
+
+    @objc private func exportLog() {
+        let panel = NSSavePanel()
+        panel.title = "导出流量日志"
+        panel.nameFieldStringValue = "网络监控日志.csv"
+        panel.allowedContentTypes = [.commaSeparatedText]
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        var csv = NetworkLogEntry.csvHeader + "\n"
+        for entry in logEntries {
+            csv += entry.csvRow + "\n"
+        }
+
+        do {
+            try csv.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            print("导出失败: \(error)")
+        }
+    }
+
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
     }
 
-    /// Check whether the app is registered as a login item.
     private var isLaunchAtStartupEnabled: Bool {
         SMAppService.mainApp.status == .enabled
     }
 
-    /// Toggle launch-at-startup and update the menu item.
     @objc private func toggleLaunchAtStartup() {
         do {
             if isLaunchAtStartupEnabled {
@@ -389,15 +445,12 @@ final class MenuBarManager: NSObject {
         } catch {
             print("Failed to toggle launch-at-startup: \(error)")
         }
-        // Refresh the menu item state
         if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
             item.state = isLaunchAtStartupEnabled ? .on : .off
         }
     }
 
-    nonisolated deinit {
-        // Timer will be cleaned up by the OS when the object is deallocated
-    }
+    nonisolated deinit {}
 }
 
 // MARK: - App Delegate
@@ -410,7 +463,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarManager = MenuBarManager()
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        // Clean up
-    }
+    func applicationWillTerminate(_ notification: Notification) {}
 }
