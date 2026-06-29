@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import ServiceManagement
 import NetworkMonitorCore
 
 // MARK: - Network Speed Monitor
@@ -203,6 +204,7 @@ final class MenuBarManager: NSObject {
 
     /// Tags for dynamic process menu items.
     private let processSectionTag: Int = 2000
+    private let launchAtStartupTag: Int = 3001
     private let maxProcessItems: Int = 10
 
     private let formatter: ByteCountFormatter = {
@@ -262,11 +264,23 @@ final class MenuBarManager: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
+        let launchItem = NSMenuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup), keyEquivalent: "")
+        launchItem.target = self
+        launchItem.tag = launchAtStartupTag
+        menu.addItem(launchItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let quitItem = NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
         statusItem.menu = menu
+
+        // Set initial launch-at-startup state
+        if let launchItem = menu.item(withTag: launchAtStartupTag) {
+            launchItem.state = isLaunchAtStartupEnabled ? .on : .off
+        }
     }
 
     private func setupTimer() {
@@ -296,6 +310,11 @@ final class MenuBarManager: NSObject {
 
         // Update menu items
         guard let menu = statusItem.menu else { return }
+
+        // Refresh launch-at-startup state
+        if let launchItem = menu.item(withTag: launchAtStartupTag) {
+            launchItem.state = isLaunchAtStartupEnabled ? .on : .off
+        }
 
         // Update detail item
         if let detailsItem = menu.item(withTag: 1001) {
@@ -352,6 +371,28 @@ final class MenuBarManager: NSObject {
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
+    }
+
+    /// Check whether the app is registered as a login item.
+    private var isLaunchAtStartupEnabled: Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    /// Toggle launch-at-startup and update the menu item.
+    @objc private func toggleLaunchAtStartup() {
+        do {
+            if isLaunchAtStartupEnabled {
+                try SMAppService.mainApp.unregister()
+            } else {
+                try SMAppService.mainApp.register()
+            }
+        } catch {
+            print("Failed to toggle launch-at-startup: \(error)")
+        }
+        // Refresh the menu item state
+        if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
+            item.state = isLaunchAtStartupEnabled ? .on : .off
+        }
     }
 
     nonisolated deinit {
