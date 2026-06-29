@@ -653,10 +653,9 @@ final class MenuBarManager: NSObject {
 
     private func restoreLaunchAtStartup() {
         guard UserDefaults.standard.bool(forKey: Self.launchPrefKey) else { return }
-        // Only register if not already enabled — avoid duplicate login items
-        if SMAppService.mainApp.status != .enabled {
-            try? SMAppService.mainApp.register()
-        }
+        // 先清理可能残留的旧启动项（重装后路径/签名变化会导致重复），再重新注册
+        try? SMAppService.mainApp.unregister()
+        try? SMAppService.mainApp.register()
         if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
             item.state = isLaunchAtStartupEnabled ? .on : .off
         }
