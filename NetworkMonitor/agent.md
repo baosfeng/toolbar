@@ -26,10 +26,11 @@ cd <repo>/NetworkMonitor && swift build --disable-sandbox
 cd <repo>/NetworkMonitor
 
 APP_PATH="./dist/NetworkMonitor.app"
-rm -rf "${APP_PATH}"
-mkdir -p "${APP_PATH}/Contents/MacOS"
 
-cat > "${APP_PATH}/Contents/Info.plist" << 'EOF'
+# 首次创建 .app 目录结构，后续只替换可执行文件（保持 inode 不变）
+if [ ! -d "${APP_PATH}" ]; then
+    mkdir -p "${APP_PATH}/Contents/MacOS"
+    cat > "${APP_PATH}/Contents/Info.plist" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -51,7 +52,9 @@ cat > "${APP_PATH}/Contents/Info.plist" << 'EOF'
 </dict>
 </plist>
 EOF
+fi
 
+# 只替换可执行文件，不删 .app 目录
 cp .build/debug/NetworkMonitor "${APP_PATH}/Contents/MacOS/NetworkMonitor"
 ```
 
