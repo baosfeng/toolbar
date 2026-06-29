@@ -622,9 +622,9 @@ final class MenuBarManager: NSObject {
 
     private func restoreLaunchAtStartup() {
         guard UserDefaults.standard.bool(forKey: Self.launchPrefKey) else { return }
-        if SMAppService.mainApp.status != .enabled {
-            try? SMAppService.mainApp.register()
-        }
+        // Always re-register on launch — handles updates where the old
+        // login item was invalidated by a changed app bundle signature.
+        try? SMAppService.mainApp.register()
         if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
             item.state = isLaunchAtStartupEnabled ? .on : .off
         }
