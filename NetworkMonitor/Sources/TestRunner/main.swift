@@ -41,8 +41,8 @@ for (bps, expected) in speedCases {
 
 print("\n🧪 Testing parseNettopLine...")
 
-// Normal line
-let line1 = "23:46:47.674162\tGoogle Chrome H.51129\t16218\t4096"
+// Normal line (space-padded columns)
+let line1 = "23:46:47.674162 Google Chrome H.51129                                   16218            4096"
 let r1 = parseNettopLine(line1)
 assertNotNil(r1, "should parse normal line")
 if let r = r1 {
@@ -52,8 +52,18 @@ if let r = r1 {
     assertEqual(r.bytesOut, UInt64(4096), "bytesOut")
 }
 
+// Multi-word process name
+let lineMulti = "23:46:48.123456 Microsoft Excel T.12345                                   98765           43210"
+let rMulti = parseNettopLine(lineMulti)
+assertNotNil(rMulti, "multi-word name")
+if let r = rMulti {
+    assertEqual(r.name, "Microsoft Excel T", "multi-word name")
+    assertEqual(r.pid, Int32(12345), "multi-word pid")
+    assertEqual(r.bytesIn, UInt64(98765), "multi-word bytesIn")
+}
+
 // Zero values
-let line2 = "23:46:47.674152\tairportd.649\t0\t0"
+let line2 = "23:46:47.674152 airportd.649                                                                                   0               0"
 let r2 = parseNettopLine(line2)
 assertNotNil(r2, "should parse zero line")
 if let r = r2 {
@@ -62,7 +72,7 @@ if let r = r2 {
 }
 
 // Large numbers
-let line3 = "23:46:47.674157\tmDNSResponder.689\t105434952\t59651139"
+let line3 = "23:46:47.674157 mDNSResponder.689                                                                  105434952       59651139"
 let r3 = parseNettopLine(line3)
 assertNotNil(r3, "should parse large numbers")
 if let r = r3 {
@@ -70,8 +80,8 @@ if let r = r3 {
     assertEqual(r.bytesOut, UInt64(59651139))
 }
 
-// Header line → nil
-let header = parseNettopLine("time\tinterface\ttype\tbytes_in\tbytes_out\trcvsize\ttc_class\tarch")
+// Header line → nil (only 1 field)
+let header = parseNettopLine("time                                                                            interface   type        bytes_in       bytes_out   rcvsize  tc_class arch")
 assertEqual(header, nil, "header should return nil")
 
 // Empty line → nil

@@ -36,22 +36,27 @@ public struct ProcessNetUsage: Comparable {
 }
 
 /// Parse a single line of `nettop -x` output.
-/// Format: `timestamp\tname.PID\tbytes_in\tbytes_out`
+/// Format: `timestamp  name.PID  bytes_in  bytes_out` (space-padded columns).
+/// Process names may contain spaces (e.g. "Google Chrome H").
 /// Returns nil for header lines or unparseable lines.
 public func parseNettopLine(_ line: String) -> ProcessNetUsage? {
-    let parts = line.split(separator: "\t", omittingEmptySubsequences: true)
+    let parts = line.split(separator: " ", omittingEmptySubsequences: true)
     guard parts.count >= 4 else { return nil }
 
-    // Field 1: name.PID (the PID is everything after the last dot)
-    let namePid = String(parts[1])
+    // Last two parts are bytes_in and bytes_out
+    guard let bytesIn = UInt64(parts[parts.count - 2]),
+          let bytesOut = UInt64(parts[parts.count - 1])
+    else { return nil }
+
+    // Parts between the timestamp (index 0) and the last two numbers form "name.PID"
+    let namePidParts = parts[1..<parts.count - 2]
+    let namePid = namePidParts.joined(separator: " ")
+
+    // PID is everything after the last dot
     guard let dotIndex = namePid.lastIndex(of: ".") else { return nil }
     let name = String(namePid[namePid.startIndex..<dotIndex])
     let pidStr = String(namePid[namePid.index(after: dotIndex)...])
-    guard !name.isEmpty,
-          let pid = Int32(pidStr),
-          let bytesIn = UInt64(parts[2]),
-          let bytesOut = UInt64(parts[3])
-    else { return nil }
+    guard !name.isEmpty, let pid = Int32(pidStr) else { return nil }
 
     return ProcessNetUsage(name: name, pid: pid, bytesIn: bytesIn, bytesOut: bytesOut)
 }
