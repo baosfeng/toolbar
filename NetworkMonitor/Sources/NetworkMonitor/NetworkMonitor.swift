@@ -651,17 +651,20 @@ final class MenuBarManager: NSObject {
     }
 
     @objc private func toggleLaunchAtStartup() {
+        let wasEnabled = isLaunchAtStartupSaved
+        // 先更新配置文件，再操作系统登录项（即使 register 失败，配置也已记录）
+        UserDefaults.standard.set(!wasEnabled, forKey: Self.launchPrefKey)
+
         do {
-            if isLaunchAtStartupSaved {
+            if wasEnabled {
                 try SMAppService.mainApp.unregister()
-                UserDefaults.standard.set(false, forKey: Self.launchPrefKey)
             } else {
                 try SMAppService.mainApp.register()
-                UserDefaults.standard.set(true, forKey: Self.launchPrefKey)
             }
         } catch {
             print("Failed to toggle launch-at-startup: \(error)")
         }
+
         if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
             item.state = isLaunchAtStartupSaved ? .on : .off
         }
