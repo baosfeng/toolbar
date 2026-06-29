@@ -13,8 +13,13 @@ final class NetworkSpeedMonitor {
 
     private(set) var downloadSpeed: Double = 0
     private(set) var uploadSpeed: Double = 0
-    private(set) var totalRx: UInt64 = 0
-    private(set) var totalTx: UInt64 = 0
+    private(set) var totalRx: UInt64
+    private(set) var totalTx: UInt64
+
+    init(totalRx: UInt64 = 0, totalTx: UInt64 = 0) {
+        self.totalRx = totalRx
+        self.totalTx = totalTx
+    }
 
     func poll() {
         let current = readInterfaceBytes()
@@ -318,7 +323,7 @@ final class DetailPanel: NSPanel {
 final class MenuBarManager: NSObject {
     private let statusItem: NSStatusItem
     private let labelView = DualLabelView()
-    private let monitor = NetworkSpeedMonitor()
+    private var monitor: NetworkSpeedMonitor!
     private let processMonitor = ProcessNetworkMonitor()
     private var timer: Timer?
     private var detailPanel: DetailPanel?
@@ -328,6 +333,8 @@ final class MenuBarManager: NSObject {
     private let maxProcessItems: Int = 10
 
     private static let launchPrefKey = "launchAtStartup"
+    private static let totalRxKey = "totalRx"
+    private static let totalTxKey = "totalTx"
 
     private var downHistory: [Double] = []
     private var upHistory: [Double] = []
@@ -336,6 +343,9 @@ final class MenuBarManager: NSObject {
     private var logEntries: [NetworkLogEntry] = []
 
     override init() {
+        let savedRx = UInt64(UserDefaults.standard.integer(forKey: Self.totalRxKey))
+        let savedTx = UInt64(UserDefaults.standard.integer(forKey: Self.totalTxKey))
+        monitor = NetworkSpeedMonitor(totalRx: savedRx, totalTx: savedTx)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         setupButton()
@@ -467,6 +477,9 @@ final class MenuBarManager: NSObject {
             if logEntries.count > 1000 {
                 logEntries.removeFirst(logEntries.count - 1000)
             }
+            // Persist cumulative totals every 5 seconds
+            UserDefaults.standard.set(Int(monitor.totalRx), forKey: Self.totalRxKey)
+            UserDefaults.standard.set(Int(monitor.totalTx), forKey: Self.totalTxKey)
         }
 
         processMonitor.poll()
