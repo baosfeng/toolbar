@@ -66,15 +66,31 @@ private let sparkChars: [Character] = ["▁", "▂", "▃", "▄", "▅", "▆",
 
 /// Generate a sparkline string from an array of values (most recent last).
 /// Each value is mapped to one of 8 block heights.
-/// - Parameter values: The data points (0 = smallest, max = largest).
-/// - Returns: A string of Unicode block characters, max 60 chars.
-public func sparkline(from values: [Double]) -> String {
+/// Down-samples automatically if values exceed `maxChars`.
+/// - Parameters:
+///   - values: The data points (0 = smallest, max = largest).
+///   - maxChars: Maximum characters in the output (default 20).
+/// - Returns: A string of Unicode block characters.
+public func sparkline(from values: [Double], maxChars: Int = 20) -> String {
     guard !values.isEmpty else { return "" }
-    let maxVal = values.max() ?? 1
-    guard maxVal > 0 else { return String(repeating: "▁", count: values.count) }
+
+    // Down-sample if too many data points
+    let sampled: [Double]
+    if values.count > maxChars {
+        let step = Double(values.count) / Double(maxChars)
+        sampled = (0..<maxChars).map { i -> Double in
+            let idx = Int(Double(i) * step)
+            return values[min(idx, values.count - 1)]
+        }
+    } else {
+        sampled = values
+    }
+
+    let maxVal = sampled.max() ?? 1
+    guard maxVal > 0 else { return String(repeating: "▁", count: sampled.count) }
 
     let levelCount = sparkChars.count
-    return values.map { v -> Character in
+    return sampled.map { v -> Character in
         let idx = min(Int(v / maxVal * Double(levelCount - 1)), levelCount - 1)
         return sparkChars[idx]
     }.map { String($0) }.joined()
