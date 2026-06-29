@@ -39,7 +39,7 @@ cat > "${APP_PATH}/Contents/Info.plist" << 'EOF'
     <key>CFBundleIdentifier</key>
     <string>com.example.NetworkMonitor</string>
     <key>CFBundleName</key>
-    <string>NetworkMonitor</string>
+    <string>网络监控</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
