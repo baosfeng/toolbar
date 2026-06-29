@@ -53,12 +53,9 @@ cat > "${APP_PATH}/Contents/Info.plist" << 'EOF'
 EOF
 
 cp .build/debug/NetworkMonitor "${APP_PATH}/Contents/MacOS/NetworkMonitor"
-
-# 签名（WiFi 授权等）
-codesign --force --sign - --entitlements NetworkMonitor.entitlements "${APP_PATH}"
 ```
 
-不要生成 .dmg 文件。
+不要生成 .dmg 文件。**不要用 codesign 签名**，签名会导致 app 无法打开。
 
 ## 提交规范
 
