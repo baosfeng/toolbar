@@ -75,28 +75,22 @@ final class NetworkSpeedMonitor {
     }
 }
 
-// MARK: - Custom Status Bar View
+// MARK: - Two-Line Label View
 
-/// A two-line custom view for the menu bar button.
-/// Top line: upload speed (▲); bottom line: download speed (▼).
+/// A simple view with two labels: upload on top, download below.
+/// Attached as a subview of the status item button so the button handles clicks natively.
 @MainActor
-final class StatusBarView: NSView {
-    private let uploadLabel = NSTextField(labelWithString: "▲ 0")
-    private let downloadLabel = NSTextField(labelWithString: "▼ 0")
-
-    /// The menu to show when the view is clicked.
-    weak var statusMenu: NSMenu?
-
-    // MARK: - Intrinsic size (used by NSStatusItem to set width)
+final class DualLabelView: NSView {
+    let uploadLabel = NSTextField(labelWithString: "▲ 0")
+    let downloadLabel = NSTextField(labelWithString: "▼ 0")
 
     override var intrinsicContentSize: NSSize {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
-        // Widest possible text: "▲ 1.2G" / "▼ 1.2G" → roughly 54pt wide
         let sample = "▲ 1.2G" as NSString
         let textWidth = sample.size(withAttributes: [.font: font]).width
-        let width = ceil(textWidth) + 12  // 4pt leading + 4pt trailing + some margin
-        let lineHeight = font.leading + font.capHeight + font.descender + 2
-        let height = ceil(lineHeight * 2) + 4  // two lines + top/bottom padding
+        let width = ceil(textWidth) + 12
+        let lineHeight = font.leading + font.capHeight + font.descender + 3
+        let height = ceil(lineHeight * 2) + 4
         return NSSize(width: width, height: height)
     }
 
@@ -111,9 +105,7 @@ final class StatusBarView: NSView {
     }
 
     private func setup() {
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.clear.cgColor
-
+        translatesAutoresizingMaskIntoConstraints = false
         let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
         for label in [uploadLabel, downloadLabel] {
             label.font = font
@@ -125,13 +117,10 @@ final class StatusBarView: NSView {
             label.translatesAutoresizingMaskIntoConstraints = false
             addSubview(label)
         }
-
-        // Layout: upload on top, download below
         NSLayoutConstraint.activate([
             uploadLabel.topAnchor.constraint(equalTo: topAnchor, constant: 1),
             uploadLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
             uploadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-
             downloadLabel.topAnchor.constraint(equalTo: uploadLabel.bottomAnchor, constant: -2),
             downloadLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
             downloadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
@@ -139,20 +128,10 @@ final class StatusBarView: NSView {
         ])
     }
 
-    /// Update the displayed speeds.
     func setSpeeds(upload: String, download: String) {
         uploadLabel.stringValue = "▲ \(upload)"
         downloadLabel.stringValue = "▼ \(download)"
         invalidateIntrinsicContentSize()
-    }
-
-    // MARK: - Mouse handling
-
-    override func mouseDown(with event: NSEvent) {
-        guard let m = statusMenu else { return }
-        // Position the menu below the status item
-        let point = NSPoint(x: 0, y: bounds.height + 5)
-        m.popUp(positioning: nil, at: point, in: self)
     }
 }
 
@@ -161,11 +140,10 @@ final class StatusBarView: NSView {
 @MainActor
 final class MenuBarManager: NSObject {
     private let statusItem: NSStatusItem
-    private let statusView = StatusBarView()
+    private let labelView = DualLabelView()
     private let monitor = NetworkSpeedMonitor()
     private var timer: Timer?
 
-    /// Formats full byte counts (e.g., "1.2 MB").
     private let formatter: ByteCountFormatter = {
         let f = ByteCountFormatter()
         f.countStyle = .decimal
@@ -179,12 +157,25 @@ final class MenuBarManager: NSObject {
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+        setupButton()
         setupMenu()
-        statusView.statusMenu = statusItem.menu
-        statusItem.view = statusView
-        // Ensure the view gets the correct initial size
-        statusView.invalidateIntrinsicContentSize()
         setupTimer()
+    }
+
+    /// Attach the label view to the button.
+    /// The button handles clicks and shows the menu natively.
+    private func setupButton() {
+        guard let button = statusItem.button else { return }
+        button.title = ""  // Clear default text
+        button.addSubview(labelView)
+
+        // Constrain labelView to fill the button
+        NSLayoutConstraint.activate([
+            labelView.topAnchor.constraint(equalTo: button.topAnchor),
+            labelView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+            labelView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+            labelView.bottomAnchor.constraint(equalTo: button.bottomAnchor),
+        ])
     }
 
     private func setupMenu() {
@@ -203,7 +194,9 @@ final class MenuBarManager: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
 
         statusItem.menu = menu
     }
@@ -227,8 +220,8 @@ final class MenuBarManager: NSObject {
         let downStr = formatSpeedShort(downSpeed)
         let upStr = formatSpeedShort(upSpeed)
 
-        // Update two-line custom view: upload on top, download below
-        statusView.setSpeeds(upload: upStr, download: downStr)
+        // Update the two-line display: upload on top, download below
+        labelView.setSpeeds(upload: upStr, download: downStr)
 
         // Update dropdown detail menu items
         guard let menu = statusItem.menu else { return }
