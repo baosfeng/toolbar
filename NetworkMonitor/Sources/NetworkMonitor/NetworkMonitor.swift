@@ -336,9 +336,18 @@ final class MenuBarManager: NSObject {
     private static let totalRxKey = "totalRx"
     private static let totalTxKey = "totalTx"
 
-    /// Get Wi-Fi SSID via CoreWLAN.
-    private func getWiFiSSID() -> String? {
-        CWWiFiClient.shared().interface()?.ssid()
+    /// Get Wi-Fi name. Returns the SSID if CoreWLAN can access it,
+    /// or "已连接" / "未连接" based on whether en0 has an IP address.
+    private func getWiFiStatus() -> String {
+        // Try CoreWLAN (requires entitlement + Location Services)
+        if let ssid = CWWiFiClient.shared().interface()?.ssid(), !ssid.isEmpty {
+            return ssid
+        }
+        // Fallback: check if en0 has an IP
+        if getLocalIPAddress() != nil {
+            return "已连接"
+        }
+        return "未连接"
     }
 
     private var downHistory: [Double] = []
@@ -490,7 +499,7 @@ final class MenuBarManager: NSObject {
         processMonitor.poll()
         let processes = processMonitor.processSpeeds
         let ip = getLocalIPAddress()
-        let wifi = getWiFiSSID()
+        let wifi = getWiFiStatus()
 
         guard let menu = statusItem.menu else { return }
 
@@ -503,7 +512,7 @@ final class MenuBarManager: NSObject {
         }
 
         if let wifiItem = menu.item(withTag: 1004) {
-            wifiItem.title = wifi.map { "Wi-Fi: \($0)" } ?? "Wi-Fi: 未连接"
+            wifiItem.title = "Wi-Fi: \(wifi)"
         }
 
         if let detailsItem = menu.item(withTag: 1001) {
@@ -579,7 +588,7 @@ final class MenuBarManager: NSObject {
                 downSpeed: max(monitor.downloadSpeed, 0),
                 upSpeed: max(monitor.uploadSpeed, 0),
                 totalRx: monitor.totalRx, totalTx: monitor.totalTx,
-                ip: getLocalIPAddress(), wifi: getWiFiSSID(),
+                ip: getLocalIPAddress(), wifi: getWiFiStatus(),
                 processes: processMonitor.processSpeeds
             )
             panel.makeKeyAndOrderFront(nil)
@@ -589,7 +598,7 @@ final class MenuBarManager: NSObject {
 
     @objc private func copyNetworkInfo() {
         let ip = getLocalIPAddress() ?? "未连接"
-        let wifi = getWiFiSSID() ?? "—"
+        let wifi = getWiFiStatus()
         let down = formatBytesFull(UInt64(monitor.downloadSpeed)) + "/s"
         let up = formatBytesFull(UInt64(monitor.uploadSpeed)) + "/s"
         let totalDown = formatBytesFull(monitor.totalRx)
