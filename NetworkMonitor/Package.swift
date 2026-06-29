@@ -16,7 +16,8 @@ let package = Package(
             dependencies: ["NetworkMonitorCore"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
-                .linkedFramework("Foundation")
+                .linkedFramework("Foundation"),
+                .linkedFramework("ServiceManagement")
             ]
         ),
         .executableTarget(
