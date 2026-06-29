@@ -524,7 +524,7 @@ final class MenuBarManager: NSObject {
         if let trendItem = menu.item(withTag: 1003) {
             let totalHistory = zip(downHistory, upHistory).map { $0 + $1 }
             if !totalHistory.isEmpty {
-                trendItem.title = "趋势  \(sparkline(from: totalHistory))"
+                trendItem.title = "趋势  \(sparkline(from: totalHistory, maxChars: 10))"
             }
         }
 
