@@ -450,7 +450,7 @@ final class MenuBarManager: NSObject {
         statusItem.menu = menu
 
         if let launchItem = menu.item(withTag: launchAtStartupTag) {
-            launchItem.state = isLaunchAtStartupEnabled ? .on : .off
+            launchItem.state = isLaunchAtStartupSaved ? .on : .off
         }
     }
 
@@ -503,7 +503,7 @@ final class MenuBarManager: NSObject {
         guard let menu = statusItem.menu else { return }
 
         if let launchItem = menu.item(withTag: launchAtStartupTag) {
-            launchItem.state = isLaunchAtStartupEnabled ? .on : .off
+            launchItem.state = isLaunchAtStartupSaved ? .on : .off
         }
 
         if let ipItem = menu.item(withTag: 1002) {
@@ -646,13 +646,13 @@ final class MenuBarManager: NSObject {
         NSApplication.shared.terminate(nil)
     }
 
-    private var isLaunchAtStartupEnabled: Bool {
-        SMAppService.mainApp.status == .enabled
+    private var isLaunchAtStartupSaved: Bool {
+        UserDefaults.standard.bool(forKey: Self.launchPrefKey)
     }
 
     @objc private func toggleLaunchAtStartup() {
         do {
-            if isLaunchAtStartupEnabled {
+            if isLaunchAtStartupSaved {
                 try SMAppService.mainApp.unregister()
                 UserDefaults.standard.set(false, forKey: Self.launchPrefKey)
             } else {
@@ -663,7 +663,7 @@ final class MenuBarManager: NSObject {
             print("Failed to toggle launch-at-startup: \(error)")
         }
         if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
-            item.state = isLaunchAtStartupEnabled ? .on : .off
+            item.state = isLaunchAtStartupSaved ? .on : .off
         }
     }
 
