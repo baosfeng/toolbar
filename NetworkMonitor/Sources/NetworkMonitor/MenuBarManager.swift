@@ -194,6 +194,8 @@ final class MenuBarManager: NSObject {
                                            symbol: "clock.fill", tag: macMonitorSummaryTag, isEnabled: false))
         macMonitorSubmenu.addItem(menuItem(title: "⌨️ 击键监控: 检查权限…",
                                            symbol: "keyboard.fill", tag: macMonitorKeyTag, isEnabled: false))
+        macMonitorSubmenu.addItem(menuItem(title: "打开辅助功能设置", action: #selector(openAccessibilityPrefs),
+                                           symbol: "hand.point.up.left"))
         macMonitorSubmenu.addItem(menuItem(title: "亮屏: —    息屏: —",
                                            symbol: "sun.max.fill", tag: macMonitorSummaryTag + 1, isEnabled: false))
         macMonitorSubmenu.addItem(menuItem(title: "CPU: —%    内存: —",
@@ -406,7 +408,7 @@ final class MenuBarManager: NSObject {
                 item.title = "击键监控: 运行中 ✅"
                 item.image = NSImage(systemSymbolName: "keyboard.fill", accessibilityDescription: "击键监控")
             } else {
-                item.title = "击键监控: 未授权 — 请在 系统设置→隐私与安全性→输入监控 中允许"
+                item.title = "击键监控: 未授权 — 请在 系统设置→隐私与安全性→辅助功能 中允许"
                 item.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "击键未授权")
             }
             let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
@@ -608,6 +610,11 @@ final class MenuBarManager: NSObject {
     }
 
     // MARK: - macMonitor 报告
+
+    @objc private func openAccessibilityPrefs() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+        NSWorkspace.shared.open(url)
+    }
 
     @objc private func generateDailyReport() {
         if let path = reportGenerator?.generateDailyReport() {
