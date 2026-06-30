@@ -1,5 +1,6 @@
 @preconcurrency import CoreGraphics
 import Foundation
+import ApplicationServices
 
 /// 击键计数器：监听键盘按键事件，仅计数不记录内容
 /// 使用 CGEventTap 监听 kCGEventKeyDown，每60秒向数据库写入一次击键数
@@ -52,7 +53,12 @@ final class KeyPressMonitor {
             },
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            print("⌨️ 击键监听启动失败 — 需要输入监控权限")
+            let trusted = AXIsProcessTrusted()
+            if !trusted {
+                print("⌨️ 击键监听启动失败 — 需要辅助功能权限")
+            } else {
+                print("⌨️ 击键监听启动失败 — 未知错误")
+            }
             return false
         }
 
