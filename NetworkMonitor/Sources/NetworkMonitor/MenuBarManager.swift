@@ -408,7 +408,7 @@ final class MenuBarManager: NSObject {
                 item.title = "击键监控: 运行中 ✅"
                 item.image = NSImage(systemSymbolName: "keyboard.fill", accessibilityDescription: "击键监控")
             } else {
-                item.title = "击键监控: 未授权 — 请在 系统设置→隐私与安全性→辅助功能 中允许"
+                item.title = "击键监控: 未授权 — 请在 系统设置→隐私与安全性→输入监控 中允许"
                 item.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "击键未授权")
             }
             let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
