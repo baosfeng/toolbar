@@ -57,8 +57,6 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <true/>
     <key>NSInputMonitoringUsageDescription</key>
     <string>NetworkMonitor 需要输入监控权限来统计键盘敲击次数，不会记录按键内容。</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>NetworkMonitor 需要辅助功能权限来监听全局键盘事件以统计击键次数。</string>
 </dict>
 </plist>
 PLIST
