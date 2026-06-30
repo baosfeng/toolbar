@@ -23,6 +23,9 @@ enum EventType: String {
 
     // 输入事件
     case keyPress = "key_press"
+
+    // 系统采样
+    case systemSample = "system_sample"
 }
 
 /// 事件监听器：监听系统通知并记录事件到数据库
