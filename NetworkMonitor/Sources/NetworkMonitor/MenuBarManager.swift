@@ -593,5 +593,12 @@ final class MenuBarManager: NSObject {
         }
     }
 
+    /// 退出前刷新数据库缓冲区并关闭连接
+    func flushBeforeQuit() {
+        databaseManager.flush()
+        databaseManager.close()
+        print("📊 数据库已关闭")
+    }
+
     nonisolated deinit {}
 }
