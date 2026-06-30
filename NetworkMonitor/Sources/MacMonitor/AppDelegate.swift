@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let databaseManager = DatabaseManager()
     private var eventMonitor: EventMonitor?
     private var keyPressMonitor: KeyPressMonitor?
+    private var systemSampler: SystemSampler?
 
     // MARK: - 应用生命周期
 
@@ -29,6 +30,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyPressMonitor = keyMonitor
         }
 
+        // 启动系统采样
+        let sampler = SystemSampler(database: databaseManager)
+        sampler.start()
+        systemSampler = sampler
+
         // 设置菜单栏
         setupMenuBar()
 
@@ -36,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        systemSampler?.stop()
         keyPressMonitor?.stop()
         eventMonitor?.stop()
         databaseManager.close()

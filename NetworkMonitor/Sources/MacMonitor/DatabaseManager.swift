@@ -66,7 +66,48 @@ final class DatabaseManager {
 
     // MARK: - 事件写入
 
-    /// 写入一条事件到缓冲区（批量写入）
+    /// 写入一条系统采样数据
+    func writeSystemSample(timestamp: TimeInterval, cpuUsage: Double, memoryUsedMB: Int, memoryTotalMB: Int, networkRx: UInt64, networkTx: UInt64) {
+        let extra: String
+        if #available(macOS 10.15, *) {
+            let dict: [String: Any] = [
+                "cpu": cpuUsage,
+                "memory_used_mb": memoryUsedMB,
+                "memory_total_mb": memoryTotalMB,
+                "net_rx": networkRx,
+                "net_tx": networkTx,
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: dict),
+               let json = String(data: data, encoding: .utf8) {
+                extra = escapeSQL(json)
+            } else {
+                extra = "NULL"
+            }
+        } else {
+            extra = "NULL"
+        }
+
+        let escapedType = escapeSQL(EventType.systemSample.rawValue)
+        let values = "(\(escapedType), '', '', \(timestamp), \(extra))"
+        eventBuffer.append(values)
+
+        if eventBuffer.count >= batchSize {
+            flush()
+        }
+    }
+
+    /// 写入一次击键批量数据（一条事件带计数）
+    func writeKeyPressBatch(count: Int, timestamp: TimeInterval) {
+        let escapedType = escapeSQL(EventType.keyPress.rawValue)
+        let extra = escapeSQL("{\"count\":\(count)}")
+        let values = "(\(escapedType), '', '', \(timestamp), \(extra))"
+        eventBuffer.append(values)
+
+        if eventBuffer.count >= batchSize {
+            flush()
+        }
+    }
+
     func writeEvent(type: EventType, appName: String? = nil, bundleID: String? = nil, timestamp: TimeInterval) {
         // 使用 SQL 值转义避免注入
         let escapedType = escapeSQL(type.rawValue)

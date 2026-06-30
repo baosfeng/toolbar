@@ -130,15 +130,9 @@ final class KeyPressMonitor {
 
         keyPressCount = 0
 
-        // 写入击键事件到数据库
+        // 写入一条带计数的事件到数据库
         let timestamp = Date().timeIntervalSince1970
-        // 每60秒的击键数作为一条事件记录
-        for _ in 0..<count {
-            database.writeEvent(
-                type: .keyPress,
-                timestamp: timestamp
-            )
-        }
+        database.writeKeyPressBatch(count: count, timestamp: timestamp)
 
         print("⌨️ 写入 \(count) 次击键")
     }
