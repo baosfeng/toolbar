@@ -1,4 +1,91 @@
 import Foundation
+import IOKit.ps
+
+// MARK: - Battery Status
+
+/// Battery state information.
+public struct BatteryStatus: Equatable, Sendable {
+    public let percentage: Int          // 0-100
+    public let isCharging: Bool
+    public let isCharged: Bool
+    public let timeRemaining: Int       // minutes, 0 = calculating, -1 = unlimited (AC)
+    public let powerSource: String      // "AC Power" or "Battery Power"
+    public let health: String
+    public let cycleCount: Int
+    public let temperature: Double      // Celsius, 0 if unavailable
+
+    public var timeLabel: String {
+        if isCharged { return "已充满" }
+        if isCharging {
+            if timeRemaining <= 0 { return "充电中…" }
+            let h = timeRemaining / 60
+            let m = timeRemaining % 60
+            return h > 0 ? "剩余\(h)时\(m)分" : "剩余\(m)分"
+        }
+        // 使用电池
+        if powerSource == "AC Power" { return "已接通电源" }
+        if timeRemaining <= 0 { return "计算中…" }
+        let h = timeRemaining / 60
+        let m = timeRemaining % 60
+        return h > 0 ? "剩余\(h)时\(m)分" : "剩余\(m)分"
+    }
+
+    public var percentageLabel: String {
+        "\(percentage)%"
+    }
+
+    public static let unavailable = BatteryStatus(
+        percentage: 0, isCharging: false, isCharged: false,
+        timeRemaining: -1, powerSource: "—", health: "—",
+        cycleCount: 0, temperature: 0
+    )
+}
+
+/// Monitor battery status using IOKit power sources API.
+public final class BatteryMonitor {
+    public private(set) var status: BatteryStatus = .unavailable
+
+    public init() {}
+
+    public func poll() {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else { return }
+        guard let list = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [Any],
+              let first = list.first as? [String: Any] else { return }
+
+        let capacity = first["Current Capacity"] as? Int ?? 0
+        let maxCap = first["Max Capacity"] as? Int ?? 100
+        let percentage = maxCap > 0 ? min(Int(round(Double(capacity) / Double(maxCap) * 100)), 100) : 0
+        let isCharging = first["Is Charging"] as? Bool ?? false
+        let isCharged = first["Is Charged"] as? Bool ?? false
+        let timeToEmpty = first["Time to Empty"] as? Int ?? 0
+        let timeToFull = first["Time to Full Charge"] as? Int ?? 0
+        let powerSource = first["Power Source State"] as? String ?? "—"
+        let health = first["BatteryHealth"] as? String ?? "—"
+        let cycleCount = first["DesignCycleCount"] as? Int ?? 0
+
+        let timeRemaining: Int
+        if isCharged {
+            timeRemaining = -1
+        } else if isCharging {
+            timeRemaining = timeToFull
+        } else if powerSource == "AC Power" {
+            timeRemaining = -1
+        } else {
+            timeRemaining = timeToEmpty
+        }
+
+        status = BatteryStatus(
+            percentage: percentage,
+            isCharging: isCharging,
+            isCharged: isCharged,
+            timeRemaining: timeRemaining,
+            powerSource: powerSource,
+            health: health,
+            cycleCount: cycleCount,
+            temperature: 0
+        )
+    }
+}
 
 // MARK: - Formatting
 
@@ -50,7 +137,10 @@ public func getLocalIPAddress() -> String? {
             getnameinfo(addr, socklen_t(addr.pointee.sa_len),
                         &hostname, socklen_t(hostname.count),
                         nil, 0, NI_NUMERICHOST)
-            return String(cString: hostname)
+            let cStr = hostname
+            return cStr.withUnsafeBufferPointer { buf in
+                buf.baseAddress.flatMap { String(validatingCString: $0) }
+            }
         }
 
         guard let next = ptr.pointee.ifa_next else { break }
