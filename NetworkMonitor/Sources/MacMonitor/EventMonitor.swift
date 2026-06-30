@@ -20,6 +20,9 @@ enum EventType: String {
     // 电源事件（暂未实现，预留）
     case powerAC = "power_ac"
     case powerBattery = "power_battery"
+
+    // 输入事件
+    case keyPress = "key_press"
 }
 
 /// 事件监听器：监听系统通知并记录事件到数据库
