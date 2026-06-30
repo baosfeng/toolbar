@@ -60,8 +60,10 @@ public final class BatteryMonitor {
         let timeToEmpty = first["Time to Empty"] as? Int ?? 0
         let timeToFull = first["Time to Full Charge"] as? Int ?? 0
         let powerSource = first["Power Source State"] as? String ?? "—"
-        let health = first["BatteryHealth"] as? String ?? "—"
-        let cycleCount = first["DesignCycleCount"] as? Int ?? 0
+        let health = first["BatteryHealth"] as? String
+            ?? (first["Health"] as? String)
+            ?? "—"
+        let cycleCount = first["CycleCount"] as? Int ?? 0
 
         let timeRemaining: Int
         if isCharged {
