@@ -1,16 +1,14 @@
-@preconcurrency import CoreGraphics
-import Foundation
+import AppKit
 import ApplicationServices
 
 /// 击键计数器：监听键盘按键事件，仅计数不记录内容
-/// 使用 CGEventTap 监听 kCGEventKeyDown，每60秒向数据库写入一次击键数
+/// 使用 NSEvent.addGlobalMonitorForEvents 监听全局键盘事件
 final class KeyPressMonitor {
 
     // MARK: - 属性
 
     private let database: DatabaseManager
-    private var tap: CFMachPort?
-    private nonisolated(unsafe) var runLoopSource: CFRunLoopSource?
+    private var monitor: Any?
     private var isRunning = false
 
     /// 击键计数器
@@ -35,45 +33,21 @@ final class KeyPressMonitor {
     func start() -> Bool {
         guard !isRunning else { return true }
 
-        // 创建事件 Tap
-        let eventMask = CGEventMask(1 << CGEventType.keyDown.rawValue)
-
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: eventMask,
-            callback: { (_, _, event, refcon) -> Unmanaged<CGEvent>? in
-                // 直接传递事件，不做修改
-                if let refcon {
-                    let monitor = Unmanaged<KeyPressMonitor>.fromOpaque(refcon).takeUnretainedValue()
-                    monitor.incrementCount()
-                }
-                return Unmanaged.passUnretained(event)
-            },
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ) else {
-            let trusted = AXIsProcessTrusted()
-            if !trusted {
-                print("⌨️ 击键监听启动失败 — 需要辅助功能权限")
-            } else {
-                print("⌨️ 击键监听启动失败 — 未知错误")
-            }
+        // 检查辅助功能/输入监控权限
+        let trusted = AXIsProcessTrusted()
+        if !trusted {
+            print("⌨️ 击键监听启动失败 — 需要辅助功能权限")
             return false
         }
 
-        self.tap = tap
+        // 使用 NSEvent 全局监听（比 CGEvent.tapCreate 更稳定）
+        monitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] _ in
+            self?.incrementCount()
+        }
 
-        // 将 Tap 添加到当前线程的 RunLoop
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        runLoopSource = source
-
-        // 在后台线程运行事件循环
-        if let source {
-            Thread.detachNewThread {
-                CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
-                CFRunLoopRun()
-            }
+        guard monitor != nil else {
+            print("⌨️ 击键监听启动失败 — 无法创建全局事件监听器")
+            return false
         }
 
         // 启动定时刷新（每60秒写入一次数据库）
@@ -91,18 +65,10 @@ final class KeyPressMonitor {
         flushTimer?.cancel()
         flushTimer = nil
 
-        if let tap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-            self.tap = nil
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+            self.monitor = nil
         }
-
-        if let source = runLoopSource {
-            CFRunLoopSourceInvalidate(source)
-            runLoopSource = nil
-        }
-
-        // 停止后台 RunLoop
-        CFRunLoopStop(CFRunLoopGetCurrent())
 
         // 写入剩余计数
         flushCount()
@@ -113,7 +79,7 @@ final class KeyPressMonitor {
 
     // MARK: - 计数与写入
 
-    /// 递增击键计数（线程安全）
+    /// 递增击键计数（可在任意线程调用）
     private func incrementCount() {
         keyPressCount += 1
     }
