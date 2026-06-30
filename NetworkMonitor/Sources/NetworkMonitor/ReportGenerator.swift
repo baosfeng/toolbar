@@ -54,7 +54,6 @@ final class ReportGenerator {
 
         // 查询昨日数据
         let startOfDay = Calendar.current.startOfDay(for: yesterday).timeIntervalSince1970
-        let endOfDay = startOfDay + 86400
 
         let stats = statsProvider.fetchTodayStats() // 回退到今日数据
         let content = buildDailyReport(date: dateStr, stats: stats)

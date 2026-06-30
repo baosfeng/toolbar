@@ -734,6 +734,20 @@ final class MenuBarManager: NSObject {
     private var timer: Timer?
     private var detailPanel: DetailPanel?
 
+    // MARK: - macMonitor 引擎
+    private let databaseManager = DatabaseManager()
+    private var eventMonitor: EventMonitor?
+    private var keyPressMonitor: KeyPressMonitor?
+    private var systemSampler: SystemSampler?
+    private lazy var statsProvider = StatsProvider(database: databaseManager)
+    private var reportGenerator: ReportGenerator?
+
+    // MARK: - macMonitor 菜单标签
+    private let macMonitorHeaderTag: Int = 5000
+    private let macMonitorSummaryTag: Int = 5001
+    private let macMonitorCPUTag: Int = 5002
+    private let macMonitorNetTag: Int = 5003
+
     private let processSectionTag: Int = 2000
     private let launchAtStartupTag: Int = 3001
     private let maxProcessItems: Int = 10
@@ -767,6 +781,7 @@ final class MenuBarManager: NSObject {
         setupButton()
         setupMenu()
         setupTimer()
+        setupMacMonitor()
     }
 
     private func setupButton() {
@@ -831,6 +846,18 @@ final class MenuBarManager: NSObject {
         procHeader.tag = processSectionTag
         menu.addItem(procHeader)
 
+        // ── macMonitor 本机监控 ──
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "📊 本机监控", action: nil, keyEquivalent: ""))
+        menu.addItem(menuItem(title: "⏱  活跃: —    ⌨️ 击键: —", tag: macMonitorSummaryTag, isEnabled: false))
+        menu.addItem(menuItem(title: "💡 亮屏: —    🌙 息屏: —", tag: macMonitorSummaryTag + 1, isEnabled: false))
+        menu.addItem(menuItem(title: "💻 CPU: —   内存: —", tag: macMonitorCPUTag, isEnabled: false))
+        menu.addItem(menuItem(title: "📶 ↑ —/s   ↓ —/s", tag: macMonitorNetTag, isEnabled: false))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(menuItem(title: "📅 生成每日报告", action: #selector(generateDailyReport), symbol: "doc.text"))
+        menu.addItem(menuItem(title: "📆 生成每周报告", action: #selector(generateWeeklyReport), symbol: "calendar"))
+        menu.addItem(menuItem(title: "📂 打开报告文件夹", action: #selector(openReportsFolder), symbol: "folder"))
+
         // ── Actions ──
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "打开详情面板", action: #selector(toggleDetailPanel), keyEquivalent: "d",
@@ -863,6 +890,28 @@ final class MenuBarManager: NSObject {
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+    }
+
+    /// 启动 macMonitor 本机监控引擎
+    private func setupMacMonitor() {
+        databaseManager.initialize()
+
+        let monitor = EventMonitor(database: databaseManager)
+        monitor.start()
+        eventMonitor = monitor
+
+        let keyMonitor = KeyPressMonitor(database: databaseManager)
+        if keyMonitor.start() {
+            keyPressMonitor = keyMonitor
+        }
+
+        let sampler = SystemSampler(database: databaseManager)
+        sampler.start()
+        systemSampler = sampler
+
+        reportGenerator = ReportGenerator(database: databaseManager, statsProvider: statsProvider)
+
+        print("📊 macMonitor 本机监控已启动")
     }
 
     @objc private func update() {
@@ -967,6 +1016,11 @@ final class MenuBarManager: NSObject {
             let fullRange = NSRange(location: 0, length: attrStr.length)
             attrStr.addAttribute(.font, value: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium), range: fullRange)
             headerItem.attributedTitle = attrStr
+        }
+
+        // ── Update macMonitor menu items (每10秒刷新一次) ──
+        if Int(Date().timeIntervalSince1970).isMultiple(of: 10) {
+            updateMacMonitorMenu(menu: menu)
         }
 
         updateProcessItems(menu: menu, processes: processes)
@@ -1144,6 +1198,64 @@ final class MenuBarManager: NSObject {
 
         if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
             item.state = isLaunchAtStartupSaved ? .on : .off
+        }
+    }
+
+    /// 更新 macMonitor 菜单项
+    private func updateMacMonitorMenu(menu: NSMenu) {
+        let stats = statsProvider.fetchTodayStats()
+
+        let active = formatDurationCompact(stats.activeSeconds)
+        let keys = formatCompactNumber(stats.keyPressCount)
+        if let item = menu.item(withTag: macMonitorSummaryTag) {
+            item.title = "⏱  活跃: \(active)    ⌨️ 击键: \(keys)"
+        }
+        if let item = menu.item(withTag: macMonitorSummaryTag + 1) {
+            item.title = "💡 亮屏: \(formatDurationCompact(stats.screenOnSeconds))    🌙 息屏: \(formatDurationCompact(stats.screenOffSeconds))"
+        }
+        if let item = menu.item(withTag: macMonitorCPUTag) {
+            item.title = "💻 CPU: \(String(format: "%.1f", stats.cpuUsage))%   内存: \(stats.memoryUsedMB)MB/\(stats.memoryTotalMB)MB"
+        }
+        if let item = menu.item(withTag: macMonitorNetTag) {
+            item.title = "📶 ↑ \(formatSpeedShort(Double(stats.netUploadSpeed)))/s   ↓ \(formatSpeedShort(Double(stats.netDownloadSpeed)))/s"
+        }
+    }
+
+    // MARK: - 格式化辅助
+
+    private func formatDurationCompact(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds)
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        return h > 0 ? "\(h)h\(m)m" : "\(m)m"
+    }
+
+    private func formatCompactNumber(_ number: Int) -> String {
+        if number >= 10000 {
+            return String(format: "%.1fK", Double(number) / 1000)
+        }
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        return f.string(from: NSNumber(value: number)) ?? "\(number)"
+    }
+
+    // MARK: - macMonitor 操作
+
+    @objc private func generateDailyReport() {
+        if let path = reportGenerator?.generateDailyReport() {
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        }
+    }
+
+    @objc private func generateWeeklyReport() {
+        if let path = reportGenerator?.generateWeeklyReport() {
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        }
+    }
+
+    @objc private func openReportsFolder() {
+        if let path = reportGenerator?.reportsDirectoryPath {
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
         }
     }
 

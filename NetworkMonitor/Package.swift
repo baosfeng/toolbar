@@ -22,14 +22,6 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "MacMonitor",
-            dependencies: ["NetworkMonitorCore"],
-            linkerSettings: [
-                .linkedFramework("AppKit"),
-                .linkedFramework("Foundation"),
-            ]
-        ),
-        .executableTarget(
             name: "TestRunner",
             dependencies: ["NetworkMonitorCore"]
         ),
