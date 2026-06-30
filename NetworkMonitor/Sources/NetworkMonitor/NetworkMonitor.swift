@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import ServiceManagement
 import CoreWLAN
+import NetworkMonitorCore
 
 // MARK: - Network Speed Monitor
 
@@ -41,7 +42,6 @@ final class NetworkSpeedMonitor {
             previousData[iface] = (rx, tx)
         }
 
-        // Remove interfaces that are no longer active
         let currentIfaces = Set(current.keys)
         previousData = previousData.filter { currentIfaces.contains($0.key) }
 
@@ -112,38 +112,40 @@ final class ProcessNetworkMonitor {
         speeds.sort(by: { $0.total > $1.total })
         processSpeeds = speeds
 
-        // Remove stale PIDs that are no longer in the snapshot
         let currentPids = Set(snapshot.map { $0.pid })
         previous = previous.filter { currentPids.contains($0.key) }
     }
 }
 
-// MARK: - Dual-Label Status Bar View
+// MARK: - Status Bar View (Battery + Network)
 
 @MainActor
-final class DualLabelView: NSView {
-    private let uploadIconView = NSImageView()
-    private let downloadIconView = NSImageView()
-    private let uploadLabel: NSTextField = {
-        let l = NSTextField(labelWithString: "0 B/s")
-        l.textColor = .systemOrange
-        return l
-    }()
-    private let downloadLabel: NSTextField = {
-        let l = NSTextField(labelWithString: "0 B/s")
-        l.textColor = .systemGreen
-        return l
-    }()
+final class StatusBarView: NSView {
+    // Battery
+    private let batteryIconView = NSImageView()
+    private let batteryLabel = NSTextField(labelWithString: "—%")
+    private let timeLabel = NSTextField(labelWithString: "")
+
+    // Network
+    private let downIconView = NSImageView()
+    private let downLabel = NSTextField(labelWithString: "0 B/s")
+    private let upIconView = NSImageView()
+    private let upLabel = NSTextField(labelWithString: "0 B/s")
 
     override var intrinsicContentSize: NSSize {
-        let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular)
         let sample = "1.2 G/s" as NSString
         let textWidth = sample.size(withAttributes: [.font: font]).width
-        let iconWidth: CGFloat = 10
-        let totalWidth = ceil(textWidth) + iconWidth + 16
-        let lineHeight = font.leading + font.capHeight + font.descender + 3
-        let height = ceil(lineHeight * 2) + 6
-        return NSSize(width: totalWidth, height: height)
+        let iconW: CGFloat = 10
+        let itemW = ceil(textWidth) + iconW + 4
+        // Layout: [battery-icon battery%  time]  [▼speed  ▲speed]
+        // width = battery section + network section + padding
+        let batterySection: CGFloat = 80
+        let networkSection = itemW * 2 + 8
+        let width = batterySection + networkSection + 12
+        let lineH = font.leading + font.capHeight + font.descender + 2
+        let height = ceil(lineH * 2) + 6
+        return NSSize(width: width, height: height)
     }
 
     override init(frame frameRect: NSRect) {
@@ -158,27 +160,58 @@ final class DualLabelView: NSView {
 
     private func setup() {
         translatesAutoresizingMaskIntoConstraints = false
-        let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular)
+        let smallFont = NSFont.monospacedDigitSystemFont(ofSize: 8, weight: .regular)
 
-        // Configure icon image views
-        let iconConfig = NSImage.SymbolConfiguration(pointSize: 8, weight: .bold)
-        if let downImg = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Download") {
-            downloadIconView.image = downImg
-            downloadIconView.contentTintColor = .systemGreen
-            downloadIconView.symbolConfiguration = iconConfig
+        // ── Battery icon ──
+        let battConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
+        if let img = NSImage(systemSymbolName: "battery.75", accessibilityDescription: "Battery") {
+            batteryIconView.image = img
+            batteryIconView.contentTintColor = .labelColor
+            batteryIconView.symbolConfiguration = battConfig
         }
-        if let upImg = NSImage(systemSymbolName: "arrow.up.circle.fill", accessibilityDescription: "Upload") {
-            uploadIconView.image = upImg
-            uploadIconView.contentTintColor = .systemOrange
-            uploadIconView.symbolConfiguration = iconConfig
+        batteryIconView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(batteryIconView)
+
+        // ── Battery % label ──
+        batteryLabel.font = font
+        batteryLabel.textColor = .labelColor
+        batteryLabel.alignment = .left
+        batteryLabel.isBezeled = false
+        batteryLabel.isEditable = false
+        batteryLabel.drawsBackground = false
+        batteryLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(batteryLabel)
+
+        // ── Time remaining label ──
+        timeLabel.font = smallFont
+        timeLabel.textColor = .secondaryLabelColor
+        timeLabel.alignment = .left
+        timeLabel.isBezeled = false
+        timeLabel.isEditable = false
+        timeLabel.drawsBackground = false
+        timeLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(timeLabel)
+
+        // ── Network icons ──
+        let netConfig = NSImage.SymbolConfiguration(pointSize: 8, weight: .bold)
+        if let img = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Download") {
+            downIconView.image = img
+            downIconView.contentTintColor = .systemGreen
+            downIconView.symbolConfiguration = netConfig
+        }
+        if let img = NSImage(systemSymbolName: "arrow.up.circle.fill", accessibilityDescription: "Upload") {
+            upIconView.image = img
+            upIconView.contentTintColor = .systemOrange
+            upIconView.symbolConfiguration = netConfig
+        }
+        for iv in [downIconView, upIconView] {
+            iv.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(iv)
         }
 
-        for iconView in [downloadIconView, uploadIconView] {
-            iconView.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(iconView)
-        }
-
-        for label in [downloadLabel, uploadLabel] {
+        // ── Network labels ──
+        for label in [downLabel, upLabel] {
             label.font = font
             label.alignment = .left
             label.isBezeled = false
@@ -187,32 +220,72 @@ final class DualLabelView: NSView {
             label.translatesAutoresizingMaskIntoConstraints = false
             addSubview(label)
         }
+        downLabel.textColor = .systemGreen
+        upLabel.textColor = .systemOrange
 
         NSLayoutConstraint.activate([
-            // Download row
-            downloadIconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            downloadIconView.centerYAnchor.constraint(equalTo: downloadLabel.centerYAnchor),
-            downloadIconView.widthAnchor.constraint(equalToConstant: 10),
-            downloadIconView.heightAnchor.constraint(equalToConstant: 10),
-            downloadLabel.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            downloadLabel.leadingAnchor.constraint(equalTo: downloadIconView.trailingAnchor, constant: 3),
-            downloadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            // ═══ Row 1: Battery ═══
+            batteryIconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            batteryIconView.centerYAnchor.constraint(equalTo: batteryLabel.centerYAnchor),
+            batteryIconView.widthAnchor.constraint(equalToConstant: 12),
+            batteryIconView.heightAnchor.constraint(equalToConstant: 12),
 
-            // Upload row
-            uploadIconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            uploadIconView.centerYAnchor.constraint(equalTo: uploadLabel.centerYAnchor),
-            uploadIconView.widthAnchor.constraint(equalToConstant: 10),
-            uploadIconView.heightAnchor.constraint(equalToConstant: 10),
-            uploadLabel.topAnchor.constraint(equalTo: downloadLabel.bottomAnchor, constant: -1),
-            uploadLabel.leadingAnchor.constraint(equalTo: uploadIconView.trailingAnchor, constant: 3),
-            uploadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            uploadLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+            batteryLabel.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            batteryLabel.leadingAnchor.constraint(equalTo: batteryIconView.trailingAnchor, constant: 2),
+
+            timeLabel.leadingAnchor.constraint(equalTo: batteryLabel.trailingAnchor, constant: 4),
+            timeLabel.centerYAnchor.constraint(equalTo: batteryLabel.centerYAnchor),
+            timeLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -4),
+
+            // ═══ Row 2: Network ═══
+            downIconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            downIconView.centerYAnchor.constraint(equalTo: downLabel.centerYAnchor),
+            downIconView.widthAnchor.constraint(equalToConstant: 10),
+            downIconView.heightAnchor.constraint(equalToConstant: 10),
+
+            downLabel.topAnchor.constraint(equalTo: batteryLabel.bottomAnchor, constant: -1),
+            downLabel.leadingAnchor.constraint(equalTo: downIconView.trailingAnchor, constant: 2),
+
+            upIconView.leadingAnchor.constraint(equalTo: downLabel.trailingAnchor, constant: 6),
+            upIconView.centerYAnchor.constraint(equalTo: upLabel.centerYAnchor),
+            upIconView.widthAnchor.constraint(equalToConstant: 10),
+            upIconView.heightAnchor.constraint(equalToConstant: 10),
+
+            upLabel.topAnchor.constraint(equalTo: batteryLabel.bottomAnchor, constant: -1),
+            upLabel.leadingAnchor.constraint(equalTo: upIconView.trailingAnchor, constant: 2),
+            upLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -6),
+            upLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
         ])
     }
 
-    func setSpeeds(upload: String, download: String) {
-        downloadLabel.stringValue = "\(download)/s"
-        uploadLabel.stringValue = "\(upload)/s"
+    func update(battery: BatteryStatus, downSpeed: String, upSpeed: String) {
+        // Update battery
+        batteryLabel.stringValue = "\(battery.percentage)%"
+        timeLabel.stringValue = battery.timeLabel
+
+        // Choose battery SF Symbol based on level
+        let battName: String
+        if battery.isCharging {
+            battName = "battery.100.bolt"
+        } else if battery.isCharged {
+            battName = "battery.100"
+        } else if battery.percentage > 75 {
+            battName = "battery.75"
+        } else if battery.percentage > 50 {
+            battName = "battery.50"
+        } else if battery.percentage > 25 {
+            battName = "battery.25"
+        } else {
+            battName = "battery.25"
+            batteryIconView.contentTintColor = .systemRed
+        }
+        if let img = NSImage(systemSymbolName: battName, accessibilityDescription: "Battery") {
+            batteryIconView.image = img
+        }
+
+        // Update network
+        downLabel.stringValue = "\(downSpeed)/s"
+        upLabel.stringValue = "\(upSpeed)/s"
         invalidateIntrinsicContentSize()
     }
 }
@@ -221,20 +294,23 @@ final class DualLabelView: NSView {
 
 @MainActor
 final class DetailPanel: NSPanel {
-    // Speed display
+    // Battery section
+    private let batteryIconView = NSImageView()
+    private let batteryPercentLabel = NSTextField(labelWithString: "—%")
+    private let batteryTimeLabel = NSTextField(labelWithString: "")
+    private let batteryStatusLabel = NSTextField(labelWithString: "")
+    private let batteryHealthLabel = NSTextField(labelWithString: "")
+    private let batteryCycleLabel = NSTextField(labelWithString: "")
+
+    // Network speed section
     private let downSpeedLabel = NSTextField(labelWithString: "0 KB/s")
     private let upSpeedLabel = NSTextField(labelWithString: "0 KB/s")
-    private let downIconView = NSImageView()
-    private let upIconView = NSImageView()
     private let downCaption = NSTextField(labelWithString: "下载")
     private let upCaption = NSTextField(labelWithString: "上传")
 
-    // Info rows
-    private let ipIconView = NSImageView()
+    // Network info
     private let ipLabel = NSTextField(labelWithString: "—")
-    private let wifiIconView = NSImageView()
     private let wifiLabel = NSTextField(labelWithString: "—")
-    private let totalIconView = NSImageView()
     private let totalLabel = NSTextField(labelWithString: "↓0 B  ↑0 B")
 
     // Process section
@@ -243,13 +319,13 @@ final class DetailPanel: NSPanel {
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 480),
             styleMask: [.titled, .closable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
-        title = "网络监控"
+        title = "网速&电池"
         isFloatingPanel = true
         level = .floating
         hidesOnDeactivate = false
@@ -257,17 +333,106 @@ final class DetailPanel: NSPanel {
         setupViews()
     }
 
+    private func makeLabel(text: String, font: NSFont, color: NSColor = .labelColor, align: NSTextAlignment = .left) -> NSTextField {
+        let l = NSTextField(labelWithString: text)
+        l.font = font
+        l.textColor = color
+        l.alignment = align
+        l.isBezeled = false
+        l.isEditable = false
+        l.drawsBackground = false
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }
+
     private func setupViews() {
         guard let content = contentView else { return }
         content.wantsLayer = true
 
-        let bigFont = NSFont.monospacedDigitSystemFont(ofSize: 30, weight: .bold)
-        let normalFont = NSFont.systemFont(ofSize: 13)
+        let bigFont = NSFont.monospacedDigitSystemFont(ofSize: 32, weight: .bold)
+        let largeFont = NSFont.monospacedDigitSystemFont(ofSize: 20, weight: .bold)
+        let normalFont = NSFont.systemFont(ofSize: 12)
         let captionFont = NSFont.systemFont(ofSize: 10)
         let smallFont = NSFont.systemFont(ofSize: 11)
         let sectionFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        let tinyFont = NSFont.systemFont(ofSize: 9)
 
-        // ═══ Speed Section ═══
+        // ════════════════════════════════════════════
+        // SECTION 1: Battery
+        // ════════════════════════════════════════════
+        let batteryCard = NSView()
+        batteryCard.wantsLayer = true
+        batteryCard.layer?.cornerRadius = 8
+        batteryCard.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(batteryCard)
+
+        // Battery icon (big)
+        batteryIconView.translatesAutoresizingMaskIntoConstraints = false
+        let battBigConfig = NSImage.SymbolConfiguration(pointSize: 28, weight: .bold)
+        if let img = NSImage(systemSymbolName: "battery.100", accessibilityDescription: "Battery") {
+            batteryIconView.image = img
+            batteryIconView.contentTintColor = .systemGreen
+            batteryIconView.symbolConfiguration = battBigConfig
+        }
+        batteryCard.addSubview(batteryIconView)
+
+        // Battery percentage (big)
+        batteryPercentLabel.font = bigFont
+        batteryPercentLabel.textColor = .labelColor
+        batteryPercentLabel.alignment = .left
+        batteryPercentLabel.isBezeled = false
+        batteryPercentLabel.isEditable = false
+        batteryPercentLabel.drawsBackground = false
+        batteryPercentLabel.translatesAutoresizingMaskIntoConstraints = false
+        batteryCard.addSubview(batteryPercentLabel)
+
+        // Battery time
+        batteryTimeLabel.font = normalFont
+        batteryTimeLabel.textColor = .secondaryLabelColor
+        batteryTimeLabel.alignment = .left
+        batteryTimeLabel.isBezeled = false
+        batteryTimeLabel.isEditable = false
+        batteryTimeLabel.drawsBackground = false
+        batteryTimeLabel.translatesAutoresizingMaskIntoConstraints = false
+        batteryCard.addSubview(batteryTimeLabel)
+
+        // Battery status/health info stack
+        batteryStatusLabel.font = tinyFont
+        batteryStatusLabel.textColor = .secondaryLabelColor
+        batteryStatusLabel.alignment = .left
+        batteryStatusLabel.isBezeled = false
+        batteryStatusLabel.isEditable = false
+        batteryStatusLabel.drawsBackground = false
+        batteryStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+        batteryCard.addSubview(batteryStatusLabel)
+
+        batteryHealthLabel.font = tinyFont
+        batteryHealthLabel.textColor = .secondaryLabelColor
+        batteryHealthLabel.alignment = .left
+        batteryHealthLabel.isBezeled = false
+        batteryHealthLabel.isEditable = false
+        batteryHealthLabel.drawsBackground = false
+        batteryHealthLabel.translatesAutoresizingMaskIntoConstraints = false
+        batteryCard.addSubview(batteryHealthLabel)
+
+        batteryCycleLabel.font = tinyFont
+        batteryCycleLabel.textColor = .secondaryLabelColor
+        batteryCycleLabel.alignment = .left
+        batteryCycleLabel.isBezeled = false
+        batteryCycleLabel.isEditable = false
+        batteryCycleLabel.drawsBackground = false
+        batteryCycleLabel.translatesAutoresizingMaskIntoConstraints = false
+        batteryCard.addSubview(batteryCycleLabel)
+
+        // ═══ Separator ═══
+        let separator1 = NSBox()
+        separator1.boxType = .separator
+        separator1.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(separator1)
+
+        // ════════════════════════════════════════════
+        // SECTION 2: Network Speed
+        // ════════════════════════════════════════════
         let speedStack = NSStackView()
         speedStack.orientation = .horizontal
         speedStack.distribution = .fillEqually
@@ -279,20 +444,19 @@ final class DetailPanel: NSPanel {
         let downStack = NSStackView()
         downStack.orientation = .vertical
         downStack.alignment = .centerX
-        downStack.spacing = 2
-        downStack.translatesAutoresizingMaskIntoConstraints = false
+        downStack.spacing = 1
 
-        downIconView.translatesAutoresizingMaskIntoConstraints = false
-        let downSymbolConfig = NSImage.SymbolConfiguration(pointSize: 18, weight: .bold)
+        let downIconSmall = NSImageView()
+        downIconSmall.translatesAutoresizingMaskIntoConstraints = false
         if let img = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Download") {
-            downIconView.image = img
-            downIconView.contentTintColor = .systemGreen
-            downIconView.symbolConfiguration = downSymbolConfig
+            downIconSmall.image = img
+            downIconSmall.contentTintColor = .systemGreen
+            downIconSmall.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 16, weight: .bold)
         }
-        downIconView.widthAnchor.constraint(equalToConstant: 22).isActive = true
-        downIconView.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        downIconSmall.widthAnchor.constraint(equalToConstant: 20).isActive = true
+        downIconSmall.heightAnchor.constraint(equalToConstant: 20).isActive = true
 
-        downSpeedLabel.font = bigFont
+        downSpeedLabel.font = largeFont
         downSpeedLabel.textColor = .systemGreen
         downSpeedLabel.alignment = .center
         downSpeedLabel.isBezeled = false
@@ -306,7 +470,7 @@ final class DetailPanel: NSPanel {
         downCaption.isEditable = false
         downCaption.drawsBackground = false
 
-        downStack.addArrangedSubview(downIconView)
+        downStack.addArrangedSubview(downIconSmall)
         downStack.addArrangedSubview(downSpeedLabel)
         downStack.addArrangedSubview(downCaption)
         speedStack.addArrangedSubview(downStack)
@@ -315,20 +479,19 @@ final class DetailPanel: NSPanel {
         let upStack = NSStackView()
         upStack.orientation = .vertical
         upStack.alignment = .centerX
-        upStack.spacing = 2
-        upStack.translatesAutoresizingMaskIntoConstraints = false
+        upStack.spacing = 1
 
-        upIconView.translatesAutoresizingMaskIntoConstraints = false
-        let upSymbolConfig = NSImage.SymbolConfiguration(pointSize: 18, weight: .bold)
+        let upIconSmall = NSImageView()
+        upIconSmall.translatesAutoresizingMaskIntoConstraints = false
         if let img = NSImage(systemSymbolName: "arrow.up.circle.fill", accessibilityDescription: "Upload") {
-            upIconView.image = img
-            upIconView.contentTintColor = .systemOrange
-            upIconView.symbolConfiguration = upSymbolConfig
+            upIconSmall.image = img
+            upIconSmall.contentTintColor = .systemOrange
+            upIconSmall.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 16, weight: .bold)
         }
-        upIconView.widthAnchor.constraint(equalToConstant: 22).isActive = true
-        upIconView.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        upIconSmall.widthAnchor.constraint(equalToConstant: 20).isActive = true
+        upIconSmall.heightAnchor.constraint(equalToConstant: 20).isActive = true
 
-        upSpeedLabel.font = bigFont
+        upSpeedLabel.font = largeFont
         upSpeedLabel.textColor = .systemOrange
         upSpeedLabel.alignment = .center
         upSpeedLabel.isBezeled = false
@@ -342,38 +505,39 @@ final class DetailPanel: NSPanel {
         upCaption.isEditable = false
         upCaption.drawsBackground = false
 
-        upStack.addArrangedSubview(upIconView)
+        upStack.addArrangedSubview(upIconSmall)
         upStack.addArrangedSubview(upSpeedLabel)
         upStack.addArrangedSubview(upCaption)
         speedStack.addArrangedSubview(upStack)
 
         // ═══ Separator ═══
-        let separator1 = NSBox()
-        separator1.boxType = .separator
-        separator1.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(separator1)
+        let separator2 = NSBox()
+        separator2.boxType = .separator
+        separator2.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(separator2)
 
-        // ═══ Info Section ═══
+        // ════════════════════════════════════════════
+        // SECTION 3: Network Info
+        // ════════════════════════════════════════════
         let infoStack = NSStackView()
         infoStack.orientation = .vertical
-        infoStack.spacing = 6
+        infoStack.spacing = 4
         infoStack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(infoStack)
 
-        // Helper to create icon+label rows
-        func makeInfoRow(iconView: NSImageView, symbolName: String, tint: NSColor, label: NSTextField) -> NSView {
+        func makeInfoRow(symbol: String, tint: NSColor, label: NSTextField) -> NSView {
             let row = NSView()
             row.translatesAutoresizingMaskIntoConstraints = false
-
-            iconView.translatesAutoresizingMaskIntoConstraints = false
-            if let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
-                iconView.image = img
-                iconView.contentTintColor = tint
-                iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+            let iv = NSImageView()
+            iv.translatesAutoresizingMaskIntoConstraints = false
+            if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) {
+                iv.image = img
+                iv.contentTintColor = tint
+                iv.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
             }
-            iconView.widthAnchor.constraint(equalToConstant: 18).isActive = true
-            iconView.heightAnchor.constraint(equalToConstant: 18).isActive = true
-            row.addSubview(iconView)
+            iv.widthAnchor.constraint(equalToConstant: 16).isActive = true
+            iv.heightAnchor.constraint(equalToConstant: 16).isActive = true
+            row.addSubview(iv)
 
             label.font = normalFont
             label.textColor = .labelColor
@@ -384,27 +548,33 @@ final class DetailPanel: NSPanel {
             row.addSubview(label)
 
             NSLayoutConstraint.activate([
-                iconView.leadingAnchor.constraint(equalTo: row.leadingAnchor),
-                iconView.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-                label.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
+                iv.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+                iv.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+                label.leadingAnchor.constraint(equalTo: iv.trailingAnchor, constant: 6),
                 label.trailingAnchor.constraint(equalTo: row.trailingAnchor),
                 label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-                row.heightAnchor.constraint(equalToConstant: 22),
+                row.heightAnchor.constraint(equalToConstant: 20),
             ])
             return row
         }
 
-        infoStack.addArrangedSubview(makeInfoRow(iconView: ipIconView, symbolName: "network", tint: .systemBlue, label: ipLabel))
-        infoStack.addArrangedSubview(makeInfoRow(iconView: wifiIconView, symbolName: "wifi", tint: .systemBlue, label: wifiLabel))
-        infoStack.addArrangedSubview(makeInfoRow(iconView: totalIconView, symbolName: "arrow.down.arrow.up", tint: .secondaryLabelColor, label: totalLabel))
+        let ipRow = makeInfoRow(symbol: "network", tint: .systemBlue, label: ipLabel)
+        let wifiRow = makeInfoRow(symbol: "wifi", tint: .systemBlue, label: wifiLabel)
+        let totalRow = makeInfoRow(symbol: "arrow.down.arrow.up", tint: .secondaryLabelColor, label: totalLabel)
+
+        infoStack.addArrangedSubview(ipRow)
+        infoStack.addArrangedSubview(wifiRow)
+        infoStack.addArrangedSubview(totalRow)
 
         // ═══ Separator ═══
-        let separator2 = NSBox()
-        separator2.boxType = .separator
-        separator2.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(separator2)
+        let separator3 = NSBox()
+        separator3.boxType = .separator
+        separator3.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(separator3)
 
-        // ═══ Process Section ═══
+        // ════════════════════════════════════════════
+        // SECTION 4: Processes
+        // ════════════════════════════════════════════
         processHeaderLabel.font = sectionFont
         processHeaderLabel.textColor = .secondaryLabelColor
         processHeaderLabel.isBezeled = false
@@ -421,53 +591,124 @@ final class DetailPanel: NSPanel {
         processList.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(processList)
 
-        // ═══ Layout Constraints ═══
+        // ════════════════════════════════════════════
+        // Layout Constraints
+        // ════════════════════════════════════════════
         NSLayoutConstraint.activate([
-            // Speed section
-            speedStack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
-            speedStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            speedStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
-            speedStack.heightAnchor.constraint(equalToConstant: 90),
+            // ── Battery Card ──
+            batteryCard.topAnchor.constraint(equalTo: content.topAnchor, constant: 16),
+            batteryCard.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            batteryCard.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            batteryCard.heightAnchor.constraint(equalToConstant: 100),
 
-            // Separator 1
-            separator1.topAnchor.constraint(equalTo: speedStack.bottomAnchor, constant: 16),
+            batteryIconView.leadingAnchor.constraint(equalTo: batteryCard.leadingAnchor, constant: 12),
+            batteryIconView.centerYAnchor.constraint(equalTo: batteryCard.centerYAnchor),
+            batteryIconView.widthAnchor.constraint(equalToConstant: 36),
+            batteryIconView.heightAnchor.constraint(equalToConstant: 36),
+
+            batteryPercentLabel.topAnchor.constraint(equalTo: batteryCard.topAnchor, constant: 12),
+            batteryPercentLabel.leadingAnchor.constraint(equalTo: batteryIconView.trailingAnchor, constant: 12),
+            batteryPercentLabel.trailingAnchor.constraint(equalTo: batteryCard.trailingAnchor, constant: -12),
+
+            batteryTimeLabel.topAnchor.constraint(equalTo: batteryPercentLabel.bottomAnchor, constant: 2),
+            batteryTimeLabel.leadingAnchor.constraint(equalTo: batteryIconView.trailingAnchor, constant: 12),
+            batteryTimeLabel.trailingAnchor.constraint(equalTo: batteryCard.trailingAnchor, constant: -12),
+
+            batteryStatusLabel.topAnchor.constraint(equalTo: batteryTimeLabel.bottomAnchor, constant: 4),
+            batteryStatusLabel.leadingAnchor.constraint(equalTo: batteryIconView.trailingAnchor, constant: 12),
+
+            batteryHealthLabel.topAnchor.constraint(equalTo: batteryStatusLabel.bottomAnchor, constant: 1),
+            batteryHealthLabel.leadingAnchor.constraint(equalTo: batteryIconView.trailingAnchor, constant: 12),
+
+            batteryCycleLabel.topAnchor.constraint(equalTo: batteryHealthLabel.bottomAnchor, constant: 1),
+            batteryCycleLabel.leadingAnchor.constraint(equalTo: batteryIconView.trailingAnchor, constant: 12),
+
+            // ── Separator 1 ──
+            separator1.topAnchor.constraint(equalTo: batteryCard.bottomAnchor, constant: 12),
             separator1.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
             separator1.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
 
-            // Info section
-            infoStack.topAnchor.constraint(equalTo: separator1.bottomAnchor, constant: 12),
-            infoStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
-            infoStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            // ── Speed Section ──
+            speedStack.topAnchor.constraint(equalTo: separator1.bottomAnchor, constant: 12),
+            speedStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            speedStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            speedStack.heightAnchor.constraint(equalToConstant: 70),
 
-            // Separator 2
-            separator2.topAnchor.constraint(equalTo: infoStack.bottomAnchor, constant: 12),
+            // ── Separator 2 ──
+            separator2.topAnchor.constraint(equalTo: speedStack.bottomAnchor, constant: 12),
             separator2.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
             separator2.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
 
-            // Process section
-            processHeaderLabel.topAnchor.constraint(equalTo: separator2.bottomAnchor, constant: 10),
+            // ── Info Section ──
+            infoStack.topAnchor.constraint(equalTo: separator2.bottomAnchor, constant: 10),
+            infoStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            infoStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+
+            // ── Separator 3 ──
+            separator3.topAnchor.constraint(equalTo: infoStack.bottomAnchor, constant: 10),
+            separator3.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            separator3.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+
+            // ── Process Section ──
+            processHeaderLabel.topAnchor.constraint(equalTo: separator3.bottomAnchor, constant: 8),
             processHeaderLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
             processHeaderLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
 
-            processList.topAnchor.constraint(equalTo: processHeaderLabel.bottomAnchor, constant: 6),
+            processList.topAnchor.constraint(equalTo: processHeaderLabel.bottomAnchor, constant: 4),
             processList.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
             processList.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             processList.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -16),
         ])
     }
 
-    func update(downSpeed: Double, upSpeed: Double, totalRx: UInt64, totalTx: UInt64,
+    func update(battery: BatteryStatus, downSpeed: Double, upSpeed: Double,
+                totalRx: UInt64, totalTx: UInt64,
                 ip: String?, wifi: String?, processes: [ProcessNetUsage]) {
+        // Battery
+        batteryPercentLabel.stringValue = "\(battery.percentage)%"
+        batteryTimeLabel.stringValue = battery.timeLabel
+
+        let battName: String
+        let battTint: NSColor
+        if battery.isCharging {
+            battName = "battery.100.bolt"
+            battTint = .systemGreen
+        } else if battery.isCharged {
+            battName = "battery.100"
+            battTint = .systemGreen
+        } else if battery.percentage > 50 {
+            battName = "battery.75"
+            battTint = .systemGreen
+        } else if battery.percentage > 25 {
+            battName = "battery.50"
+            battTint = .systemOrange
+        } else {
+            battName = "battery.25"
+            battTint = .systemRed
+        }
+        if let img = NSImage(systemSymbolName: battName, accessibilityDescription: "Battery") {
+            batteryIconView.image = img
+            batteryIconView.contentTintColor = battTint
+        }
+
+        let sourceText = battery.powerSource == "AC Power" ? "交流电" : "电池"
+        batteryStatusLabel.stringValue = "电源: \(sourceText)  \(battery.isCharging ? "⚡充电中" : battery.isCharged ? "✅已充满" : "🔋使用中")"
+        batteryHealthLabel.stringValue = "健康度: \(battery.health)"
+        batteryCycleLabel.stringValue = "循环次数: \(battery.cycleCount)"
+
+        // Network speed
         let downFull = formatBytesFull(UInt64(downSpeed)) + "/s"
         let upFull = formatBytesFull(UInt64(upSpeed)) + "/s"
         downSpeedLabel.stringValue = downFull
         upSpeedLabel.stringValue = upFull
+
+        // Network info
         ipLabel.stringValue = ip ?? "未连接"
         wifiLabel.stringValue = wifi ?? "—"
         totalLabel.stringValue = "↓\(formatBytesFull(totalRx))  ↑\(formatBytesFull(totalTx))"
 
-        // Top 15 processes
-        let top = processes.prefix(15)
+        // Processes
+        let top = processes.prefix(12)
         if top.isEmpty {
             processList.stringValue = "暂无活跃流量"
             processList.textColor = .secondaryLabelColor
@@ -486,8 +727,9 @@ final class DetailPanel: NSPanel {
 @MainActor
 final class MenuBarManager: NSObject {
     private let statusItem: NSStatusItem
-    private let labelView = DualLabelView()
+    private let labelView = StatusBarView()
     private var monitor: NetworkSpeedMonitor!
+    private let batteryMonitor = BatteryMonitor()
     private let processMonitor = ProcessNetworkMonitor()
     private var timer: Timer?
     private var detailPanel: DetailPanel?
@@ -500,14 +742,10 @@ final class MenuBarManager: NSObject {
     private static let totalRxKey = "totalRx"
     private static let totalTxKey = "totalTx"
 
-    /// Get Wi-Fi name. Returns the SSID if CoreWLAN can access it,
-    /// or "已连接" / "未连接" based on whether en0 has an IP address.
     private func getWiFiStatus() -> String {
-        // Try CoreWLAN (requires entitlement + Location Services)
         if let ssid = CWWiFiClient.shared().interface()?.ssid(), !ssid.isEmpty {
             return ssid
         }
-        // Fallback: check if en0 has an IP
         if getLocalIPAddress() != nil {
             return "已连接"
         }
@@ -542,13 +780,11 @@ final class MenuBarManager: NSObject {
             labelView.bottomAnchor.constraint(equalTo: button.bottomAnchor),
         ])
 
-        // Double-click opens detail panel
         let clickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(toggleDetailPanel))
         clickRecognizer.numberOfClicksRequired = 2
         button.addGestureRecognizer(clickRecognizer)
     }
 
-    /// Helper: create an NSMenuItem with an SF Symbol image
     private func menuItem(title: String, action: Selector? = nil, keyEquivalent: String = "",
                           symbol: String? = nil, tag: Int = 0, isEnabled: Bool = true) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
@@ -570,21 +806,24 @@ final class MenuBarManager: NSObject {
         let menu = NSMenu()
 
         // ── Header ──
-        let headerItem = NSMenuItem(title: "网络监控", action: nil, keyEquivalent: "")
+        let headerItem = NSMenuItem(title: "网速&电池", action: nil, keyEquivalent: "")
         headerItem.isEnabled = false
         menu.addItem(headerItem)
 
-        // ── Network Status ──
-        menu.addItem(menuItem(title: "IP: 获取中…", symbol: "network", tag: 1002, isEnabled: false))
-        menu.addItem(menuItem(title: "Wi-Fi: —", symbol: "wifi", tag: 1004, isEnabled: false))
-
+        // ── Battery Status ──
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(menuItem(title: "🔋 电池: —%", tag: 200, isEnabled: false))
+        menu.addItem(menuItem(title: "⏱ 剩余时间: —", tag: 201, isEnabled: false))
+        menu.addItem(menuItem(title: "⚡ 电源: —", tag: 202, isEnabled: false))
+        menu.addItem(menuItem(title: "🔄 循环: —次", tag: 203, isEnabled: false))
+        menu.addItem(menuItem(title: "❤️ 健康: —", tag: 204, isEnabled: false))
 
-        // ── Speed Summary ──
+        // ── Network Status ──
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(menuItem(title: "📶 IP: 获取中…", tag: 1002, isEnabled: false))
+        menu.addItem(menuItem(title: "📶 Wi-Fi: —", tag: 1004, isEnabled: false))
         menu.addItem(menuItem(title: "▼ 0 KB/s  ▲ 0 KB/s", tag: 1001, isEnabled: false))
         menu.addItem(menuItem(title: "", tag: 1003, isEnabled: false))
-
-        menu.addItem(NSMenuItem.separator())
 
         // ── Active Processes ──
         let procHeader = NSMenuItem(title: "活跃进程", action: nil, keyEquivalent: "")
@@ -592,25 +831,20 @@ final class MenuBarManager: NSObject {
         procHeader.tag = processSectionTag
         menu.addItem(procHeader)
 
-        menu.addItem(NSMenuItem.separator())
-
         // ── Actions ──
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "打开详情面板", action: #selector(toggleDetailPanel), keyEquivalent: "d",
                               symbol: "info.circle.fill"))
-        menu.addItem(menuItem(title: "复制网络信息", action: #selector(copyNetworkInfo), keyEquivalent: "c",
+        menu.addItem(menuItem(title: "复制信息", action: #selector(copyNetworkInfo), keyEquivalent: "c",
                               symbol: "doc.on.doc"))
-        menu.addItem(menuItem(title: "导出流量日志…", action: #selector(exportLog), keyEquivalent: "e",
+        menu.addItem(menuItem(title: "导出日志…", action: #selector(exportLog), keyEquivalent: "e",
                               symbol: "square.and.arrow.up"))
 
         menu.addItem(NSMenuItem.separator())
-
-        // ── Settings ──
         menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
                               symbol: "clock.arrow.circlepath", tag: launchAtStartupTag))
 
         menu.addItem(NSMenuItem.separator())
-
-        // ── Quit ──
         menu.addItem(menuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q",
                               symbol: "power"))
 
@@ -632,19 +866,27 @@ final class MenuBarManager: NSObject {
     }
 
     @objc private func update() {
+        // Poll battery
+        batteryMonitor.poll()
+        let battery = batteryMonitor.status
+
+        // Poll network
         monitor.poll()
         let downSpeed = max(monitor.downloadSpeed, 0)
         let upSpeed = max(monitor.uploadSpeed, 0)
         let downStr = formatSpeedShort(downSpeed)
         let upStr = formatSpeedShort(upSpeed)
 
-        labelView.setSpeeds(upload: upStr, download: downStr)
+        // Update menu bar view
+        labelView.update(battery: battery, downSpeed: downStr, upSpeed: upStr)
 
+        // History
         downHistory.append(downSpeed)
         upHistory.append(upSpeed)
         if downHistory.count > maxHistory { downHistory.removeFirst() }
         if upHistory.count > maxHistory { upHistory.removeFirst() }
 
+        // Logging
         let shouldLog = logEntries.isEmpty || Date().timeIntervalSince(logEntries.last!.timestamp) >= 5
         if shouldLog {
             logEntries.append(NetworkLogEntry(
@@ -653,15 +895,14 @@ final class MenuBarManager: NSObject {
                 totalRx: monitor.totalRx, totalTx: monitor.totalTx,
                 ip: getLocalIPAddress()
             ))
-            // Keep at most 1000 entries (~1.4 hours of 5-second logging)
             if logEntries.count > 1000 {
                 logEntries.removeFirst(logEntries.count - 1000)
             }
-            // Persist cumulative totals every 5 seconds
             UserDefaults.standard.set(Int(monitor.totalRx), forKey: Self.totalRxKey)
             UserDefaults.standard.set(Int(monitor.totalTx), forKey: Self.totalTxKey)
         }
 
+        // Process monitor
         processMonitor.poll()
         let processes = processMonitor.processSpeeds
         let ip = getLocalIPAddress()
@@ -669,42 +910,60 @@ final class MenuBarManager: NSObject {
 
         guard let menu = statusItem.menu else { return }
 
+        // ── Update menu items ──
+
+        // Launch at startup
         if let launchItem = menu.item(withTag: launchAtStartupTag) {
             launchItem.state = isLaunchAtStartupSaved ? .on : .off
         }
 
+        // Battery items
+        if let item = menu.item(withTag: 200) {
+            item.title = "🔋 \(battery.percentage)%"
+        }
+        if let item = menu.item(withTag: 201) {
+            item.title = "⏱ \(battery.timeLabel)"
+        }
+        if let item = menu.item(withTag: 202) {
+            let src = battery.powerSource == "AC Power" ? "交流电" : "电池"
+            let charging = battery.isCharging ? " ⚡充电中" : battery.isCharged ? " ✅已充满" : ""
+            item.title = "⚡ \(src)\(charging)"
+        }
+        if let item = menu.item(withTag: 203) {
+            item.title = "🔄 循环: \(battery.cycleCount)次"
+        }
+        if let item = menu.item(withTag: 204) {
+            item.title = "❤️ 健康: \(battery.health)"
+        }
+
+        // Network items
         if let ipItem = menu.item(withTag: 1002) {
-            ipItem.title = ip.map { "\($0)" } ?? "未连接"
+            ipItem.title = ip.map { "📶 \($0)" } ?? "📶 未连接"
         }
-
         if let wifiItem = menu.item(withTag: 1004) {
-            wifiItem.title = "\(wifi)"
+            wifiItem.title = "📶 \(wifi)"
         }
-
         if let detailsItem = menu.item(withTag: 1001) {
             let downFull = formatBytesFull(UInt64(downSpeed)) + "/s"
             let upFull = formatBytesFull(UInt64(upSpeed)) + "/s"
-            detailsItem.attributedTitle = nil
             detailsItem.title = "▼ \(downFull)    ▲ \(upFull)"
-            // Color the speed string
             let attrStr = NSMutableAttributedString(string: detailsItem.title)
             let fullRange = NSRange(location: 0, length: attrStr.length)
             attrStr.addAttribute(.font, value: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular), range: fullRange)
             detailsItem.attributedTitle = attrStr
         }
-
         if let trendItem = menu.item(withTag: 1003) {
             let totalHistory = zip(downHistory, upHistory).map { $0 + $1 }
             if !totalHistory.isEmpty {
-                let spark = sparkline(from: totalHistory, maxChars: 10)
-                trendItem.title = "\(spark)"
+                trendItem.title = "\(sparkline(from: totalHistory, maxChars: 10))"
             }
         }
 
+        // Header (show totals)
         if let headerItem = menu.item(at: 0) {
             let totalDown = formatBytesFull(monitor.totalRx)
             let totalUp = formatBytesFull(monitor.totalTx)
-            let attrStr = NSMutableAttributedString(string: "↓\(totalDown)  ↑\(totalUp)")
+            let attrStr = NSMutableAttributedString(string: "网速&电池  ↓\(totalDown)  ↑\(totalUp)")
             let fullRange = NSRange(location: 0, length: attrStr.length)
             attrStr.addAttribute(.font, value: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium), range: fullRange)
             headerItem.attributedTitle = attrStr
@@ -715,6 +974,7 @@ final class MenuBarManager: NSObject {
         // Update detail panel if open
         if let panel = detailPanel, panel.isVisible {
             panel.update(
+                battery: battery,
                 downSpeed: downSpeed, upSpeed: upSpeed,
                 totalRx: monitor.totalRx, totalTx: monitor.totalTx,
                 ip: ip, wifi: wifi, processes: processes
@@ -731,7 +991,6 @@ final class MenuBarManager: NSObject {
         for process in top {
             let downStr = formatSpeedShort(Double(process.bytesIn))
             let upStr = formatSpeedShort(Double(process.bytesOut))
-            // Truncate process name to 14 chars so the line doesn't widen the menu
             let shortName = process.name.count > 14
                 ? String(process.name.prefix(13)) + "…"
                 : process.name
@@ -741,8 +1000,7 @@ final class MenuBarManager: NSObject {
             item.isEnabled = false
             item.tag = processSectionTag + 1
 
-            // Add app icon if available
-            if let appPath = NSWorkspace.shared.urlForApplication(withBundleIdentifier: process.name) ?? 
+            if let appPath = NSWorkspace.shared.urlForApplication(withBundleIdentifier: process.name) ??
                 NSWorkspace.shared.urlForApplication(withBundleIdentifier: guessBundleID(for: process.name)) {
                 let icon = NSWorkspace.shared.icon(forFile: appPath.path)
                 icon.size = NSSize(width: 14, height: 14)
@@ -766,9 +1024,7 @@ final class MenuBarManager: NSObject {
         }
     }
 
-    /// Try to guess a bundle ID from a process name (best-effort for app icon lookup)
     private func guessBundleID(for processName: String) -> String {
-        // Common mappings
         let map: [String: String] = [
             "Google Chrome": "com.google.Chrome",
             "Safari": "com.apple.Safari",
@@ -803,6 +1059,7 @@ final class MenuBarManager: NSObject {
         } else {
             let panel = DetailPanel()
             panel.update(
+                battery: batteryMonitor.status,
                 downSpeed: max(monitor.downloadSpeed, 0),
                 upSpeed: max(monitor.uploadSpeed, 0),
                 totalRx: monitor.totalRx, totalTx: monitor.totalTx,
@@ -815,6 +1072,7 @@ final class MenuBarManager: NSObject {
     }
 
     @objc private func copyNetworkInfo() {
+        let battery = batteryMonitor.status
         let ip = getLocalIPAddress() ?? "未连接"
         let wifi = getWiFiStatus()
         let down = formatBytesFull(UInt64(monitor.downloadSpeed)) + "/s"
@@ -823,7 +1081,12 @@ final class MenuBarManager: NSObject {
         let totalUp = formatBytesFull(monitor.totalTx)
 
         let text = """
-        网络监控
+        网速&电池
+        ========
+        电池: \(battery.percentage)%  \(battery.timeLabel)
+        电源: \(battery.powerSource)
+        循环: \(battery.cycleCount)次  健康: \(battery.health)
+        ========
         IP: \(ip)
         Wi-Fi: \(wifi)
         下载: \(down)
@@ -867,7 +1130,6 @@ final class MenuBarManager: NSObject {
 
     @objc private func toggleLaunchAtStartup() {
         let wasEnabled = isLaunchAtStartupSaved
-        // 先更新配置文件，再操作系统登录项（即使 register 失败，配置也已记录）
         UserDefaults.standard.set(!wasEnabled, forKey: Self.launchPrefKey)
 
         do {
