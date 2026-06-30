@@ -33,8 +33,10 @@ final class MenuBuilder {
         menu.addItem(NSMenuItem.separator())
 
         // 操作按钮
-        menu.addItem(actionItem(title: "📅  查看每日报告", action: #selector(AppDelegate.showDailyReport)))
-        menu.addItem(actionItem(title: "📆  查看每周报告", action: #selector(AppDelegate.showWeeklyReport)))
+        menu.addItem(actionItem(title: "📅  生成并查看每日报告", action: #selector(AppDelegate.showDailyReport)))
+        menu.addItem(actionItem(title: "📆  生成每周报告", action: #selector(AppDelegate.showWeeklyReport)))
+        menu.addItem(actionItem(title: "📂  打开报告文件夹", action: #selector(AppDelegate.openReportsFolder)))
+        menu.addItem(NSMenuItem.separator())
         menu.addItem(actionItem(title: "🚀  开机自启", action: #selector(AppDelegate.toggleLaunchAtLogin)))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(actionItem(title: "⏹  退出", action: #selector(AppDelegate.quit)))

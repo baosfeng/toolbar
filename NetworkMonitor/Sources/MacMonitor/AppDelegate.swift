@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var systemSampler: SystemSampler?
     private lazy var statsProvider = StatsProvider(database: databaseManager)
     private lazy var menuBuilder = MenuBuilder(statsProvider: statsProvider)
+    private lazy var reportGenerator = ReportGenerator(database: databaseManager, statsProvider: statsProvider)
 
     // MARK: - 应用生命周期
 
@@ -76,15 +77,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - 操作
 
     @objc func showDailyReport() {
-        print("查看每日报告（待实现）")
+        if let path = reportGenerator.generateDailyReport() {
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        }
     }
 
     @objc func showWeeklyReport() {
-        print("查看每周报告（待实现）")
+        if let path = reportGenerator.generateWeeklyReport() {
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        }
     }
 
     @objc func toggleLaunchAtLogin() {
         print("开机自启切换（待实现）")
+    }
+
+    @objc func openReportsFolder() {
+        NSWorkspace.shared.open(URL(fileURLWithPath: reportGenerator.reportsDirectoryPath))
     }
 
     @objc func quit() {
