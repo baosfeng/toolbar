@@ -9,12 +9,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: NSStatusItem?
     private let databaseManager = DatabaseManager()
+    private var eventMonitor: EventMonitor?
 
     // MARK: - 应用生命周期
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 初始化数据库
         databaseManager.initialize()
+
+        // 启动事件监听
+        let monitor = EventMonitor(database: databaseManager)
+        monitor.start()
+        eventMonitor = monitor
 
         // 设置菜单栏
         setupMenuBar()
@@ -23,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        eventMonitor?.stop()
         databaseManager.close()
     }
 
