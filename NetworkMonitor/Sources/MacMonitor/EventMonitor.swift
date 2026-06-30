@@ -108,12 +108,19 @@ final class EventMonitor {
               let bundleID = app.bundleIdentifier
         else { return }
 
+        // 获取窗口标题（需要 Accessibility 权限）
+        let windowTitle = WindowTitleMonitor.title(for: app)
+
         let previousName = currentAppName ?? "（无）"
         currentAppName = name
         currentBundleID = bundleID
 
-        writeEvent(type: .appSwitch, appName: name, bundleID: bundleID)
-        print("📱 切换: \(previousName) → \(name)")
+        writeEvent(type: .appSwitch, appName: name, bundleID: bundleID, windowTitle: windowTitle)
+        if let title = windowTitle {
+            print("📱 切换: \(previousName) → \(name) 「\(title)」")
+        } else {
+            print("📱 切换: \(previousName) → \(name)")
+        }
     }
 
     /// 息屏
@@ -146,13 +153,15 @@ final class EventMonitor {
     private func writeEvent(
         type: EventType,
         appName: String? = nil,
-        bundleID: String? = nil
+        bundleID: String? = nil,
+        windowTitle: String? = nil
     ) {
         let timestamp = Date().timeIntervalSince1970
         database.writeEvent(
             type: type,
             appName: appName,
             bundleID: bundleID,
+            windowTitle: windowTitle,
             timestamp: timestamp
         )
     }

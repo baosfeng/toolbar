@@ -88,7 +88,7 @@ final class DatabaseManager {
         }
 
         let escapedType = escapeSQL(EventType.systemSample.rawValue)
-        let values = "(\(escapedType), '', '', \(timestamp), \(extra))"
+        let values = "(\(escapedType), '', '', '', \(timestamp), \(extra))"
         eventBuffer.append(values)
 
         if eventBuffer.count >= batchSize {
@@ -100,7 +100,7 @@ final class DatabaseManager {
     func writeKeyPressBatch(count: Int, timestamp: TimeInterval) {
         let escapedType = escapeSQL(EventType.keyPress.rawValue)
         let extra = escapeSQL("{\"count\":\(count)}")
-        let values = "(\(escapedType), '', '', \(timestamp), \(extra))"
+        let values = "(\(escapedType), '', '', '', \(timestamp), \(extra))"
         eventBuffer.append(values)
 
         if eventBuffer.count >= batchSize {
@@ -108,13 +108,14 @@ final class DatabaseManager {
         }
     }
 
-    func writeEvent(type: EventType, appName: String? = nil, bundleID: String? = nil, timestamp: TimeInterval) {
+    func writeEvent(type: EventType, appName: String? = nil, bundleID: String? = nil, windowTitle: String? = nil, timestamp: TimeInterval) {
         // 使用 SQL 值转义避免注入
         let escapedType = escapeSQL(type.rawValue)
         let escapedApp = escapeSQL(appName ?? "")
         let escapedBundle = escapeSQL(bundleID ?? "")
+        let escapedTitle = escapeSQL(windowTitle ?? "")
 
-        let values = "(\(escapedType), \(escapedApp), \(escapedBundle), \(timestamp), NULL)"
+        let values = "(\(escapedType), \(escapedApp), \(escapedBundle), \(escapedTitle), \(timestamp), NULL)"
         eventBuffer.append(values)
 
         if eventBuffer.count >= batchSize {
@@ -127,7 +128,7 @@ final class DatabaseManager {
         guard !eventBuffer.isEmpty, let db else { return }
 
         let values = eventBuffer.joined(separator: ",\n")
-        let sql = "INSERT INTO events (event_type, app_name, app_bundle_id, timestamp, extra_data) VALUES \(values);"
+        let sql = "INSERT INTO events (event_type, app_name, app_bundle_id, window_title, timestamp, extra_data) VALUES \(values);"
 
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
