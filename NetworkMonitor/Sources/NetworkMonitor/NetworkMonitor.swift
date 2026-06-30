@@ -2,7 +2,6 @@ import AppKit
 import Darwin
 import ServiceManagement
 import CoreWLAN
-import NetworkMonitorCore
 
 // MARK: - Network Speed Monitor
 
@@ -119,29 +118,32 @@ final class ProcessNetworkMonitor {
     }
 }
 
-// MARK: - Dual-Label Status Bar View (with color)
+// MARK: - Dual-Label Status Bar View
 
 @MainActor
 final class DualLabelView: NSView {
-    let uploadLabel: NSTextField = {
-        let l = NSTextField(labelWithString: "▲ 0")
+    private let uploadIconView = NSImageView()
+    private let downloadIconView = NSImageView()
+    private let uploadLabel: NSTextField = {
+        let l = NSTextField(labelWithString: "0 B/s")
         l.textColor = .systemOrange
         return l
     }()
-    let downloadLabel: NSTextField = {
-        let l = NSTextField(labelWithString: "▼ 0")
+    private let downloadLabel: NSTextField = {
+        let l = NSTextField(labelWithString: "0 B/s")
         l.textColor = .systemGreen
         return l
     }()
 
     override var intrinsicContentSize: NSSize {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
-        let sample = "▲ 1.2G" as NSString
+        let sample = "1.2 G/s" as NSString
         let textWidth = sample.size(withAttributes: [.font: font]).width
-        let width = ceil(textWidth) + 12
+        let iconWidth: CGFloat = 10
+        let totalWidth = ceil(textWidth) + iconWidth + 16
         let lineHeight = font.leading + font.capHeight + font.descender + 3
-        let height = ceil(lineHeight * 2) + 4
-        return NSSize(width: width, height: height)
+        let height = ceil(lineHeight * 2) + 6
+        return NSSize(width: totalWidth, height: height)
     }
 
     override init(frame frameRect: NSRect) {
@@ -157,29 +159,60 @@ final class DualLabelView: NSView {
     private func setup() {
         translatesAutoresizingMaskIntoConstraints = false
         let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
-        for label in [uploadLabel, downloadLabel] {
+
+        // Configure icon image views
+        let iconConfig = NSImage.SymbolConfiguration(pointSize: 8, weight: .bold)
+        if let downImg = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Download") {
+            downloadIconView.image = downImg
+            downloadIconView.contentTintColor = .systemGreen
+            downloadIconView.symbolConfiguration = iconConfig
+        }
+        if let upImg = NSImage(systemSymbolName: "arrow.up.circle.fill", accessibilityDescription: "Upload") {
+            uploadIconView.image = upImg
+            uploadIconView.contentTintColor = .systemOrange
+            uploadIconView.symbolConfiguration = iconConfig
+        }
+
+        for iconView in [downloadIconView, uploadIconView] {
+            iconView.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(iconView)
+        }
+
+        for label in [downloadLabel, uploadLabel] {
             label.font = font
-            label.alignment = .center
+            label.alignment = .left
             label.isBezeled = false
             label.isEditable = false
             label.drawsBackground = false
             label.translatesAutoresizingMaskIntoConstraints = false
             addSubview(label)
         }
+
         NSLayoutConstraint.activate([
-            uploadLabel.topAnchor.constraint(equalTo: topAnchor, constant: 1),
-            uploadLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            uploadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-            downloadLabel.topAnchor.constraint(equalTo: uploadLabel.bottomAnchor, constant: -2),
-            downloadLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            downloadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-            downloadLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+            // Download row
+            downloadIconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            downloadIconView.centerYAnchor.constraint(equalTo: downloadLabel.centerYAnchor),
+            downloadIconView.widthAnchor.constraint(equalToConstant: 10),
+            downloadIconView.heightAnchor.constraint(equalToConstant: 10),
+            downloadLabel.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            downloadLabel.leadingAnchor.constraint(equalTo: downloadIconView.trailingAnchor, constant: 3),
+            downloadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+
+            // Upload row
+            uploadIconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            uploadIconView.centerYAnchor.constraint(equalTo: uploadLabel.centerYAnchor),
+            uploadIconView.widthAnchor.constraint(equalToConstant: 10),
+            uploadIconView.heightAnchor.constraint(equalToConstant: 10),
+            uploadLabel.topAnchor.constraint(equalTo: downloadLabel.bottomAnchor, constant: -1),
+            uploadLabel.leadingAnchor.constraint(equalTo: uploadIconView.trailingAnchor, constant: 3),
+            uploadLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            uploadLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
         ])
     }
 
     func setSpeeds(upload: String, download: String) {
-        uploadLabel.stringValue = "▲ \(upload)"
-        downloadLabel.stringValue = "▼ \(download)"
+        downloadLabel.stringValue = "\(download)/s"
+        uploadLabel.stringValue = "\(upload)/s"
         invalidateIntrinsicContentSize()
     }
 }
@@ -188,22 +221,35 @@ final class DualLabelView: NSView {
 
 @MainActor
 final class DetailPanel: NSPanel {
-    private let downSpeedLabel = NSTextField(labelWithString: "↓ 0 KB/s")
-    private let upSpeedLabel = NSTextField(labelWithString: "↑ 0 KB/s")
-    private let totalLabel = NSTextField(labelWithString: "总计：")
-    private let ipLabel = NSTextField(labelWithString: "IP: —")
-    private let wifiLabel = NSTextField(labelWithString: "Wi-Fi: —")
+    // Speed display
+    private let downSpeedLabel = NSTextField(labelWithString: "0 KB/s")
+    private let upSpeedLabel = NSTextField(labelWithString: "0 KB/s")
+    private let downIconView = NSImageView()
+    private let upIconView = NSImageView()
+    private let downCaption = NSTextField(labelWithString: "下载")
+    private let upCaption = NSTextField(labelWithString: "上传")
+
+    // Info rows
+    private let ipIconView = NSImageView()
+    private let ipLabel = NSTextField(labelWithString: "—")
+    private let wifiIconView = NSImageView()
+    private let wifiLabel = NSTextField(labelWithString: "—")
+    private let totalIconView = NSImageView()
+    private let totalLabel = NSTextField(labelWithString: "↓0 B  ↑0 B")
+
+    // Process section
+    private let processHeaderLabel = NSTextField(labelWithString: "活跃进程")
     private let processList = NSTextField(labelWithString: "")
 
     init() {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 360),
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 400),
             styleMask: [.titled, .closable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
-        title = "网络监控详情"
+        title = "网络监控"
         isFloatingPanel = true
         level = .floating
         hidesOnDeactivate = false
@@ -212,84 +258,200 @@ final class DetailPanel: NSPanel {
     }
 
     private func setupViews() {
-        let bigFont = NSFont.monospacedDigitSystemFont(ofSize: 28, weight: .bold)
-        let normalFont = NSFont.systemFont(ofSize: 13)
-        let smallFont = NSFont.systemFont(ofSize: 11)
+        guard let content = contentView else { return }
+        content.wantsLayer = true
 
-        // Download speed — green
+        let bigFont = NSFont.monospacedDigitSystemFont(ofSize: 30, weight: .bold)
+        let normalFont = NSFont.systemFont(ofSize: 13)
+        let captionFont = NSFont.systemFont(ofSize: 10)
+        let smallFont = NSFont.systemFont(ofSize: 11)
+        let sectionFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
+
+        // ═══ Speed Section ═══
+        let speedStack = NSStackView()
+        speedStack.orientation = .horizontal
+        speedStack.distribution = .fillEqually
+        speedStack.spacing = 0
+        speedStack.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(speedStack)
+
+        // Download side
+        let downStack = NSStackView()
+        downStack.orientation = .vertical
+        downStack.alignment = .centerX
+        downStack.spacing = 2
+        downStack.translatesAutoresizingMaskIntoConstraints = false
+
+        downIconView.translatesAutoresizingMaskIntoConstraints = false
+        let downSymbolConfig = NSImage.SymbolConfiguration(pointSize: 18, weight: .bold)
+        if let img = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Download") {
+            downIconView.image = img
+            downIconView.contentTintColor = .systemGreen
+            downIconView.symbolConfiguration = downSymbolConfig
+        }
+        downIconView.widthAnchor.constraint(equalToConstant: 22).isActive = true
+        downIconView.heightAnchor.constraint(equalToConstant: 22).isActive = true
+
         downSpeedLabel.font = bigFont
         downSpeedLabel.textColor = .systemGreen
         downSpeedLabel.alignment = .center
         downSpeedLabel.isBezeled = false
         downSpeedLabel.isEditable = false
         downSpeedLabel.drawsBackground = false
-        downSpeedLabel.translatesAutoresizingMaskIntoConstraints = false
-        contentView?.addSubview(downSpeedLabel)
 
-        // Upload speed — orange
+        downCaption.font = captionFont
+        downCaption.textColor = .secondaryLabelColor
+        downCaption.alignment = .center
+        downCaption.isBezeled = false
+        downCaption.isEditable = false
+        downCaption.drawsBackground = false
+
+        downStack.addArrangedSubview(downIconView)
+        downStack.addArrangedSubview(downSpeedLabel)
+        downStack.addArrangedSubview(downCaption)
+        speedStack.addArrangedSubview(downStack)
+
+        // Upload side
+        let upStack = NSStackView()
+        upStack.orientation = .vertical
+        upStack.alignment = .centerX
+        upStack.spacing = 2
+        upStack.translatesAutoresizingMaskIntoConstraints = false
+
+        upIconView.translatesAutoresizingMaskIntoConstraints = false
+        let upSymbolConfig = NSImage.SymbolConfiguration(pointSize: 18, weight: .bold)
+        if let img = NSImage(systemSymbolName: "arrow.up.circle.fill", accessibilityDescription: "Upload") {
+            upIconView.image = img
+            upIconView.contentTintColor = .systemOrange
+            upIconView.symbolConfiguration = upSymbolConfig
+        }
+        upIconView.widthAnchor.constraint(equalToConstant: 22).isActive = true
+        upIconView.heightAnchor.constraint(equalToConstant: 22).isActive = true
+
         upSpeedLabel.font = bigFont
         upSpeedLabel.textColor = .systemOrange
         upSpeedLabel.alignment = .center
         upSpeedLabel.isBezeled = false
         upSpeedLabel.isEditable = false
         upSpeedLabel.drawsBackground = false
-        upSpeedLabel.translatesAutoresizingMaskIntoConstraints = false
-        contentView?.addSubview(upSpeedLabel)
 
-        let separator = NSBox()
-        separator.boxType = .separator
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        contentView?.addSubview(separator)
+        upCaption.font = captionFont
+        upCaption.textColor = .secondaryLabelColor
+        upCaption.alignment = .center
+        upCaption.isBezeled = false
+        upCaption.isEditable = false
+        upCaption.drawsBackground = false
 
-        for label in [totalLabel, ipLabel, wifiLabel] {
+        upStack.addArrangedSubview(upIconView)
+        upStack.addArrangedSubview(upSpeedLabel)
+        upStack.addArrangedSubview(upCaption)
+        speedStack.addArrangedSubview(upStack)
+
+        // ═══ Separator ═══
+        let separator1 = NSBox()
+        separator1.boxType = .separator
+        separator1.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(separator1)
+
+        // ═══ Info Section ═══
+        let infoStack = NSStackView()
+        infoStack.orientation = .vertical
+        infoStack.spacing = 6
+        infoStack.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(infoStack)
+
+        // Helper to create icon+label rows
+        func makeInfoRow(iconView: NSImageView, symbolName: String, tint: NSColor, label: NSTextField) -> NSView {
+            let row = NSView()
+            row.translatesAutoresizingMaskIntoConstraints = false
+
+            iconView.translatesAutoresizingMaskIntoConstraints = false
+            if let img = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil) {
+                iconView.image = img
+                iconView.contentTintColor = tint
+                iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+            }
+            iconView.widthAnchor.constraint(equalToConstant: 18).isActive = true
+            iconView.heightAnchor.constraint(equalToConstant: 18).isActive = true
+            row.addSubview(iconView)
+
             label.font = normalFont
-            label.textColor = .secondaryLabelColor
+            label.textColor = .labelColor
             label.isBezeled = false
             label.isEditable = false
             label.drawsBackground = false
             label.translatesAutoresizingMaskIntoConstraints = false
-            contentView?.addSubview(label)
+            row.addSubview(label)
+
+            NSLayoutConstraint.activate([
+                iconView.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+                iconView.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+                label.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
+                label.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+                label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+                row.heightAnchor.constraint(equalToConstant: 22),
+            ])
+            return row
         }
 
-        // Process list
+        infoStack.addArrangedSubview(makeInfoRow(iconView: ipIconView, symbolName: "network", tint: .systemBlue, label: ipLabel))
+        infoStack.addArrangedSubview(makeInfoRow(iconView: wifiIconView, symbolName: "wifi", tint: .systemBlue, label: wifiLabel))
+        infoStack.addArrangedSubview(makeInfoRow(iconView: totalIconView, symbolName: "arrow.down.arrow.up", tint: .secondaryLabelColor, label: totalLabel))
+
+        // ═══ Separator ═══
+        let separator2 = NSBox()
+        separator2.boxType = .separator
+        separator2.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(separator2)
+
+        // ═══ Process Section ═══
+        processHeaderLabel.font = sectionFont
+        processHeaderLabel.textColor = .secondaryLabelColor
+        processHeaderLabel.isBezeled = false
+        processHeaderLabel.isEditable = false
+        processHeaderLabel.drawsBackground = false
+        processHeaderLabel.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(processHeaderLabel)
+
         processList.font = smallFont
         processList.textColor = .labelColor
         processList.isBezeled = false
         processList.isEditable = false
         processList.drawsBackground = false
         processList.translatesAutoresizingMaskIntoConstraints = false
-        contentView?.addSubview(processList)
+        content.addSubview(processList)
 
-        guard let content = contentView else { return }
-
+        // ═══ Layout Constraints ═══
         NSLayoutConstraint.activate([
-            downSpeedLabel.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
-            downSpeedLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            downSpeedLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            // Speed section
+            speedStack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
+            speedStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            speedStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            speedStack.heightAnchor.constraint(equalToConstant: 90),
 
-            upSpeedLabel.topAnchor.constraint(equalTo: downSpeedLabel.bottomAnchor, constant: 4),
-            upSpeedLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            upSpeedLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            // Separator 1
+            separator1.topAnchor.constraint(equalTo: speedStack.bottomAnchor, constant: 16),
+            separator1.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            separator1.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
 
-            separator.topAnchor.constraint(equalTo: upSpeedLabel.bottomAnchor, constant: 12),
-            separator.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            separator.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            // Info section
+            infoStack.topAnchor.constraint(equalTo: separator1.bottomAnchor, constant: 12),
+            infoStack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            infoStack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
 
-            ipLabel.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 10),
-            ipLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            ipLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            // Separator 2
+            separator2.topAnchor.constraint(equalTo: infoStack.bottomAnchor, constant: 12),
+            separator2.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
+            separator2.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
 
-            wifiLabel.topAnchor.constraint(equalTo: ipLabel.bottomAnchor, constant: 4),
-            wifiLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            wifiLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            // Process section
+            processHeaderLabel.topAnchor.constraint(equalTo: separator2.bottomAnchor, constant: 10),
+            processHeaderLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            processHeaderLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
 
-            totalLabel.topAnchor.constraint(equalTo: wifiLabel.bottomAnchor, constant: 4),
-            totalLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            totalLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
-
-            processList.topAnchor.constraint(equalTo: totalLabel.bottomAnchor, constant: 10),
-            processList.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16),
-            processList.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
+            processList.topAnchor.constraint(equalTo: processHeaderLabel.bottomAnchor, constant: 6),
+            processList.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            processList.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
             processList.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -16),
         ])
     }
@@ -298,17 +460,19 @@ final class DetailPanel: NSPanel {
                 ip: String?, wifi: String?, processes: [ProcessNetUsage]) {
         let downFull = formatBytesFull(UInt64(downSpeed)) + "/s"
         let upFull = formatBytesFull(UInt64(upSpeed)) + "/s"
-        downSpeedLabel.stringValue = "↓ \(downFull)"
-        upSpeedLabel.stringValue = "↑ \(upFull)"
-        ipLabel.stringValue = "IP: \(ip ?? "未连接")"
-        wifiLabel.stringValue = "Wi-Fi: \(wifi ?? "—")"
-        totalLabel.stringValue = "总计：↓\(formatBytesFull(totalRx))  ↑\(formatBytesFull(totalTx))"
+        downSpeedLabel.stringValue = downFull
+        upSpeedLabel.stringValue = upFull
+        ipLabel.stringValue = ip ?? "未连接"
+        wifiLabel.stringValue = wifi ?? "—"
+        totalLabel.stringValue = "↓\(formatBytesFull(totalRx))  ↑\(formatBytesFull(totalTx))"
 
         // Top 15 processes
         let top = processes.prefix(15)
         if top.isEmpty {
             processList.stringValue = "暂无活跃流量"
+            processList.textColor = .secondaryLabelColor
         } else {
+            processList.textColor = .labelColor
             let lines = top.map { p -> String in
                 "\(p.name)  ↓\(formatSpeedShort(Double(p.bytesIn)))  ↑\(formatSpeedShort(Double(p.bytesOut)))"
             }
@@ -384,37 +548,45 @@ final class MenuBarManager: NSObject {
         button.addGestureRecognizer(clickRecognizer)
     }
 
+    /// Helper: create an NSMenuItem with an SF Symbol image
+    private func menuItem(title: String, action: Selector? = nil, keyEquivalent: String = "",
+                          symbol: String? = nil, tag: Int = 0, isEnabled: Bool = true) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
+        item.target = self
+        item.tag = tag
+        item.isEnabled = isEnabled
+        if let symbol {
+            if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: title) {
+                let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+                let configured = img.withSymbolConfiguration(config) ?? img
+                item.image = configured
+                item.image?.isTemplate = true
+            }
+        }
+        return item
+    }
+
     private func setupMenu() {
         let menu = NSMenu()
 
+        // ── Header ──
         let headerItem = NSMenuItem(title: "网络监控", action: nil, keyEquivalent: "")
         headerItem.isEnabled = false
         menu.addItem(headerItem)
 
-        let ipItem = NSMenuItem(title: "IP: 获取中…", action: nil, keyEquivalent: "")
-        ipItem.isEnabled = false
-        ipItem.tag = 1002
-        menu.addItem(ipItem)
-
-        let wifiItem = NSMenuItem(title: "Wi-Fi: —", action: nil, keyEquivalent: "")
-        wifiItem.isEnabled = false
-        wifiItem.tag = 1004
-        menu.addItem(wifiItem)
+        // ── Network Status ──
+        menu.addItem(menuItem(title: "IP: 获取中…", symbol: "network", tag: 1002, isEnabled: false))
+        menu.addItem(menuItem(title: "Wi-Fi: —", symbol: "wifi", tag: 1004, isEnabled: false))
 
         menu.addItem(NSMenuItem.separator())
 
-        let detailsItem = NSMenuItem(title: "▼ 0 KB/s  ▲ 0 KB/s", action: nil, keyEquivalent: "")
-        detailsItem.isEnabled = false
-        detailsItem.tag = 1001
-        menu.addItem(detailsItem)
-
-        let trendItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        trendItem.isEnabled = false
-        trendItem.tag = 1003
-        menu.addItem(trendItem)
+        // ── Speed Summary ──
+        menu.addItem(menuItem(title: "▼ 0 KB/s  ▲ 0 KB/s", tag: 1001, isEnabled: false))
+        menu.addItem(menuItem(title: "", tag: 1003, isEnabled: false))
 
         menu.addItem(NSMenuItem.separator())
 
+        // ── Active Processes ──
         let procHeader = NSMenuItem(title: "活跃进程", action: nil, keyEquivalent: "")
         procHeader.isEnabled = false
         procHeader.tag = processSectionTag
@@ -422,30 +594,25 @@ final class MenuBarManager: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
-        let detailItem = NSMenuItem(title: "打开详情面板", action: #selector(toggleDetailPanel), keyEquivalent: "d")
-        detailItem.target = self
-        menu.addItem(detailItem)
-
-        let copyItem = NSMenuItem(title: "复制网络信息", action: #selector(copyNetworkInfo), keyEquivalent: "c")
-        copyItem.target = self
-        menu.addItem(copyItem)
-
-        let exportItem = NSMenuItem(title: "导出流量日志…", action: #selector(exportLog), keyEquivalent: "e")
-        exportItem.target = self
-        menu.addItem(exportItem)
+        // ── Actions ──
+        menu.addItem(menuItem(title: "打开详情面板", action: #selector(toggleDetailPanel), keyEquivalent: "d",
+                              symbol: "info.circle.fill"))
+        menu.addItem(menuItem(title: "复制网络信息", action: #selector(copyNetworkInfo), keyEquivalent: "c",
+                              symbol: "doc.on.doc"))
+        menu.addItem(menuItem(title: "导出流量日志…", action: #selector(exportLog), keyEquivalent: "e",
+                              symbol: "square.and.arrow.up"))
 
         menu.addItem(NSMenuItem.separator())
 
-        let launchItem = NSMenuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup), keyEquivalent: "")
-        launchItem.target = self
-        launchItem.tag = launchAtStartupTag
-        menu.addItem(launchItem)
+        // ── Settings ──
+        menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
+                              symbol: "clock.arrow.circlepath", tag: launchAtStartupTag))
 
         menu.addItem(NSMenuItem.separator())
 
-        let quitItem = NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q")
-        quitItem.target = self
-        menu.addItem(quitItem)
+        // ── Quit ──
+        menu.addItem(menuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q",
+                              symbol: "power"))
 
         statusItem.menu = menu
 
@@ -507,30 +674,40 @@ final class MenuBarManager: NSObject {
         }
 
         if let ipItem = menu.item(withTag: 1002) {
-            ipItem.title = ip.map { "IP: \($0)" } ?? "IP: 未连接"
+            ipItem.title = ip.map { "\($0)" } ?? "未连接"
         }
 
         if let wifiItem = menu.item(withTag: 1004) {
-            wifiItem.title = "Wi-Fi: \(wifi)"
+            wifiItem.title = "\(wifi)"
         }
 
         if let detailsItem = menu.item(withTag: 1001) {
             let downFull = formatBytesFull(UInt64(downSpeed)) + "/s"
             let upFull = formatBytesFull(UInt64(upSpeed)) + "/s"
-            detailsItem.title = "▼ \(downFull)  ▲ \(upFull)"
+            detailsItem.attributedTitle = nil
+            detailsItem.title = "▼ \(downFull)    ▲ \(upFull)"
+            // Color the speed string
+            let attrStr = NSMutableAttributedString(string: detailsItem.title)
+            let fullRange = NSRange(location: 0, length: attrStr.length)
+            attrStr.addAttribute(.font, value: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular), range: fullRange)
+            detailsItem.attributedTitle = attrStr
         }
 
         if let trendItem = menu.item(withTag: 1003) {
             let totalHistory = zip(downHistory, upHistory).map { $0 + $1 }
             if !totalHistory.isEmpty {
-                trendItem.title = "趋势  \(sparkline(from: totalHistory, maxChars: 10))"
+                let spark = sparkline(from: totalHistory, maxChars: 10)
+                trendItem.title = "\(spark)"
             }
         }
 
         if let headerItem = menu.item(at: 0) {
             let totalDown = formatBytesFull(monitor.totalRx)
             let totalUp = formatBytesFull(monitor.totalTx)
-            headerItem.title = "总计：↓\(totalDown)  ↑\(totalUp)"
+            let attrStr = NSMutableAttributedString(string: "↓\(totalDown)  ↑\(totalUp)")
+            let fullRange = NSRange(location: 0, length: attrStr.length)
+            attrStr.addAttribute(.font, value: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium), range: fullRange)
+            headerItem.attributedTitle = attrStr
         }
 
         updateProcessItems(menu: menu, processes: processes)
@@ -554,14 +731,24 @@ final class MenuBarManager: NSObject {
         for process in top {
             let downStr = formatSpeedShort(Double(process.bytesIn))
             let upStr = formatSpeedShort(Double(process.bytesOut))
-            // Truncate process name to 12 chars so the line doesn't widen the menu
-            let shortName = process.name.count > 12
-                ? String(process.name.prefix(11)) + "…"
+            // Truncate process name to 14 chars so the line doesn't widen the menu
+            let shortName = process.name.count > 14
+                ? String(process.name.prefix(13)) + "…"
                 : process.name
-            let title = "\(shortName)  ▼\(downStr)  ▲\(upStr)"
+            let title = "  \(shortName)  ▼\(downStr)  ▲\(upStr)"
+
             let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             item.isEnabled = false
             item.tag = processSectionTag + 1
+
+            // Add app icon if available
+            if let appPath = NSWorkspace.shared.urlForApplication(withBundleIdentifier: process.name) ?? 
+                NSWorkspace.shared.urlForApplication(withBundleIdentifier: guessBundleID(for: process.name)) {
+                let icon = NSWorkspace.shared.icon(forFile: appPath.path)
+                icon.size = NSSize(width: 14, height: 14)
+                item.image = icon
+            }
+
             let headerIndex = menu.indexOfItem(withTag: processSectionTag)
             if headerIndex >= 0 {
                 menu.insertItem(item, at: headerIndex + 1)
@@ -569,7 +756,7 @@ final class MenuBarManager: NSObject {
         }
 
         if top.isEmpty {
-            let item = NSMenuItem(title: "（暂无活跃流量）", action: nil, keyEquivalent: "")
+            let item = NSMenuItem(title: "暂无活跃流量", action: nil, keyEquivalent: "")
             item.isEnabled = false
             item.tag = processSectionTag + 1
             let headerIdx = menu.indexOfItem(withTag: processSectionTag)
@@ -577,6 +764,34 @@ final class MenuBarManager: NSObject {
                 menu.insertItem(item, at: headerIdx + 1)
             }
         }
+    }
+
+    /// Try to guess a bundle ID from a process name (best-effort for app icon lookup)
+    private func guessBundleID(for processName: String) -> String {
+        // Common mappings
+        let map: [String: String] = [
+            "Google Chrome": "com.google.Chrome",
+            "Safari": "com.apple.Safari",
+            "Firefox": "org.mozilla.firefox",
+            "iTerm2": "com.googlecode.iterm2",
+            "Terminal": "com.apple.Terminal",
+            "Finder": "com.apple.Finder",
+            "Xcode": "com.apple.dt.Xcode",
+            "Slack": "com.tinyspeck.slackmacgap",
+            "Spotify": "com.spotify.client",
+            "Discord": "com.hnc.Discord",
+            "Visual Studio Code": "com.microsoft.VSCode",
+            "Code": "com.microsoft.VSCode",
+            "VSCode": "com.microsoft.VSCode",
+            "QQ": "com.tencent.qq",
+            "WeChat": "com.tencent.xinWeChat",
+            "Telegram": "ru.keepcoder.Telegram",
+            "DingTalk": "com.alibaba.DingTalk",
+            "WPS": "com.kingsoft.wpsoffice.mac",
+            "Microsoft Word": "com.microsoft.Word",
+            "Microsoft Excel": "com.microsoft.Excel",
+        ]
+        return map[processName] ?? "\(processName)"
     }
 
     // MARK: - Actions
