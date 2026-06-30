@@ -64,6 +64,21 @@ final class DatabaseManager {
     /// 数据库是否可用
     var isReady: Bool { db != nil }
 
+    /// 执行查询，每行调用一次 handler
+    func query(sql: String, handler: (OpaquePointer) -> Void) {
+        guard let db else { return }
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            return
+        }
+
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            handler(stmt!)
+        }
+    }
+
     // MARK: - 事件写入
 
     /// 写入一条系统采样数据
