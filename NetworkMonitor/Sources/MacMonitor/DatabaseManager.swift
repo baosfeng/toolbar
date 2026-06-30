@@ -9,6 +9,11 @@ final class DatabaseManager {
 
     private var db: OpaquePointer?
 
+    /// 事件缓冲区 — 批量写入以减少 IO
+    private var eventBuffer: [String] = []
+    private let batchSize = 10
+    private var flushTimer: DispatchSourceTimer?
+
     /// 数据库文件路径
     private(set) lazy var dbPath: String = {
         let appSupport = FileManager.default.urls(
@@ -42,11 +47,15 @@ final class DatabaseManager {
         }
 
         createTables()
+        startFlushTimer()
         print("✅ 数据库已就绪: \(dbPath)")
     }
 
     /// 关闭数据库连接
     func close() {
+        flush() // 关闭前刷新缓冲区
+        flushTimer?.cancel()
+        flushTimer = nil
         guard let db else { return }
         sqlite3_close(db)
         self.db = nil
@@ -54,6 +63,67 @@ final class DatabaseManager {
 
     /// 数据库是否可用
     var isReady: Bool { db != nil }
+
+    // MARK: - 事件写入
+
+    /// 写入一条事件到缓冲区（批量写入）
+    func writeEvent(type: EventType, appName: String? = nil, bundleID: String? = nil, timestamp: TimeInterval) {
+        // 使用 SQL 值转义避免注入
+        let escapedType = escapeSQL(type.rawValue)
+        let escapedApp = escapeSQL(appName ?? "")
+        let escapedBundle = escapeSQL(bundleID ?? "")
+
+        let values = "(\(escapedType), \(escapedApp), \(escapedBundle), \(timestamp), NULL)"
+        eventBuffer.append(values)
+
+        if eventBuffer.count >= batchSize {
+            flush()
+        }
+    }
+
+    /// 立即刷新缓冲区，将事件写入数据库
+    func flush() {
+        guard !eventBuffer.isEmpty, let db else { return }
+
+        let values = eventBuffer.joined(separator: ",\n")
+        let sql = "INSERT INTO events (event_type, app_name, app_bundle_id, timestamp, extra_data) VALUES \(values);"
+
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            print("⚠️ 批量写入准备失败: \(String(cString: sqlite3_errmsg(db)))")
+            return
+        }
+
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            print("⚠️ 批量写入失败: \(String(cString: sqlite3_errmsg(db)))")
+            return
+        }
+
+        eventBuffer.removeAll()
+    }
+
+    /// 启动定时刷新（每30秒自动写入）
+    private func startFlushTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .background))
+        timer.schedule(deadline: .now() + 30, repeating: 30)
+        timer.setEventHandler { [weak self] in
+            self?.flush()
+        }
+        timer.resume()
+        flushTimer = timer
+    }
+
+    // MARK: - 辅助方法
+
+    /// SQL 值转义（防止特殊字符破坏 SQL）
+    private func escapeSQL(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "'", with: "''")
+            .replacingOccurrences(of: "\\", with: "\\\\")
+        return "'\(escaped)'"
+    }
 
     // MARK: - 建表
 
