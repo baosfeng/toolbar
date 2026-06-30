@@ -24,7 +24,7 @@ ehthumbs.db
 Thumbs.db
 
 # Build artifacts
-dist/*.dmg
+dist/
 *.ipa
 *.dSYM.zip
 *.dSYM
