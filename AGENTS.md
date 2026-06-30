@@ -1,7 +1,8 @@
-# NetworkMonitor — macOS 菜单栏网络速度监控
+# NetworkMonitor / macMonitor — macOS 菜单栏监控
 
 ## 项目简介
-- **版本:** 1.0.0
+- **当前版本:** 1.0.0（NetworkMonitor）
+- **规划版本:** macMonitor（功能扩展规划中）
 - **语言:** Swift 6.3
 - **类型:** 业务应用
 - **技术栈:** Swift 6.3, Swift PM, AppKit, macOS 14+, ARM64
@@ -9,6 +10,7 @@
 → [项目简介](docs/概览/项目简介.md)
 → [架构总览](docs/概览/架构总览.md)
 → [快速上手](docs/概览/快速上手.md)
+→ [未来规划 - macMonitor](docs/未来规划/概述.md) ← 本机全面监控规划
 
 > ⚠️ **操作前必读规范：**
 >
