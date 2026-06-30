@@ -55,6 +55,8 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <string>AppIcon</string>
     <key>LSUIElement</key>
     <true/>
+    <key>NSInputMonitoringUsageDescription</key>
+    <string>NetworkMonitor 需要输入监控权限来统计键盘敲击次数，不会记录按键内容。</string>
 </dict>
 </plist>
 PLIST

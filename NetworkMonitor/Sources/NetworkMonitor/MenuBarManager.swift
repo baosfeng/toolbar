@@ -53,6 +53,7 @@ final class MenuBarManager: NSObject {
 
     private let macMonitorSummaryTag = 5001
     private let macMonitorCPUTag = 5003
+    private let macMonitorKeyTag = 5004
 
     private let launchAtStartupTag = 3001
     private let maxProcessItems = 10
@@ -191,6 +192,8 @@ final class MenuBarManager: NSObject {
         macMonitorSubmenu.removeAllItems()
         macMonitorSubmenu.addItem(menuItem(title: "活跃: —    击键: —",
                                            symbol: "clock.fill", tag: macMonitorSummaryTag, isEnabled: false))
+        macMonitorSubmenu.addItem(menuItem(title: "⌨️ 击键监控: 检查权限…",
+                                           symbol: "keyboard.fill", tag: macMonitorKeyTag, isEnabled: false))
         macMonitorSubmenu.addItem(menuItem(title: "亮屏: —    息屏: —",
                                            symbol: "sun.max.fill", tag: macMonitorSummaryTag + 1, isEnabled: false))
         macMonitorSubmenu.addItem(menuItem(title: "CPU: —%    内存: —",
@@ -215,6 +218,8 @@ final class MenuBarManager: NSObject {
 
     // MARK: - macMonitor 启动
 
+    private var keyMonitorActive = false
+
     private func setupMacMonitor() {
         databaseManager.initialize()
 
@@ -222,10 +227,7 @@ final class MenuBarManager: NSObject {
         monitor.start()
         eventMonitor = monitor
 
-        let keyMonitor = KeyPressMonitor(database: databaseManager)
-        if keyMonitor.start() {
-            keyPressMonitor = keyMonitor
-        }
+        retryKeyMonitor()
 
         let sampler = SystemSampler(database: databaseManager)
         sampler.start()
@@ -233,6 +235,26 @@ final class MenuBarManager: NSObject {
 
         reportGenerator = ReportGenerator(database: databaseManager, statsProvider: statsProvider)
         print("📊 macMonitor 本机监控已启动")
+    }
+
+    /// 尝试启动击键监控（可重试）
+    private func retryKeyMonitor() {
+        let keyMonitor = KeyPressMonitor(database: databaseManager)
+        if keyMonitor.start() {
+            keyPressMonitor = keyMonitor
+            keyMonitorActive = true
+            print("⌨️ 击键监控已启用 ✅")
+        } else {
+            keyPressMonitor = nil
+            keyMonitorActive = false
+            print("⌨️ 击键监控未授权，5秒后重试…")
+            // 延时重试（用户可能在这期间授予了权限）
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard self.keyPressMonitor == nil else { return }
+                self.retryKeyMonitor()
+            }
+        }
     }
 
     // MARK: - 定时更新
@@ -378,6 +400,18 @@ final class MenuBarManager: NSObject {
         let keys = formatCompactNumber(stats.keyPressCount)
         if let item = macMonitorSubmenu.item(withTag: macMonitorSummaryTag) {
             item.title = "活跃: \(active)    击键: \(keys)"
+        }
+        if let item = macMonitorSubmenu.item(withTag: macMonitorKeyTag) {
+            if keyMonitorActive {
+                item.title = "击键监控: 运行中 ✅"
+                item.image = NSImage(systemSymbolName: "keyboard.fill", accessibilityDescription: "击键监控")
+            } else {
+                item.title = "击键监控: 未授权 — 请在 系统设置→隐私与安全性→输入监控 中允许"
+                item.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "击键未授权")
+            }
+            let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+            item.image = item.image?.withSymbolConfiguration(config)
+            item.image?.isTemplate = true
         }
         if let item = macMonitorSubmenu.item(withTag: macMonitorSummaryTag + 1) {
             item.title = "亮屏: \(formatDurationCompact(stats.screenOnSeconds))    息屏: \(formatDurationCompact(stats.screenOffSeconds))"
