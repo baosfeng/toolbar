@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var eventMonitor: EventMonitor?
     private var keyPressMonitor: KeyPressMonitor?
     private var systemSampler: SystemSampler?
+    private lazy var statsProvider = StatsProvider(database: databaseManager)
+    private lazy var menuBuilder = MenuBuilder(statsProvider: statsProvider)
 
     // MARK: - 应用生命周期
 
@@ -58,49 +60,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 图标按钮
         if let button = item.button {
             button.title = "📊"
-            button.action = #selector(statusItemClicked)
-            button.target = self
         }
 
-        // 构建菜单
-        let menu = NSMenu()
-        menu.addItem(buildTitleItem())
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "今日概览", action: #selector(showTodaySummary), keyEquivalent: "1"))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "开机自启", action: #selector(toggleLaunchAtLogin), keyEquivalent: ""))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q"))
-
-        item.menu = menu
+        // 使用 MenuBuilder 构建初始菜单
+        item.menu = buildFreshMenu()
     }
 
-    /// 标题栏项目（显示版本信息）
-    private func buildTitleItem() -> NSMenuItem {
-        let item = NSMenuItem(
-            title: "📊  macMonitor  v0.1.0",
-            action: nil,
-            keyEquivalent: ""
-        )
-        item.isEnabled = false
-        return item
+    /// 构建最新数据的菜单
+    private func buildFreshMenu() -> NSMenu {
+        let menu = menuBuilder.buildMenu()
+        menu.delegate = self
+        return menu
     }
 
     // MARK: - 操作
 
-    @objc private func statusItemClicked() {
-        // 点击图标时的操作（菜单已自动弹出）
+    @objc func showDailyReport() {
+        print("查看每日报告（待实现）")
     }
 
-    @objc private func showTodaySummary() {
-        print("显示今日概览（待实现）")
+    @objc func showWeeklyReport() {
+        print("查看每周报告（待实现）")
     }
 
-    @objc private func toggleLaunchAtLogin() {
+    @objc func toggleLaunchAtLogin() {
         print("开机自启切换（待实现）")
     }
 
-    @objc private func quit() {
+    @objc func quit() {
         NSApplication.shared.terminate(nil)
+    }
+}
+
+// MARK: - NSMenuDelegate
+
+extension AppDelegate: NSMenuDelegate {
+
+    /// 菜单即将打开时重新构建，确保数据显示最新
+    func menuWillOpen(_ menu: NSMenu) {
+        statusItem?.menu = buildFreshMenu()
     }
 }
