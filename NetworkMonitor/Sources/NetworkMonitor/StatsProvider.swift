@@ -55,7 +55,6 @@ final class StatsProvider {
 
     /// 查询今日统计数据
     func fetchTodayStats() -> TodayStats {
-        let today = todayDateString()
         let startOfDay = startOfDayTimestamp()
 
         return TodayStats(
@@ -251,14 +250,6 @@ final class StatsProvider {
 
     // MARK: - 辅助
 
-    /// 今日日期字符串 "2026-06-30"
-    private func todayDateString() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
-    }
-
-    /// 今日起始时间戳
     private func startOfDayTimestamp() -> TimeInterval {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: Date())

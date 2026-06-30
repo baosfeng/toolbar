@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build and package NetworkMonitor.app
+# 一键构建 + 打包 NetworkMonitor.app（含 macMonitor 本机监控功能）
 # Usage: ./Scripts/build-app.sh [debug|release]
 
 set -e
@@ -7,58 +7,35 @@ set -e
 cd "$(dirname "$0")/.."
 BUILD_MODE="${1:-debug}"
 
-echo "🔨 Building NetworkMonitor ($BUILD_MODE)..."
+APP_NAME="NetworkMonitor"
+APP_DIR="dist/${APP_NAME}.app"
 
-# Clean dist
-rm -rf dist/NetworkMonitor.app
-mkdir -p dist/NetworkMonitor.app/Contents/MacOS
-mkdir -p dist/NetworkMonitor.app/Contents/Resources
-mkdir -p dist/NetworkMonitor.app/Contents/Frameworks
-mkdir -p .build/obj
+echo "🔨 正在构建 ${APP_NAME}（${BUILD_MODE}）..."
 
-# Compile Core module
-echo "📦 Compiling NetworkMonitorCore..."
-swiftc \
-  -target arm64-apple-macosx14.0 \
-  -emit-module \
-  -module-name NetworkMonitorCore \
-  -o .build/obj/NetworkMonitorCore.swiftmodule \
-  -emit-library -o .build/obj/libNetworkMonitorCore.dylib \
-  Sources/NetworkMonitorCore/Core.swift \
-  -framework Foundation
-
-# Compile main app
-echo "📦 Compiling NetworkMonitor..."
-swiftc \
-  -target arm64-apple-macosx14.0 \
-  -parse-as-library \
-  -I .build/obj \
-  -L .build/obj \
-  -lNetworkMonitorCore \
-  -o dist/NetworkMonitor.app/Contents/MacOS/NetworkMonitor \
-  Sources/NetworkMonitor/main.swift \
-  Sources/NetworkMonitor/NetworkMonitor.swift \
-  -framework AppKit \
-  -framework Foundation \
-  -framework ServiceManagement \
-  -framework CoreWLAN \
-  -Xlinker -rpath -Xlinker @executable_path/../Frameworks
-
-# Copy dylib
-cp .build/obj/libNetworkMonitorCore.dylib dist/NetworkMonitor.app/Contents/Frameworks/
-
-# Generate icon if not exists
-if [ ! -f dist/NetworkMonitor.app/Contents/Resources/AppIcon.icns ]; then
-    echo "🎨 Generating app icon..."
-    swift Scripts/generate-icon.swift dist/NetworkMonitor.app/Contents/Resources 2>/dev/null || true
-    # Fallback: copy from scripts if generated there
-    if [ -f Scripts/AppIcon.icns ]; then
-        cp Scripts/AppIcon.icns dist/NetworkMonitor.app/Contents/Resources/
-    fi
+# 1. 使用 Swift PM 构建
+if [ "$BUILD_MODE" = "release" ]; then
+    swift build -c release --target ${APP_NAME} --disable-sandbox
+    BINARY_PATH=".build/arm64-apple-macosx/release/${APP_NAME}"
+else
+    swift build --target ${APP_NAME} --disable-sandbox
+    BINARY_PATH=".build/arm64-apple-macosx/debug/${APP_NAME}"
 fi
 
-# Write Info.plist
-cat > dist/NetworkMonitor.app/Contents/Info.plist << 'PLIST'
+# 2. 创建 .app 包结构
+rm -rf "$APP_DIR"
+mkdir -p "$APP_DIR/Contents/MacOS"
+mkdir -p "$APP_DIR/Contents/Resources"
+
+# 3. 复制可执行文件
+cp "$BINARY_PATH" "$APP_DIR/Contents/MacOS/${APP_NAME}"
+
+# 4. 复制图标
+if [ -f "Scripts/AppIcon.icns" ]; then
+    cp "Scripts/AppIcon.icns" "$APP_DIR/Contents/Resources/"
+fi
+
+# 5. 写入 Info.plist
+cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -73,7 +50,7 @@ cat > dist/NetworkMonitor.app/Contents/Info.plist << 'PLIST'
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>1.0.0</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSUIElement</key>
@@ -83,6 +60,16 @@ cat > dist/NetworkMonitor.app/Contents/Info.plist << 'PLIST'
 PLIST
 
 echo ""
-echo "✅ Build complete!"
-echo "   App: dist/NetworkMonitor.app"
-ls -lh dist/NetworkMonitor.app/Contents/MacOS/NetworkMonitor
+echo "🎉 交付物就绪！"
+echo "   📦 应用位置：${APP_DIR}"
+echo ""
+echo "📋 应用大小："
+ls -lh "$APP_DIR/Contents/MacOS/${APP_NAME}"
+echo ""
+echo "🚀 三步上手："
+echo "   1. 打开 Finder → 前往 → 前往文件夹"
+echo "      输入: $(cd "$APP_DIR" && pwd)"
+echo "   2. 双击 NetworkMonitor.app"
+echo "   3. 菜单栏出现 📊 图标，开始监控"
+echo ""
+echo "   💡 新增本机监控：应用追踪、击键统计、系统采样等"
