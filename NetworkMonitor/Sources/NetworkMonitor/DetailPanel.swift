@@ -17,6 +17,10 @@ final class DetailPanel: NSPanel {
     private let ipLabel = NSTextField(labelWithString: "—")
     private let wifiLabel = NSTextField(labelWithString: "—")
     private let totalLabel = NSTextField(labelWithString: "↓0 B  ↑0 B")
+    /// 今日流量（替换总计）
+    private let todayLabel = NSTextField(labelWithString: "今日  ↓0 B  ↑0 B")
+    /// 近7日流量
+    private let weekLabel = NSTextField(labelWithString: "近7日  ↓0 B  ↑0 B")
 
     // MARK: - 电池
     private let batteryIconView = NSImageView()
@@ -243,11 +247,13 @@ final class DetailPanel: NSPanel {
 
         let ipRow = makeInfoRow(symbol: "network", tint: .systemBlue, label: ipLabel)
         let wifiRow = makeInfoRow(symbol: "wifi", tint: .systemBlue, label: wifiLabel)
-        let totalRow = makeInfoRow(symbol: "arrow.down.arrow.up", tint: .secondaryLabelColor, label: totalLabel)
+        let todayRow = makeInfoRow(symbol: "sun.max", tint: .systemOrange, label: todayLabel)
+        let weekRow = makeInfoRow(symbol: "calendar", tint: .secondaryLabelColor, label: weekLabel)
 
         stack.addArrangedSubview(ipRow)
         stack.addArrangedSubview(wifiRow)
-        stack.addArrangedSubview(totalRow)
+        stack.addArrangedSubview(todayRow)
+        stack.addArrangedSubview(weekRow)
 
         let cardPadding: CGFloat = 12
         NSLayoutConstraint.activate([
@@ -451,6 +457,8 @@ final class DetailPanel: NSPanel {
 
     func update(battery: BatteryStatus, downSpeed: Double, upSpeed: Double,
                 totalRx: UInt64, totalTx: UInt64,
+                todayRx: UInt64, todayTx: UInt64,
+                weekRx: UInt64, weekTx: UInt64,
                 ip: String?, wifi: String, processes: [ProcessNetUsage])
     {
         // 网速
@@ -460,9 +468,8 @@ final class DetailPanel: NSPanel {
         // 网络信息
         ipLabel.stringValue = ip ?? "未连接"
         wifiLabel.stringValue = "Wi-Fi: \(wifi)"
-        let totalDown = formatBytesFull(totalRx)
-        let totalUp = formatBytesFull(totalTx)
-        totalLabel.stringValue = "↓\(totalDown)  ↑\(totalUp)"
+        todayLabel.stringValue = "今日  ↓\(formatBytesFull(todayRx))  ↑\(formatBytesFull(todayTx))"
+        weekLabel.stringValue = "近7日  ↓\(formatBytesFull(weekRx))  ↑\(formatBytesFull(weekTx))"
 
         // 电池
         batteryPercentLabel.stringValue = "\(battery.percentage)%"

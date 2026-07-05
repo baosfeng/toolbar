@@ -61,11 +61,24 @@ final class MenuBarManager: NSObject {
     private static let totalRxKey = "totalRx"
     private static let totalTxKey = "totalTx"
 
+    // MARK: - 每日流量追踪
+    private static let dayStartDateKey = "dayStartDate"
+    private static let dayStartRxKey = "dayStartRx"
+    private static let dayStartTxKey = "dayStartTx"
+    private static let dailyLogKey = "dailyTrafficLog"
+
     private var downHistory: [Double] = []
     private var upHistory: [Double] = []
     private let maxHistory = 60
 
     private var logEntries: [NetworkLogEntry] = []
+
+    // MARK: - 每日流量追踪
+    private var dayStartRx: UInt64 = 0
+    private var dayStartTx: UInt64 = 0
+    private let trafficSubmenu = NSMenu()
+    private let trafficTodayTag = 8001
+    private let trafficWeekTag = 8002
 
     // MARK: - 初始化
 
@@ -75,6 +88,7 @@ final class MenuBarManager: NSObject {
         monitor = NetworkSpeedMonitor(totalRx: savedRx, totalTx: savedTx)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+        loadDailyTraffic()
         setupButton()
         setupMenu()
         setupTimer()
@@ -140,6 +154,13 @@ final class MenuBarManager: NSObject {
         let macMenuItem = menuItem(title: "本机监控", symbol: "cpu")
         macMenuItem.submenu = macMonitorSubmenu
         menu.addItem(macMenuItem)
+
+        // ── 流量汇总（二级菜单） ──
+        menu.addItem(NSMenuItem.separator())
+        buildTrafficSubmenu()
+        let trafficMenuItem = menuItem(title: "流量汇总", symbol: "arrow.down.arrow.up")
+        trafficMenuItem.submenu = trafficSubmenu
+        menu.addItem(trafficMenuItem)
 
         // ── 操作 ──
         menu.addItem(NSMenuItem.separator())
@@ -328,6 +349,10 @@ final class MenuBarManager: NSObject {
         // ── 更新电池子菜单 ──
         updateBatterySubmenu(battery: battery)
 
+        // ── 更新流量汇总子菜单
+        updateDailyTraffic()
+        updateTrafficSubmenu()
+
         // ── 更新 macMonitor 子菜单（每 10 秒刷新） ──
         if Int(Date().timeIntervalSince1970).isMultiple(of: 10) {
             updateMacMonitorSubmenu()
@@ -342,6 +367,8 @@ final class MenuBarManager: NSObject {
                 battery: battery,
                 downSpeed: downSpeed, upSpeed: upSpeed,
                 totalRx: monitor.totalRx, totalTx: monitor.totalTx,
+                todayRx: todayRx, todayTx: todayTx,
+                weekRx: weekRx, weekTx: weekTx,
                 ip: ip, wifi: wifi, processes: processes
             )
         }
@@ -504,6 +531,124 @@ final class MenuBarManager: NSObject {
         return f.string(from: NSNumber(value: number)) ?? "\(number)"
     }
 
+    // MARK: - 每日流量追踪
+
+    /// 加载或初始化每日流量追踪
+    private func loadDailyTraffic() {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+
+        dayStartRx = UInt64(UserDefaults.standard.integer(forKey: Self.dayStartRxKey))
+        dayStartTx = UInt64(UserDefaults.standard.integer(forKey: Self.dayStartTxKey))
+
+        // 首次启动：以当前总量为今日起点
+        if dayStartRx == 0, dayStartTx == 0 {
+            dayStartRx = monitor.totalRx
+            dayStartTx = monitor.totalTx
+            UserDefaults.standard.set(today, forKey: Self.dayStartDateKey)
+            UserDefaults.standard.set(Int(dayStartRx), forKey: Self.dayStartRxKey)
+            UserDefaults.standard.set(Int(dayStartTx), forKey: Self.dayStartTxKey)
+        }
+    }
+
+    /// 检查日期变更，切换并保存每日日志
+    private func updateDailyTraffic() {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let savedDate = UserDefaults.standard.object(forKey: Self.dayStartDateKey) as? Date ?? today
+
+        guard !cal.isDate(savedDate, inSameDayAs: today) else { return }
+
+        // 日期变了 — 保存昨天的流量到日志
+        let yesterdayRx = dayStartRx > 0 && monitor.totalRx >= dayStartRx
+            ? monitor.totalRx - dayStartRx : 0
+        let yesterdayTx = dayStartTx > 0 && monitor.totalTx >= dayStartTx
+            ? monitor.totalTx - dayStartTx : 0
+
+        if yesterdayRx > 0 || yesterdayTx > 0 {
+            var log = UserDefaults.standard.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy-MM-dd"
+            log.append(["date": fmt.string(from: savedDate), "rx": yesterdayRx, "tx": yesterdayTx])
+            // 保留最近 30 天
+            if log.count > 30 { log = Array(log.suffix(30)) }
+            UserDefaults.standard.set(log, forKey: Self.dailyLogKey)
+        }
+
+        // 重置今日起点
+        dayStartRx = monitor.totalRx
+        dayStartTx = monitor.totalTx
+        UserDefaults.standard.set(today, forKey: Self.dayStartDateKey)
+        UserDefaults.standard.set(Int(dayStartRx), forKey: Self.dayStartRxKey)
+        UserDefaults.standard.set(Int(dayStartTx), forKey: Self.dayStartTxKey)
+    }
+
+    /// 今日流量（下行）
+    private var todayRx: UInt64 {
+        monitor.totalRx >= dayStartRx ? monitor.totalRx - dayStartRx : 0
+    }
+
+    /// 今日流量（上行）
+    private var todayTx: UInt64 {
+        monitor.totalTx >= dayStartTx ? monitor.totalTx - dayStartTx : 0
+    }
+
+    /// 近 7 日流量合计（含今日）
+    private var weekRx: UInt64 {
+        var total = todayRx
+        let log = UserDefaults.standard.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        for entry in log.suffix(6) {
+            guard let dateStr = entry["date"] as? String,
+                  let date = fmt.date(from: dateStr),
+                  let rx = entry["rx"] as? UInt64 else { continue }
+            let daysDiff = cal.dateComponents([.day], from: date, to: today).day ?? 7
+            if daysDiff < 7 { total += rx }
+        }
+        return total
+    }
+
+    private var weekTx: UInt64 {
+        var total = todayTx
+        let log = UserDefaults.standard.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        for entry in log.suffix(6) {
+            guard let dateStr = entry["date"] as? String,
+                  let date = fmt.date(from: dateStr),
+                  let tx = entry["tx"] as? UInt64 else { continue }
+            let daysDiff = cal.dateComponents([.day], from: date, to: today).day ?? 7
+            if daysDiff < 7 { total += tx }
+        }
+        return total
+    }
+
+    /// 构建流量汇总子菜单
+    private func buildTrafficSubmenu() {
+        trafficSubmenu.removeAllItems()
+        trafficSubmenu.addItem(menuItem(title: "今日: —", symbol: "sun.max", tag: trafficTodayTag, isEnabled: false))
+        trafficSubmenu.addItem(menuItem(title: "近7日: —", symbol: "calendar", tag: trafficWeekTag, isEnabled: false))
+    }
+
+    /// 更新流量汇总子菜单
+    private func updateTrafficSubmenu() {
+        let todayDown = formatBytesFull(todayRx)
+        let todayUp = formatBytesFull(todayTx)
+        let weekDown = formatBytesFull(weekRx)
+        let weekUp = formatBytesFull(weekTx)
+        if let item = trafficSubmenu.item(withTag: trafficTodayTag) {
+            item.title = "今日  ↓\(todayDown)  ↑\(todayUp)"
+        }
+        if let item = trafficSubmenu.item(withTag: trafficWeekTag) {
+            item.title = "近7日  ↓\(weekDown)  ↑\(weekUp)"
+        }
+    }
+
     // MARK: - Actions
 
     @objc private func toggleDetailPanel() {
@@ -517,6 +662,8 @@ final class MenuBarManager: NSObject {
                 downSpeed: max(monitor.downloadSpeed, 0),
                 upSpeed: max(monitor.uploadSpeed, 0),
                 totalRx: monitor.totalRx, totalTx: monitor.totalTx,
+                todayRx: todayRx, todayTx: todayTx,
+                weekRx: weekRx, weekTx: weekTx,
                 ip: getLocalIPAddress(), wifi: getWiFiStatus(),
                 processes: processMonitor.processSpeeds
             )
