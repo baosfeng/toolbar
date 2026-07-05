@@ -326,11 +326,11 @@ final class MenuBarManager: NSObject {
             launchItem.state = isLaunchAtStartupSaved ? .on : .off
         }
 
-        // 标题栏（显示累计流量）
+        // 标题栏（显示今日流量）
         if let headerItem = menu.item(at: 0) {
-            let totalDown = formatBytesFull(monitor.totalRx)
-            let totalUp = formatBytesFull(monitor.totalTx)
-            let attrStr = NSMutableAttributedString(string: "网络监控  ↓\(totalDown)  ↑\(totalUp)")
+            let todayDown = formatBytesFull(todayRx)
+            let todayUp = formatBytesFull(todayTx)
+            let attrStr = NSMutableAttributedString(string: "今日  ↓\(todayDown)  ↑\(todayUp)")
             let fullRange = NSRange(location: 0, length: attrStr.length)
             attrStr.addAttribute(.font, value: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium), range: fullRange)
             headerItem.attributedTitle = attrStr
@@ -368,7 +368,7 @@ final class MenuBarManager: NSObject {
                 downSpeed: downSpeed, upSpeed: upSpeed,
                 totalRx: monitor.totalRx, totalTx: monitor.totalTx,
                 todayRx: todayRx, todayTx: todayTx,
-                weekRx: weekRx, weekTx: weekTx,
+                weekDetail: weekDetailText,
                 ip: ip, wifi: wifi, processes: processes
             )
         }
@@ -593,39 +593,38 @@ final class MenuBarManager: NSObject {
         monitor.totalTx >= dayStartTx ? monitor.totalTx - dayStartTx : 0
     }
 
-    /// 近 7 日流量合计（含今日）
-    private var weekRx: UInt64 {
-        var total = todayRx
-        let log = UserDefaults.standard.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
+    /// 近 7 日每日流量明细（日期降序：今天在最前）
+    private var weekEntries: [(label: String, rx: UInt64, tx: UInt64)] {
+        var entries: [(label: String, rx: UInt64, tx: UInt64)] = []
         let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM-dd"
-        for entry in log.suffix(6) {
-            guard let dateStr = entry["date"] as? String,
-                  let date = fmt.date(from: dateStr),
-                  let rx = entry["rx"] as? UInt64 else { continue }
-            let daysDiff = cal.dateComponents([.day], from: date, to: today).day ?? 7
-            if daysDiff < 7 { total += rx }
-        }
-        return total
-    }
+        fmt.dateFormat = "M/d"
 
-    private var weekTx: UInt64 {
-        var total = todayTx
+        // 今天
+        entries.append((label: fmt.string(from: Date()), rx: todayRx, tx: todayTx))
+
+        // 从日志取前 6 天
         let log = UserDefaults.standard.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
+        let dateFmt = DateFormatter()
+        dateFmt.dateFormat = "yyyy-MM-dd"
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM-dd"
-        for entry in log.suffix(6) {
+
+        for entry in log.reversed() {
             guard let dateStr = entry["date"] as? String,
-                  let date = fmt.date(from: dateStr),
+                  let date = dateFmt.date(from: dateStr),
+                  let rx = entry["rx"] as? UInt64,
                   let tx = entry["tx"] as? UInt64 else { continue }
             let daysDiff = cal.dateComponents([.day], from: date, to: today).day ?? 7
-            if daysDiff < 7 { total += tx }
+            guard daysDiff > 0, daysDiff < 7 else { continue }
+            entries.append((label: fmt.string(from: date), rx: rx, tx: tx))
         }
-        return total
+
+        return entries
+    }
+
+    /// 近 7 日逐日明细文本（多行）
+    private var weekDetailText: String {
+        weekEntries.map { "\($0.label)  ↓\(formatBytesFull($0.rx))  ↑\(formatBytesFull($0.tx))" }.joined(separator: "\n")
     }
 
     /// 构建流量汇总子菜单
@@ -639,8 +638,8 @@ final class MenuBarManager: NSObject {
     private func updateTrafficSubmenu() {
         let todayDown = formatBytesFull(todayRx)
         let todayUp = formatBytesFull(todayTx)
-        let weekDown = formatBytesFull(weekRx)
-        let weekUp = formatBytesFull(weekTx)
+        let weekDown = formatBytesFull(weekEntries.map(\.rx).reduce(0, +))
+        let weekUp = formatBytesFull(weekEntries.map(\.tx).reduce(0, +))
         if let item = trafficSubmenu.item(withTag: trafficTodayTag) {
             item.title = "今日  ↓\(todayDown)  ↑\(todayUp)"
         }
@@ -663,7 +662,7 @@ final class MenuBarManager: NSObject {
                 upSpeed: max(monitor.uploadSpeed, 0),
                 totalRx: monitor.totalRx, totalTx: monitor.totalTx,
                 todayRx: todayRx, todayTx: todayTx,
-                weekRx: weekRx, weekTx: weekTx,
+                weekDetail: weekDetailText,
                 ip: getLocalIPAddress(), wifi: getWiFiStatus(),
                 processes: processMonitor.processSpeeds
             )
