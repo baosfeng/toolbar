@@ -61,17 +61,44 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
+# 6. 部署到 /Applications
 echo ""
-echo "🎉 交付物就绪！"
-echo "   📦 应用位置：${APP_DIR}"
+echo "📦 正在部署到 /Applications..."
+
+# 杀掉正在运行的应用
+RUNNING_PID=$(pgrep -f "${APP_NAME}" || true)
+if [ -n "$RUNNING_PID" ]; then
+    echo "   🛑 正在关闭正在运行的 ${APP_NAME}（PID: $RUNNING_PID）..."
+    kill "$RUNNING_PID" 2>/dev/null || true
+    sleep 1
+    # 确保进程已退出
+    if kill -0 "$RUNNING_PID" 2>/dev/null; then
+        echo "   ⚠️  进程未退出，强制终止..."
+        kill -9 "$RUNNING_PID" 2>/dev/null || true
+        sleep 0.5
+    fi
+fi
+
+# 删除旧的 /Applications 版本
+INSTALL_PATH="/Applications/${APP_NAME}.app"
+if [ -d "$INSTALL_PATH" ]; then
+    echo "   🗑️  删除旧版本 ${INSTALL_PATH}..."
+    rm -rf "$INSTALL_PATH"
+fi
+
+# 复制到 /Applications
+cp -R "$APP_DIR" "$INSTALL_PATH"
+echo "   ✅ 已复制到 ${INSTALL_PATH}"
+
+# 打开应用
+echo "   🚀 正在启动 ${APP_NAME}..."
+open "$INSTALL_PATH"
+
+echo ""
+echo "🎉 部署完成！"
+echo "   📦 应用位置：${INSTALL_PATH}"
 echo ""
 echo "📋 应用大小："
-ls -lh "$APP_DIR/Contents/MacOS/${APP_NAME}"
+ls -lh "${INSTALL_PATH}/Contents/MacOS/${APP_NAME}"
 echo ""
-echo "🚀 三步上手："
-echo "   1. 打开 Finder → 前往 → 前往文件夹"
-echo "      输入: $(cd "$APP_DIR" && pwd)"
-echo "   2. 双击 NetworkMonitor.app"
-echo "   3. 菜单栏出现 📊 图标，开始监控"
-echo ""
-echo "   💡 新增本机监控：应用追踪、击键统计、系统采样等"
+echo "💡 应用已自动启动，查看菜单栏 📊 图标"

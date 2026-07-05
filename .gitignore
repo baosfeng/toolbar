@@ -1,5 +1,6 @@
 .reasonix
 .scan-cache/
+reasonix.toml
 
 # Swift Package Manager
 .build/
