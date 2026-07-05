@@ -22,7 +22,6 @@ import CoreWLAN
 @MainActor
 final class MenuBarManager: NSObject {
     private let statusItem: NSStatusItem
-    private let labelView = StatusBarView()
     private var monitor: NetworkSpeedMonitor!
     private let batteryMonitor = BatteryMonitor()
     private let processMonitor = ProcessNetworkMonitor()
@@ -83,19 +82,9 @@ final class MenuBarManager: NSObject {
     }
 
     private func setupButton() {
-        guard let button = statusItem.button else { return }
-        button.title = ""
-        button.addSubview(labelView)
-        NSLayoutConstraint.activate([
-            labelView.topAnchor.constraint(equalTo: button.topAnchor),
-            labelView.leadingAnchor.constraint(equalTo: button.leadingAnchor),
-            labelView.trailingAnchor.constraint(equalTo: button.trailingAnchor),
-            labelView.bottomAnchor.constraint(equalTo: button.bottomAnchor),
-        ])
-
         let clickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(toggleDetailPanel))
         clickRecognizer.numberOfClicksRequired = 2
-        button.addGestureRecognizer(clickRecognizer)
+        statusItem.button?.addGestureRecognizer(clickRecognizer)
     }
 
     // MARK: - 菜单项工厂
@@ -216,6 +205,9 @@ final class MenuBarManager: NSObject {
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+
+        // 立即更新一次，避免启动后 1 秒空白
+        update()
     }
 
     // MARK: - macMonitor 启动
@@ -273,8 +265,8 @@ final class MenuBarManager: NSObject {
         let downStr = formatSpeedShort(downSpeed)
         let upStr = formatSpeedShort(upSpeed)
 
-        // 更新菜单栏视图
-        labelView.update(downSpeed: downStr, upSpeed: upStr)
+        // 更新菜单栏属性字符串
+        statusItem.button?.attributedTitle = StatusBarView.attributedString(downSpeed: downStr, upSpeed: upStr)
 
         // 历史记录
         downHistory.append(downSpeed)
