@@ -16,11 +16,18 @@ final class DetailPanel: NSPanel {
     // MARK: - 网络信息
     private let ipLabel = NSTextField(labelWithString: "—")
     private let wifiLabel = NSTextField(labelWithString: "—")
-    private let totalLabel = NSTextField(labelWithString: "↓0 B  ↑0 B")
-    /// 今日流量（替换总计）
+    /// 今日流量
     private let todayLabel = NSTextField(labelWithString: "今日  ↓0 B  ↑0 B")
-    /// 近7日流量
-    private let weekLabel = NSTextField(labelWithString: "近7日  ↓0 B  ↑0 B")
+    /// 近7日逐日列表（多行）
+    private let weekListLabel: NSTextField = {
+        let l = NSTextField(labelWithString: "")
+        l.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        l.textColor = .secondaryLabelColor
+        l.isBezeled = false
+        l.isEditable = false
+        l.drawsBackground = false
+        return l
+    }()
 
     // MARK: - 电池
     private let batteryIconView = NSImageView()
@@ -248,12 +255,11 @@ final class DetailPanel: NSPanel {
         let ipRow = makeInfoRow(symbol: "network", tint: .systemBlue, label: ipLabel)
         let wifiRow = makeInfoRow(symbol: "wifi", tint: .systemBlue, label: wifiLabel)
         let todayRow = makeInfoRow(symbol: "sun.max", tint: .systemOrange, label: todayLabel)
-        let weekRow = makeInfoRow(symbol: "calendar", tint: .secondaryLabelColor, label: weekLabel)
 
         stack.addArrangedSubview(ipRow)
         stack.addArrangedSubview(wifiRow)
         stack.addArrangedSubview(todayRow)
-        stack.addArrangedSubview(weekRow)
+        stack.addArrangedSubview(weekListLabel)
 
         let cardPadding: CGFloat = 12
         NSLayoutConstraint.activate([
@@ -458,7 +464,7 @@ final class DetailPanel: NSPanel {
     func update(battery: BatteryStatus, downSpeed: Double, upSpeed: Double,
                 totalRx: UInt64, totalTx: UInt64,
                 todayRx: UInt64, todayTx: UInt64,
-                weekRx: UInt64, weekTx: UInt64,
+                weekDetail: String,
                 ip: String?, wifi: String, processes: [ProcessNetUsage])
     {
         // 网速
@@ -469,7 +475,7 @@ final class DetailPanel: NSPanel {
         ipLabel.stringValue = ip ?? "未连接"
         wifiLabel.stringValue = "Wi-Fi: \(wifi)"
         todayLabel.stringValue = "今日  ↓\(formatBytesFull(todayRx))  ↑\(formatBytesFull(todayTx))"
-        weekLabel.stringValue = "近7日  ↓\(formatBytesFull(weekRx))  ↑\(formatBytesFull(weekTx))"
+        weekListLabel.stringValue = weekDetail
 
         // 电池
         batteryPercentLabel.stringValue = "\(battery.percentage)%"
