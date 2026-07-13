@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import NetworkMonitorCore
 
 /// 击键计数器：监听键盘按键事件，仅计数不记录内容
 /// 使用 NSEvent.addGlobalMonitorForEvents 监听全局键盘事件

@@ -1,32 +1,6 @@
 import AppKit
 import Foundation
-
-/// 系统事件类型
-enum EventType: String {
-    // 应用事件
-    case appOpen = "app_open"
-    case appClose = "app_close"
-    case appSwitch = "app_switch"
-    case windowTitle = "window_title"
-
-    // 屏幕事件
-    case screenSleep = "screen_sleep"
-    case screenWake = "screen_wake"
-
-    // 系统事件
-    case systemSleep = "system_sleep"
-    case systemWake = "system_wake"
-
-    // 电源事件（暂未实现，预留）
-    case powerAC = "power_ac"
-    case powerBattery = "power_battery"
-
-    // 输入事件
-    case keyPress = "key_press"
-
-    // 系统采样
-    case systemSample = "system_sample"
-}
+import NetworkMonitorCore
 
 /// 事件监听器：监听系统通知并记录事件到数据库
 /// 使用被动通知机制，几乎不消耗 CPU
