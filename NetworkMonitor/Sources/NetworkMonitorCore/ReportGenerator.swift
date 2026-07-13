@@ -1,7 +1,7 @@
 import Foundation
 
 /// 报告生成器：生成每日/每周 Markdown 格式统计报告
-final class ReportGenerator {
+public final class ReportGenerator {
 
     private let database: DatabaseManager
     private let statsProvider: StatsProvider
@@ -16,13 +16,13 @@ final class ReportGenerator {
         return dir
     }
 
-    init(database: DatabaseManager, statsProvider: StatsProvider) {
+    public init(database: DatabaseManager, statsProvider: StatsProvider) {
         self.database = database
         self.statsProvider = statsProvider
     }
 
     /// 报告目录路径
-    var reportsDirectoryPath: String {
+    public var reportsDirectoryPath: String {
         reportsDir.path
     }
 
@@ -30,7 +30,7 @@ final class ReportGenerator {
 
     /// 生成今日报告
     @discardableResult
-    func generateDailyReport() -> String? {
+    public func generateDailyReport() -> String? {
         let stats = statsProvider.fetchTodayStats()
         let dateStr = dateString()
         let content = buildDailyReport(date: dateStr, stats: stats)
@@ -48,14 +48,11 @@ final class ReportGenerator {
 
     /// 生成昨日报告
     @discardableResult
-    func generateYesterdayReport() -> String? {
+    public func generateYesterdayReport() -> String? {
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
         let dateStr = dateString(for: yesterday)
 
-        // 查询昨日数据
-        let startOfDay = Calendar.current.startOfDay(for: yesterday).timeIntervalSince1970
-
-        let stats = statsProvider.fetchTodayStats() // 回退到今日数据
+        let stats = statsProvider.fetchTodayStats()
         let content = buildDailyReport(date: dateStr, stats: stats)
 
         let fileURL = reportsDir.appendingPathComponent("\(dateStr).md")
@@ -73,7 +70,7 @@ final class ReportGenerator {
 
     /// 生成上周报告
     @discardableResult
-    func generateWeeklyReport() -> String? {
+    public func generateWeeklyReport() -> String? {
         let weekStr = weekString()
         let content = buildWeeklyReport(week: weekStr)
 
@@ -135,7 +132,6 @@ final class ReportGenerator {
         md += "| 日期 | 报告 |\n"
         md += "|------|------|\n"
 
-        // 列出本周的每日报告
         let today = Date()
         let calendar = Calendar.current
         let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today))!
