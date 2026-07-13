@@ -1,60 +1,17 @@
 import Foundation
 import SQLite3
 
-/// 今日统计数据结构
-struct TodayStats {
-    /// 活跃时间（秒）
-    let activeSeconds: TimeInterval
-    /// 击键总数
-    let keyPressCount: Int
-    /// 亮屏时间（秒）
-    let screenOnSeconds: TimeInterval
-    /// 息屏时间（秒）
-    let screenOffSeconds: TimeInterval
-    /// 应用排行
-    let appRanking: [AppUsage]
-    /// 最近的 CPU 使用率
-    let cpuUsage: Double
-    /// 内存使用（MB）
-    let memoryUsedMB: Int
-    /// 总内存（MB）
-    let memoryTotalMB: Int
-    /// 网络下载速率（字节/秒）
-    let netDownloadSpeed: UInt64
-    /// 网络上传速率（字节/秒）
-    let netUploadSpeed: UInt64
-
-    static let empty = TodayStats(
-        activeSeconds: 0, keyPressCount: 0,
-        screenOnSeconds: 0, screenOffSeconds: 0,
-        appRanking: [], cpuUsage: 0,
-        memoryUsedMB: 0, memoryTotalMB: 0,
-        netDownloadSpeed: 0, netUploadSpeed: 0
-    )
-}
-
-/// 应用使用数据
-struct AppUsage: Comparable {
-    let name: String
-    let bundleID: String
-    let duration: TimeInterval // 前台使用秒数
-
-    static func < (lhs: AppUsage, rhs: AppUsage) -> Bool {
-        lhs.duration < rhs.duration
-    }
-}
-
 /// 统计查询器：从 SQLite 中查询今日统计数据
-final class StatsProvider {
+public final class StatsProvider {
 
     private let database: DatabaseManager
 
-    init(database: DatabaseManager) {
+    public init(database: DatabaseManager) {
         self.database = database
     }
 
     /// 查询今日统计数据
-    func fetchTodayStats() -> TodayStats {
+    public func fetchTodayStats() -> TodayStats {
         let startOfDay = startOfDayTimestamp()
 
         return TodayStats(
@@ -75,7 +32,6 @@ final class StatsProvider {
 
     /// 计算今日活跃时间：基于应用切换时间差
     private func calculateActiveSeconds(from startOfDay: TimeInterval) -> TimeInterval {
-        // 简化实现：统计 app_switch 事件数，估算活跃时间
         let sql = """
             SELECT COUNT(*), MIN(timestamp), MAX(timestamp)
             FROM events
@@ -94,7 +50,6 @@ final class StatsProvider {
         }
 
         guard count > 0, maxTS > minTS else { return 0 }
-        // 估算：从第一次切换到最后一次切换之间的时间
         return maxTS - minTS
     }
 
@@ -129,7 +84,6 @@ final class StatsProvider {
         calculateScreenTime(from: startOfDay, onType: "screen_sleep", offType: "screen_wake")
     }
 
-    /// 计算屏幕时间：通过 screen_sleep/screen_wake 事件配对
     private func calculateScreenTime(from startOfDay: TimeInterval, onType: String, offType: String) -> TimeInterval {
         let sql = """
             SELECT timestamp FROM events
@@ -147,7 +101,6 @@ final class StatsProvider {
         var i = 0
         while i < timestamps.count {
             let start = timestamps[i]
-            // 检查事件类型是否匹配 onType
             let checkSQL = """
                 SELECT event_type FROM events
                 WHERE timestamp = \(start) AND event_type IN ('\(onType)', '\(offType)')
@@ -223,7 +176,6 @@ final class StatsProvider {
         UInt64(fetchLatestSampleValue(from: startOfDay, key: "net_tx") ?? 0)
     }
 
-    /// 从最近的 system_sample 事件中提取指定字段的值
     private func fetchLatestSampleValue(from startOfDay: TimeInterval, key: String) -> Double? {
         let sql = """
             SELECT extra_data FROM events
