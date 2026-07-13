@@ -78,7 +78,7 @@ final class MenuBarManager: NSObject {
     private var dayStartTx: UInt64 = 0
     private let trafficSubmenu = NSMenu()
     private let trafficTodayTag = 8001
-    private let trafficWeekTag = 8002
+
 
     // MARK: - 初始化
 
@@ -631,20 +631,30 @@ final class MenuBarManager: NSObject {
     private func buildTrafficSubmenu() {
         trafficSubmenu.removeAllItems()
         trafficSubmenu.addItem(menuItem(title: "今日: —", symbol: "sun.max", tag: trafficTodayTag, isEnabled: false))
-        trafficSubmenu.addItem(menuItem(title: "近7日: —", symbol: "calendar", tag: trafficWeekTag, isEnabled: false))
     }
 
-    /// 更新流量汇总子菜单
+    /// 更新流量汇总子菜单（今日 + 近7日逐日明细）
     private func updateTrafficSubmenu() {
+        trafficSubmenu.removeAllItems()
+
+        // 今日
         let todayDown = formatBytesFull(todayRx)
         let todayUp = formatBytesFull(todayTx)
-        let weekDown = formatBytesFull(weekEntries.map(\.rx).reduce(0, +))
-        let weekUp = formatBytesFull(weekEntries.map(\.tx).reduce(0, +))
-        if let item = trafficSubmenu.item(withTag: trafficTodayTag) {
-            item.title = "今日  ↓\(todayDown)  ↑\(todayUp)"
-        }
-        if let item = trafficSubmenu.item(withTag: trafficWeekTag) {
-            item.title = "近7日  ↓\(weekDown)  ↑\(weekUp)"
+        trafficSubmenu.addItem(menuItem(title: "今日  ↓\(todayDown)  ↑\(todayUp)", symbol: "sun.max", tag: trafficTodayTag, isEnabled: false))
+
+        // 近7日逐日明细（weekEntries[0] 是今天，已单独显示）
+        let entries = weekEntries
+        if entries.count > 1 {
+            trafficSubmenu.addItem(NSMenuItem.separator())
+            for i in 1..<entries.count {
+                let entry = entries[i]
+                trafficSubmenu.addItem(menuItem(
+                    title: "\(entry.label)  ↓\(formatBytesFull(entry.rx))  ↑\(formatBytesFull(entry.tx))",
+                    symbol: "calendar.day.timeline.left",
+                    tag: 0,
+                    isEnabled: false
+                ))
+            }
         }
     }
 
