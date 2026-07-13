@@ -3,15 +3,22 @@ import SQLite3
 
 /// 数据库管理器：管理 SQLite 数据库的初始化和基本操作
 /// 数据存储在 ~/Library/Application Support/macMonitor/monitor.db
-final class DatabaseManager {
+///
+/// 线程安全说明：
+/// - 所有 sqlite3_* 调用通过串行队列 `serialQueue` 访问，保证单线程操作 db 指针
+/// - `PRAGMA mmap_size=0` 禁用 mmap，避免 Apple 平台 mmap/purgeable 缓存导致的死锁
+/// - `PRAGMA journal_mode=WAL` 启用 WAL 模式，读写不互相阻塞
+final class DatabaseManager: @unchecked Sendable {
 
     // MARK: - 属性
 
     private var db: OpaquePointer?
 
-    /// 事件缓冲区 — 批量写入以减少 IO
+    /// 串行队列 — 所有数据库操作在此队列上执行
+    private let serialQueue = DispatchQueue(label: "com.example.NetworkMonitor.database")
+
+    /// 事件缓冲区 — 批量写入以减少 IO（仅在 serialQueue 上读写）
     private var eventBuffer: [String] = []
-    private let batchSize = 10
     private var flushTimer: DispatchSourceTimer?
 
     /// 数据库文件路径
@@ -33,6 +40,12 @@ final class DatabaseManager {
 
     /// 打开数据库并创建表结构
     func initialize() {
+        serialQueue.sync {
+            _initialize()
+        }
+    }
+
+    private func _initialize() {
         let path = (dbPath as NSString).utf8String
         guard let cPath = path else {
             print("❌ 数据库路径无效")
@@ -46,26 +59,58 @@ final class DatabaseManager {
             return
         }
 
+        // 禁用 mmap — 避免 purgeableCacheUnpin 死锁/活锁（Apple 平台特有 bug）
+        applyPragma("mmap_size", value: "0")
+        // 启用 WAL 模式 — 读写不互相阻塞
+        applyPragma("journal_mode", value: "WAL")
+
         createTables()
         startFlushTimer()
         print("✅ 数据库已就绪: \(dbPath)")
     }
 
+    /// 执行 PRAGMA 语句
+    private func applyPragma(_ name: String, value: String) {
+        guard let db else { return }
+        let sql = "PRAGMA \(name)=\(value);"
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
+              sqlite3_step(stmt) == SQLITE_DONE else {
+            print("⚠️ PRAGMA \(name) 设置失败: \(String(cString: sqlite3_errmsg(db)))")
+            return
+        }
+    }
+
     /// 关闭数据库连接
     func close() {
-        flush() // 关闭前刷新缓冲区
+        serialQueue.sync {
+            _close()
+        }
+    }
+
+    private func _close() {
         flushTimer?.cancel()
         flushTimer = nil
+        _flush()
         guard let db else { return }
         sqlite3_close(db)
         self.db = nil
     }
 
     /// 数据库是否可用
-    var isReady: Bool { db != nil }
+    var isReady: Bool {
+        serialQueue.sync { db != nil }
+    }
 
     /// 执行查询，每行调用一次 handler
-    func query(sql: String, handler: (OpaquePointer) -> Void) {
+    func query(sql: String, handler: @escaping (OpaquePointer) -> Void) {
+        serialQueue.sync {
+            _query(sql: sql, handler: handler)
+        }
+    }
+
+    private func _query(sql: String, handler: (OpaquePointer) -> Void) {
         guard let db else { return }
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
@@ -104,10 +149,9 @@ final class DatabaseManager {
 
         let escapedType = escapeSQL(EventType.systemSample.rawValue)
         let values = "(\(escapedType), '', '', '', \(timestamp), \(extra))"
-        eventBuffer.append(values)
 
-        if eventBuffer.count >= batchSize {
-            flush()
+        serialQueue.async { [weak self] in
+            self?.eventBuffer.append(values)
         }
     }
 
@@ -116,10 +160,9 @@ final class DatabaseManager {
         let escapedType = escapeSQL(EventType.keyPress.rawValue)
         let extra = escapeSQL("{\"count\":\(count)}")
         let values = "(\(escapedType), '', '', '', \(timestamp), \(extra))"
-        eventBuffer.append(values)
 
-        if eventBuffer.count >= batchSize {
-            flush()
+        serialQueue.async { [weak self] in
+            self?.eventBuffer.append(values)
         }
     }
 
@@ -131,15 +174,20 @@ final class DatabaseManager {
         let escapedTitle = escapeSQL(windowTitle ?? "")
 
         let values = "(\(escapedType), \(escapedApp), \(escapedBundle), \(escapedTitle), \(timestamp), NULL)"
-        eventBuffer.append(values)
 
-        if eventBuffer.count >= batchSize {
-            flush()
+        serialQueue.async { [weak self] in
+            self?.eventBuffer.append(values)
         }
     }
 
     /// 立即刷新缓冲区，将事件写入数据库
     func flush() {
+        serialQueue.sync {
+            _flush()
+        }
+    }
+
+    private func _flush() {
         guard !eventBuffer.isEmpty, let db else { return }
 
         let values = eventBuffer.joined(separator: ",\n")
@@ -163,10 +211,10 @@ final class DatabaseManager {
 
     /// 启动定时刷新（每30秒自动写入）
     private func startFlushTimer() {
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .background))
+        let timer = DispatchSource.makeTimerSource(queue: serialQueue)
         timer.schedule(deadline: .now() + 30, repeating: 30)
         timer.setEventHandler { [weak self] in
-            self?.flush()
+            self?._flush()
         }
         timer.resume()
         flushTimer = timer
