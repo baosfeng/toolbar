@@ -8,7 +8,10 @@ import SQLite3
 /// - 所有 sqlite3_* 调用通过串行队列 `serialQueue` 访问，保证单线程操作 db 指针
 /// - `PRAGMA mmap_size=0` 禁用 mmap，避免 Apple 平台 mmap/purgeable 缓存导致的死锁
 /// - `PRAGMA journal_mode=WAL` 启用 WAL 模式，读写不互相阻塞
-final class DatabaseManager: @unchecked Sendable {
+///
+/// 测试支持：
+/// - `initializeInMemory()` 使用 `:memory:` 数据库，适合单元测试
+public final class DatabaseManager: @unchecked Sendable {
 
     // MARK: - 属性
 
@@ -22,13 +25,12 @@ final class DatabaseManager: @unchecked Sendable {
     private var flushTimer: DispatchSourceTimer?
 
     /// 数据库文件路径
-    private(set) lazy var dbPath: String = {
+    public private(set) lazy var dbPath: String = {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first!
         let dir = appSupport.appendingPathComponent("macMonitor", isDirectory: true)
-        // 确保目录存在
         try? FileManager.default.createDirectory(
             at: dir,
             withIntermediateDirectories: true
@@ -36,12 +38,21 @@ final class DatabaseManager: @unchecked Sendable {
         return dir.appendingPathComponent("monitor.db").path
     }()
 
+    public init() {}
+
     // MARK: - 初始化与关闭
 
-    /// 打开数据库并创建表结构
-    func initialize() {
+    /// 打开数据库并创建表结构（基于文件系统默认路径）
+    public func initialize() {
         serialQueue.sync {
             _initialize()
+        }
+    }
+
+    /// 打开内存数据库（仅用于测试，不启动 flush 定时器）
+    public func initializeInMemory() {
+        serialQueue.sync {
+            _openInMemory()
         }
     }
 
@@ -69,6 +80,18 @@ final class DatabaseManager: @unchecked Sendable {
         print("✅ 数据库已就绪: \(dbPath)")
     }
 
+    private func _openInMemory() {
+        let status = sqlite3_open(":memory:", &db)
+        guard status == SQLITE_OK else {
+            print("❌ 打开内存数据库失败: \(status)")
+            db = nil
+            return
+        }
+
+        createTables()
+        print("✅ 内存数据库已就绪")
+    }
+
     /// 执行 PRAGMA 语句
     private func applyPragma(_ name: String, value: String) {
         guard let db else { return }
@@ -83,7 +106,7 @@ final class DatabaseManager: @unchecked Sendable {
     }
 
     /// 关闭数据库连接
-    func close() {
+    public func close() {
         serialQueue.sync {
             _close()
         }
@@ -99,12 +122,12 @@ final class DatabaseManager: @unchecked Sendable {
     }
 
     /// 数据库是否可用
-    var isReady: Bool {
+    public var isReady: Bool {
         serialQueue.sync { db != nil }
     }
 
     /// 执行查询，每行调用一次 handler
-    func query(sql: String, handler: @escaping (OpaquePointer) -> Void) {
+    public func query(sql: String, handler: @escaping (OpaquePointer) -> Void) {
         serialQueue.sync {
             _query(sql: sql, handler: handler)
         }
@@ -127,7 +150,7 @@ final class DatabaseManager: @unchecked Sendable {
     // MARK: - 事件写入
 
     /// 写入一条系统采样数据
-    func writeSystemSample(timestamp: TimeInterval, cpuUsage: Double, memoryUsedMB: Int, memoryTotalMB: Int, networkRx: UInt64, networkTx: UInt64) {
+    public func writeSystemSample(timestamp: TimeInterval, cpuUsage: Double, memoryUsedMB: Int, memoryTotalMB: Int, networkRx: UInt64, networkTx: UInt64) {
         let extra: String
         if #available(macOS 10.15, *) {
             let dict: [String: Any] = [
@@ -156,7 +179,7 @@ final class DatabaseManager: @unchecked Sendable {
     }
 
     /// 写入一次击键批量数据（一条事件带计数）
-    func writeKeyPressBatch(count: Int, timestamp: TimeInterval) {
+    public func writeKeyPressBatch(count: Int, timestamp: TimeInterval) {
         let escapedType = escapeSQL(EventType.keyPress.rawValue)
         let extra = escapeSQL("{\"count\":\(count)}")
         let values = "(\(escapedType), '', '', '', \(timestamp), \(extra))"
@@ -166,8 +189,7 @@ final class DatabaseManager: @unchecked Sendable {
         }
     }
 
-    func writeEvent(type: EventType, appName: String? = nil, bundleID: String? = nil, windowTitle: String? = nil, timestamp: TimeInterval) {
-        // 使用 SQL 值转义避免注入
+    public func writeEvent(type: EventType, appName: String? = nil, bundleID: String? = nil, windowTitle: String? = nil, timestamp: TimeInterval) {
         let escapedType = escapeSQL(type.rawValue)
         let escapedApp = escapeSQL(appName ?? "")
         let escapedBundle = escapeSQL(bundleID ?? "")
@@ -181,7 +203,7 @@ final class DatabaseManager: @unchecked Sendable {
     }
 
     /// 立即刷新缓冲区，将事件写入数据库
-    func flush() {
+    public func flush() {
         serialQueue.sync {
             _flush()
         }
@@ -235,7 +257,6 @@ final class DatabaseManager: @unchecked Sendable {
     /// 创建所有需要的表（仅首次运行时执行）
     private func createTables() {
         let statements = [
-            // 原始事件记录表
             """
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -248,7 +269,6 @@ final class DatabaseManager: @unchecked Sendable {
             );
             """,
 
-            // 小时聚合统计表
             """
             CREATE TABLE IF NOT EXISTS stats_hourly (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -266,7 +286,6 @@ final class DatabaseManager: @unchecked Sendable {
             );
             """,
 
-            // 每日汇总表
             """
             CREATE TABLE IF NOT EXISTS stats_daily (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -298,7 +317,6 @@ final class DatabaseManager: @unchecked Sendable {
             }
         }
 
-        // 创建索引
         createIndexes()
     }
 
