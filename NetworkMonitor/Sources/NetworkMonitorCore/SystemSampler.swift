@@ -3,7 +3,7 @@ import Foundation
 
 /// 系统采样器：定时采集 CPU、内存和网络数据
 /// 每60秒进行一次完整采样，写入数据库
-final class SystemSampler {
+public final class SystemSampler {
 
     // MARK: - 属性
 
@@ -21,7 +21,7 @@ final class SystemSampler {
 
     // MARK: - 初始化
 
-    init(database: DatabaseManager) {
+    public init(database: DatabaseManager) {
         self.database = database
     }
 
@@ -32,7 +32,7 @@ final class SystemSampler {
     // MARK: - 启动/停止
 
     /// 启动定时采样
-    func start() {
+    public func start() {
         // 先采集一次初始快照
         previousCPUTicks = readCPUTicks()
         previousNetData = readInterfaceBytes()
@@ -51,7 +51,7 @@ final class SystemSampler {
     }
 
     /// 停止定时采样
-    func stop() {
+    public func stop() {
         timer?.cancel()
         timer = nil
     }
@@ -59,7 +59,7 @@ final class SystemSampler {
     // MARK: - 采样
 
     /// 执行一次完整采样
-    private func sample() {
+    public func sample() {
         let timestamp = Date().timeIntervalSince1970
         let cpuUsage = sampleCPU()
         let memoryInfo = sampleMemory()
