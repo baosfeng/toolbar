@@ -12,5 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         menuBarManager?.flushBeforeQuit()
+        ReasonixHookMonitor.cleanupSocket()
+        print("👋 应用退出")
     }
 }
