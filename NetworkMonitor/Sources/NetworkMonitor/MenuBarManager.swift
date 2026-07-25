@@ -19,12 +19,13 @@ import DGCharts
 @MainActor
 final class MenuBarManager: NSObject {
     private let statusItem: NSStatusItem
-    private var monitor: NetworkSpeedMonitor!
-    private let processMonitor = ProcessNetworkMonitor()
+    private let monitor: NetworkMonitoringService
+    private let processMonitor: ProcessNetworkMonitor
     private var timer: Timer?
-    private let databaseManager = DatabaseManager()
+    private let databaseManager: DatabaseService
     private var reasonixHookMonitor: ReasonixHookMonitor?
-    private lazy var tokenUsageProvider = TokenUsageProvider(database: databaseManager)
+    private let tokenUsageProvider: TokenStatsService
+    private let trafficTracker: TrafficTracker
     private var lastHistoryHash: String = ""
     private var lastHourlyHash: String = ""
 
@@ -53,37 +54,32 @@ final class MenuBarManager: NSObject {
     private let maxProcessItems = 10
 
     private static let launchPrefKey = "launchAtStartup"
-    private static let totalRxKey = "totalRx"
-    private static let totalTxKey = "totalTx"
-
-    // MARK: - 每日流量追踪
-    private static let dayStartDateKey = "dayStartDate"
-    private static let dayStartRxKey = "dayStartRx"
-    private static let dayStartTxKey = "dayStartTx"
-    private static let dailyLogKey = "dailyTrafficLog"
 
     private var downHistory: [Double] = []
     private var upHistory: [Double] = []
     private let maxHistory = 60
 
-
-    // MARK: - 每日流量追踪
-    private var dayStartRx: UInt64 = 0
-    private var dayStartTx: UInt64 = 0
+    // MARK: - 子菜单
     private let trafficSubmenu = NSMenu()
     private let trafficTodayTag = 8001
 
 
     // MARK: - 初始化
 
-    override init() {
-        let savedRx = UInt64(UserDefaults.standard.integer(forKey: Self.totalRxKey))
-        let savedTx = UInt64(UserDefaults.standard.integer(forKey: Self.totalTxKey))
-        monitor = NetworkSpeedMonitor(totalRx: savedRx, totalTx: savedTx)
+    init(
+        networkMonitor: NetworkMonitoringService,
+        processMonitor: ProcessNetworkMonitor,
+        database: DatabaseService,
+        trafficTracker: TrafficTracker,
+        tokenUsageProvider: TokenStatsService
+    ) {
+        self.monitor = networkMonitor
+        self.processMonitor = processMonitor
+        self.databaseManager = database
+        self.trafficTracker = trafficTracker
+        self.tokenUsageProvider = tokenUsageProvider
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
-        loadDailyTraffic()
-        databaseManager.initialize()
         startReasonixHook()
         setupMenu()
         setupTimer()
@@ -222,8 +218,8 @@ final class MenuBarManager: NSObject {
 
         // 标题栏（显示今日流量）
         if let headerItem = menu.item(at: 0) {
-            let todayDown = formatBytesFull(todayRx)
-            let todayUp = formatBytesFull(todayTx)
+            let todayDown = formatBytesFull(trafficTracker.todayRx)
+            let todayUp = formatBytesFull(trafficTracker.todayTx)
             let attrStr = NSMutableAttributedString(string: "今日  ↓\(todayDown)  ↑\(todayUp)")
             let fullRange = NSRange(location: 0, length: attrStr.length)
             attrStr.addAttribute(.font, value: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium), range: fullRange)
@@ -236,7 +232,7 @@ final class MenuBarManager: NSObject {
         }
 
         // ── 更新流量汇总子菜单
-        updateDailyTraffic()
+        trafficTracker.update()
         updateTrafficSubmenu()
 
         // 更新 Token 一级项目
@@ -314,111 +310,14 @@ final class MenuBarManager: NSObject {
     }
 
     private func formatDurationCompact(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        return h > 0 ? "\(h)h\(m)m" : "\(m)m"
+        MenuFactory.formatDurationCompact(seconds)
     }
 
     private func formatCompactNumber(_ number: Int) -> String {
-        if number >= 10000 {
-            return String(format: "%.1fK", Double(number) / 1000)
-        }
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        return f.string(from: NSNumber(value: number)) ?? "\(number)"
+        MenuFactory.formatCompactNumber(number)
     }
 
-    // MARK: - 每日流量追踪
-
-    /// 加载或初始化每日流量追踪
-    private func loadDailyTraffic() {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-
-        dayStartRx = UInt64(UserDefaults.standard.integer(forKey: Self.dayStartRxKey))
-        dayStartTx = UInt64(UserDefaults.standard.integer(forKey: Self.dayStartTxKey))
-
-        // 首次启动：以当前总量为今日起点
-        if dayStartRx == 0, dayStartTx == 0 {
-            dayStartRx = monitor.totalRx
-            dayStartTx = monitor.totalTx
-            UserDefaults.standard.set(today, forKey: Self.dayStartDateKey)
-            UserDefaults.standard.set(Int(dayStartRx), forKey: Self.dayStartRxKey)
-            UserDefaults.standard.set(Int(dayStartTx), forKey: Self.dayStartTxKey)
-        }
-    }
-
-    /// 检查日期变更，切换并保存每日日志
-    private func updateDailyTraffic() {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        let savedDate = UserDefaults.standard.object(forKey: Self.dayStartDateKey) as? Date ?? today
-
-        guard !cal.isDate(savedDate, inSameDayAs: today) else { return }
-
-        // 日期变了 — 保存昨天的流量到日志
-        let yesterdayRx = dayStartRx > 0 && monitor.totalRx >= dayStartRx
-            ? monitor.totalRx - dayStartRx : 0
-        let yesterdayTx = dayStartTx > 0 && monitor.totalTx >= dayStartTx
-            ? monitor.totalTx - dayStartTx : 0
-
-        if yesterdayRx > 0 || yesterdayTx > 0 {
-            var log = UserDefaults.standard.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
-            let fmt = DateFormatter()
-            fmt.dateFormat = "yyyy-MM-dd"
-            log.append(["date": fmt.string(from: savedDate), "rx": yesterdayRx, "tx": yesterdayTx])
-            // 保留最近 30 天
-            if log.count > 30 { log = Array(log.suffix(30)) }
-            UserDefaults.standard.set(log, forKey: Self.dailyLogKey)
-        }
-
-        // 重置今日起点
-        dayStartRx = monitor.totalRx
-        dayStartTx = monitor.totalTx
-        UserDefaults.standard.set(today, forKey: Self.dayStartDateKey)
-        UserDefaults.standard.set(Int(dayStartRx), forKey: Self.dayStartRxKey)
-        UserDefaults.standard.set(Int(dayStartTx), forKey: Self.dayStartTxKey)
-    }
-
-    /// 今日流量（下行）
-    private var todayRx: UInt64 {
-        monitor.totalRx >= dayStartRx ? monitor.totalRx - dayStartRx : 0
-    }
-
-    /// 今日流量（上行）
-    private var todayTx: UInt64 {
-        monitor.totalTx >= dayStartTx ? monitor.totalTx - dayStartTx : 0
-    }
-
-    /// 近 7 日每日流量明细（日期降序：今天在最前）
-    private var weekEntries: [(label: String, rx: UInt64, tx: UInt64)] {
-        var entries: [(label: String, rx: UInt64, tx: UInt64)] = []
-        let fmt = DateFormatter()
-        fmt.dateFormat = "M/d"
-
-        // 今天
-        entries.append((label: fmt.string(from: Date()), rx: todayRx, tx: todayTx))
-
-        // 从日志取前 6 天
-        let log = UserDefaults.standard.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
-        let dateFmt = DateFormatter()
-        dateFmt.dateFormat = "yyyy-MM-dd"
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-
-        for entry in log.reversed() {
-            guard let dateStr = entry["date"] as? String,
-                  let date = dateFmt.date(from: dateStr),
-                  let rx = entry["rx"] as? UInt64,
-                  let tx = entry["tx"] as? UInt64 else { continue }
-            let daysDiff = cal.dateComponents([.day], from: date, to: today).day ?? 7
-            guard daysDiff > 0, daysDiff < 7 else { continue }
-            entries.append((label: fmt.string(from: date), rx: rx, tx: tx))
-        }
-
-        return entries
-    }
+    // MARK: - 流量汇总子菜单
 
     /// 构建流量汇总子菜单
     private func buildTrafficSubmenu() {
@@ -431,12 +330,12 @@ final class MenuBarManager: NSObject {
         trafficSubmenu.removeAllItems()
 
         // 今日
-        let todayDown = formatBytesFull(todayRx)
-        let todayUp = formatBytesFull(todayTx)
+        let todayDown = formatBytesFull(trafficTracker.todayRx)
+        let todayUp = formatBytesFull(trafficTracker.todayTx)
         trafficSubmenu.addItem(menuItem(title: "今日  ↓\(todayDown)  ↑\(todayUp)", symbol: "sun.max", tag: trafficTodayTag, isEnabled: false))
 
-        // 近7日逐日明细（weekEntries[0] 是今天，已单独显示）
-        let entries = weekEntries
+        // 近7日逐日明细
+        let entries = trafficTracker.weekEntries
         if entries.count > 1 {
             trafficSubmenu.addItem(NSMenuItem.separator())
             for i in 1..<entries.count {
@@ -455,7 +354,11 @@ final class MenuBarManager: NSObject {
 
     /// 启动 Reasonix Hook 事件监听器
     private func startReasonixHook() {
-        let hookMonitor = ReasonixHookMonitor(database: databaseManager)
+        guard let db = databaseManager as? DatabaseManager else {
+            print("⚠️ ReasonixHookMonitor 需要 DatabaseManager 实例")
+            return
+        }
+        let hookMonitor = ReasonixHookMonitor(database: db)
         hookMonitor.start()
         reasonixHookMonitor = hookMonitor
         print("📡 Reasonix Hook 监听器已启动")
@@ -482,7 +385,7 @@ final class MenuBarManager: NSObject {
 
     /// 在一级菜单中插入每小时迷你图表
     private func updateTokenHourlyItems(in menu: NSMenu) {
-        let hourly = tokenUsageProvider.fetchHourlyBreakdown()
+        let hourly = tokenUsageProvider.fetchHourlyBreakdown(dateString: nil)
         let hash = hourly.map { "\($0.hour):\($0.totalTokens)" }.joined(separator: ",")
         guard hash != lastHourlyHash else { return }
         lastHourlyHash = hash
