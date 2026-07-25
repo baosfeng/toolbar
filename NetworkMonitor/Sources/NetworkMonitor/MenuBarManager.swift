@@ -529,7 +529,7 @@ final class MenuBarManager: NSObject {
         tokenHistorySubmenu.addItem(menuItem(title: "加载中…", symbol: "calendar", isEnabled: false))
     }
 
-    /// 更新历史用量子菜单
+    /// 更新历史用量子菜单（内嵌图表）
     private func updateTokenHistorySubmenu() {
         tokenHistorySubmenu.removeAllItems()
 
@@ -539,13 +539,14 @@ final class MenuBarManager: NSObject {
             return
         }
 
-        for entry in history {
-            let tokenStr = Self.formatTokenShort(entry.totalTokens)
-            let costStr = Self.formatCostShort(entry.cost)
-            let dateStr = Self.formatDateShort(entry.date)
-            let title = "\(dateStr)  \(tokenStr)  \(costStr)"
-            tokenHistorySubmenu.addItem(menuItem(title: title, symbol: nil, isEnabled: false))
-        }
+        let chartView = MiniHistoryMenuChartView(data: history)
+        let hosting = NSHostingView(rootView: chartView)
+        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 100)
+
+        let item = NSMenuItem()
+        item.view = hosting
+        item.isEnabled = false
+        tokenHistorySubmenu.addItem(item)
     }
 
     // MARK: - 格式化辅助（菜单栏共用）
