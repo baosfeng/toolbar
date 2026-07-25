@@ -31,6 +31,11 @@ final class MenuBarManager: NSObject {
     // MARK: - 子菜单
     private let processSubmenu = NSMenu()
     private let tokenHistorySubmenu = NSMenu()
+    private let aiAnalysisSubmenu = NSMenu()
+    private let aiDynamicSubmenu = NSMenu()
+    private let aiToolStatsSubmenu = NSMenu()
+    private let aiModelSubmenu = NSMenu()
+    private let aiProjectSubmenu = NSMenu()
 
     // MARK: - 菜单标签
     private let networkIPTag = 1002
@@ -38,6 +43,13 @@ final class MenuBarManager: NSObject {
     private let launchAtStartupTag = 3001
     private let tokenSummaryTag = 4001
     private let tokenHourBaseTag = 4200
+
+    // MARK: - AI 分析标签
+    private let aiDynamicTag = 5100
+    private let aiToolStatsTag = 5101
+    private let aiModelTag = 5102
+    private let aiProjectTag = 5103
+    private let aiSessionTag = 5104
     private let maxProcessItems = 10
 
     private static let launchPrefKey = "launchAtStartup"
@@ -136,6 +148,13 @@ final class MenuBarManager: NSObject {
         historyItem.submenu = tokenHistorySubmenu
         menu.addItem(historyItem)
 
+        // ── AI 分析（多子菜单） ──
+        menu.addItem(NSMenuItem.separator())
+        buildAiAnalysisSubmenu()
+        let aiItem = menuItem(title: "AI 分析", symbol: "brain.head.profile")
+        aiItem.submenu = aiAnalysisSubmenu
+        menu.addItem(aiItem)
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
                               symbol: "clock.arrow.circlepath", tag: launchAtStartupTag))
@@ -222,6 +241,9 @@ final class MenuBarManager: NSObject {
 
         // 更新 Token 一级项目
         updateTokenSubmenu()
+
+        // 更新 AI 分析子菜单
+        updateAiAnalysisSubmenu()
 
         // 进程列表
         updateProcessItems(processes: processes)
@@ -523,6 +545,133 @@ final class MenuBarManager: NSObject {
         item.view = chartView
         item.isEnabled = false
         tokenHistorySubmenu.addItem(item)
+    }
+
+    // MARK: - AI 分析子菜单
+
+    /// 构建 AI 分析子菜单结构
+    private func buildAiAnalysisSubmenu() {
+        aiAnalysisSubmenu.removeAllItems()
+
+        aiAnalysisSubmenu.addItem(menuItem(title: "AI 实时动态", symbol: "antenna.radiowaves.left.and.right",
+                                           tag: aiDynamicTag))
+        aiAnalysisSubmenu.item(withTag: aiDynamicTag)?.submenu = aiDynamicSubmenu
+
+        aiAnalysisSubmenu.addItem(menuItem(title: "AI 工具统计", symbol: "wrench.adjustable",
+                                           tag: aiToolStatsTag))
+        aiAnalysisSubmenu.item(withTag: aiToolStatsTag)?.submenu = aiToolStatsSubmenu
+
+        aiAnalysisSubmenu.addItem(menuItem(title: "AI 模型统计", symbol: "cpu",
+                                           tag: aiModelTag))
+        aiAnalysisSubmenu.item(withTag: aiModelTag)?.submenu = aiModelSubmenu
+
+        aiAnalysisSubmenu.addItem(menuItem(title: "AI 项目统计", symbol: "folder",
+                                           tag: aiProjectTag))
+        aiAnalysisSubmenu.item(withTag: aiProjectTag)?.submenu = aiProjectSubmenu
+
+        aiAnalysisSubmenu.addItem(NSMenuItem.separator())
+        aiAnalysisSubmenu.addItem(menuItem(title: "AI 会话统计: —", symbol: "chart.pie",
+                                           tag: aiSessionTag, isEnabled: false))
+
+        // 填充占位
+        aiDynamicSubmenu.addItem(menuItem(title: "加载中…", isEnabled: false))
+        aiToolStatsSubmenu.addItem(menuItem(title: "加载中…", isEnabled: false))
+        aiModelSubmenu.addItem(menuItem(title: "加载中…", isEnabled: false))
+        aiProjectSubmenu.addItem(menuItem(title: "加载中…", isEnabled: false))
+    }
+
+    /// 更新 AI 分析子菜单
+    private func updateAiAnalysisSubmenu() {
+        updateAiDynamicSubmenu()
+        updateAiToolStatsSubmenu()
+        updateAiModelSubmenu()
+        updateAiProjectSubmenu()
+        updateAiSessionStatsItem()
+    }
+
+    /// 更新实时动态子菜单
+    private func updateAiDynamicSubmenu() {
+        let calls = tokenUsageProvider.fetchRecentToolCalls(limit: 8)
+        aiDynamicSubmenu.removeAllItems()
+
+        if calls.isEmpty {
+            aiDynamicSubmenu.addItem(menuItem(title: "暂无工具调用", isEnabled: false))
+            return
+        }
+
+        for call in calls {
+            let statusIcon = call.status == "success" ? "✅" : (call.status == "failure" ? "❌" : "⏳")
+            let timeStr = call.secondsAgo < 60 ? "\(call.secondsAgo)s前" : "\(call.secondsAgo / 60)m前"
+            let durStr = call.durationMs > 0 ? " \(call.durationMs)ms" : ""
+            let title = "\(statusIcon) \(call.toolName)  (\(timeStr))\(durStr)"
+            let item = menuItem(title: title, isEnabled: false)
+            aiDynamicSubmenu.addItem(item)
+        }
+    }
+
+    /// 更新工具统计子菜单
+    private func updateAiToolStatsSubmenu() {
+        let stats = tokenUsageProvider.fetchToolCallRanking(limit: 6)
+        aiToolStatsSubmenu.removeAllItems()
+
+        if stats.isEmpty {
+            aiToolStatsSubmenu.addItem(menuItem(title: "暂无工具数据", isEnabled: false))
+            return
+        }
+
+        for s in stats {
+            let rateStr = String(format: "%.0f%%", s.successRate)
+            let durStr = s.avgDurationMs > 0 ? " ⏱\(s.avgDurationMs)ms" : ""
+            let title = "\(s.toolName)  \(s.callCount)次  ✅\(rateStr)\(durStr)"
+            aiToolStatsSubmenu.addItem(menuItem(title: title, isEnabled: false))
+        }
+    }
+
+    /// 更新模型统计子菜单
+    private func updateAiModelSubmenu() {
+        let models = tokenUsageProvider.fetchModelRanking(limit: 5)
+        aiModelSubmenu.removeAllItems()
+
+        if models.isEmpty {
+            aiModelSubmenu.addItem(menuItem(title: "暂无模型数据", isEnabled: false))
+            return
+        }
+
+        for m in models {
+            let tokensStr = Self.formatTokenShort(m.totalTokens)
+            let costStr = Self.formatCostShort(m.totalCost)
+            let title = "\(m.model)  \(tokensStr)Token  \(costStr)"
+            aiModelSubmenu.addItem(menuItem(title: title, isEnabled: false))
+        }
+    }
+
+    /// 更新项目统计子菜单
+    private func updateAiProjectSubmenu() {
+        let projects = tokenUsageProvider.fetchProjectRanking(limit: 5)
+        aiProjectSubmenu.removeAllItems()
+
+        if projects.isEmpty {
+            aiProjectSubmenu.addItem(menuItem(title: "暂无项目数据", isEnabled: false))
+            return
+        }
+
+        for p in projects {
+            let tokensStr = Self.formatTokenShort(p.totalTokens)
+            let costStr = Self.formatCostShort(p.totalCost)
+            let title = "\(p.project)  \(tokensStr)Token  \(p.sessionCount)会话  \(costStr)"
+            aiProjectSubmenu.addItem(menuItem(title: title, isEnabled: false))
+        }
+    }
+
+    /// 更新会话统计概览项
+    private func updateAiSessionStatsItem() {
+        let stats = tokenUsageProvider.fetchSessionOverviewStats()
+        let failStr = String(format: "%.0f%%", stats.failRate)
+        let ratioStr = String(format: "%.0f%%", stats.reasoningTokenRatio)
+        let title = "AI 会话统计: 活跃\(stats.activeSessions) | 今日\(stats.todayTotal) | 失败率\(failStr) | 推理\(ratioStr)"
+        if let item = aiAnalysisSubmenu.item(withTag: aiSessionTag) {
+            item.title = title
+        }
     }
 
     // MARK: - 格式化辅助（菜单栏共用）
