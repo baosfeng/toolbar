@@ -30,7 +30,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
 
     // MARK: - 属性
 
-    private let database: DatabaseManager
+    private let database: DatabaseService
     private var socketFd: Int32 = -1
     private var readSource: DispatchSourceRead?
     /// 事件处理队列 — DispatchSourceRead 在此队列上派发事件
@@ -44,7 +44,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
 
     // MARK: - 初始化
 
-    init(database: DatabaseManager) {
+    init(database: DatabaseService) {
         self.database = database
     }
 
