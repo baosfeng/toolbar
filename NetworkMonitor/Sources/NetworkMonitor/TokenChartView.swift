@@ -34,9 +34,7 @@ final class MiniMenuChartView: BarChartView {
         xAxis.setLabelCount(7, force: false)
         xAxis.valueFormatter = HourAxisFormatter()
 
-        leftAxis.drawGridLinesEnabled = true
-        leftAxis.gridColor = NSColor.separatorColor.withAlphaComponent(0.3)
-        leftAxis.gridLineDashLengths = [2, 3]
+        leftAxis.drawGridLinesEnabled = false
         leftAxis.drawAxisLineEnabled = false
         leftAxis.drawLabelsEnabled = false
 
@@ -100,9 +98,7 @@ final class MiniHistoryMenuChartView: BarChartView {
         xAxis.setLabelCount(data.count, force: true)
         xAxis.valueFormatter = DateAxisFormatter(data: data)
 
-        leftAxis.drawGridLinesEnabled = true
-        leftAxis.gridColor = NSColor.separatorColor.withAlphaComponent(0.3)
-        leftAxis.gridLineDashLengths = [2, 3]
+        leftAxis.drawGridLinesEnabled = false
         leftAxis.drawAxisLineEnabled = false
         leftAxis.drawLabelsEnabled = false
         rightAxis.enabled = false
