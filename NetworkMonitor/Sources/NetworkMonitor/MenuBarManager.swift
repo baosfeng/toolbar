@@ -522,7 +522,7 @@ final class MenuBarManager: NSObject {
         let hourly = tokenUsageProvider.fetchHourlyBreakdown()
         let chartView = MiniHourlyChartView(data: hourly)
         let hosting = NSHostingView(rootView: chartView)
-        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 130)
+        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 150)
 
         let item = NSMenuItem()
         item.view = hosting
@@ -537,7 +537,7 @@ final class MenuBarManager: NSObject {
         let history = tokenUsageProvider.fetchDailyHistory(days: 7)
         let chartView = MiniHistoryChartView(data: history)
         let hosting = NSHostingView(rootView: chartView)
-        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 130)
+        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 150)
 
         let item = NSMenuItem()
         item.view = hosting
