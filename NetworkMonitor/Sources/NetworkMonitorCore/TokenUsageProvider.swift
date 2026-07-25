@@ -58,16 +58,25 @@ public final class TokenUsageProvider {
         var grandTotalTokens = 0
         var grandTotalCost = 0.0
 
+        // hook_events 中同一会话的多条事件重复携带累积 usage，需按 session_id 去重
         let sql = """
-            SELECT COALESCE(model, '未知'),
-                   COALESCE(SUM(prompt_tokens), 0),
-                   COALESCE(SUM(completion_tokens), 0),
-                   COALESCE(SUM(total_tokens), 0),
-                   COALESCE(SUM(cost), 0.0)
-            FROM hook_events
-            WHERE date(timestamp) = '\(today)'
-            GROUP BY model
-            ORDER BY SUM(total_tokens) DESC
+            SELECT COALESCE(s.model, '未知'),
+                   COALESCE(SUM(s.prompt_tokens), 0),
+                   COALESCE(SUM(s.completion_tokens), 0),
+                   COALESCE(SUM(s.total_tokens), 0),
+                   COALESCE(SUM(s.cost), 0.0)
+            FROM (
+                SELECT session_id, model,
+                       MAX(prompt_tokens) AS prompt_tokens,
+                       MAX(completion_tokens) AS completion_tokens,
+                       MAX(total_tokens) AS total_tokens,
+                       MAX(cost) AS cost
+                FROM hook_events
+                WHERE date(timestamp) = '\(today)'
+                GROUP BY session_id
+            ) s
+            GROUP BY s.model
+            ORDER BY SUM(s.total_tokens) DESC
             """
 
         database.query(sql: sql) { stmt in
@@ -99,11 +108,18 @@ public final class TokenUsageProvider {
     public func fetchTodayTotal() -> (tokens: Int, cost: Double) {
         let today = todayDateString()
 
+        // 按会话去重：每个会话取 MAX（即最终的累积值）再求和
         let sql = """
-            SELECT COALESCE(SUM(total_tokens), 0),
-                   COALESCE(SUM(cost), 0.0)
-            FROM hook_events
-            WHERE date(timestamp) = '\(today)'
+            SELECT COALESCE(SUM(s.total_tokens), 0),
+                   COALESCE(SUM(s.cost), 0.0)
+            FROM (
+                SELECT session_id,
+                       MAX(total_tokens) AS total_tokens,
+                       MAX(cost) AS cost
+                FROM hook_events
+                WHERE date(timestamp) = '\(today)'
+                GROUP BY session_id
+            ) s
             """
 
         var tokens = 0
@@ -123,15 +139,23 @@ public final class TokenUsageProvider {
         let day = dateString ?? todayDateString()
 
         let sql = """
-            SELECT CAST(strftime('%H', timestamp) AS INTEGER) AS hour,
-                   COALESCE(SUM(prompt_tokens), 0),
-                   COALESCE(SUM(completion_tokens), 0),
-                   COALESCE(SUM(total_tokens), 0),
-                   COALESCE(SUM(cost), 0.0)
-            FROM hook_events
-            WHERE date(timestamp) = '\(day)'
-            GROUP BY hour
-            ORDER BY hour
+            SELECT s.hour,
+                   COALESCE(SUM(s.prompt_tokens), 0),
+                   COALESCE(SUM(s.completion_tokens), 0),
+                   COALESCE(SUM(s.total_tokens), 0),
+                   COALESCE(SUM(s.cost), 0.0)
+            FROM (
+                SELECT CAST(strftime('%H', MIN(timestamp)) AS INTEGER) AS hour,
+                       MAX(prompt_tokens) AS prompt_tokens,
+                       MAX(completion_tokens) AS completion_tokens,
+                       MAX(total_tokens) AS total_tokens,
+                       MAX(cost) AS cost
+                FROM hook_events
+                WHERE date(timestamp) = '\(day)'
+                GROUP BY session_id
+            ) s
+            GROUP BY s.hour
+            ORDER BY s.hour
             """
 
         var results: [HourlyTokenUsage] = []
@@ -157,19 +181,25 @@ public final class TokenUsageProvider {
 
     /// 查询最近 N 天的每日汇总
     public func fetchDailyHistory(days: Int = 7) -> [DailyTokenUsage] {
-        let today = todayDateString()
 
         let sql = """
-            SELECT date(timestamp) AS day,
-                   COALESCE(SUM(prompt_tokens), 0),
-                   COALESCE(SUM(completion_tokens), 0),
-                   COALESCE(SUM(total_tokens), 0),
-                   COALESCE(SUM(cost), 0.0)
-            FROM hook_events
-            WHERE date(timestamp) <= '\(today)'
-            GROUP BY day
-            ORDER BY day DESC
-            LIMIT \(days)
+            SELECT s.day,
+                   COALESCE(SUM(s.prompt_tokens), 0),
+                   COALESCE(SUM(s.completion_tokens), 0),
+                   COALESCE(SUM(s.total_tokens), 0),
+                   COALESCE(SUM(s.cost), 0.0)
+            FROM (
+                SELECT date(MIN(timestamp)) AS day,
+                       MAX(prompt_tokens) AS prompt_tokens,
+                       MAX(completion_tokens) AS completion_tokens,
+                       MAX(total_tokens) AS total_tokens,
+                       MAX(cost) AS cost
+                FROM hook_events
+                WHERE date(timestamp) >= date('now', '-\(days) days')
+                GROUP BY session_id
+            ) s
+            GROUP BY s.day
+            ORDER BY s.day DESC
             """
 
         var results: [DailyTokenUsage] = []
