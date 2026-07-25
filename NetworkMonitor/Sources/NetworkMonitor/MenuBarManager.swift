@@ -29,6 +29,7 @@ final class MenuBarManager: NSObject {
 
     // MARK: - 子菜单
     private let processSubmenu = NSMenu()
+    private let tokenHistorySubmenu = NSMenu()
 
     // MARK: - 菜单标签
     private let networkIPTag = 1002
@@ -37,6 +38,7 @@ final class MenuBarManager: NSObject {
     private let launchAtStartupTag = 3001
     private let tokenSummaryTag = 4001
     private let tokenCostTag = 4002
+    private let tokenHourBaseTag = 4200
     private let maxProcessItems = 10
 
     private static let launchPrefKey = "launchAtStartup"
@@ -129,8 +131,13 @@ final class MenuBarManager: NSObject {
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "Token: —", symbol: "chart.bar.fill", tag: tokenSummaryTag, isEnabled: false))
         menu.addItem(menuItem(title: "花费: —", symbol: "dollarsign.circle", tag: tokenCostTag, isEnabled: false))
-        menu.addItem(menuItem(title: "查看详情", action: #selector(openTokenDetailPanel),
-                              symbol: "chart.pie.fill"))
+
+        // ── 历史用量（二级菜单） ──
+        menu.addItem(NSMenuItem.separator())
+        buildTokenHistorySubmenu()
+        let historyItem = menuItem(title: "历史用量", symbol: "calendar.badge.clock")
+        historyItem.submenu = tokenHistorySubmenu
+        menu.addItem(historyItem)
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
@@ -456,40 +463,88 @@ final class MenuBarManager: NSObject {
         print("📡 Reasonix Hook 监听器已启动")
     }
 
-    // MARK: - Token 用量（一级 + 详情入口）
+    // MARK: - Token 用量（一级 + 历史二级菜单）
 
-    /// 更新 Token 一级项目
+    /// 更新 Token 一级项目 + 每小时明细 + 历史子菜单
     private func updateTokenSubmenu() {
         let total = tokenUsageProvider.fetchTodayTotal()
         guard let menu = statusItem.menu else { return }
 
+        // 一级：Token 总数
         if let item = menu.item(withTag: tokenSummaryTag) {
-            let tokenStr: String
-            if total.tokens >= 100_000_000 {
-                tokenStr = String(format: "%.1f亿", Double(total.tokens) / 100_000_000)
-            } else if total.tokens >= 10_000 {
-                tokenStr = String(format: "%.1f万", Double(total.tokens) / 10_000)
-            } else {
-                tokenStr = "\(total.tokens)"
-            }
-            item.title = "Token: \(tokenStr)"
+            item.title = "Token: \(Self.formatTokenShort(total.tokens))"
         }
 
+        // 一级：花费
         if let item = menu.item(withTag: tokenCostTag) {
-            let costStr: String
-            if total.cost < 0.01 {
-                costStr = String(format: "¥%.4f", total.cost)
-            } else if total.cost < 1 {
-                costStr = String(format: "¥%.3f", total.cost)
-            } else {
-                costStr = String(format: "¥%.2f", total.cost)
-            }
-            item.title = "花费: \(costStr)"
+            item.title = "花费: \(Self.formatCostShort(total.cost))"
         }
 
-        // 刷新详情面板（如果已打开）
-        if let panel = tokenDetailPanel, panel.isVisible {
-            panel.reloadData()
+        // 一级：每小时明细（动态插入）
+        updateTokenHourlyItems(in: menu)
+
+        // 二级：历史用量
+        updateTokenHistorySubmenu()
+    }
+
+    /// 在一级菜单中插入每小时明细
+    private func updateTokenHourlyItems(in menu: NSMenu) {
+        // 先移除旧的每小时条目（tag 从 tokenHourBaseTag 开始）
+        var idx = menu.numberOfItems - 1
+        while idx >= 0 {
+            if let item = menu.item(at: idx), item.tag >= tokenHourBaseTag {
+                menu.removeItem(at: idx)
+            }
+            idx -= 1
+        }
+
+        // 查找历史子菜单的位置，在其前面插入
+        let hourly = tokenUsageProvider.fetchHourlyBreakdown()
+        let nonZero = hourly.filter { $0.totalTokens > 0 }
+
+        guard !nonZero.isEmpty else { return }
+
+        // 找到历史用量前面的位置
+        var insertIdx = 0
+        for i in 0..<menu.numberOfItems {
+            if let item = menu.item(at: i), item.submenu === tokenHistorySubmenu {
+                insertIdx = i
+                break
+            }
+        }
+
+        // 倒序插入（从历史前面往前插，保持时间正序）
+        for entry in nonZero.reversed() {
+            let tokenStr = Self.formatTokenShort(entry.totalTokens)
+            let costStr = Self.formatCostShort(entry.cost)
+            let title = "\(entry.hour)时  \(tokenStr)  \(costStr)"
+            let item = menuItem(title: title, symbol: nil, tag: tokenHourBaseTag + entry.hour, isEnabled: false)
+            menu.insertItem(item, at: insertIdx)
+        }
+    }
+
+    /// 构建历史用量子菜单
+    private func buildTokenHistorySubmenu() {
+        tokenHistorySubmenu.removeAllItems()
+        tokenHistorySubmenu.addItem(menuItem(title: "加载中…", symbol: "calendar", isEnabled: false))
+    }
+
+    /// 更新历史用量子菜单
+    private func updateTokenHistorySubmenu() {
+        tokenHistorySubmenu.removeAllItems()
+
+        let history = tokenUsageProvider.fetchDailyHistory(days: 7)
+        if history.isEmpty {
+            tokenHistorySubmenu.addItem(menuItem(title: "暂无数据", symbol: "calendar", isEnabled: false))
+            return
+        }
+
+        for entry in history {
+            let tokenStr = Self.formatTokenShort(entry.totalTokens)
+            let costStr = Self.formatCostShort(entry.cost)
+            let dateStr = Self.formatDateShort(entry.date)
+            let title = "\(dateStr)  \(tokenStr)  \(costStr)"
+            tokenHistorySubmenu.addItem(menuItem(title: title, symbol: nil, isEnabled: false))
         }
     }
 
