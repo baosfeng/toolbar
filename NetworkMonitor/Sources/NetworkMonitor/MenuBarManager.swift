@@ -478,11 +478,11 @@ final class MenuBarManager: NSObject {
         if let item = menu.item(withTag: tokenCostTag) {
             let costStr: String
             if total.cost < 0.01 {
-                costStr = String(format: "$%.4f", total.cost)
+                costStr = String(format: "¥%.4f", total.cost)
             } else if total.cost < 1 {
-                costStr = String(format: "$%.3f", total.cost)
+                costStr = String(format: "¥%.3f", total.cost)
             } else {
-                costStr = String(format: "$%.2f", total.cost)
+                costStr = String(format: "¥%.2f", total.cost)
             }
             item.title = "花费: \(costStr)"
         }
