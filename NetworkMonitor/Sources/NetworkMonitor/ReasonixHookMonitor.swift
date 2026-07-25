@@ -372,9 +372,9 @@ final class ReasonixHookMonitor {
         guard roundTokens > 0 else { return }
 
         // 格式化和转换
-        let tokensStr = Self.formatTokenCount(roundTokens)
+        let tokensStr = MenuBarManager.formatTokenShort(roundTokens)
         let costCNY = roundCostUSD * Self.usdToCnyRate
-        let costStr = String(format: "¥%.2f", costCNY)
+        let costStr = MenuBarManager.formatCostShort(costCNY)
 
         // 清理过期通知（超过 5 分钟）和超量通知（最多 5 条）
         cleanupNotifications()
@@ -431,16 +431,5 @@ final class ReasonixHookMonitor {
                 center.removeDeliveredNotification(note)
             }
         }
-    }
-
-    /// 格式化 Token 数（简短显示）
-    private static func formatTokenCount(_ count: Int) -> String {
-        if count >= 1_000_000 {
-            return String(format: "%.1fM", Double(count) / 1_000_000)
-        }
-        if count >= 1_000 {
-            return String(format: "%.1fK", Double(count) / 1_000)
-        }
-        return "\(count)"
     }
 }
