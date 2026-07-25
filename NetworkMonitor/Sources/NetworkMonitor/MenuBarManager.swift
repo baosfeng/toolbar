@@ -22,7 +22,9 @@ final class MenuBarManager: NSObject {
     private var monitor: NetworkSpeedMonitor!
     private let processMonitor = ProcessNetworkMonitor()
     private var timer: Timer?
-    private let tokenUsageProvider = TokenUsageProvider(database: DatabaseManager())
+    private let databaseManager = DatabaseManager()
+    private var reasonixHookMonitor: ReasonixHookMonitor?
+    private lazy var tokenUsageProvider = TokenUsageProvider(database: databaseManager)
     private var tokenDetailPanel: TokenDetailPanel?
 
     // MARK: - 子菜单
@@ -68,6 +70,8 @@ final class MenuBarManager: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         loadDailyTraffic()
+        databaseManager.initialize()
+        startReasonixHook()
         setupMenu()
         setupTimer()
     }
@@ -442,7 +446,17 @@ final class MenuBarManager: NSObject {
         }
     }
 
-    // MARK: - Token 用量子菜单
+    // MARK: - Reasonix Hook
+
+    /// 启动 Reasonix Hook 事件监听器
+    private func startReasonixHook() {
+        let hookMonitor = ReasonixHookMonitor(database: databaseManager)
+        hookMonitor.start()
+        reasonixHookMonitor = hookMonitor
+        print("📡 Reasonix Hook 监听器已启动")
+    }
+
+    // MARK: - Token 用量（一级菜单）
 
     /// 更新一级菜单中的 Token 用量项目
     private func updateTokenSubmenu() {
