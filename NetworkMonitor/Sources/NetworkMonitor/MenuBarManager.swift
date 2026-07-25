@@ -27,7 +27,6 @@ final class MenuBarManager: NSObject {
 
     // MARK: - 子菜单
     private let processSubmenu = NSMenu()
-    private let tokenSubmenu = NSMenu()
 
     // MARK: - 菜单标签
     private let networkIPTag = 1002
@@ -122,12 +121,12 @@ final class MenuBarManager: NSObject {
         trafficMenuItem.submenu = trafficSubmenu
         menu.addItem(trafficMenuItem)
 
-        // ── Token 用量（二级菜单） ──
+        // ── Token 用量（一级菜单） ──
         menu.addItem(NSMenuItem.separator())
-        buildTokenSubmenu()
-        let tokenMenuItem = menuItem(title: "Token 用量", symbol: "chart.bar.fill")
-        tokenMenuItem.submenu = tokenSubmenu
-        menu.addItem(tokenMenuItem)
+        menu.addItem(menuItem(title: "Token: —", symbol: "chart.bar.fill", tag: tokenSummaryTag, isEnabled: false))
+        menu.addItem(menuItem(title: "花费: —", symbol: "dollarsign.circle", tag: tokenCostTag, isEnabled: false))
+        menu.addItem(menuItem(title: "查看每小时明细…", action: #selector(openTokenDetailPanel),
+                              symbol: "magnifyingglass.circle"))
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
@@ -445,21 +444,12 @@ final class MenuBarManager: NSObject {
 
     // MARK: - Token 用量子菜单
 
-    /// 构建 Token 用量子菜单
-    private func buildTokenSubmenu() {
-        tokenSubmenu.removeAllItems()
-        tokenSubmenu.addItem(menuItem(title: "Token: —", symbol: "chart.bar.fill", tag: tokenSummaryTag, isEnabled: false))
-        tokenSubmenu.addItem(menuItem(title: "花费: —", symbol: "dollarsign.circle", tag: tokenCostTag, isEnabled: false))
-        tokenSubmenu.addItem(NSMenuItem.separator())
-        tokenSubmenu.addItem(menuItem(title: "查看每小时明细…", action: #selector(openTokenDetailPanel),
-                                      symbol: "magnifyingglass.circle"))
-    }
-
-    /// 更新 Token 用量子菜单
+    /// 更新一级菜单中的 Token 用量项目
     private func updateTokenSubmenu() {
         let total = tokenUsageProvider.fetchTodayTotal()
+        guard let menu = statusItem.menu else { return }
 
-        if let item = tokenSubmenu.item(withTag: tokenSummaryTag) {
+        if let item = menu.item(withTag: tokenSummaryTag) {
             let tokenStr: String
             if total.tokens >= 1_000_000 {
                 tokenStr = String(format: "%.1fM", Double(total.tokens) / 1_000_000)
@@ -471,7 +461,7 @@ final class MenuBarManager: NSObject {
             item.title = "Token: \(tokenStr)"
         }
 
-        if let item = tokenSubmenu.item(withTag: tokenCostTag) {
+        if let item = menu.item(withTag: tokenCostTag) {
             let costStr: String
             if total.cost < 0.01 {
                 costStr = String(format: "$%.4f", total.cost)
