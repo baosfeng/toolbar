@@ -4,10 +4,11 @@
 
 ## 功能域
 
-当前项目暂无踩坑记录。
+当前项目有以下踩坑记录：
 
-- 源码扫描未发现 TODO/FIXME/HACK/BUG 标记
-- 执行过程中未发现需要记录的问题
+- [Swift 6 @unchecked Sendable 标记需求](swift-并发/unchecked-sendable.md)
+- [@MainActor 类适配协议需要 @preconcurrency](swift-并发/preconcurrency-mainactor.md)
+- [os_log_with_type 宏在 Swift 中不可用](swift-并发/os_log_swift_api.md)
 
 ---
 
