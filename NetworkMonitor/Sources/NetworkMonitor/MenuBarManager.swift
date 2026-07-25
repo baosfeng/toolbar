@@ -15,45 +15,20 @@ import CoreWLAN
 ///   ────────────────────────
 ///   活跃进程                    ← 进程列表
 ///   ────────────────────────
-///   ◉ 电池 >                   ← 二级菜单
-///   ◉ 本机监控 >               ← 二级菜单
-///   ────────────────────────
 ///   操作项 / 退出
 @MainActor
 final class MenuBarManager: NSObject {
     private let statusItem: NSStatusItem
     private var monitor: NetworkSpeedMonitor!
-    private let batteryMonitor = BatteryMonitor()
     private let processMonitor = ProcessNetworkMonitor()
     private var timer: Timer?
-    private var detailPanel: DetailPanel?
-
-    // MARK: - macMonitor 引擎
-    private let databaseManager = DatabaseManager()
-    private var eventMonitor: EventMonitor?
-    private var keyPressMonitor: KeyPressMonitor?
-    private var systemSampler: SystemSampler?
-    private var reasonixHookMonitor: ReasonixHookMonitor?
-    private lazy var statsProvider = StatsProvider(database: databaseManager)
-    private var reportGenerator: ReportGenerator?
 
     // MARK: - 子菜单
     private let processSubmenu = NSMenu()
-    private let batterySubmenu = NSMenu()
-    private let macMonitorSubmenu = NSMenu()
 
     // MARK: - 菜单标签
     private let networkIPTag = 1002
     private let networkWiFiTag = 1004
-
-    private let batteryPercentTag = 210
-    private let batteryTimeTag = 211
-    private let batteryPowerTag = 212
-    private let batteryCycleTag = 213
-
-    private let macMonitorSummaryTag = 5001
-    private let macMonitorCPUTag = 5003
-    private let macMonitorKeyTag = 5004
 
     private let launchAtStartupTag = 3001
     private let maxProcessItems = 10
@@ -72,7 +47,6 @@ final class MenuBarManager: NSObject {
     private var upHistory: [Double] = []
     private let maxHistory = 60
 
-    private var logEntries: [NetworkLogEntry] = []
 
     // MARK: - 每日流量追踪
     private var dayStartRx: UInt64 = 0
@@ -90,17 +64,10 @@ final class MenuBarManager: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         loadDailyTraffic()
-        setupButton()
         setupMenu()
         setupTimer()
-        setupMacMonitor()
     }
 
-    private func setupButton() {
-        let clickRecognizer = NSClickGestureRecognizer(target: self, action: #selector(toggleDetailPanel))
-        clickRecognizer.numberOfClicksRequired = 2
-        statusItem.button?.addGestureRecognizer(clickRecognizer)
-    }
 
     // MARK: - 菜单项工厂
 
@@ -143,34 +110,12 @@ final class MenuBarManager: NSObject {
         procItem.submenu = processSubmenu
         menu.addItem(procItem)
 
-        // ── 电池（二级菜单） ──
-        menu.addItem(NSMenuItem.separator())
-        buildBatterySubmenu()
-        let battMenuItem = menuItem(title: "电池", symbol: "battery.75", tag: 0)
-        battMenuItem.submenu = batterySubmenu
-        menu.addItem(battMenuItem)
-
-        // ── macMonitor 本机监控（二级菜单） ──
-        buildMacMonitorSubmenu()
-        let macMenuItem = menuItem(title: "本机监控", symbol: "cpu")
-        macMenuItem.submenu = macMonitorSubmenu
-        menu.addItem(macMenuItem)
-
         // ── 流量汇总（二级菜单） ──
         menu.addItem(NSMenuItem.separator())
         buildTrafficSubmenu()
         let trafficMenuItem = menuItem(title: "流量汇总", symbol: "arrow.down.arrow.up")
         trafficMenuItem.submenu = trafficSubmenu
         menu.addItem(trafficMenuItem)
-
-        // ── 操作 ──
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(menuItem(title: "打开详情面板", action: #selector(toggleDetailPanel), keyEquivalent: "d",
-                              symbol: "info.circle.fill"))
-        menu.addItem(menuItem(title: "复制信息", action: #selector(copyNetworkInfo), keyEquivalent: "c",
-                              symbol: "doc.on.doc"))
-        menu.addItem(menuItem(title: "导出日志…", action: #selector(exportLog), keyEquivalent: "e",
-                              symbol: "square.and.arrow.up"))
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
@@ -187,35 +132,6 @@ final class MenuBarManager: NSObject {
         }
     }
 
-    // MARK: - 电池子菜单
-
-    private func buildBatterySubmenu() {
-        batterySubmenu.removeAllItems()
-        batterySubmenu.addItem(menuItem(title: "电池: —%", symbol: "battery.75", tag: batteryPercentTag, isEnabled: false))
-        batterySubmenu.addItem(menuItem(title: "剩余: —", symbol: "clock", tag: batteryTimeTag, isEnabled: false))
-        batterySubmenu.addItem(menuItem(title: "电源: —", symbol: "powerplug", tag: batteryPowerTag, isEnabled: false))
-        batterySubmenu.addItem(menuItem(title: "循环: —次    健康: —", symbol: "arrow.counterclockwise", tag: batteryCycleTag, isEnabled: false))
-    }
-
-    // MARK: - macMonitor 子菜单
-
-    private func buildMacMonitorSubmenu() {
-        macMonitorSubmenu.removeAllItems()
-        macMonitorSubmenu.addItem(menuItem(title: "活跃: —    击键: —",
-                                           symbol: "clock.fill", tag: macMonitorSummaryTag, isEnabled: false))
-        macMonitorSubmenu.addItem(menuItem(title: "⌨️ 击键监控: 检查权限…",
-                                           symbol: "keyboard.fill", tag: macMonitorKeyTag, isEnabled: false))
-        macMonitorSubmenu.addItem(menuItem(title: "打开辅助功能设置", action: #selector(openAccessibilityPrefs),
-                                           symbol: "hand.point.up.left"))
-        macMonitorSubmenu.addItem(menuItem(title: "亮屏: —    息屏: —",
-                                           symbol: "sun.max.fill", tag: macMonitorSummaryTag + 1, isEnabled: false))
-        macMonitorSubmenu.addItem(menuItem(title: "CPU: —%    内存: —",
-                                           symbol: "cpu", tag: macMonitorCPUTag, isEnabled: false))
-        macMonitorSubmenu.addItem(NSMenuItem.separator())
-        macMonitorSubmenu.addItem(menuItem(title: "生成每日报告", action: #selector(generateDailyReport), symbol: "doc.text"))
-        macMonitorSubmenu.addItem(menuItem(title: "生成每周报告", action: #selector(generateWeeklyReport), symbol: "calendar"))
-        macMonitorSubmenu.addItem(menuItem(title: "打开报告文件夹", action: #selector(openReportsFolder), symbol: "folder"))
-    }
 
     // MARK: - 定时器
 
@@ -232,60 +148,10 @@ final class MenuBarManager: NSObject {
         update()
     }
 
-    // MARK: - macMonitor 启动
-
-    private var keyMonitorActive = false
-
-    private func setupMacMonitor() {
-        databaseManager.initialize()
-
-        let monitor = EventMonitor(database: databaseManager)
-        monitor.start()
-        eventMonitor = monitor
-
-        retryKeyMonitor()
-
-        let sampler = SystemSampler(database: databaseManager)
-        sampler.start()
-        systemSampler = sampler
-
-        reportGenerator = ReportGenerator(database: databaseManager, statsProvider: statsProvider)
-
-        // Reasonix Hook 事件监听器
-        let hookMonitor = ReasonixHookMonitor(database: databaseManager)
-        hookMonitor.start()
-        reasonixHookMonitor = hookMonitor
-
-        print("📊 macMonitor 本机监控已启动")
-    }
-
-    /// 尝试启动击键监控（可重试）
-    private func retryKeyMonitor() {
-        let keyMonitor = KeyPressMonitor(database: databaseManager)
-        if keyMonitor.start() {
-            keyPressMonitor = keyMonitor
-            keyMonitorActive = true
-            print("⌨️ 击键监控已启用 ✅")
-        } else {
-            keyPressMonitor = nil
-            keyMonitorActive = false
-            print("⌨️ 击键监控未授权，5秒后重试…")
-            // 延时重试（用户可能在这期间授予了权限）
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                guard self.keyPressMonitor == nil else { return }
-                self.retryKeyMonitor()
-            }
-        }
-    }
 
     // MARK: - 定时更新
 
     @objc private func update() {
-        // 电池
-        batteryMonitor.poll()
-        let battery = batteryMonitor.status
-
         // 网速
         monitor.poll()
         let downSpeed = max(monitor.downloadSpeed, 0)
@@ -301,22 +167,6 @@ final class MenuBarManager: NSObject {
         upHistory.append(upSpeed)
         if downHistory.count > maxHistory { downHistory.removeFirst() }
         if upHistory.count > maxHistory { upHistory.removeFirst() }
-
-        // 日志
-        let shouldLog = logEntries.isEmpty || Date().timeIntervalSince(logEntries.last!.timestamp) >= 5
-        if shouldLog {
-            logEntries.append(NetworkLogEntry(
-                timestamp: Date(),
-                downSpeed: downSpeed, upSpeed: upSpeed,
-                totalRx: monitor.totalRx, totalTx: monitor.totalTx,
-                ip: getLocalIPAddress()
-            ))
-            if logEntries.count > 1000 {
-                logEntries.removeFirst(logEntries.count - 1000)
-            }
-            UserDefaults.standard.set(Int(monitor.totalRx), forKey: Self.totalRxKey)
-            UserDefaults.standard.set(Int(monitor.totalTx), forKey: Self.totalTxKey)
-        }
 
         // 进程
         processMonitor.poll()
@@ -353,102 +203,15 @@ final class MenuBarManager: NSObject {
             wifiItem.title = wifi
         }
 
-        // ── 更新电池子菜单 ──
-        updateBatterySubmenu(battery: battery)
-
         // ── 更新流量汇总子菜单
         updateDailyTraffic()
         updateTrafficSubmenu()
 
-        // ── 更新 macMonitor 子菜单（每 10 秒刷新） ──
-        if Int(Date().timeIntervalSince1970).isMultiple(of: 10) {
-            updateMacMonitorSubmenu()
-        }
-
         // 进程列表
         updateProcessItems(processes: processes)
 
-        // 详情面板
-        if let panel = detailPanel, panel.isVisible {
-            panel.update(
-                battery: battery,
-                downSpeed: downSpeed, upSpeed: upSpeed,
-                totalRx: monitor.totalRx, totalTx: monitor.totalTx,
-                todayRx: todayRx, todayTx: todayTx,
-                weekDetail: weekDetailText,
-                ip: ip, wifi: wifi, processes: processes
-            )
-        }
     }
 
-    // MARK: - 更新电池子菜单
-
-    private func updateBatterySubmenu(battery: BatteryStatus) {
-        if let item = batterySubmenu.item(withTag: batteryPercentTag) {
-            item.title = "电池: \(battery.percentage)%"
-            let battName: String
-            if battery.isCharging {
-                battName = "battery.100.bolt"
-            } else if battery.isCharged {
-                battName = "battery.100"
-            } else if battery.percentage > 75 {
-                battName = "battery.75"
-            } else if battery.percentage > 50 {
-                battName = "battery.50"
-            } else if battery.percentage > 25 {
-                battName = "battery.25"
-            } else {
-                battName = "battery.25"
-            }
-            if let img = NSImage(systemSymbolName: battName, accessibilityDescription: "电池") {
-                let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
-                item.image = img.withSymbolConfiguration(config) ?? img
-                item.image?.isTemplate = true
-            }
-        }
-        if let item = batterySubmenu.item(withTag: batteryTimeTag) {
-            item.title = "剩余: \(battery.timeLabel)"
-        }
-        if let item = batterySubmenu.item(withTag: batteryPowerTag) {
-            let src = battery.powerSource == "AC Power" ? "交流电" : "电池"
-            let charging = battery.isCharging ? "充电中" : battery.isCharged ? "已充满" : ""
-            item.title = "\(src)  \(charging)"
-        }
-        if let item = batterySubmenu.item(withTag: batteryCycleTag) {
-            item.title = "循环: \(battery.cycleCount)次    健康: \(battery.health)"
-        }
-    }
-
-    // MARK: - 更新 macMonitor 子菜单
-
-    private func updateMacMonitorSubmenu() {
-        let stats = statsProvider.fetchTodayStats()
-
-        let active = formatDurationCompact(stats.activeSeconds)
-        let keys = formatCompactNumber(stats.keyPressCount)
-        if let item = macMonitorSubmenu.item(withTag: macMonitorSummaryTag) {
-            item.title = "活跃: \(active)    击键: \(keys)"
-        }
-        if let item = macMonitorSubmenu.item(withTag: macMonitorKeyTag) {
-            if keyMonitorActive {
-                item.title = "击键监控: 运行中 ✅"
-                item.image = NSImage(systemSymbolName: "keyboard.fill", accessibilityDescription: "击键监控")
-            } else {
-                item.title = "击键监控: 未授权 — 请在 系统设置→隐私与安全性→输入监控 中允许"
-                item.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "击键未授权")
-            }
-            let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
-            item.image = item.image?.withSymbolConfiguration(config)
-            item.image?.isTemplate = true
-        }
-        if let item = macMonitorSubmenu.item(withTag: macMonitorSummaryTag + 1) {
-            item.title = "亮屏: \(formatDurationCompact(stats.screenOnSeconds))    息屏: \(formatDurationCompact(stats.screenOffSeconds))"
-        }
-        if let item = macMonitorSubmenu.item(withTag: macMonitorCPUTag) {
-            item.title = "CPU: \(String(format: "%.1f", stats.cpuUsage))%    内存: \(stats.memoryUsedMB)MB/\(stats.memoryTotalMB)MB"
-        }
-
-    }
 
     // MARK: - 进程列表更新
 
@@ -629,11 +392,6 @@ final class MenuBarManager: NSObject {
         return entries
     }
 
-    /// 近 7 日逐日明细文本（多行）
-    private var weekDetailText: String {
-        weekEntries.map { "\($0.label)  ↓\(formatBytesFull($0.rx))  ↑\(formatBytesFull($0.tx))" }.joined(separator: "\n")
-    }
-
     /// 构建流量汇总子菜单
     private func buildTrafficSubmenu() {
         trafficSubmenu.removeAllItems()
@@ -667,75 +425,8 @@ final class MenuBarManager: NSObject {
 
     // MARK: - Actions
 
-    @objc private func toggleDetailPanel() {
-        if let panel = detailPanel, panel.isVisible {
-            panel.close()
-            detailPanel = nil
-        } else {
-            let panel = DetailPanel()
-            panel.update(
-                battery: batteryMonitor.status,
-                downSpeed: max(monitor.downloadSpeed, 0),
-                upSpeed: max(monitor.uploadSpeed, 0),
-                totalRx: monitor.totalRx, totalTx: monitor.totalTx,
-                todayRx: todayRx, todayTx: todayTx,
-                weekDetail: weekDetailText,
-                ip: getLocalIPAddress(), wifi: getWiFiStatus(),
-                processes: processMonitor.processSpeeds
-            )
-            panel.makeKeyAndOrderFront(nil)
-            detailPanel = panel
-        }
-    }
 
-    @objc private func copyNetworkInfo() {
-        let battery = batteryMonitor.status
-        let ip = getLocalIPAddress() ?? "未连接"
-        let wifi = getWiFiStatus()
-        let down = formatBytesFull(UInt64(monitor.downloadSpeed)) + "/s"
-        let up = formatBytesFull(UInt64(monitor.uploadSpeed)) + "/s"
-        let totalDown = formatBytesFull(monitor.totalRx)
-        let totalUp = formatBytesFull(monitor.totalTx)
 
-        let text = """
-        网络监控
-        ========
-        电池: \(battery.percentage)%  \(battery.timeLabel)
-        电源: \(battery.powerSource)
-        循环: \(battery.cycleCount)次  健康: \(battery.health)
-        ========
-        IP: \(ip)
-        Wi-Fi: \(wifi)
-        下载: \(down)
-        上传: \(up)
-        累计下载: \(totalDown)
-        累计上传: \(totalUp)
-        """
-
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.setString(text, forType: .string)
-    }
-
-    @objc private func exportLog() {
-        let panel = NSSavePanel()
-        panel.title = "导出流量日志"
-        panel.nameFieldStringValue = "网络监控日志.csv"
-        panel.allowedContentTypes = [.commaSeparatedText]
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        var csv = NetworkLogEntry.csvHeader + "\n"
-        for entry in logEntries {
-            csv += entry.csvRow + "\n"
-        }
-
-        do {
-            try csv.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            print("导出失败: \(error)")
-        }
-    }
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
@@ -764,41 +455,8 @@ final class MenuBarManager: NSObject {
         }
     }
 
-    // MARK: - macMonitor 报告
 
-    @objc private func openAccessibilityPrefs() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        NSWorkspace.shared.open(url)
-    }
 
-    @objc private func generateDailyReport() {
-        if let path = reportGenerator?.generateDailyReport() {
-            NSWorkspace.shared.open(URL(fileURLWithPath: path))
-        }
-    }
-
-    @objc private func generateWeeklyReport() {
-        if let path = reportGenerator?.generateWeeklyReport() {
-            NSWorkspace.shared.open(URL(fileURLWithPath: path))
-        }
-    }
-
-    @objc private func openReportsFolder() {
-        if let path = reportGenerator?.reportsDirectoryPath {
-            NSWorkspace.shared.open(URL(fileURLWithPath: path))
-        }
-    }
-
-    /// 退出前刷新数据库缓冲区并关闭连接
-    func flushBeforeQuit() {
-        // 停止 Reasonix Hook 监听器
-        reasonixHookMonitor?.stop()
-        reasonixHookMonitor = nil
-
-        databaseManager.flush()
-        databaseManager.close()
-        print("📊 数据库已关闭")
-    }
 
     nonisolated deinit {}
 }
