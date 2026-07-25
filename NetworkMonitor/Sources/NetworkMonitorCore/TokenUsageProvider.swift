@@ -71,7 +71,7 @@ public final class TokenUsageProvider {
                        MAX(total_tokens) AS total_tokens,
                        MAX(cost) AS cost
                 FROM hook_events
-                WHERE date(timestamp) = '\(today)'
+                WHERE date(timestamp, '+8 hours') = '\(today)'
                 GROUP BY session_id
             ) s
             GROUP BY s.model
@@ -111,7 +111,7 @@ public final class TokenUsageProvider {
             SELECT COALESCE(SUM(total_tokens), 0),
                    COALESCE(SUM(total_cost), 0.0)
             FROM hook_sessions
-            WHERE date(started_at) = '\(today)'
+            WHERE date(started_at, '+8 hours') = '\(today)'
             """
 
         var tokens = 0
@@ -137,13 +137,13 @@ public final class TokenUsageProvider {
                    COALESCE(SUM(s.total_tokens), 0),
                    COALESCE(SUM(s.cost), 0.0)
             FROM (
-                SELECT CAST(strftime('%H', MAX(timestamp)) AS INTEGER) AS hour,
+                SELECT CAST(strftime('%H', MAX(timestamp), '+8 hours') AS INTEGER) AS hour,
                        MAX(prompt_tokens) AS prompt_tokens,
                        MAX(completion_tokens) AS completion_tokens,
                        MAX(total_tokens) AS total_tokens,
                        MAX(cost) AS cost
                 FROM hook_events
-                WHERE date(timestamp) = '\(day)'
+                WHERE date(timestamp, '+8 hours') = '\(day)'
                 GROUP BY session_id
             ) s
             GROUP BY s.hour
@@ -190,7 +190,7 @@ public final class TokenUsageProvider {
                    COALESCE(SUM(s.total_tokens), 0),
                    COALESCE(SUM(s.cost), 0.0)
             FROM (
-                SELECT date(started_at) AS day,
+                SELECT date(started_at, '+8 hours') AS day,
                        total_prompt_tokens AS prompt_tokens,
                        total_completion_tokens AS completion_tokens,
                        total_tokens,
