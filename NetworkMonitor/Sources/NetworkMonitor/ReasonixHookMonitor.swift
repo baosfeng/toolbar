@@ -38,6 +38,10 @@ final class ReasonixHookMonitor {
     private var healthTimer: DispatchSourceTimer?
     /// 会话侧车缓存 — TTL 1 小时，最多 100 个会话，LRU 淘汰
     private let sidecarCache = SessionSidecarCache(maxCount: 100, ttl: 3600)
+    /// 记录每个 session 上一次 Stop 事件的累计值，用于计算单轮消耗
+    private var lastStopUsage: [String: (tokens: Int, cost: Double)] = [:]
+    /// 人民币汇率（1 USD ≈ 7.2 CNY）
+    private static let usdToCnyRate: Double = 7.2
 
     // MARK: - 初始化
 
@@ -349,23 +353,35 @@ final class ReasonixHookMonitor {
         }
     }
 
-    // MARK: - 会话结束通知
+    // MARK: - 轮次完成通知
 
-    /// 会话结束时弹出系统通知
+    /// 轮次完成时弹出系统通知
     private func sendSessionEndNotification(event: ReasonixHookEvent) {
         let project = event.project.isEmpty ? "默认项目" : event.project
-        let sid = event.sessionId
-        let tokensStr = "Token: \(Self.formatTokenCount(event.totalTokens))"
-        let costStr = String(format: "花费: $%.4f", event.cost)
         let isFailure = event.isStopFailure
         let statusStr = isFailure ? "❌ 失败" : "✅ 完成"
+
+        // 计算本轮消耗（当前累计值 - 上一次累计值）
+        let sid = event.sessionId
+        let prev = lastStopUsage[sid] ?? (0, 0)
+        let roundTokens = event.totalTokens - prev.tokens
+        let roundCostUSD = event.cost - prev.cost
+        lastStopUsage[sid] = (event.totalTokens, event.cost)
+
+        // 仅当本轮有消耗时才发通知
+        guard roundTokens > 0 else { return }
+
+        // 格式化和转换
+        let tokensStr = Self.formatTokenCount(roundTokens)
+        let costCNY = roundCostUSD * Self.usdToCnyRate
+        let costStr = String(format: "¥%.2f", costCNY)
 
         // 清理过期通知（超过 5 分钟）和超量通知（最多 5 条）
         cleanupNotifications()
 
         let notification = NSUserNotification()
         notification.title = "\(project) — 轮次 \(statusStr)"
-        notification.informativeText = "\(sid.prefix(16))...  \(tokensStr)  \(costStr)"
+        notification.informativeText = "\(tokensStr)  \(costStr)"
         notification.soundName = NSUserNotificationDefaultSoundName
 
         // 保存会话文件路径到 userInfo，点击时用来跳转
