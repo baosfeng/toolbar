@@ -34,7 +34,9 @@ final class MiniMenuChartView: BarChartView {
         xAxis.setLabelCount(7, force: false)
         xAxis.valueFormatter = HourAxisFormatter()
 
-        leftAxis.drawGridLinesEnabled = false
+        leftAxis.drawGridLinesEnabled = true
+        leftAxis.gridColor = NSColor.separatorColor.withAlphaComponent(0.3)
+        leftAxis.gridLineDashLengths = [2, 3]
         leftAxis.drawAxisLineEnabled = false
         leftAxis.drawLabelsEnabled = false
 
@@ -98,7 +100,9 @@ final class MiniHistoryMenuChartView: BarChartView {
         xAxis.setLabelCount(data.count, force: true)
         xAxis.valueFormatter = DateAxisFormatter(data: data)
 
-        leftAxis.drawGridLinesEnabled = false
+        leftAxis.drawGridLinesEnabled = true
+        leftAxis.gridColor = NSColor.separatorColor.withAlphaComponent(0.3)
+        leftAxis.gridLineDashLengths = [2, 3]
         leftAxis.drawAxisLineEnabled = false
         leftAxis.drawLabelsEnabled = false
         rightAxis.enabled = false
@@ -160,6 +164,7 @@ private final class DateAxisFormatter: AxisValueFormatter {
 private final class TokenValueFormatter: ValueFormatter {
     func stringForValue(_ value: Double, entry: ChartDataEntry, dataSetIndex: Int, viewPortHandler: ViewPortHandler?) -> String {
         let c = Int(value)
+        if c == 0 { return "" }
         if c >= 100_000_000 { return String(format: "%.1f亿", Double(c) / 100_000_000) }
         if c >= 10_000 { return String(format: "%.0f万", Double(c) / 10_000) }
         return "\(c)"
