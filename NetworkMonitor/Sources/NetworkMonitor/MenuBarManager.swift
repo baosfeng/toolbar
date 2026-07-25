@@ -30,8 +30,7 @@ final class MenuBarManager: NSObject {
 
     // MARK: - 子菜单
     private let processSubmenu = NSMenu()
-    private let tokenHourlySubmenu = NSMenu()
-    private let tokenHistorySubmenu = NSMenu()
+    private let tokenDetailSubmenu = NSMenu()
 
     // MARK: - 菜单标签
     private let networkIPTag = 1002
@@ -128,18 +127,14 @@ final class MenuBarManager: NSObject {
         trafficMenuItem.submenu = trafficSubmenu
         menu.addItem(trafficMenuItem)
 
-        // ── Token 用量（一级 + 二级菜单） ──
+        // ── Token 用量（一级 + 详情入口） ──
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "Token: —", symbol: "chart.bar.fill", tag: tokenSummaryTag, isEnabled: false))
         menu.addItem(menuItem(title: "花费: —", symbol: "dollarsign.circle", tag: tokenCostTag, isEnabled: false))
-        buildTokenHourlySubmenu()
-        let hourlyItem = menuItem(title: "每小时明细", symbol: "clock.arrow.circlepath")
-        hourlyItem.submenu = tokenHourlySubmenu
-        menu.addItem(hourlyItem)
-        buildTokenHistorySubmenu()
-        let historyItem = menuItem(title: "历史用量", symbol: "calendar.badge.clock")
-        historyItem.submenu = tokenHistorySubmenu
-        menu.addItem(historyItem)
+        buildTokenDetailSubmenu()
+        let detailItem = menuItem(title: "查看详情", symbol: "chart.pie.fill")
+        detailItem.submenu = tokenDetailSubmenu
+        menu.addItem(detailItem)
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
@@ -465,21 +460,15 @@ final class MenuBarManager: NSObject {
         print("📡 Reasonix Hook 监听器已启动")
     }
 
-    // MARK: - Token 用量（一级 + 二级菜单）
+    // MARK: - Token 用量（一级 + 详情入口）
 
-    /// 构建每小时明细子菜单
-    private func buildTokenHourlySubmenu() {
-        tokenHourlySubmenu.removeAllItems()
-        tokenHourlySubmenu.addItem(menuItem(title: "加载中…", symbol: "clock", isEnabled: false))
+    /// 构建详情子菜单
+    private func buildTokenDetailSubmenu() {
+        tokenDetailSubmenu.removeAllItems()
+        tokenDetailSubmenu.addItem(menuItem(title: "加载中…", symbol: "clock", isEnabled: false))
     }
 
-    /// 构建历史用量子菜单
-    private func buildTokenHistorySubmenu() {
-        tokenHistorySubmenu.removeAllItems()
-        tokenHistorySubmenu.addItem(menuItem(title: "加载中…", symbol: "calendar", isEnabled: false))
-    }
-
-    /// 更新 Token 一级项目 + 二级子菜单
+    /// 更新 Token 一级项目 + 详情子菜单
     private func updateTokenSubmenu() {
         let total = tokenUsageProvider.fetchTodayTotal()
         guard let menu = statusItem.menu else { return }
@@ -508,41 +497,26 @@ final class MenuBarManager: NSObject {
             item.title = "花费: \(costStr)"
         }
 
-        // 二级菜单：每小时明细
-        updateTokenHourlySubmenu()
-
-        // 二级菜单：历史用量
-        updateTokenHistorySubmenu()
+        // 更新详情子菜单
+        updateTokenDetailSubmenu()
     }
 
-    /// 更新每小时明细子菜单（嵌入图表）
-    private func updateTokenHourlySubmenu() {
-        tokenHourlySubmenu.removeAllItems()
+    /// 更新详情子菜单（内嵌综合图表）
+    private func updateTokenDetailSubmenu() {
+        tokenDetailSubmenu.removeAllItems()
 
+        let summary = tokenUsageProvider.fetchTodaySummary()
         let hourly = tokenUsageProvider.fetchHourlyBreakdown()
-        let chartView = MiniHourlyChartView(data: hourly)
-        let hosting = NSHostingView(rootView: chartView)
-        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 150)
-
-        let item = NSMenuItem()
-        item.view = hosting
-        item.isEnabled = false
-        tokenHourlySubmenu.addItem(item)
-    }
-
-    /// 更新历史用量子菜单（嵌入图表）
-    private func updateTokenHistorySubmenu() {
-        tokenHistorySubmenu.removeAllItems()
-
         let history = tokenUsageProvider.fetchDailyHistory(days: 7)
-        let chartView = MiniHistoryChartView(data: history)
-        let hosting = NSHostingView(rootView: chartView)
-        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 150)
+
+        let panelView = TokenDetailCompactView(summary: summary, hourly: hourly, history: history)
+        let hosting = NSHostingView(rootView: panelView)
+        hosting.frame = NSRect(x: 0, y: 0, width: 300, height: 380)
 
         let item = NSMenuItem()
         item.view = hosting
         item.isEnabled = false
-        tokenHistorySubmenu.addItem(item)
+        tokenDetailSubmenu.addItem(item)
     }
 
     // MARK: - 格式化辅助（菜单栏共用）
