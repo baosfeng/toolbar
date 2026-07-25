@@ -470,7 +470,7 @@ final class MenuBarManager: NSObject {
 
         // 一级：Token 总数 + 花费
         if let item = menu.item(withTag: tokenSummaryTag) {
-            item.title = "Token: \(Self.formatTokenShort(total.tokens)) | 花费: \(Self.formatCostShort(total.cost))"
+            item.title = "Token: \(FormatUtils.tokenShort(total.tokens)) | 花费: \(FormatUtils.costShort(total.cost))"
         }
 
         // 一级：每小时明细（动态插入）
@@ -638,8 +638,8 @@ final class MenuBarManager: NSObject {
         }
 
         for m in models {
-            let tokensStr = Self.formatTokenShort(m.totalTokens)
-            let costStr = Self.formatCostShort(m.totalCost)
+            let tokensStr = FormatUtils.tokenShort(m.totalTokens)
+            let costStr = FormatUtils.costShort(m.totalCost)
             let title = "\(m.model)  \(tokensStr)Token  \(costStr)"
             aiModelSubmenu.addItem(menuItem(title: title, isEnabled: false))
         }
@@ -656,8 +656,8 @@ final class MenuBarManager: NSObject {
         }
 
         for p in projects {
-            let tokensStr = Self.formatTokenShort(p.totalTokens)
-            let costStr = Self.formatCostShort(p.totalCost)
+            let tokensStr = FormatUtils.tokenShort(p.totalTokens)
+            let costStr = FormatUtils.costShort(p.totalCost)
             let title = "\(p.project)  \(tokensStr)Token  \(p.sessionCount)会话  \(costStr)"
             aiProjectSubmenu.addItem(menuItem(title: title, isEnabled: false))
         }
@@ -675,24 +675,6 @@ final class MenuBarManager: NSObject {
     }
 
     // MARK: - 格式化辅助（菜单栏共用）
-
-    /// 短格式 Token 数（中文单位）
-    nonisolated static func formatTokenShort(_ count: Int) -> String {
-        if count >= 100_000_000 {
-            return String(format: "%.1f亿", Double(count) / 100_000_000)
-        }
-        if count >= 10_000 {
-            return String(format: "%.1f万", Double(count) / 10_000)
-        }
-        return "\(count)"
-    }
-
-    /// 短格式花费
-    nonisolated static func formatCostShort(_ cost: Double) -> String {
-        if cost < 0.01 { return String(format: "¥%.4f", cost) }
-        if cost < 1 { return String(format: "¥%.3f", cost) }
-        return String(format: "¥%.2f", cost)
-    }
 
     /// 短格式日期 "7/25"
     private static func formatDateShort(_ dateStr: String) -> String {

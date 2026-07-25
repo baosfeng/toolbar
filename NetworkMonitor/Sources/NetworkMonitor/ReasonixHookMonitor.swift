@@ -372,9 +372,9 @@ final class ReasonixHookMonitor {
         guard roundTokens > 0 else { return }
 
         // 格式化和转换
-        let tokensStr = MenuBarManager.formatTokenShort(roundTokens)
+        let tokensStr = FormatUtils.tokenShort(roundTokens)
         let costCNY = roundCostUSD * Self.usdToCnyRate
-        let costStr = MenuBarManager.formatCostShort(costCNY)
+        let costStr = FormatUtils.costShort(costCNY)
 
         // 清理过期通知（超过 5 分钟）和超量通知（最多 5 条）
         cleanupNotifications()
