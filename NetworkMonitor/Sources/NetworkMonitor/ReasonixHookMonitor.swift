@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import SQLite3
 import NetworkMonitorCore
 
 /// Reasonix Hook 事件监听器
@@ -38,8 +39,6 @@ final class ReasonixHookMonitor {
     private var healthTimer: DispatchSourceTimer?
     /// 会话侧车缓存 — TTL 1 小时，最多 100 个会话，LRU 淘汰
     private let sidecarCache = SessionSidecarCache(maxCount: 100, ttl: 3600)
-    /// 记录每个 session 上一次 Stop 事件的累计值，用于计算单轮消耗
-    private var lastStopUsage: [String: (tokens: Int, cost: Double)] = [:]
     /// 人民币汇率（1 USD ≈ 7.2 CNY）
     private static let usdToCnyRate: Double = 7.2
 
@@ -361,12 +360,11 @@ final class ReasonixHookMonitor {
         let isFailure = event.isStopFailure
         let statusStr = isFailure ? "❌ 失败" : "✅ 完成"
 
-        // 计算本轮消耗（当前累计值 - 上一次累计值）
+        // 从数据库查询该 session 上一次 Stop 的累计值，计算本轮增量
         let sid = event.sessionId
-        let prev = lastStopUsage[sid] ?? (0, 0)
+        let prev = previousStopTotal(for: sid)
         let roundTokens = event.totalTokens - prev.tokens
         let roundCostUSD = event.cost - prev.cost
-        lastStopUsage[sid] = (event.totalTokens, event.cost)
 
         // 仅当本轮有消耗时才发通知
         guard roundTokens > 0 else { return }
@@ -381,7 +379,7 @@ final class ReasonixHookMonitor {
 
         let notification = NSUserNotification()
         notification.title = "\(project) — 轮次 \(statusStr)"
-        notification.informativeText = "\(tokensStr)  \(costStr)"
+        notification.informativeText = "Token 消耗: \(tokensStr), 金额: \(costStr)"
         notification.soundName = NSUserNotificationDefaultSoundName
 
         // 保存会话文件路径到 userInfo，点击时用来跳转
@@ -394,6 +392,26 @@ final class ReasonixHookMonitor {
         ]
 
         NSUserNotificationCenter.default.deliver(notification)
+    }
+
+    /// 从数据库查询该 session 上一次 Stop/StopFailure 事件的累计值
+    private func previousStopTotal(for sessionId: String) -> (tokens: Int, cost: Double) {
+        let sql = """
+            SELECT COALESCE(total_tokens, 0), COALESCE(cost, 0.0)
+            FROM hook_events
+            WHERE session_id = '\(sessionId)'
+              AND event_type IN ('Stop', 'StopFailure')
+              AND id < (SELECT COALESCE(MAX(id), 0) FROM hook_events
+                        WHERE session_id = '\(sessionId)' AND event_type IN ('Stop', 'StopFailure'))
+            ORDER BY id DESC LIMIT 1
+            """
+        var tokens = 0
+        var cost = 0.0
+        database.query(sql: sql) { stmt in
+            tokens = Int(sqlite3_column_int(stmt, 0))
+            cost = sqlite3_column_double(stmt, 1)
+        }
+        return (tokens, cost)
     }
 
     /// 清理过期和超量的通知
