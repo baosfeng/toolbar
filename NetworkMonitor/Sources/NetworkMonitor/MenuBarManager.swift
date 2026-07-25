@@ -33,6 +33,7 @@ final class MenuBarManager: NSObject {
     private var eventMonitor: EventMonitor?
     private var keyPressMonitor: KeyPressMonitor?
     private var systemSampler: SystemSampler?
+    private var reasonixHookMonitor: ReasonixHookMonitor?
     private lazy var statsProvider = StatsProvider(database: databaseManager)
     private var reportGenerator: ReportGenerator?
 
@@ -249,6 +250,12 @@ final class MenuBarManager: NSObject {
         systemSampler = sampler
 
         reportGenerator = ReportGenerator(database: databaseManager, statsProvider: statsProvider)
+
+        // Reasonix Hook 事件监听器
+        let hookMonitor = ReasonixHookMonitor(database: databaseManager)
+        hookMonitor.start()
+        reasonixHookMonitor = hookMonitor
+
         print("📊 macMonitor 本机监控已启动")
     }
 
@@ -784,6 +791,10 @@ final class MenuBarManager: NSObject {
 
     /// 退出前刷新数据库缓冲区并关闭连接
     func flushBeforeQuit() {
+        // 停止 Reasonix Hook 监听器
+        reasonixHookMonitor?.stop()
+        reasonixHookMonitor = nil
+
         databaseManager.flush()
         databaseManager.close()
         print("📊 数据库已关闭")
