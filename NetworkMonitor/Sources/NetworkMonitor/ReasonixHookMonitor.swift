@@ -1,6 +1,5 @@
 import Darwin
 import Foundation
-import UserNotifications
 import NetworkMonitorCore
 
 /// Reasonix Hook 事件监听器
@@ -361,35 +360,22 @@ final class ReasonixHookMonitor {
         let isFailure = event.isStopFailure
         let statusStr = isFailure ? "❌ 失败" : "✅ 结束"
 
-        let title = "\(project) — 会话 \(statusStr)"
-        let body = "\(sid.prefix(16))...  \(tokensStr)  \(costStr)"
+        let notification = NSUserNotification()
+        notification.title = "\(project) — 会话 \(statusStr)"
+        notification.informativeText = "\(sid.prefix(16))...  \(tokensStr)  \(costStr)"
+        notification.soundName = NSUserNotificationDefaultSoundName
 
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-
-        // 保存会话文件路径到 userInfo，点击时用来跳转
+        // 保存会话路径到 userInfo，点击时用来跳转
         let slug = event.cwd.replacingOccurrences(of: "/", with: "-")
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let sessionDir = "\(home)/.reasonix/projects/\(slug)/sessions"
-        content.userInfo = [
+        notification.userInfo = [
             "sessionPath": "\(sessionDir)/\(sid).jsonl.meta",
             "sessionDir": sessionDir,
             "sessionId": sid
         ]
 
-        let request = UNNotificationRequest(
-            identifier: "session-end-\(sid)",
-            content: content,
-            trigger: nil
-        )
-
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("⚠️ 通知发送失败: \(error.localizedDescription)")
-            }
-        }
+        NSUserNotificationCenter.default.deliver(notification)
     }
 
     /// 格式化 Token 数（简短显示）
