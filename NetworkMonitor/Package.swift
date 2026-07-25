@@ -7,13 +7,19 @@ let package = Package(
     platforms: [
         .macOS(.v14)
     ],
+    dependencies: [
+        .package(url: "https://github.com/ChartsOrg/Charts.git", .upToNextMajor(from: "5.1.0"))
+    ],
     targets: [
         .target(
             name: "NetworkMonitorCore"
         ),
         .executableTarget(
             name: "NetworkMonitor",
-            dependencies: ["NetworkMonitorCore"],
+            dependencies: [
+                "NetworkMonitorCore",
+                .product(name: "DGCharts", package: "Charts")
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("Foundation"),

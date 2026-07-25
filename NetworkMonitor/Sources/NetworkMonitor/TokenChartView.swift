@@ -1,170 +1,150 @@
-import SwiftUI
-import Charts
+import AppKit
+import DGCharts
 import NetworkMonitorCore
 
-// MARK: - 模型占比环形图
-
-struct TokenModelPieChart: View {
-    let byModel: [TokenUsageByModel]
-
-    private var totalTokens: Int { byModel.reduce(0) { $0 + $1.totalTokens } }
-
-    var body: some View {
-        if byModel.isEmpty {
-            Text("暂无数据").font(.caption).foregroundStyle(.secondary).frame(height: 100)
-        } else {
-            Chart(byModel, id: \.model) { entry in
-                SectorMark(angle: .value("Token", entry.totalTokens),
-                           innerRadius: .ratio(0.55), angularInset: 1.5)
-                    .foregroundStyle(by: .value("模型", shortName(entry.model)))
-                    .cornerRadius(3)
-                    .annotation(position: .overlay) {
-                        if Double(entry.totalTokens) / Double(max(totalTokens, 1)) > 0.12 {
-                            Text("\(Int(Double(entry.totalTokens) / Double(max(totalTokens, 1)) * 100))%")
-                                .font(.caption2.bold()).foregroundStyle(.white)
-                        }
-                    }
-            }
-            .chartLegend(position: .bottom, spacing: 4) {
-                HStack(spacing: 8) {
-                    ForEach(byModel, id: \.model) { entry in
-                        HStack(spacing: 3) {
-                            Circle().fill(colorForModel(entry.model)).frame(width: 7, height: 7)
-                            Text(shortName(entry.model)).font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            .frame(height: 100).padding(.vertical, 4)
-        }
-    }
-
-    private func shortName(_ model: String) -> String {
-        let m = model.lowercased()
-        if m.contains("gpt-4o") { return "GPT-4o" }
-        if m.contains("gpt-4") { return "GPT-4" }
-        if m.contains("claude-3.5") || m.contains("claude-35") { return "Claude 3.5" }
-        if m.contains("claude") { return "Claude" }
-        if m.contains("gemini") { return "Gemini" }
-        if m.contains("deepseek") { return "DeepSeek" }
-        return model.count > 10 ? String(model.prefix(8)) + "…" : model
-    }
-
-    private func colorForModel(_ model: String) -> Color {
-        let m = model.lowercased()
-        if m.contains("gpt") { return .green }
-        if m.contains("claude") { return .orange }
-        if m.contains("gemini") { return .blue }
-        if m.contains("deepseek") { return .purple }
-        return .gray
-    }
-}
-
-
-/// 每小时 Token 折线面积图（面板用）
-struct TokenHourlyChartView: View {
-    let data: [HourlyTokenUsage]
-
-    var body: some View {
-        if data.isEmpty {
-            Text("暂无数据").font(.caption).foregroundStyle(.secondary).frame(height: 150)
-        } else {
-            Chart(data, id: \.hour) { entry in
-                AreaMark(x: .value("时", "\(entry.hour)时"), y: .value("Token", entry.totalTokens))
-                    .foregroundStyle(.blue.opacity(0.1))
-                LineMark(x: .value("时", "\(entry.hour)时"), y: .value("Token", entry.totalTokens))
-                    .foregroundStyle(.blue).lineStyle(StrokeStyle(lineWidth: 2))
-                    .interpolationMethod(.catmullRom)
-                PointMark(x: .value("时", "\(entry.hour)时"), y: .value("Token", entry.totalTokens))
-                    .foregroundStyle(.blue).symbolSize(CGSize(width: 5, height: 5))
-            }
-            .chartYAxis { AxisMarks { AxisValueLabel().font(.caption2) } }
-            .chartXAxis { AxisMarks { AxisValueLabel().font(.caption2) } }
-            .frame(height: 150).padding(.vertical, 4)
-        }
-    }
-}
-
-/// 近 7 日 Token 折线面积图（面板用）
-struct TokenHistoryChartView: View {
-    let data: [DailyTokenUsage]
-
-    var body: some View {
-        if data.isEmpty {
-            Text("暂无历史数据").font(.caption).foregroundStyle(.secondary).frame(height: 150)
-        } else {
-            Chart(data, id: \.date) { entry in
-                AreaMark(x: .value("日期", shortDate(entry.date)), y: .value("Token", entry.totalTokens))
-                    .foregroundStyle(.blue.opacity(0.1))
-                LineMark(x: .value("日期", shortDate(entry.date)), y: .value("Token", entry.totalTokens))
-                    .foregroundStyle(.blue).lineStyle(StrokeStyle(lineWidth: 2))
-                    .interpolationMethod(.catmullRom)
-                PointMark(x: .value("日期", shortDate(entry.date)), y: .value("Token", entry.totalTokens))
-                    .foregroundStyle(.blue).symbolSize(CGSize(width: 5, height: 5))
-            }
-            .chartYAxis { AxisMarks { AxisValueLabel().font(.caption2) } }
-            .chartXAxis { AxisMarks { AxisValueLabel().font(.caption2) } }
-            .frame(height: 150).padding(.vertical, 4)
-        }
-    }
-
-    private func shortDate(_ s: String) -> String {
-        let p = s.split(separator: "-"); guard p.count == 3 else { return s }
-        return "\(Int(p[1])!)/\(Int(p[2])!)"
-    }
-}
-
-// MARK: - 一级菜单内嵌迷你柱状图
+// MARK: - 一级菜单 24 小时柱状图
 
 /// 24 小时迷你柱状图 — 直接嵌入一级菜单
-struct MiniMenuChartView: View {
-    let data: [HourlyTokenUsage]
+final class MiniMenuChartView: BarChartView {
 
-    var body: some View {
-        Chart(data, id: \.hour) { entry in
-            BarMark(x: .value("时", "\(entry.hour)"),
-                    y: .value("Token", entry.totalTokens))
-                .foregroundStyle(Color.blue.gradient)
-                .cornerRadius(1.5)
+    init(data: [HourlyTokenUsage]) {
+        super.init(frame: NSRect(x: 0, y: 0, width: 260, height: 80))
+        setup(data: data)
+    }
+
+    required init?(coder aDecoder: NSCoder) { nil }
+
+    private func setup(data: [HourlyTokenUsage]) {
+        // 基本设置
+        chartDescription.enabled = false
+        legend.enabled = false
+        setScaleEnabled(false)
+        dragEnabled = false
+        pinchZoomEnabled = false
+        doubleTapToZoomEnabled = false
+        highlightPerTapEnabled = false
+        highlightPerDragEnabled = false
+
+        // 网格
+        xAxis.drawGridLinesEnabled = false
+        xAxis.drawAxisLineEnabled = false
+        xAxis.labelPosition = .bottom
+        xAxis.labelFont = NSFont.systemFont(ofSize: 8)
+        xAxis.labelTextColor = NSColor.secondaryLabelColor
+        xAxis.setLabelCount(7, force: false)
+        xAxis.valueFormatter = HourAxisFormatter()
+
+        leftAxis.drawGridLinesEnabled = false
+        leftAxis.drawAxisLineEnabled = false
+        leftAxis.drawLabelsEnabled = false
+
+        rightAxis.enabled = false
+
+        // 数据
+        var entries: [BarChartDataEntry] = []
+        for entry in data {
+            entries.append(BarChartDataEntry(x: Double(entry.hour), y: Double(entry.totalTokens)))
         }
-        .chartXAxis {
-            AxisMarks(values: .stride(by: 3)) { value in
-                AxisValueLabel()
-                    .font(.system(size: 7))
-            }
-        }
-        .chartYAxis(.hidden)
-        .chartLegend(.hidden)
-        .padding(.horizontal, 4)
+
+        let set = BarChartDataSet(entries: entries, label: "")
+        set.colors = [NSColor.systemBlue.withAlphaComponent(0.7)]
+        set.highlightColor = NSColor.clear
+        set.drawValuesEnabled = false
+
+        let barData = BarChartData(dataSet: set)
+        barData.barWidth = 0.7
+        self.data = barData
+
+        // 圆角效果
+
+        // 背景透明
+        backgroundColor = NSColor.clear
+        gridBackgroundColor = NSColor.clear
+        drawGridBackgroundEnabled = false
+
+        animate(yAxisDuration: 0.3, easingOption: .easeOutCubic)
     }
 }
 
-// MARK: - 二级菜单历史柱状图
+// MARK: - 二级菜单 7 日柱状图
 
 /// 7 日迷你柱状图 — 嵌入二级菜单
-struct MiniHistoryMenuChartView: View {
-    let data: [DailyTokenUsage]
+final class MiniHistoryMenuChartView: BarChartView {
 
-    var body: some View {
-        Chart(data, id: \.date) { entry in
-            BarMark(x: .value("日期", shortD(entry.date)),
-                    y: .value("Token", entry.totalTokens))
-                .foregroundStyle(Color.blue.gradient)
-                .cornerRadius(1.5)
-        }
-        .chartXAxis {
-            AxisMarks(values: .automatic) { _ in
-                AxisValueLabel()
-                    .font(.system(size: 7))
-            }
-        }
-        .chartYAxis(.hidden)
-        .chartLegend(.hidden)
-        .padding(.horizontal, 4)
+    init(data: [DailyTokenUsage]) {
+        super.init(frame: NSRect(x: 0, y: 0, width: 260, height: 100))
+        setup(data: data)
     }
 
-    private func shortD(_ s: String) -> String {
-        let p = s.split(separator: "-"); guard p.count == 3 else { return s }
-        return "\(Int(p[1])!)/\(Int(p[2])!)"
+    required init?(coder aDecoder: NSCoder) { nil }
+
+    private func setup(data: [DailyTokenUsage]) {
+        chartDescription.enabled = false
+        legend.enabled = false
+        setScaleEnabled(false)
+        dragEnabled = false
+        pinchZoomEnabled = false
+        doubleTapToZoomEnabled = false
+        highlightPerTapEnabled = false
+
+        xAxis.drawGridLinesEnabled = false
+        xAxis.drawAxisLineEnabled = false
+        xAxis.labelPosition = .bottom
+        xAxis.labelFont = NSFont.systemFont(ofSize: 8)
+        xAxis.labelTextColor = NSColor.secondaryLabelColor
+        xAxis.setLabelCount(data.count, force: true)
+        xAxis.valueFormatter = DateAxisFormatter(data: data)
+
+        leftAxis.drawGridLinesEnabled = false
+        leftAxis.drawAxisLineEnabled = false
+        leftAxis.drawLabelsEnabled = false
+        rightAxis.enabled = false
+
+        var entries: [BarChartDataEntry] = []
+        for (i, entry) in data.enumerated() {
+            entries.append(BarChartDataEntry(x: Double(i), y: Double(entry.totalTokens)))
+        }
+
+        let set = BarChartDataSet(entries: entries, label: "")
+        set.colors = [NSColor.systemBlue.withAlphaComponent(0.7)]
+        set.highlightColor = NSColor.clear
+        set.drawValuesEnabled = false
+
+        let barData = BarChartData(dataSet: set)
+        barData.barWidth = 0.6
+        self.data = barData
+
+        backgroundColor = NSColor.clear
+        gridBackgroundColor = NSColor.clear
+        drawGridBackgroundEnabled = false
+
+        animate(yAxisDuration: 0.3, easingOption: .easeOutCubic)
+    }
+}
+
+// MARK: - 轴格式化器
+
+private final class HourAxisFormatter: AxisValueFormatter {
+    func stringForValue(_ value: Double, axis: AxisBase?) -> String {
+        let h = Int(value)
+        return "\(h)"
+    }
+}
+
+private final class DateAxisFormatter: AxisValueFormatter {
+    let labels: [String]
+    init(data: [DailyTokenUsage]) {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "M/d"
+        labels = data.map { entry in
+            let parts = entry.date.split(separator: "-")
+            guard parts.count == 3 else { return entry.date }
+            return "\(Int(parts[1])!)/\(Int(parts[2])!)"
+        }
+    }
+    func stringForValue(_ value: Double, axis: AxisBase?) -> String {
+        let idx = Int(value)
+        guard idx >= 0, idx < labels.count else { return "" }
+        return labels[idx]
     }
 }

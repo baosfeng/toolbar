@@ -2,7 +2,7 @@ import AppKit
 import NetworkMonitorCore
 import ServiceManagement
 import CoreWLAN
-import SwiftUI
+import DGCharts
 
 // MARK: - Menu Bar Manager
 
@@ -26,7 +26,6 @@ final class MenuBarManager: NSObject {
     private let databaseManager = DatabaseManager()
     private var reasonixHookMonitor: ReasonixHookMonitor?
     private lazy var tokenUsageProvider = TokenUsageProvider(database: databaseManager)
-    private var tokenDetailPanel: TokenDetailPanel?
 
     // MARK: - 子菜单
     private let processSubmenu = NSMenu()
@@ -230,13 +229,8 @@ final class MenuBarManager: NSObject {
         updateDailyTraffic()
         updateTrafficSubmenu()
 
-        // ── 更新 Token 用量子菜单
+        // 更新 Token 一级项目
         updateTokenSubmenu()
-
-        // 详情面板刷新
-        if let panel = tokenDetailPanel, panel.isVisible {
-            panel.reloadData()
-        }
 
         // 进程列表
         updateProcessItems(processes: processes)
@@ -513,11 +507,10 @@ final class MenuBarManager: NSObject {
 
         // 创建迷你柱状图作为单个菜单项
         let chartView = MiniMenuChartView(data: hourly)
-        let hosting = NSHostingView(rootView: chartView)
-        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 80)
+        chartView.frame = NSRect(x: 0, y: 0, width: 260, height: 80)
 
         let chartItem = NSMenuItem()
-        chartItem.view = hosting
+        chartItem.view = chartView
         chartItem.tag = tokenHourBaseTag
         chartItem.isEnabled = false
         menu.insertItem(chartItem, at: insertIdx)
@@ -540,11 +533,10 @@ final class MenuBarManager: NSObject {
         }
 
         let chartView = MiniHistoryMenuChartView(data: history)
-        let hosting = NSHostingView(rootView: chartView)
-        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 100)
+        chartView.frame = NSRect(x: 0, y: 0, width: 260, height: 100)
 
         let item = NSMenuItem()
-        item.view = hosting
+        item.view = chartView
         item.isEnabled = false
         tokenHistorySubmenu.addItem(item)
     }
@@ -574,18 +566,6 @@ final class MenuBarManager: NSObject {
         let parts = dateStr.split(separator: "-")
         guard parts.count == 3 else { return dateStr }
         return "\(Int(parts[1])!)/\(Int(parts[2])!)"
-    }
-
-    /// 打开 Token 用量详情面板
-    @objc private func openTokenDetailPanel() {
-        if let panel = tokenDetailPanel, panel.isVisible {
-            panel.reloadData()
-            panel.makeKeyAndOrderFront(nil)
-        } else {
-            let panel = TokenDetailPanel(provider: tokenUsageProvider)
-            panel.makeKeyAndOrderFront(nil)
-            tokenDetailPanel = panel
-        }
     }
 
     // MARK: - Actions
