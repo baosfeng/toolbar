@@ -2,6 +2,7 @@ import AppKit
 import NetworkMonitorCore
 import ServiceManagement
 import CoreWLAN
+import SwiftUI
 
 // MARK: - Menu Bar Manager
 
@@ -516,43 +517,34 @@ final class MenuBarManager: NSObject {
         updateTokenHistorySubmenu()
     }
 
-    /// 更新每小时明细子菜单
+    /// 更新每小时明细子菜单（嵌入图表）
     private func updateTokenHourlySubmenu() {
         tokenHourlySubmenu.removeAllItems()
 
         let hourly = tokenUsageProvider.fetchHourlyBreakdown()
-        if hourly.isEmpty {
-            tokenHourlySubmenu.addItem(menuItem(title: "暂无数据", symbol: "clock", isEnabled: false))
-            return
-        }
+        let chartView = MiniHourlyChartView(data: hourly)
+        let hosting = NSHostingView(rootView: chartView)
+        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 130)
 
-        for entry in hourly {
-            let tokenStr = Self.formatTokenShort(entry.totalTokens)
-            let costStr = Self.formatCostShort(entry.cost)
-            let title = "\(entry.hour)时  \(tokenStr)  \(costStr)"
-            let item = menuItem(title: title, symbol: nil, isEnabled: false)
-            tokenHourlySubmenu.addItem(item)
-        }
+        let item = NSMenuItem()
+        item.view = hosting
+        item.isEnabled = false
+        tokenHourlySubmenu.addItem(item)
     }
 
-    /// 更新历史用量子菜单
+    /// 更新历史用量子菜单（嵌入图表）
     private func updateTokenHistorySubmenu() {
         tokenHistorySubmenu.removeAllItems()
 
         let history = tokenUsageProvider.fetchDailyHistory(days: 7)
-        if history.isEmpty {
-            tokenHistorySubmenu.addItem(menuItem(title: "暂无历史数据", symbol: "calendar", isEnabled: false))
-            return
-        }
+        let chartView = MiniHistoryChartView(data: history)
+        let hosting = NSHostingView(rootView: chartView)
+        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 130)
 
-        for entry in history {
-            let tokenStr = Self.formatTokenShort(entry.totalTokens)
-            let costStr = Self.formatCostShort(entry.cost)
-            let dateStr = Self.formatDateShort(entry.date)
-            let title = "\(dateStr)  \(tokenStr)  \(costStr)"
-            let item = menuItem(title: title, symbol: nil, isEnabled: false)
-            tokenHistorySubmenu.addItem(item)
-        }
+        let item = NSMenuItem()
+        item.view = hosting
+        item.isEnabled = false
+        tokenHistorySubmenu.addItem(item)
     }
 
     // MARK: - 格式化辅助（菜单栏共用）

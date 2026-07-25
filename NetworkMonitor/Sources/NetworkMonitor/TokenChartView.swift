@@ -223,3 +223,82 @@ struct TokenHistoryChartView: View {
         return "\(count)"
     }
 }
+
+// MARK: - 迷你版（嵌入二级菜单）
+
+/// 迷你逐时折线图（嵌入二级菜单）
+struct MiniHourlyChartView: View {
+    let data: [HourlyTokenUsage]
+
+    var body: some View {
+        if data.isEmpty {
+            VStack(spacing: 2) {
+                Image(systemName: "clock").font(.title3).foregroundStyle(.secondary)
+                Text("暂无数据").font(.caption2).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            Chart(data, id: \.hour) { entry in
+                AreaMark(x: .value("时", "\(entry.hour)"), y: .value("Token", entry.totalTokens))
+                    .foregroundStyle(.blue.opacity(0.1))
+                LineMark(x: .value("时", "\(entry.hour)"), y: .value("Token", entry.totalTokens))
+                    .foregroundStyle(.blue).lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
+                PointMark(x: .value("时", "\(entry.hour)"), y: .value("Token", entry.totalTokens))
+                    .foregroundStyle(.blue).symbolSize(CGSize(width: 3, height: 3))
+            }
+            .chartXAxis { AxisMarks { AxisValueLabel().font(.system(size: 8)) } }
+            .chartYAxis { AxisMarks { AxisValueLabel(miniFormat($0)).font(.system(size: 7)) } }
+            .chartLegend(.hidden)
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func miniFormat(_ value: AxisValue) -> String {
+        guard let c = value.as(Int.self) else { return "" }
+        if c >= 100_000_000 { return String(format: "%.0f亿", Double(c) / 100_000_000) }
+        if c >= 10_000 { return String(format: "%.0f万", Double(c) / 10_000) }
+        return "\(c)"
+    }
+}
+
+/// 迷你历史折线图（嵌入二级菜单）
+struct MiniHistoryChartView: View {
+    let data: [DailyTokenUsage]
+
+    var body: some View {
+        if data.isEmpty {
+            VStack(spacing: 2) {
+                Image(systemName: "calendar").font(.title3).foregroundStyle(.secondary)
+                Text("暂无历史数据").font(.caption2).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            Chart(data, id: \.date) { entry in
+                AreaMark(x: .value("日期", miniDate(entry.date)), y: .value("Token", entry.totalTokens))
+                    .foregroundStyle(.blue.opacity(0.1))
+                LineMark(x: .value("日期", miniDate(entry.date)), y: .value("Token", entry.totalTokens))
+                    .foregroundStyle(.blue).lineStyle(StrokeStyle(lineWidth: 1.5))
+                    .interpolationMethod(.catmullRom)
+                PointMark(x: .value("日期", miniDate(entry.date)), y: .value("Token", entry.totalTokens))
+                    .foregroundStyle(.blue).symbolSize(CGSize(width: 3, height: 3))
+            }
+            .chartXAxis { AxisMarks { AxisValueLabel().font(.system(size: 8)) } }
+            .chartYAxis { AxisMarks { AxisValueLabel(miniFormat($0)).font(.system(size: 7)) } }
+            .chartLegend(.hidden)
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func miniDate(_ s: String) -> String {
+        let p = s.split(separator: "-"); guard p.count == 3 else { return s }
+        return "\(Int(p[1])!)/\(Int(p[2])!)"
+    }
+
+    private func miniFormat(_ value: AxisValue) -> String {
+        guard let c = value.as(Int.self) else { return "" }
+        if c >= 100_000_000 { return String(format: "%.0f亿", Double(c) / 100_000_000) }
+        if c >= 10_000 { return String(format: "%.0f万", Double(c) / 10_000) }
+        return "\(c)"
+    }
+}
