@@ -86,7 +86,7 @@ public struct SessionOverviewStats: Sendable, Equatable {
 // MARK: - Token 用量查询器
 
 /// Token 用量统计查询器
-public final class TokenUsageProvider {
+public final class TokenUsageProvider: TokenStatsService {
 
     private let database: DatabaseManager
 

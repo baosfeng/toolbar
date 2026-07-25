@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 
 /// 统计查询器：从 SQLite 中查询今日统计数据
-public final class StatsProvider {
+public final class StatsProvider: SystemStatsService {
 
     private let database: DatabaseManager
 

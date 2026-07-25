@@ -17,7 +17,7 @@ import NetworkMonitorCore
 /// - `start()` / `stop()` 可在任意线程调用
 /// - 实际的 recvfrom 循环在私有 DispatchQueue 上运行
 /// - 数据库写入委托给 DatabaseManager（内部已串行化）
-final class ReasonixHookMonitor {
+final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
 
     // MARK: - 常量
 

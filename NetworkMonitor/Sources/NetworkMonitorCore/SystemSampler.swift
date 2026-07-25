@@ -3,11 +3,13 @@ import Foundation
 
 /// 系统采样器：定时采集 CPU、内存和网络数据
 /// 每60秒进行一次完整采样，写入数据库
-public final class SystemSampler {
+public final class SystemSampler: @unchecked Sendable, SystemSamplingService {
 
     // MARK: - 属性
 
     private let database: DatabaseManager
+    /// 日志服务
+    public var logger: LoggingService = AppContext.shared.logger
     private var timer: DispatchSourceTimer?
 
     /// CPU 采样 — 上次的 ticks 快照
