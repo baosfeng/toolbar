@@ -465,10 +465,10 @@ final class MenuBarManager: NSObject {
 
         if let item = menu.item(withTag: tokenSummaryTag) {
             let tokenStr: String
-            if total.tokens >= 1_000_000 {
-                tokenStr = String(format: "%.1fM", Double(total.tokens) / 1_000_000)
-            } else if total.tokens >= 1_000 {
-                tokenStr = String(format: "%.1fK", Double(total.tokens) / 1_000)
+            if total.tokens >= 100_000_000 {
+                tokenStr = String(format: "%.1f亿", Double(total.tokens) / 100_000_000)
+            } else if total.tokens >= 10_000 {
+                tokenStr = String(format: "%.1f万", Double(total.tokens) / 10_000)
             } else {
                 tokenStr = "\(total.tokens)"
             }

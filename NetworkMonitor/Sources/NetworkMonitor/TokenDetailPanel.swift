@@ -607,8 +607,12 @@ final class TokenDetailPanel: NSPanel {
     // MARK: - 辅助
 
     private static func formatTokens(_ count: Int) -> String {
-        if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
-        if count >= 1_000 { return String(format: "%.1fK", Double(count) / 1_000) }
+        if count >= 100_000_000 {
+            return String(format: "%.1f亿", Double(count) / 100_000_000)
+        }
+        if count >= 10_000 {
+            return String(format: "%.1f万", Double(count) / 10_000)
+        }
         return "\(count)"
     }
 
