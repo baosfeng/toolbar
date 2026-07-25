@@ -22,15 +22,20 @@ final class MenuBarManager: NSObject {
     private var monitor: NetworkSpeedMonitor!
     private let processMonitor = ProcessNetworkMonitor()
     private var timer: Timer?
+    private let tokenUsageProvider = TokenUsageProvider(database: DatabaseManager())
+    private var tokenDetailPanel: TokenDetailPanel?
 
     // MARK: - 子菜单
     private let processSubmenu = NSMenu()
+    private let tokenSubmenu = NSMenu()
 
     // MARK: - 菜单标签
     private let networkIPTag = 1002
     private let networkWiFiTag = 1004
 
     private let launchAtStartupTag = 3001
+    private let tokenSummaryTag = 4001
+    private let tokenCostTag = 4002
     private let maxProcessItems = 10
 
     private static let launchPrefKey = "launchAtStartup"
@@ -116,6 +121,13 @@ final class MenuBarManager: NSObject {
         let trafficMenuItem = menuItem(title: "流量汇总", symbol: "arrow.down.arrow.up")
         trafficMenuItem.submenu = trafficSubmenu
         menu.addItem(trafficMenuItem)
+
+        // ── Token 用量（二级菜单） ──
+        menu.addItem(NSMenuItem.separator())
+        buildTokenSubmenu()
+        let tokenMenuItem = menuItem(title: "Token 用量", symbol: "chart.bar.fill")
+        tokenMenuItem.submenu = tokenSubmenu
+        menu.addItem(tokenMenuItem)
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
@@ -206,6 +218,14 @@ final class MenuBarManager: NSObject {
         // ── 更新流量汇总子菜单
         updateDailyTraffic()
         updateTrafficSubmenu()
+
+        // ── 更新 Token 用量子菜单
+        updateTokenSubmenu()
+
+        // 详情面板刷新
+        if let panel = tokenDetailPanel, panel.isVisible {
+            panel.reloadData()
+        }
 
         // 进程列表
         updateProcessItems(processes: processes)
@@ -420,6 +440,59 @@ final class MenuBarManager: NSObject {
                     isEnabled: false
                 ))
             }
+        }
+    }
+
+    // MARK: - Token 用量子菜单
+
+    /// 构建 Token 用量子菜单
+    private func buildTokenSubmenu() {
+        tokenSubmenu.removeAllItems()
+        tokenSubmenu.addItem(menuItem(title: "Token: —", symbol: "chart.bar.fill", tag: tokenSummaryTag, isEnabled: false))
+        tokenSubmenu.addItem(menuItem(title: "花费: —", symbol: "dollarsign.circle", tag: tokenCostTag, isEnabled: false))
+        tokenSubmenu.addItem(NSMenuItem.separator())
+        tokenSubmenu.addItem(menuItem(title: "查看每小时明细…", action: #selector(openTokenDetailPanel),
+                                      symbol: "magnifyingglass.circle"))
+    }
+
+    /// 更新 Token 用量子菜单
+    private func updateTokenSubmenu() {
+        let total = tokenUsageProvider.fetchTodayTotal()
+
+        if let item = tokenSubmenu.item(withTag: tokenSummaryTag) {
+            let tokenStr: String
+            if total.tokens >= 1_000_000 {
+                tokenStr = String(format: "%.1fM", Double(total.tokens) / 1_000_000)
+            } else if total.tokens >= 1_000 {
+                tokenStr = String(format: "%.1fK", Double(total.tokens) / 1_000)
+            } else {
+                tokenStr = "\(total.tokens)"
+            }
+            item.title = "Token: \(tokenStr)"
+        }
+
+        if let item = tokenSubmenu.item(withTag: tokenCostTag) {
+            let costStr: String
+            if total.cost < 0.01 {
+                costStr = String(format: "$%.4f", total.cost)
+            } else if total.cost < 1 {
+                costStr = String(format: "$%.3f", total.cost)
+            } else {
+                costStr = String(format: "$%.2f", total.cost)
+            }
+            item.title = "花费: \(costStr)"
+        }
+    }
+
+    /// 打开 Token 用量详情面板
+    @objc private func openTokenDetailPanel() {
+        if let panel = tokenDetailPanel, panel.isVisible {
+            panel.reloadData()
+            panel.makeKeyAndOrderFront(nil)
+        } else {
+            let panel = TokenDetailPanel(provider: tokenUsageProvider)
+            panel.makeKeyAndOrderFront(nil)
+            tokenDetailPanel = panel
         }
     }
 
