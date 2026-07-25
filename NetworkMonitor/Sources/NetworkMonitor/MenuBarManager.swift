@@ -29,6 +29,8 @@ final class MenuBarManager: NSObject {
 
     // MARK: - 子菜单
     private let processSubmenu = NSMenu()
+    private let tokenHourlySubmenu = NSMenu()
+    private let tokenHistorySubmenu = NSMenu()
 
     // MARK: - 菜单标签
     private let networkIPTag = 1002
@@ -125,12 +127,18 @@ final class MenuBarManager: NSObject {
         trafficMenuItem.submenu = trafficSubmenu
         menu.addItem(trafficMenuItem)
 
-        // ── Token 用量（一级菜单） ──
+        // ── Token 用量（一级 + 二级菜单） ──
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "Token: —", symbol: "chart.bar.fill", tag: tokenSummaryTag, isEnabled: false))
         menu.addItem(menuItem(title: "花费: —", symbol: "dollarsign.circle", tag: tokenCostTag, isEnabled: false))
-        menu.addItem(menuItem(title: "查看每小时明细…", action: #selector(openTokenDetailPanel),
-                              symbol: "magnifyingglass.circle"))
+        buildTokenHourlySubmenu()
+        let hourlyItem = menuItem(title: "每小时明细", symbol: "clock.arrow.circlepath")
+        hourlyItem.submenu = tokenHourlySubmenu
+        menu.addItem(hourlyItem)
+        buildTokenHistorySubmenu()
+        let historyItem = menuItem(title: "历史用量", symbol: "calendar.badge.clock")
+        historyItem.submenu = tokenHistorySubmenu
+        menu.addItem(historyItem)
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
@@ -456,9 +464,21 @@ final class MenuBarManager: NSObject {
         print("📡 Reasonix Hook 监听器已启动")
     }
 
-    // MARK: - Token 用量（一级菜单）
+    // MARK: - Token 用量（一级 + 二级菜单）
 
-    /// 更新一级菜单中的 Token 用量项目
+    /// 构建每小时明细子菜单
+    private func buildTokenHourlySubmenu() {
+        tokenHourlySubmenu.removeAllItems()
+        tokenHourlySubmenu.addItem(menuItem(title: "加载中…", symbol: "clock", isEnabled: false))
+    }
+
+    /// 构建历史用量子菜单
+    private func buildTokenHistorySubmenu() {
+        tokenHistorySubmenu.removeAllItems()
+        tokenHistorySubmenu.addItem(menuItem(title: "加载中…", symbol: "calendar", isEnabled: false))
+    }
+
+    /// 更新 Token 一级项目 + 二级子菜单
     private func updateTokenSubmenu() {
         let total = tokenUsageProvider.fetchTodayTotal()
         guard let menu = statusItem.menu else { return }
@@ -486,6 +506,78 @@ final class MenuBarManager: NSObject {
             }
             item.title = "花费: \(costStr)"
         }
+
+        // 二级菜单：每小时明细
+        updateTokenHourlySubmenu()
+
+        // 二级菜单：历史用量
+        updateTokenHistorySubmenu()
+    }
+
+    /// 更新每小时明细子菜单
+    private func updateTokenHourlySubmenu() {
+        tokenHourlySubmenu.removeAllItems()
+
+        let hourly = tokenUsageProvider.fetchHourlyBreakdown()
+        if hourly.isEmpty {
+            tokenHourlySubmenu.addItem(menuItem(title: "暂无数据", symbol: "clock", isEnabled: false))
+            return
+        }
+
+        for entry in hourly {
+            let tokenStr = Self.formatTokenShort(entry.totalTokens)
+            let costStr = Self.formatCostShort(entry.cost)
+            let title = "\(entry.hour)时  \(tokenStr)  \(costStr)"
+            let item = menuItem(title: title, symbol: nil, isEnabled: false)
+            tokenHourlySubmenu.addItem(item)
+        }
+    }
+
+    /// 更新历史用量子菜单
+    private func updateTokenHistorySubmenu() {
+        tokenHistorySubmenu.removeAllItems()
+
+        let history = tokenUsageProvider.fetchDailyHistory(days: 7)
+        if history.isEmpty {
+            tokenHistorySubmenu.addItem(menuItem(title: "暂无历史数据", symbol: "calendar", isEnabled: false))
+            return
+        }
+
+        for entry in history {
+            let tokenStr = Self.formatTokenShort(entry.totalTokens)
+            let costStr = Self.formatCostShort(entry.cost)
+            let dateStr = Self.formatDateShort(entry.date)
+            let title = "\(dateStr)  \(tokenStr)  \(costStr)"
+            let item = menuItem(title: title, symbol: nil, isEnabled: false)
+            tokenHistorySubmenu.addItem(item)
+        }
+    }
+
+    // MARK: - 格式化辅助（菜单栏共用）
+
+    /// 短格式 Token 数（中文单位）
+    private static func formatTokenShort(_ count: Int) -> String {
+        if count >= 100_000_000 {
+            return String(format: "%.1f亿", Double(count) / 100_000_000)
+        }
+        if count >= 10_000 {
+            return String(format: "%.1f万", Double(count) / 10_000)
+        }
+        return "\(count)"
+    }
+
+    /// 短格式花费
+    private static func formatCostShort(_ cost: Double) -> String {
+        if cost < 0.01 { return String(format: "¥%.4f", cost) }
+        if cost < 1 { return String(format: "¥%.3f", cost) }
+        return String(format: "¥%.2f", cost)
+    }
+
+    /// 短格式日期 "7/25"
+    private static func formatDateShort(_ dateStr: String) -> String {
+        let parts = dateStr.split(separator: "-")
+        guard parts.count == 3 else { return dateStr }
+        return "\(Int(parts[1])!)/\(Int(parts[2])!)"
     }
 
     /// 打开 Token 用量详情面板
