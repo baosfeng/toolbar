@@ -166,7 +166,16 @@ public final class TokenUsageProvider {
             ))
         }
 
-        return results
+        // 补全 0–23 小时，无数据的小时填 0
+        var filled: [HourlyTokenUsage] = []
+        for hour in 0..<24 {
+            if let existing = results.first(where: { $0.hour == hour }) {
+                filled.append(existing)
+            } else {
+                filled.append(HourlyTokenUsage(hour: hour, promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0))
+            }
+        }
+        return filled
     }
 
     // MARK: - 每日历史
@@ -210,7 +219,22 @@ public final class TokenUsageProvider {
             ))
         }
 
-        return results
+        // 补全连续 7 天，无数据的天填 0
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        var filled: [DailyTokenUsage] = []
+        for offset in 0..<days {
+            guard let date = cal.date(byAdding: .day, value: -offset, to: today) else { continue }
+            let dateStr = fmt.string(from: date)
+            if let existing = results.first(where: { $0.date == dateStr }) {
+                filled.append(existing)
+            } else {
+                filled.append(DailyTokenUsage(date: dateStr, totalTokens: 0, promptTokens: 0, completionTokens: 0, cost: 0))
+            }
+        }
+        return filled.reversed()
     }
 
     // MARK: - 辅助
