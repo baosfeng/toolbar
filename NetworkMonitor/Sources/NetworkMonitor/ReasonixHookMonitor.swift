@@ -297,8 +297,8 @@ final class ReasonixHookMonitor {
                 database.upsertHookSession(event: event)
             }
 
-            // 2b. 会话结束/失败时弹通知
-            if event.isSessionEnd || event.isStopFailure {
+            // 2b. 轮次完成/失败时弹通知
+            if event.isStop || event.isStopFailure {
                 sendSessionEndNotification(event: event)
             }
 
@@ -358,24 +358,63 @@ final class ReasonixHookMonitor {
         let tokensStr = "Token: \(Self.formatTokenCount(event.totalTokens))"
         let costStr = String(format: "花费: $%.4f", event.cost)
         let isFailure = event.isStopFailure
-        let statusStr = isFailure ? "❌ 失败" : "✅ 结束"
+        let statusStr = isFailure ? "❌ 失败" : "✅ 完成"
+
+        // 清理过期通知（超过 5 分钟）和超量通知（最多 5 条）
+        cleanupNotifications()
 
         let notification = NSUserNotification()
-        notification.title = "\(project) — 会话 \(statusStr)"
+        notification.title = "\(project) — 轮次 \(statusStr)"
         notification.informativeText = "\(sid.prefix(16))...  \(tokensStr)  \(costStr)"
         notification.soundName = NSUserNotificationDefaultSoundName
 
-        // 保存会话路径到 userInfo，点击时用来跳转
+        // 保存会话文件路径到 userInfo，点击时用来跳转
         let slug = event.cwd.replacingOccurrences(of: "/", with: "-")
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let sessionDir = "\(home)/.reasonix/projects/\(slug)/sessions"
+        let sessionFile = "\(home)/.reasonix/projects/\(slug)/sessions/\(sid).jsonl"
         notification.userInfo = [
-            "sessionPath": "\(sessionDir)/\(sid).jsonl.meta",
-            "sessionDir": sessionDir,
-            "sessionId": sid
+            "sessionFile": sessionFile,
+            "sentAt": Date().timeIntervalSince1970
         ]
 
         NSUserNotificationCenter.default.deliver(notification)
+    }
+
+    /// 清理过期和超量的通知
+    private func cleanupNotifications() {
+        let center = NSUserNotificationCenter.default
+        let now = Date().timeIntervalSince1970
+        let maxAge: TimeInterval = 300  // 5 分钟
+        let maxCount = 5
+
+        var remaining: [NSUserNotification] = []
+        for note in center.deliveredNotifications {
+            guard let info = note.userInfo,
+                  let sentAt = info["sentAt"] as? TimeInterval else {
+                center.removeDeliveredNotification(note)
+                continue
+            }
+            // 超过 5 分钟的移除
+            if now - sentAt > maxAge {
+                center.removeDeliveredNotification(note)
+                continue
+            }
+            remaining.append(note)
+        }
+
+        // 超过 5 条的移除最旧的
+        if remaining.count >= maxCount {
+            // 按发送时间排序，移除最旧的
+            remaining.sort { a, b in
+                let aTime = a.userInfo?["sentAt"] as? TimeInterval ?? 0
+                let bTime = b.userInfo?["sentAt"] as? TimeInterval ?? 0
+                return aTime < bTime
+            }
+            let toRemove = remaining.prefix(remaining.count - maxCount + 1)
+            for note in toRemove {
+                center.removeDeliveredNotification(note)
+            }
+        }
     }
 
     /// 格式化 Token 数（简短显示）

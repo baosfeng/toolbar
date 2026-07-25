@@ -24,14 +24,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCent
         true
     }
 
-    /// 点击通知时打开会话文件
+    /// 点击通知时打开 Reasonix 会话文件
     nonisolated func userNotificationCenter(_ center: NSUserNotificationCenter,
                                             didActivate notification: NSUserNotification) {
         guard let userInfo = notification.userInfo,
-              let sessionPath = userInfo["sessionPath"] as? String else { return }
-        let url = URL(fileURLWithPath: sessionPath)
+              let sessionFile = userInfo["sessionFile"] as? String else { return }
+        let url = URL(fileURLWithPath: sessionFile)
         Task { @MainActor in
-            NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
+            NSWorkspace.shared.open(url)
         }
     }
 }
