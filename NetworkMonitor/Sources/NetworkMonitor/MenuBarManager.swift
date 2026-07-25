@@ -2,6 +2,7 @@ import AppKit
 import NetworkMonitorCore
 import ServiceManagement
 import CoreWLAN
+import SwiftUI
 
 // MARK: - Menu Bar Manager
 
@@ -487,9 +488,9 @@ final class MenuBarManager: NSObject {
         updateTokenHistorySubmenu()
     }
 
-    /// 在一级菜单中插入每小时明细
+    /// 在一级菜单中插入每小时迷你图表
     private func updateTokenHourlyItems(in menu: NSMenu) {
-        // 先移除旧的每小时条目（tag 从 tokenHourBaseTag 开始）
+        // 移除旧的每小时条目（tag 从 tokenHourBaseTag 开始）
         var idx = menu.numberOfItems - 1
         while idx >= 0 {
             if let item = menu.item(at: idx), item.tag >= tokenHourBaseTag {
@@ -498,11 +499,8 @@ final class MenuBarManager: NSObject {
             idx -= 1
         }
 
-        // 查找历史子菜单的位置，在其前面插入
         let hourly = tokenUsageProvider.fetchHourlyBreakdown()
-        let nonZero = hourly.filter { $0.totalTokens > 0 }
-
-        guard !nonZero.isEmpty else { return }
+        guard hourly.contains(where: { $0.totalTokens > 0 }) else { return }
 
         // 找到历史用量前面的位置
         var insertIdx = 0
@@ -513,14 +511,16 @@ final class MenuBarManager: NSObject {
             }
         }
 
-        // 倒序插入（从历史前面往前插，保持时间正序）
-        for entry in nonZero.reversed() {
-            let tokenStr = Self.formatTokenShort(entry.totalTokens)
-            let costStr = Self.formatCostShort(entry.cost)
-            let title = "\(entry.hour)时  \(tokenStr)  \(costStr)"
-            let item = menuItem(title: title, symbol: nil, tag: tokenHourBaseTag + entry.hour, isEnabled: false)
-            menu.insertItem(item, at: insertIdx)
-        }
+        // 创建迷你柱状图作为单个菜单项
+        let chartView = MiniMenuChartView(data: hourly)
+        let hosting = NSHostingView(rootView: chartView)
+        hosting.frame = NSRect(x: 0, y: 0, width: 260, height: 80)
+
+        let chartItem = NSMenuItem()
+        chartItem.view = hosting
+        chartItem.tag = tokenHourBaseTag
+        chartItem.isEnabled = false
+        menu.insertItem(chartItem, at: insertIdx)
     }
 
     /// 构建历史用量子菜单
