@@ -404,10 +404,29 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         } else {
             prev = previousStopTotal(for: sid)
         }
-        let roundTokens = event.totalTokens - prev.tokens
-        let roundCostUSD = event.cost - prev.cost
+
+        // 如果 totalTokens 为 0，可能是 sidecar 文件尚未就绪，重试加载
+        var effectiveEvent = event
+        if effectiveEvent.totalTokens == 0 {
+            let sidecar = loadSidecar(for: effectiveEvent)
+            if sidecar.totalTokens > 0 {
+                effectiveEvent.enrich(from: sidecar)
+                // 回写数据库，修复记录
+                let safeId = Self.sanitizeSessionID(sid)
+                let updateSQL = """
+                    UPDATE hook_events SET total_tokens = \(effectiveEvent.totalTokens), cost = \(effectiveEvent.cost)
+                    WHERE session_id = '\(safeId)' AND event_type IN ('Stop', 'StopFailure')
+                      AND id = (SELECT MAX(id) FROM hook_events WHERE session_id = '\(safeId)' AND event_type IN ('Stop', 'StopFailure'))
+                    """
+                database.query(sql: updateSQL) { _ in }
+                print("📝 回填 sidecar 数据: session=\(sid.prefix(30))... tokens=\(effectiveEvent.totalTokens) cost=\(effectiveEvent.cost)")
+            }
+        }
+
+        let roundTokens = effectiveEvent.totalTokens - prev.tokens
+        let roundCostUSD = effectiveEvent.cost - prev.cost
         // 更新缓存供后续 Stop 事件使用
-        lastStopTotal[sid] = (event.totalTokens, event.cost)
+        lastStopTotal[sid] = (effectiveEvent.totalTokens, effectiveEvent.cost)
 
         // 失败事件无论是否有消耗都通知用户；普通 Stop 仅当有消耗时通知
         if !isFailure {
