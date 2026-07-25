@@ -728,16 +728,20 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
     /// 查询指定会话的最近工具调用
     public func queryToolCalls(sessionId: String, limit: Int = 20) -> [[String: Any]] {
         var results: [[String: Any]] = []
-        let escapedId = sessionId.replacingOccurrences(of: "'", with: "''")
+        let safeId = sessionId.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
+        let safeLimit = min(max(limit, 1), 1000)
 
         serialQueue.sync {
             guard let db else { return }
 
-            let sql = "SELECT * FROM hook_tool_calls WHERE session_id = '\(escapedId)' ORDER BY id DESC LIMIT \(limit);"
+            let sql = "SELECT * FROM hook_tool_calls WHERE session_id = ? ORDER BY id DESC LIMIT ?;"
             var stmt: OpaquePointer?
             defer { sqlite3_finalize(stmt) }
 
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+
+            sqlite3_bind_text(stmt, 1, (safeId as NSString).utf8String, -1, nil)
+            sqlite3_bind_int(stmt, 2, Int32(safeLimit))
 
             while sqlite3_step(stmt) == SQLITE_ROW {
                 var row: [String: Any] = [:]

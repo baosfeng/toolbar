@@ -202,6 +202,10 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     /// 加载指定事件的侧车数据（缓存优先，mtime 校验自动刷新）
     private func loadSidecar(for event: ReasonixHookEvent) -> SessionSidecarData {
         let sid = event.sessionId
+        guard !sid.contains(".."), !sid.contains("/") else {
+            print("⚠️ 拒绝路径遍历: sid=\(sid.prefix(50))")
+            return SessionSidecarData()
+        }
         if let cached = sidecarCache.get(sid) {
             return cached.data
         }
@@ -396,13 +400,14 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
 
     /// 从数据库查询该 session 上一次 Stop/StopFailure 事件的累计值
     private func previousStopTotal(for sessionId: String) -> (tokens: Int, cost: Double) {
+        let safeId = Self.sanitizeSessionID(sessionId)
         let sql = """
             SELECT COALESCE(total_tokens, 0), COALESCE(cost, 0.0)
             FROM hook_events
-            WHERE session_id = '\(sessionId)'
+            WHERE session_id = '\(safeId)'
               AND event_type IN ('Stop', 'StopFailure')
               AND id < (SELECT COALESCE(MAX(id), 0) FROM hook_events
-                        WHERE session_id = '\(sessionId)' AND event_type IN ('Stop', 'StopFailure'))
+                        WHERE session_id = '\(safeId)' AND event_type IN ('Stop', 'StopFailure'))
             ORDER BY id DESC LIMIT 1
             """
         var tokens = 0
@@ -449,5 +454,12 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
                 center.removeDeliveredNotification(note)
             }
         }
+    }
+
+    // MARK: - 安全辅助
+
+    /// 净化 sessionId，仅保留字母数字和常见分隔符
+    private static func sanitizeSessionID(_ id: String) -> String {
+        id.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
     }
 }
