@@ -4,15 +4,18 @@ import AppKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDelegate {
+    private var coordinator: AppCoordinator?
     private var menuBarManager: MenuBarManager?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        menuBarManager = MenuBarManager()
+        let coordinator = AppCoordinator()
+        self.coordinator = coordinator
+        menuBarManager = coordinator.start()
         NSUserNotificationCenter.default.delegate = self
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        ReasonixHookMonitor.cleanupSocket()
+        coordinator?.stop()
         print("👋 应用退出")
     }
 

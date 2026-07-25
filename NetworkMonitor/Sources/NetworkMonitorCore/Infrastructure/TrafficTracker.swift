@@ -1,0 +1,112 @@
+import Foundation
+
+// MARK: - 每日流量追踪
+
+/// 每日流量追踪器 — 管理今日流量累计和每日日志
+///
+/// 从 MenuBarManager 提取，使用 KeyValueStorage 替代直接 UserDefaults 调用。
+/// 职责单一：仅计算和存储每日上下行流量。
+public final class TrafficTracker {
+    private let monitor: NetworkMonitoringService
+    private let storage: KeyValueStorage
+
+    /// 每日起点（今日开关机/启动时的累计流量基准）
+    private var dayStartRx: UInt64 = 0
+    private var dayStartTx: UInt64 = 0
+
+    private static let dayStartDateKey = "dayStartDate"
+    private static let dayStartRxKey = "dayStartRx"
+    private static let dayStartTxKey = "dayStartTx"
+    private static let dailyLogKey = "dailyTrafficLog"
+
+    /// 今日流量（下行）
+    public var todayRx: UInt64 {
+        monitor.totalRx >= dayStartRx ? monitor.totalRx - dayStartRx : 0
+    }
+
+    /// 今日流量（上行）
+    public var todayTx: UInt64 {
+        monitor.totalTx >= dayStartTx ? monitor.totalTx - dayStartTx : 0
+    }
+
+    /// 近 7 日每日流量明细（日期降序：今天在最前）
+    public var weekEntries: [(label: String, rx: UInt64, tx: UInt64)] {
+        var entries: [(label: String, rx: UInt64, tx: UInt64)] = []
+        let fmt = DateFormatter()
+        fmt.dateFormat = "M/d"
+
+        // 今天
+        entries.append((label: fmt.string(from: Date()), rx: todayRx, tx: todayTx))
+
+        // 从日志取前 6 天
+        let log = storage.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
+        let dateFmt = DateFormatter()
+        dateFmt.dateFormat = "yyyy-MM-dd"
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+
+        for entry in log.reversed() {
+            guard let dateStr = entry["date"] as? String,
+                  let date = dateFmt.date(from: dateStr),
+                  let rx = entry["rx"] as? UInt64,
+                  let tx = entry["tx"] as? UInt64 else { continue }
+            let daysDiff = cal.dateComponents([.day], from: date, to: today).day ?? 7
+            guard daysDiff > 0, daysDiff < 7 else { continue }
+            entries.append((label: fmt.string(from: date), rx: rx, tx: tx))
+        }
+
+        return entries
+    }
+
+    public init(monitor: NetworkMonitoringService, storage: KeyValueStorage = AppContext.shared.storage) {
+        self.monitor = monitor
+        self.storage = storage
+        load()
+    }
+
+    /// 加载或初始化每日流量起点
+    public func load() {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+
+        dayStartRx = UInt64(storage.integer(forKey: Self.dayStartRxKey))
+        dayStartTx = UInt64(storage.integer(forKey: Self.dayStartTxKey))
+
+        if dayStartRx == 0, dayStartTx == 0 {
+            dayStartRx = monitor.totalRx
+            dayStartTx = monitor.totalTx
+            storage.set(today, forKey: Self.dayStartDateKey)
+            storage.set(Int(dayStartRx), forKey: Self.dayStartRxKey)
+            storage.set(Int(dayStartTx), forKey: Self.dayStartTxKey)
+        }
+    }
+
+    /// 检查日期变更，切换并保存每日日志
+    public func update() {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let savedDate = storage.object(forKey: Self.dayStartDateKey) as? Date ?? today
+
+        guard !cal.isDate(savedDate, inSameDayAs: today) else { return }
+
+        let yesterdayRx = dayStartRx > 0 && monitor.totalRx >= dayStartRx
+            ? monitor.totalRx - dayStartRx : 0
+        let yesterdayTx = dayStartTx > 0 && monitor.totalTx >= dayStartTx
+            ? monitor.totalTx - dayStartTx : 0
+
+        if yesterdayRx > 0 || yesterdayTx > 0 {
+            var log = storage.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy-MM-dd"
+            log.append(["date": fmt.string(from: savedDate), "rx": yesterdayRx, "tx": yesterdayTx])
+            if log.count > 30 { log = Array(log.suffix(30)) }
+            storage.set(log, forKey: Self.dailyLogKey)
+        }
+
+        dayStartRx = monitor.totalRx
+        dayStartTx = monitor.totalTx
+        storage.set(today, forKey: Self.dayStartDateKey)
+        storage.set(Int(dayStartRx), forKey: Self.dayStartRxKey)
+        storage.set(Int(dayStartTx), forKey: Self.dayStartTxKey)
+    }
+}
