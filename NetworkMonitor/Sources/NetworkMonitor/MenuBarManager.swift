@@ -26,6 +26,8 @@ final class MenuBarManager: NSObject {
     private let databaseManager = DatabaseManager()
     private var reasonixHookMonitor: ReasonixHookMonitor?
     private lazy var tokenUsageProvider = TokenUsageProvider(database: databaseManager)
+    private var lastHistoryHash: String = ""
+    private var lastHourlyHash: String = ""
 
     // MARK: - 子菜单
     private let processSubmenu = NSMenu()
@@ -484,6 +486,11 @@ final class MenuBarManager: NSObject {
 
     /// 在一级菜单中插入每小时迷你图表
     private func updateTokenHourlyItems(in menu: NSMenu) {
+        let hourly = tokenUsageProvider.fetchHourlyBreakdown()
+        let hash = hourly.map { "\($0.hour):\($0.totalTokens)" }.joined(separator: ",")
+        guard hash != lastHourlyHash else { return }
+        lastHourlyHash = hash
+
         // 移除旧的每小时条目（tag 从 tokenHourBaseTag 开始）
         var idx = menu.numberOfItems - 1
         while idx >= 0 {
@@ -493,7 +500,6 @@ final class MenuBarManager: NSObject {
             idx -= 1
         }
 
-        let hourly = tokenUsageProvider.fetchHourlyBreakdown()
         guard hourly.contains(where: { $0.totalTokens > 0 }) else { return }
 
         // 找到历史用量前面的位置
@@ -524,9 +530,13 @@ final class MenuBarManager: NSObject {
 
     /// 更新历史用量子菜单（内嵌图表）
     private func updateTokenHistorySubmenu() {
+        let history = tokenUsageProvider.fetchDailyHistory(days: 7)
+        let hash = history.map { "\($0.date):\($0.totalTokens)" }.joined(separator: ",")
+        guard hash != lastHistoryHash else { return }
+        lastHistoryHash = hash
+
         tokenHistorySubmenu.removeAllItems()
 
-        let history = tokenUsageProvider.fetchDailyHistory(days: 7)
         if history.isEmpty {
             tokenHistorySubmenu.addItem(menuItem(title: "暂无数据", symbol: "calendar", isEnabled: false))
             return
