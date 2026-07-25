@@ -39,7 +39,6 @@ final class MenuBarManager: NSObject {
 
     private let launchAtStartupTag = 3001
     private let tokenSummaryTag = 4001
-    private let tokenCostTag = 4002
     private let tokenHourBaseTag = 4200
     private let maxProcessItems = 10
 
@@ -131,8 +130,7 @@ final class MenuBarManager: NSObject {
 
         // ── Token 用量（一级 + 详情入口） ──
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(menuItem(title: "Token: —", symbol: "chart.bar.fill", tag: tokenSummaryTag, isEnabled: false))
-        menu.addItem(menuItem(title: "花费: —", symbol: "dollarsign.circle", tag: tokenCostTag, isEnabled: false))
+        menu.addItem(menuItem(title: "Token: — | 花费: —", symbol: "chart.bar.fill", tag: tokenSummaryTag, isEnabled: false))
 
         // ── 历史用量（二级菜单） ──
         menu.addItem(NSMenuItem.separator())
@@ -467,14 +465,9 @@ final class MenuBarManager: NSObject {
         let total = tokenUsageProvider.fetchTodayTotal()
         guard let menu = statusItem.menu else { return }
 
-        // 一级：Token 总数
+        // 一级：Token 总数 + 花费
         if let item = menu.item(withTag: tokenSummaryTag) {
-            item.title = "Token: \(Self.formatTokenShort(total.tokens))"
-        }
-
-        // 一级：花费
-        if let item = menu.item(withTag: tokenCostTag) {
-            item.title = "花费: \(Self.formatCostShort(total.cost))"
+            item.title = "Token: \(Self.formatTokenShort(total.tokens)) | 花费: \(Self.formatCostShort(total.cost))"
         }
 
         // 一级：每小时明细（动态插入）
