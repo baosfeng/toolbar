@@ -146,6 +146,11 @@ final class TokenDetailPanel: NSPanel {
             for mu in summary.byModel {
                 modelStack.addArrangedSubview(Self.makeModelRow(model: mu.model, tokens: mu.totalTokens, cost: mu.cost))
             }
+            // 模型占比环形图
+            let pieView = TokenModelPieChart(byModel: summary.byModel)
+            let pieHosting = NSHostingView(rootView: pieView)
+            pieHosting.translatesAutoresizingMaskIntoConstraints = false
+            modelStack.addArrangedSubview(pieHosting)
         }
     }
 
