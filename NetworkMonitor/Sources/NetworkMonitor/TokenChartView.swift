@@ -138,3 +138,33 @@ struct MiniMenuChartView: View {
         .padding(.horizontal, 4)
     }
 }
+
+// MARK: - 二级菜单历史柱状图
+
+/// 7 日迷你柱状图 — 嵌入二级菜单
+struct MiniHistoryMenuChartView: View {
+    let data: [DailyTokenUsage]
+
+    var body: some View {
+        Chart(data, id: \.date) { entry in
+            BarMark(x: .value("日期", shortD(entry.date)),
+                    y: .value("Token", entry.totalTokens))
+                .foregroundStyle(Color.blue.gradient)
+                .cornerRadius(1.5)
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic) { _ in
+                AxisValueLabel()
+                    .font(.system(size: 7))
+            }
+        }
+        .chartYAxis(.hidden)
+        .chartLegend(.hidden)
+        .padding(.horizontal, 4)
+    }
+
+    private func shortD(_ s: String) -> String {
+        let p = s.split(separator: "-"); guard p.count == 3 else { return s }
+        return "\(Int(p[1])!)/\(Int(p[2])!)"
+    }
+}
