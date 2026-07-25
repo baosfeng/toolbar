@@ -613,9 +613,9 @@ final class TokenDetailPanel: NSPanel {
     }
 
     private static func formatCost(_ cost: Double) -> String {
-        if cost < 0.01 { return String(format: "$%.4f", cost) }
-        if cost < 1 { return String(format: "$%.3f", cost) }
-        return String(format: "$%.2f", cost)
+        if cost < 0.01 { return String(format: "¥%.4f", cost) }
+        if cost < 1 { return String(format: "¥%.3f", cost) }
+        return String(format: "¥%.2f", cost)
     }
 
     private static func shortModelName(_ model: String) -> String {
