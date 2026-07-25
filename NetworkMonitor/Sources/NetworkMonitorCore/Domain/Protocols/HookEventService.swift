@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Hook 事件服务
 
 /// Reasonix Hook 事件监听服务
-public protocol HookEventService: AnyObject, Sendable {
+public protocol HookEventService: AnyObject {
     /// 启动 UDS 监听器
     func start()
     /// 停止 UDS 监听器

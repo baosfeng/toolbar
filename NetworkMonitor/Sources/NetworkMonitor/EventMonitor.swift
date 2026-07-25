@@ -5,7 +5,7 @@ import NetworkMonitorCore
 /// 事件监听器：监听系统通知并记录事件到数据库
 /// 使用被动通知机制，几乎不消耗 CPU
 @MainActor
-final class EventMonitor {
+final class EventMonitor: @preconcurrency EventMonitoringService {
 
     // MARK: - 属性
 

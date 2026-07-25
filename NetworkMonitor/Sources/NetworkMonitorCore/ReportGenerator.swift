@@ -1,7 +1,7 @@
 import Foundation
 
 /// 报告生成器：生成每日/每周 Markdown 格式统计报告
-public final class ReportGenerator {
+public final class ReportGenerator: ReportingService {
 
     private let database: DatabaseManager
     private let statsProvider: StatsProvider

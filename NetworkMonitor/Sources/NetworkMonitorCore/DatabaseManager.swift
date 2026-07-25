@@ -11,11 +11,14 @@ import SQLite3
 ///
 /// 测试支持：
 /// - `initializeInMemory()` 使用 `:memory:` 数据库，适合单元测试
-public final class DatabaseManager: @unchecked Sendable {
+public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
     // MARK: - 属性
 
     private var db: OpaquePointer?
+
+    /// 日志服务
+    public var logger: LoggingService = AppContext.shared.logger
 
     /// 串行队列 — 所有数据库操作在此队列上执行
     private let serialQueue = DispatchQueue(label: "com.example.NetworkMonitor.database")

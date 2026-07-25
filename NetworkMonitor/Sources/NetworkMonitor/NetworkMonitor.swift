@@ -7,7 +7,7 @@ import NetworkMonitorCore
 // MARK: - Network Speed Monitor
 
 @MainActor
-final class NetworkSpeedMonitor {
+final class NetworkSpeedMonitor: @preconcurrency NetworkMonitoringService {
     private var previousData: [String: (rx: UInt64, tx: UInt64)] = [:]
     private var previousTimestamp: Date = Date()
 
