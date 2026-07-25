@@ -41,6 +41,8 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     private let sidecarCache = SessionSidecarCache(maxCount: 100, ttl: 3600)
     /// sessionId → project slug 缓存（cwd 为空时避免重复扫描目录）
     private var slugCache: [String: String] = [:]
+    /// sessionId → 上一次 Stop 累计值缓存（避免历史坏数据导致增量计算错误）
+    private var lastStopTotal: [String: (tokens: Int, cost: Double)] = [:]
     /// 人民币汇率（1 USD ≈ 7.2 CNY）
     private static let usdToCnyRate: Double = 7.2
 
@@ -394,11 +396,18 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         let isFailure = event.isStopFailure
         let statusStr = isFailure ? "❌ 失败" : "✅ 完成"
 
-        // 从数据库查询该 session 上一次 Stop 的累计值，计算本轮增量
+        // 计算本轮增量：优先查内存缓存，未命中则查数据库
         let sid = event.sessionId
-        let prev = previousStopTotal(for: sid)
+        let prev: (tokens: Int, cost: Double)
+        if let cached = lastStopTotal[sid] {
+            prev = cached
+        } else {
+            prev = previousStopTotal(for: sid)
+        }
         let roundTokens = event.totalTokens - prev.tokens
         let roundCostUSD = event.cost - prev.cost
+        // 更新缓存供后续 Stop 事件使用
+        lastStopTotal[sid] = (event.totalTokens, event.cost)
 
         // 失败事件无论是否有消耗都通知用户；普通 Stop 仅当有消耗时通知
         if !isFailure {
@@ -430,7 +439,8 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         NSUserNotificationCenter.default.deliver(notification)
     }
 
-    /// 从数据库查询该 session 上一次 Stop/StopFailure 事件的累计值
+    /// 从数据库查询该 session 上一次有效的 Stop/StopFailure 累计值
+    /// 排除 total_tokens=0 的无效记录（sidecar 加载失败时遗留的坏数据）
     private func previousStopTotal(for sessionId: String) -> (tokens: Int, cost: Double) {
         let safeId = Self.sanitizeSessionID(sessionId)
         let sql = """
@@ -438,8 +448,9 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             FROM hook_events
             WHERE session_id = '\(safeId)'
               AND event_type IN ('Stop', 'StopFailure')
+              AND total_tokens > 0
               AND id < (SELECT COALESCE(MAX(id), 0) FROM hook_events
-                        WHERE session_id = '\(safeId)' AND event_type IN ('Stop', 'StopFailure'))
+                        WHERE session_id = '\(safeId)' AND event_type IN ('Stop', 'StopFailure') AND total_tokens > 0)
             ORDER BY id DESC LIMIT 1
             """
         var tokens = 0
