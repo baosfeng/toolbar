@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import UserNotifications
 import NetworkMonitorCore
 
 /// Reasonix Hook 事件监听器
@@ -297,6 +298,11 @@ final class ReasonixHookMonitor {
                 database.upsertHookSession(event: event)
             }
 
+            // 2b. 会话结束/失败时弹通知
+            if event.isSessionEnd || event.isStopFailure {
+                sendSessionEndNotification(event: event)
+            }
+
             // 3. 处理工具调用
             if event.isToolStart {
                 let toolName = event.toolName ?? "unknown"
@@ -342,5 +348,58 @@ final class ReasonixHookMonitor {
         } catch {
             print("⚠️ Hook 数据处理异常: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - 会话结束通知
+
+    /// 会话结束时弹出系统通知
+    private func sendSessionEndNotification(event: ReasonixHookEvent) {
+        let project = event.project.isEmpty ? "默认项目" : event.project
+        let sid = event.sessionId
+        let tokensStr = "Token: \(Self.formatTokenCount(event.totalTokens))"
+        let costStr = String(format: "花费: $%.4f", event.cost)
+        let isFailure = event.isStopFailure
+        let statusStr = isFailure ? "❌ 失败" : "✅ 结束"
+
+        let title = "\(project) — 会话 \(statusStr)"
+        let body = "\(sid.prefix(16))...  \(tokensStr)  \(costStr)"
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+
+        // 保存会话文件路径到 userInfo，点击时用来跳转
+        let slug = event.cwd.replacingOccurrences(of: "/", with: "-")
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let sessionDir = "\(home)/.reasonix/projects/\(slug)/sessions"
+        content.userInfo = [
+            "sessionPath": "\(sessionDir)/\(sid).jsonl.meta",
+            "sessionDir": sessionDir,
+            "sessionId": sid
+        ]
+
+        let request = UNNotificationRequest(
+            identifier: "session-end-\(sid)",
+            content: content,
+            trigger: nil
+        )
+
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("⚠️ 通知发送失败: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// 格式化 Token 数（简短显示）
+    private static func formatTokenCount(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        }
+        if count >= 1_000 {
+            return String(format: "%.1fK", Double(count) / 1_000)
+        }
+        return "\(count)"
     }
 }
