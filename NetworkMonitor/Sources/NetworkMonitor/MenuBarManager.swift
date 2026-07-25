@@ -677,7 +677,7 @@ final class MenuBarManager: NSObject {
     // MARK: - 格式化辅助（菜单栏共用）
 
     /// 短格式 Token 数（中文单位）
-    private static func formatTokenShort(_ count: Int) -> String {
+    nonisolated static func formatTokenShort(_ count: Int) -> String {
         if count >= 100_000_000 {
             return String(format: "%.1f亿", Double(count) / 100_000_000)
         }
@@ -688,7 +688,7 @@ final class MenuBarManager: NSObject {
     }
 
     /// 短格式花费
-    private static func formatCostShort(_ cost: Double) -> String {
+    nonisolated static func formatCostShort(_ cost: Double) -> String {
         if cost < 0.01 { return String(format: "¥%.4f", cost) }
         if cost < 1 { return String(format: "¥%.3f", cost) }
         return String(format: "¥%.2f", cost)
