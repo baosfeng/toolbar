@@ -370,8 +370,10 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         let roundTokens = event.totalTokens - prev.tokens
         let roundCostUSD = event.cost - prev.cost
 
-        // 仅当本轮有消耗时才发通知
-        guard roundTokens > 0 else { return }
+        // 失败事件无论是否有消耗都通知用户；普通 Stop 仅当有消耗时通知
+        if !isFailure {
+            guard roundTokens > 0 else { return }
+        }
 
         // 格式化和转换
         let tokensStr = FormatUtils.tokenShort(roundTokens)
