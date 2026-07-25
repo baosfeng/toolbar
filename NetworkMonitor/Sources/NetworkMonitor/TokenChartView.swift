@@ -113,3 +113,28 @@ struct TokenHistoryChartView: View {
         return "\(Int(p[1])!)/\(Int(p[2])!)"
     }
 }
+
+// MARK: - 一级菜单内嵌迷你柱状图
+
+/// 24 小时迷你柱状图 — 直接嵌入一级菜单
+struct MiniMenuChartView: View {
+    let data: [HourlyTokenUsage]
+
+    var body: some View {
+        Chart(data, id: \.hour) { entry in
+            BarMark(x: .value("时", "\(entry.hour)"),
+                    y: .value("Token", entry.totalTokens))
+                .foregroundStyle(Color.blue.gradient)
+                .cornerRadius(1.5)
+        }
+        .chartXAxis {
+            AxisMarks(values: .stride(by: 3)) { value in
+                AxisValueLabel()
+                    .font(.system(size: 7))
+            }
+        }
+        .chartYAxis(.hidden)
+        .chartLegend(.hidden)
+        .padding(.horizontal, 4)
+    }
+}
