@@ -140,8 +140,6 @@ final class MenuBarManager: NSObject {
         let historyItem = menuItem(title: "历史用量", symbol: "calendar.badge.clock")
         historyItem.submenu = tokenHistorySubmenu
         menu.addItem(historyItem)
-        menu.addItem(menuItem(title: "📊 查看图表面板", action: #selector(openTokenDetailPanel),
-                              symbol: "chart.pie.fill"))
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
