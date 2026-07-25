@@ -15,23 +15,21 @@ public final class AppCoordinator {
     // MARK: - 服务
 
     /// 网络速度监控
-    private(set) var networkMonitor: NetworkSpeedMonitor!
+    private var networkMonitor: NetworkSpeedMonitor!
     /// 进程网络监控
     let processMonitor = ProcessNetworkMonitor()
     /// 数据库
-    private(set) var database: DatabaseManager!
+    private var database: DatabaseManager!
     /// Token 用量查询
-    private(set) var tokenUsageProvider: TokenUsageProvider!
+    private var tokenUsageProvider: TokenUsageProvider!
     /// 每日流量追踪
-    private(set) var trafficTracker: TrafficTracker!
+    private var trafficTracker: TrafficTracker!
 
     // MARK: - 日志
 
     public var logger: LoggingService = AppContext.shared.logger
 
-    // MARK: - 定时器
 
-    private var timer: Timer?
 
     // MARK: - 初始化
 
@@ -72,9 +70,6 @@ public final class AppCoordinator {
 
     /// 应用退出前清理
     public func stop() {
-        timer?.invalidate()
-        timer = nil
-
         // 保存累计流量
         AppContext.shared.storage.set(Int(networkMonitor?.totalRx ?? 0), forKey: "totalRx")
         AppContext.shared.storage.set(Int(networkMonitor?.totalTx ?? 0), forKey: "totalTx")

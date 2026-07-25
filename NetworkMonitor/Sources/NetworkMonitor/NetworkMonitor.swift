@@ -76,7 +76,7 @@ final class NetworkSpeedMonitor: @preconcurrency NetworkMonitoringService {
 // MARK: - Per-Process Network Monitor
 
 @MainActor
-final class ProcessNetworkMonitor {
+final class ProcessNetworkMonitor: @preconcurrency ProcessNetworkMonitoringService {
     private var previous: [Int32: (UInt64, UInt64)] = [:]
     private(set) var processSpeeds: [ProcessNetUsage] = []
     private var lastUpdateTime: Date?

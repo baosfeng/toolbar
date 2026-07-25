@@ -309,13 +309,6 @@ final class MenuBarManager: NSObject {
         return map[processName] ?? "\(processName)"
     }
 
-    private func formatDurationCompact(_ seconds: TimeInterval) -> String {
-        MenuFactory.formatDurationCompact(seconds)
-    }
-
-    private func formatCompactNumber(_ number: Int) -> String {
-        MenuFactory.formatCompactNumber(number)
-    }
 
     // MARK: - 流量汇总子菜单
 
@@ -354,11 +347,7 @@ final class MenuBarManager: NSObject {
 
     /// 启动 Reasonix Hook 事件监听器
     private func startReasonixHook() {
-        guard let db = databaseManager as? DatabaseManager else {
-            print("⚠️ ReasonixHookMonitor 需要 DatabaseManager 实例")
-            return
-        }
-        let hookMonitor = ReasonixHookMonitor(database: db)
+        let hookMonitor = ReasonixHookMonitor(database: databaseManager)
         hookMonitor.start()
         reasonixHookMonitor = hookMonitor
         print("📡 Reasonix Hook 监听器已启动")
