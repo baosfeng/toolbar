@@ -39,6 +39,8 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     private var healthTimer: DispatchSourceTimer?
     /// 会话侧车缓存 — TTL 1 小时，最多 100 个会话，LRU 淘汰
     private let sidecarCache = SessionSidecarCache(maxCount: 100, ttl: 3600)
+    /// sessionId → project slug 缓存（cwd 为空时避免重复扫描目录）
+    private var slugCache: [String: String] = [:]
     /// 人民币汇率（1 USD ≈ 7.2 CNY）
     private static let usdToCnyRate: Double = 7.2
 
@@ -209,11 +211,20 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         if let cached = sidecarCache.get(sid) {
             return cached.data
         }
-        guard !sid.isEmpty, !event.cwd.isEmpty else {
+        guard !sid.isEmpty else {
             return SessionSidecarData()
         }
 
-        let slug = event.cwd.replacingOccurrences(of: "/", with: "-")
+        // 确定 project slug：优先使用 cwd，为空则扫描 projects 目录查找
+        let slug: String
+        if !event.cwd.isEmpty {
+            slug = event.cwd.replacingOccurrences(of: "/", with: "-")
+        } else if let found = findProjectSlug(for: sid) {
+            slug = found
+        } else {
+            return SessionSidecarData()
+        }
+
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let base = "\(home)/.reasonix/projects/\(slug)/sessions/\(sid)"
         let metaPath = base + ".jsonl.meta"
@@ -273,6 +284,25 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     private func fileModTime(_ path: String) -> TimeInterval? {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: path) else { return nil }
         return (attrs[.modificationDate] as? Date)?.timeIntervalSince1970
+    }
+
+    /// cwd 为空时，在 ~/.reasonix/projects/ 下查找 sessionId 对应的 project slug
+    /// 找到后缓存结果避免重复扫描
+    private func findProjectSlug(for sid: String) -> String? {
+        if let cached = slugCache[sid] { return cached }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let projectsDir = "\(home)/.reasonix/projects"
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: projectsDir) else {
+            return nil
+        }
+        for project in contents where !project.hasPrefix(".") {
+            let telePath = "\(projectsDir)/\(project)/sessions/\(sid).jsonl.telemetry.json"
+            if FileManager.default.fileExists(atPath: telePath) {
+                slugCache[sid] = project
+                return project
+            }
+        }
+        return nil
     }
 
     /// 生成 ISO8601 时间戳（事件自带为空时使用当前时间）
