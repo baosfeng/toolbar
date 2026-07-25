@@ -58,7 +58,6 @@ public final class TokenUsageProvider {
         var grandTotalTokens = 0
         var grandTotalCost = 0.0
 
-        // hook_events 中同一会话的多条事件重复携带累积 usage，需按 session_id 去重
         let sql = """
             SELECT COALESCE(s.model, '未知'),
                    COALESCE(SUM(s.prompt_tokens), 0),
@@ -108,18 +107,11 @@ public final class TokenUsageProvider {
     public func fetchTodayTotal() -> (tokens: Int, cost: Double) {
         let today = todayDateString()
 
-        // 按会话去重：每个会话取 MAX（即最终的累积值）再求和
         let sql = """
-            SELECT COALESCE(SUM(s.total_tokens), 0),
-                   COALESCE(SUM(s.cost), 0.0)
-            FROM (
-                SELECT session_id,
-                       MAX(total_tokens) AS total_tokens,
-                       MAX(cost) AS cost
-                FROM hook_events
-                WHERE date(timestamp) = '\(today)'
-                GROUP BY session_id
-            ) s
+            SELECT COALESCE(SUM(total_tokens), 0),
+                   COALESCE(SUM(total_cost), 0.0)
+            FROM hook_sessions
+            WHERE date(started_at) = '\(today)'
             """
 
         var tokens = 0
@@ -189,17 +181,17 @@ public final class TokenUsageProvider {
                    COALESCE(SUM(s.total_tokens), 0),
                    COALESCE(SUM(s.cost), 0.0)
             FROM (
-                SELECT date(MIN(timestamp)) AS day,
-                       MAX(prompt_tokens) AS prompt_tokens,
-                       MAX(completion_tokens) AS completion_tokens,
-                       MAX(total_tokens) AS total_tokens,
-                       MAX(cost) AS cost
-                FROM hook_events
-                WHERE date(timestamp) >= date('now', '-\(days) days')
-                GROUP BY session_id
+                SELECT date(started_at) AS day,
+                       total_prompt_tokens AS prompt_tokens,
+                       total_completion_tokens AS completion_tokens,
+                       total_tokens,
+                       total_cost AS cost
+                FROM hook_sessions
+                WHERE started_at IS NOT NULL
             ) s
             GROUP BY s.day
             ORDER BY s.day DESC
+            LIMIT \(days)
             """
 
         var results: [DailyTokenUsage] = []

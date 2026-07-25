@@ -527,13 +527,13 @@ public final class DatabaseManager: @unchecked Sendable {
 
                 let isEnd = event.isSessionEnd
 
-                // 累加更新 — 取最大值，避免重复累加
+                // 取最大值 — 每个 Stop/SessionEnd 携带累积值，非增量
                 let newTurns = max(oldTurns, event.turns)
-                let newPrompt = oldPrompt + event.promptTokens
-                let newCompletion = oldCompletion + event.completionTokens
-                let newTotal = oldTotal + event.totalTokens
-                let newReasoning = oldReasoning + event.reasoningTokens
-                let newCost = oldCost + event.cost
+                let newPrompt = max(oldPrompt, event.promptTokens)
+                let newCompletion = max(oldCompletion, event.completionTokens)
+                let newTotal = max(oldTotal, event.totalTokens)
+                let newReasoning = max(oldReasoning, event.reasoningTokens)
+                let newCost = max(oldCost, event.cost)
                 let newStatus = isEnd ? "'ended'" : "'\(oldStatus)'"
                 let endedSQL = isEnd ? ", ended_at = '\(event.timestamp)'" : ""
 
