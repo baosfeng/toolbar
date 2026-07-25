@@ -137,7 +137,7 @@ public final class TokenUsageProvider {
                    COALESCE(SUM(s.total_tokens), 0),
                    COALESCE(SUM(s.cost), 0.0)
             FROM (
-                SELECT CAST(strftime('%H', MIN(timestamp)) AS INTEGER) AS hour,
+                SELECT CAST(strftime('%H', MAX(timestamp)) AS INTEGER) AS hour,
                        MAX(prompt_tokens) AS prompt_tokens,
                        MAX(completion_tokens) AS completion_tokens,
                        MAX(total_tokens) AS total_tokens,

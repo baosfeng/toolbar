@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import SwiftUI
 
 // MARK: - 可点击行视图
 
@@ -153,18 +154,10 @@ final class TokenDetailPanel: NSPanel {
 
         hourlyStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
-        if data.isEmpty {
-            let empty = NSTextField(labelWithString: "暂无数据")
-            empty.font = Self.bodyFont
-            empty.textColor = Self.secondaryText
-            empty.alignment = NSTextAlignment.center
-            hourlyStack.addArrangedSubview(empty)
-        } else {
-            let maxTokens = data.map { $0.totalTokens }.max() ?? 1
-            for entry in data {
-                hourlyStack.addArrangedSubview(Self.makeHourRow(entry: entry, maxTokens: maxTokens))
-            }
-        }
+        let chartView = TokenHourlyChartView(data: data)
+        let hosting = NSHostingView(rootView: chartView)
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        hourlyStack.addArrangedSubview(hosting)
     }
 
     private func loadHistory() {
@@ -172,21 +165,10 @@ final class TokenDetailPanel: NSPanel {
 
         historyStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
-        if data.isEmpty {
-            let empty = NSTextField(labelWithString: "暂无历史数据")
-            empty.font = Self.bodyFont
-            empty.textColor = Self.secondaryText
-            empty.alignment = NSTextAlignment.center
-            historyStack.addArrangedSubview(empty)
-        } else {
-            let maxTokens = data.map { $0.totalTokens }.max() ?? 1
-            for entry in data {
-                let row = Self.makeDayRow(entry: entry, maxTokens: maxTokens) { [weak self] in
-                    self?.switchToDate(entry.date)
-                }
-                historyStack.addArrangedSubview(row)
-            }
-        }
+        let chartView = TokenHistoryChartView(data: data)
+        let hosting = NSHostingView(rootView: chartView)
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        historyStack.addArrangedSubview(hosting)
     }
 
     // MARK: - UI 构建
@@ -267,9 +249,6 @@ final class TokenDetailPanel: NSPanel {
         hourlyStack.edgeInsets = NSEdgeInsets(top: Self.cardPadding, left: Self.cardPadding,
                                               bottom: Self.cardPadding, right: Self.cardPadding)
 
-        hourlyStack.addArrangedSubview(Self.makeHourHeader())
-        hourlyStack.addArrangedSubview(Self.makeSeparator())
-
         hourlyCard.addSubview(hourlyStack)
         hourlyStack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -287,9 +266,6 @@ final class TokenDetailPanel: NSPanel {
         historyStack.spacing = 2
         historyStack.edgeInsets = NSEdgeInsets(top: Self.cardPadding, left: Self.cardPadding,
                                                bottom: Self.cardPadding, right: Self.cardPadding)
-
-        historyStack.addArrangedSubview(Self.makeHistoryHeader())
-        historyStack.addArrangedSubview(Self.makeSeparator())
 
         historyCard.addSubview(historyStack)
         historyStack.translatesAutoresizingMaskIntoConstraints = false
