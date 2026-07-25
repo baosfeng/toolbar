@@ -1,7 +1,6 @@
 import AppKit
 import NetworkMonitorCore
 import ServiceManagement
-import CoreWLAN
 import DGCharts
 
 // MARK: - Menu Bar Manager
@@ -35,7 +34,6 @@ final class MenuBarManager: NSObject {
 
     // MARK: - 菜单标签
     private let networkIPTag = 1002
-    private let networkWiFiTag = 1004
 
     private let launchAtStartupTag = 3001
     private let tokenSummaryTag = 4001
@@ -113,7 +111,6 @@ final class MenuBarManager: NSObject {
         // ── 网络信息 ──
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "IP: 获取中…", symbol: "network", tag: networkIPTag, isEnabled: false))
-        menu.addItem(menuItem(title: "Wi-Fi: —", symbol: "wifi", tag: networkWiFiTag, isEnabled: false))
 
         // ── 活跃进程（二级菜单） ──
         menu.addItem(NSMenuItem.separator())
@@ -194,7 +191,6 @@ final class MenuBarManager: NSObject {
         processMonitor.poll()
         let processes = processMonitor.processSpeeds
         let ip = getLocalIPAddress()
-        let wifi = getWiFiStatus()
 
         guard let menu = statusItem.menu else { return }
 
@@ -218,11 +214,6 @@ final class MenuBarManager: NSObject {
         // IP
         if let ipItem = menu.item(withTag: networkIPTag) {
             ipItem.title = ip.map { "\($0)" } ?? "未连接"
-        }
-
-        // Wi-Fi
-        if let wifiItem = menu.item(withTag: networkWiFiTag) {
-            wifiItem.title = wifi
         }
 
         // ── 更新流量汇总子菜单
@@ -273,16 +264,6 @@ final class MenuBarManager: NSObject {
     }
 
     // MARK: - 辅助方法
-
-    private func getWiFiStatus() -> String {
-        if let ssid = CWWiFiClient.shared().interface()?.ssid(), !ssid.isEmpty {
-            return ssid
-        }
-        if getLocalIPAddress() != nil {
-            return "已连接"
-        }
-        return "未连接"
-    }
 
     private func guessBundleID(for processName: String) -> String {
         let map: [String: String] = [
