@@ -49,7 +49,10 @@ final class MiniMenuChartView: BarChartView {
         let set = BarChartDataSet(entries: entries, label: "")
         set.colors = [NSColor.systemBlue.withAlphaComponent(0.7)]
         set.highlightColor = NSColor.clear
-        set.drawValuesEnabled = false
+        set.drawValuesEnabled = true
+        set.valueFont = NSFont.monospacedDigitSystemFont(ofSize: 7, weight: .regular)
+        set.valueTextColor = NSColor.secondaryLabelColor
+        set.valueFormatter = TokenValueFormatter()
 
         let barData = BarChartData(dataSet: set)
         barData.barWidth = 0.7
@@ -108,7 +111,10 @@ final class MiniHistoryMenuChartView: BarChartView {
         let set = BarChartDataSet(entries: entries, label: "")
         set.colors = [NSColor.systemBlue.withAlphaComponent(0.7)]
         set.highlightColor = NSColor.clear
-        set.drawValuesEnabled = false
+        set.drawValuesEnabled = true
+        set.valueFont = NSFont.monospacedDigitSystemFont(ofSize: 7, weight: .regular)
+        set.valueTextColor = NSColor.secondaryLabelColor
+        set.valueFormatter = TokenValueFormatter()
 
         let barData = BarChartData(dataSet: set)
         barData.barWidth = 0.6
@@ -146,5 +152,16 @@ private final class DateAxisFormatter: AxisValueFormatter {
         let idx = Int(value)
         guard idx >= 0, idx < labels.count else { return "" }
         return labels[idx]
+    }
+}
+
+// MARK: - 数据值格式化器
+
+private final class TokenValueFormatter: ValueFormatter {
+    func stringForValue(_ value: Double, entry: ChartDataEntry, dataSetIndex: Int, viewPortHandler: ViewPortHandler?) -> String {
+        let c = Int(value)
+        if c >= 100_000_000 { return String(format: "%.1f亿", Double(c) / 100_000_000) }
+        if c >= 10_000 { return String(format: "%.0f万", Double(c) / 10_000) }
+        return "\(c)"
     }
 }
