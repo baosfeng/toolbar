@@ -23,6 +23,9 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
     /// 串行队列 — 所有数据库操作在此队列上执行
     private let serialQueue = DispatchQueue(label: "com.example.NetworkMonitor.database")
 
+    /// 过期数据清理定时器（每日一次）
+    private var retentionTimer: DispatchSourceTimer?
+
     /// 数据库文件路径
     public private(set) lazy var dbPath: String = {
         let appSupport = FileManager.default.urls(
@@ -76,6 +79,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
         createTables()
         migrateIfNeeded()
+        startRetentionTimer()
         print("✅ 数据库已就绪: \(dbPath)")
     }
 
@@ -147,6 +151,8 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
     }
 
     private func _close() {
+        retentionTimer?.cancel()
+        retentionTimer = nil
         guard let db else { return }
         sqlite3_close(db)
         self.db = nil
@@ -175,6 +181,58 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
         while sqlite3_step(stmt) == SQLITE_ROW {
             handler(stmt!)
+        }
+    }
+
+    // MARK: - 数据保留
+
+    /// 明细数据保留天数（hook_events / hook_tool_calls）
+    private static let eventRetentionDays = 90
+    /// 会话汇总保留天数（hook_sessions，数据量小可保留更久）
+    private static let sessionRetentionDays = 180
+    /// 清理间隔（小时）
+    private static let retentionIntervalHours = 24
+
+    /// 启动每日清理定时器，并立即执行一次
+    private func startRetentionTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: serialQueue)
+        timer.schedule(deadline: .now() + 3600,
+                       repeating: TimeInterval(Self.retentionIntervalHours * 3600),
+                       leeway: .seconds(600))
+        timer.setEventHandler { [weak self] in
+            self?.purgeExpiredData()
+        }
+        timer.resume()
+        retentionTimer = timer
+
+        // 启动时立即执行一次（首次安装旧库可能已有大量历史数据）
+        serialQueue.async { [weak self] in
+            self?.purgeExpiredData()
+        }
+    }
+
+    /// 删除超过保留期限的过期数据（幂等，可随时调用）
+    /// - Note: public 仅为 TestRunner 验证清理逻辑；应用启动与每日定时自动执行
+    public func purgeExpiredData() {
+        guard let db else { return }
+        let purgeSQL = [
+            "DELETE FROM hook_events WHERE date(timestamp) < date('now', '-\(Self.eventRetentionDays) days');",
+            "DELETE FROM hook_tool_calls WHERE date(started_at) < date('now', '-\(Self.eventRetentionDays) days');",
+            "DELETE FROM hook_sessions WHERE date(updated_at) < date('now', '-\(Self.sessionRetentionDays) days');",
+        ]
+        var deleted = 0
+        for sql in purgeSQL {
+            var stmt: OpaquePointer?
+            defer { sqlite3_finalize(stmt) }
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
+                  sqlite3_step(stmt) == SQLITE_DONE else {
+                print("⚠️ 过期数据清理失败: \(String(cString: sqlite3_errmsg(db)))")
+                continue
+            }
+            deleted += Int(sqlite3_changes(db))
+        }
+        if deleted > 0 {
+            print("🧹 已清理 \(deleted) 条过期数据")
         }
     }
 
