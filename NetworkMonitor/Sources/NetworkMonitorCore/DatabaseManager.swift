@@ -75,6 +75,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
         applyPragma("journal_mode", value: "WAL")
 
         createTables()
+        migrateIfNeeded()
         print("✅ 数据库已就绪: \(dbPath)")
     }
 
@@ -87,7 +88,42 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
         }
 
         createTables()
+        migrateIfNeeded()
         print("✅ 内存数据库已就绪")
+    }
+
+    // MARK: - Schema 迁移
+
+    /// 基于 PRAGMA user_version 的增量迁移（幂等，每次启动自动执行）
+    /// - Note: public 仅为 TestRunner 验证迁移逻辑；应用启动时已自动调用
+    public func migrateIfNeeded() {
+        guard let db else { return }
+
+        var version: Int32 = 0
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        if sqlite3_prepare_v2(db, "PRAGMA user_version", -1, &stmt, nil) == SQLITE_OK,
+           sqlite3_step(stmt) == SQLITE_ROW {
+            version = sqlite3_column_int(stmt, 0)
+        }
+
+        if version < 1 {
+            // v1：cost 字段统一为 CNY（此前存的是 USD，展示时误当人民币）
+            // 历史数据按默认汇率迁移；此后新写入在 ReasonixHookMonitor 中转换
+            let rate = CurrencyConfig.defaultUsdToCnyRate
+            let migrations = [
+                "UPDATE hook_events SET cost = ROUND(cost * \(rate), 6) WHERE cost > 0;",
+                "UPDATE hook_sessions SET total_cost = ROUND(total_cost * \(rate), 6) WHERE total_cost > 0;",
+            ]
+            for sql in migrations {
+                if sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
+                    print("⚠️ 数据迁移 v1 失败: \(String(cString: sqlite3_errmsg(db)))")
+                    return
+                }
+            }
+            sqlite3_exec(db, "PRAGMA user_version = 1", nil, nil, nil)
+            print("💱 数据迁移 v1 完成：cost 字段已统一为 CNY")
+        }
     }
 
     /// 执行 PRAGMA 语句
@@ -178,7 +214,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
                 completion_tokens INTEGER DEFAULT 0,
                 total_tokens INTEGER DEFAULT 0,
                 reasoning_tokens INTEGER DEFAULT 0,
-                cost REAL DEFAULT 0.0,
+                cost REAL DEFAULT 0.0,          -- 金额（CNY，USD 在写入前转换）
                 event_data_json TEXT,
                 timestamp TEXT NOT NULL,
                 created_at TEXT NOT NULL
@@ -199,7 +235,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
                 total_completion_tokens INTEGER DEFAULT 0,
                 total_tokens INTEGER DEFAULT 0,
                 total_reasoning_tokens INTEGER DEFAULT 0,
-                total_cost REAL DEFAULT 0.0,
+                total_cost REAL DEFAULT 0.0,    -- 金额（CNY，USD 在写入前转换）
                 status TEXT NOT NULL DEFAULT 'active',
                 updated_at TEXT NOT NULL
             );

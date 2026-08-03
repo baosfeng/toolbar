@@ -43,8 +43,6 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     private var slugCache: [String: String] = [:]
     /// sessionId → 上一次 Stop 累计值缓存（避免历史坏数据导致增量计算错误）
     private var lastStopTotal: [String: (tokens: Int, cost: Double)] = [:]
-    /// 人民币汇率（1 USD ≈ 7.2 CNY）
-    private static let usdToCnyRate: Double = 7.2
 
     // MARK: - 初始化
 
@@ -328,6 +326,9 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             let sidecar = loadSidecar(for: event)
             event.enrich(from: sidecar)
 
+            // 统一货币：数据库以 CNY 存储（sidecar 中的 cost 为 USD）
+            event.cost = CurrencyConfig.usdToCny(event.cost)
+
             // 1. 写入事件流水
             database.writeHookEvent(event: event)
 
@@ -411,6 +412,8 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             let sidecar = loadSidecar(for: effectiveEvent)
             if sidecar.totalTokens > 0 {
                 effectiveEvent.enrich(from: sidecar)
+                // 侧车数据为 USD，需再次转换为 CNY 保持一致
+                effectiveEvent.cost = CurrencyConfig.usdToCny(effectiveEvent.cost)
                 // 回写数据库，修复记录
                 let safeId = Self.sanitizeSessionID(sid)
                 let updateSQL = """
@@ -424,7 +427,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         }
 
         let roundTokens = effectiveEvent.totalTokens - prev.tokens
-        let roundCostUSD = effectiveEvent.cost - prev.cost
+        let roundCost = effectiveEvent.cost - prev.cost   // 数据库与事件均为 CNY
         // 更新缓存供后续 Stop 事件使用
         lastStopTotal[sid] = (effectiveEvent.totalTokens, effectiveEvent.cost)
 
@@ -433,10 +436,9 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             guard roundTokens > 0 else { return }
         }
 
-        // 格式化和转换
+        // 格式化
         let tokensStr = FormatUtils.tokenShort(roundTokens)
-        let costCNY = roundCostUSD * Self.usdToCnyRate
-        let costStr = FormatUtils.costShort(costCNY)
+        let costStr = FormatUtils.costShort(roundCost)
 
         // 清理过期通知（超过 5 分钟）和超量通知（最多 5 条）
         cleanupNotifications()
