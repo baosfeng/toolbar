@@ -165,11 +165,12 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
 
         readSource?.cancel()
         readSource = nil
-
-        if socketFd >= 0 {
-            close(socketFd)
-            socketFd = -1
-        }
+        // 注意：不在此处 close(socketFd)！
+        // close 由 DispatchSource 的 cancel handler 负责（恰好执行一次），
+        // 若这里也 close，会与 cancel handler 形成 double-close 竞态：
+        // 健康检查 stop→start 路径下，新 socket 可能复用旧 fd 号，
+        // 旧 cancel handler 会误关新 socket。
+        socketFd = -1
     }
 
     // MARK: - Socket 健康检查
