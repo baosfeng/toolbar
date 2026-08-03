@@ -27,3 +27,6 @@ Thumbs.db
 dist/
 ehthumbs.db
 reasonix.toml
+
+# codebase-memory 知识图谱缓存（工具自动生成）
+.codebase-memory/
