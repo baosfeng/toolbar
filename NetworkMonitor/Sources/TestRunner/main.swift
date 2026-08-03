@@ -279,6 +279,38 @@ do {
     print("✅ query returns empty for empty table")
 }
 
+// Test: cost 字段 USD→CNY 迁移（v1）
+do {
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    defer { db.close() }
+
+    // 模拟旧库：user_version 复位为 0，插入 USD 金额
+    db.query(sql: "PRAGMA user_version = 0") { _ in }
+    db.query(sql: """
+        INSERT INTO hook_events (event_type, event_type_cn, session_id, cost, timestamp, created_at)
+        VALUES ('Stop', '轮次完成', 'sess-mig', 1.0, '2026-08-01T00:00:00Z', '2026-08-01T00:00:00Z')
+        """) { _ in }
+    db.query(sql: """
+        INSERT INTO hook_sessions (session_id, total_cost, status, updated_at)
+        VALUES ('sess-mig', 2.0, 'ended', '2026-08-01T00:00:00Z')
+        """) { _ in }
+
+    db.migrateIfNeeded()
+
+    let rows = collectQuery(db, sql: "SELECT cost FROM hook_events WHERE session_id='sess-mig'")
+    assertEqual(rows[0][0], "7.2", "hook_events.cost migrated USD→CNY (×7.2)")
+    let srows = collectQuery(db, sql: "SELECT total_cost FROM hook_sessions WHERE session_id='sess-mig'")
+    assertEqual(srows[0][0], "14.4", "hook_sessions.total_cost migrated USD→CNY (×7.2)")
+
+    // 幂等：再次执行不重复放大
+    db.migrateIfNeeded()
+    let rows2 = collectQuery(db, sql: "SELECT cost FROM hook_events WHERE session_id='sess-mig'")
+    assertEqual(rows2[0][0], "7.2", "migration is idempotent")
+
+    print("✅ cost USD→CNY 迁移 works")
+}
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")

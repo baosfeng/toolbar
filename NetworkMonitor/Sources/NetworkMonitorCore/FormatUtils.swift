@@ -1,5 +1,28 @@
 import Foundation
 
+// MARK: - 货币配置
+
+/// 货币配置 — 数据库统一以 CNY（人民币）存储与展示
+///
+/// Reasonix sidecar 文件中的 cost 为 USD，写入数据库前需转换为 CNY。
+public enum CurrencyConfig {
+    /// 默认汇率（1 USD ≈ 7.2 CNY），历史数据迁移也按此汇率
+    public static let defaultUsdToCnyRate: Double = 7.2
+    /// UserDefaults 键，可用该键覆盖汇率
+    public static let rateOverrideKey = "usdToCnyRate"
+
+    /// 当前汇率（可通过 UserDefaults 键 `usdToCnyRate` 覆盖）
+    public static var usdToCnyRate: Double {
+        let saved = UserDefaults.standard.object(forKey: rateOverrideKey) as? Double
+        return saved ?? defaultUsdToCnyRate
+    }
+
+    /// 将 USD 金额转换为 CNY
+    public static func usdToCny(_ usd: Double) -> Double {
+        usd * usdToCnyRate
+    }
+}
+
 // MARK: - 格式化工具
 
 /// 通用的格式化工具方法集
