@@ -247,11 +247,16 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             "CREATE INDEX IF NOT EXISTS idx_hook_events_type ON hook_events(event_type);",
             "CREATE INDEX IF NOT EXISTS idx_hook_events_time ON hook_events(timestamp);",
             "CREATE INDEX IF NOT EXISTS idx_hook_events_session_time ON hook_events(session_id, timestamp);",
+            // 表达式索引：让 WHERE date(timestamp, '+8 hours') = '...' 走索引而非全表扫描
+            "CREATE INDEX IF NOT EXISTS idx_hook_events_day ON hook_events(date(timestamp, '+8 hours'));",
             "CREATE INDEX IF NOT EXISTS idx_hook_sessions_status ON hook_sessions(status);",
             "CREATE INDEX IF NOT EXISTS idx_hook_sessions_started ON hook_sessions(started_at);",
+            "CREATE INDEX IF NOT EXISTS idx_hook_sessions_day ON hook_sessions(date(started_at, '+8 hours'));",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_session ON hook_tool_calls(session_id);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_session_turn ON hook_tool_calls(session_id, turn);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_status ON hook_tool_calls(status);",
+            "CREATE INDEX IF NOT EXISTS idx_hook_calls_started ON hook_tool_calls(started_at);",
+            "CREATE INDEX IF NOT EXISTS idx_hook_calls_day ON hook_tool_calls(date(started_at, '+8 hours'));",
         ]
 
         for sql in hookIndexes {

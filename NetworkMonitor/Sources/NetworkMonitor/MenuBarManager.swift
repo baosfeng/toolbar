@@ -17,7 +17,7 @@ import DGCharts
 ///   ────────────────────────
 ///   操作项 / 退出
 @MainActor
-final class MenuBarManager: NSObject {
+final class MenuBarManager: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let monitor: NetworkMonitoringService
     private let processMonitor: ProcessNetworkMonitor
@@ -58,6 +58,14 @@ final class MenuBarManager: NSObject {
     private var downHistory: [Double] = []
     private var upHistory: [Double] = []
     private let maxHistory = 60
+
+    // MARK: - 刷新节流
+    /// 中频更新间隔（今日流量/IP/进程列表/开机自启状态）
+    private static let midInterval: TimeInterval = 5.0
+    /// 低频更新间隔（Token 统计 / AI 分析 — 均为 SQLite 查询）
+    private static let statsInterval: TimeInterval = 15.0
+    private var lastMidUpdate: Date = .distantPast
+    private var lastStatsUpdate: Date = .distantPast
 
     // MARK: - 子菜单
     private let trafficSubmenu = NSMenu()
@@ -160,6 +168,7 @@ final class MenuBarManager: NSObject {
                               symbol: "power"))
 
         statusItem.menu = menu
+        menu.delegate = self
 
         if let launchItem = menu.item(withTag: launchAtStartupTag) {
             launchItem.state = isLaunchAtStartupSaved ? .on : .off
@@ -185,8 +194,15 @@ final class MenuBarManager: NSObject {
 
     // MARK: - 定时更新
 
+    /// 每秒定时刷新 — 按频率分层执行，避免主线程承担重活：
+    /// - 每秒：网速（getifaddrs 轻量调用）、历史记录
+    /// - 每 5 秒：今日流量标题、IP、进程列表、开机自启状态
+    /// - 每 15 秒：Token 统计 / AI 分析（SQLite 查询）
+    /// - 菜单打开时：全部强制刷新（见 menuWillOpen）
     @objc private func update() {
-        // 网速
+        let now = Date()
+
+        // ── 每秒：网速 ──
         monitor.poll()
         let downSpeed = max(monitor.downloadSpeed, 0)
         let upSpeed = max(monitor.uploadSpeed, 0)
@@ -202,14 +218,25 @@ final class MenuBarManager: NSObject {
         if downHistory.count > maxHistory { downHistory.removeFirst() }
         if upHistory.count > maxHistory { upHistory.removeFirst() }
 
-        // 进程
+        // 进程采样（内部 3 秒节流 + 后台队列执行，不阻塞主线程）
         processMonitor.poll()
-        let processes = processMonitor.processSpeeds
-        let ip = getLocalIPAddress()
 
+        // ── 每 5 秒：中频更新 ──
+        if now.timeIntervalSince(lastMidUpdate) >= Self.midInterval {
+            lastMidUpdate = now
+            updateMidFrequency()
+        }
+
+        // ── 每 15 秒：低频统计查询 ──
+        if now.timeIntervalSince(lastStatsUpdate) >= Self.statsInterval {
+            lastStatsUpdate = now
+            updateLowFrequency()
+        }
+    }
+
+    /// 中频更新（5 秒）：今日流量标题、IP、开机自启、流量汇总、进程列表
+    private func updateMidFrequency() {
         guard let menu = statusItem.menu else { return }
-
-        // ── 更新主菜单项 ──
 
         // 开机自启
         if let launchItem = menu.item(withTag: launchAtStartupTag) {
@@ -228,22 +255,33 @@ final class MenuBarManager: NSObject {
 
         // IP
         if let ipItem = menu.item(withTag: networkIPTag) {
+            let ip = getLocalIPAddress()
             ipItem.title = ip.map { "\($0)" } ?? "未连接"
         }
 
-        // ── 更新流量汇总子菜单
+        // 流量汇总
         trafficTracker.update()
         updateTrafficSubmenu()
 
-        // 更新 Token 一级项目
-        updateTokenSubmenu()
-
-        // 更新 AI 分析子菜单
-        updateAiAnalysisSubmenu()
-
         // 进程列表
-        updateProcessItems(processes: processes)
+        updateProcessItems(processes: processMonitor.processSpeeds)
+    }
 
+    /// 低频更新（15 秒）：Token 一级项目 + AI 分析子菜单
+    private func updateLowFrequency() {
+        updateTokenSubmenu()
+        updateAiAnalysisSubmenu()
+    }
+
+    // MARK: - NSMenuDelegate
+
+    /// 菜单打开时强制刷新所有统计，确保看到最新数据
+    func menuWillOpen(_ menu: NSMenu) {
+        let now = Date()
+        lastMidUpdate = now
+        lastStatsUpdate = now
+        updateMidFrequency()
+        updateLowFrequency()
     }
 
 

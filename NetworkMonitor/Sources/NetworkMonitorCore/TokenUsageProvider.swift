@@ -242,7 +242,8 @@ public final class TokenUsageProvider: TokenStatsService {
                        total_tokens,
                        total_cost AS cost
                 FROM hook_sessions
-                WHERE started_at IS NOT NULL
+                -- 只统计近 14 天，避免全表扫描（走 idx_hook_sessions_day 表达式索引）
+                WHERE date(started_at, '+8 hours') >= date('now', 'localtime', '-14 days')
             ) s
             GROUP BY s.day
             ORDER BY s.day DESC
@@ -295,6 +296,8 @@ public final class TokenUsageProvider: TokenStatsService {
                    ROUND(AVG(duration_ms)) AS avg_duration
             FROM hook_tool_calls
             WHERE status != 'started'
+              -- 只统计近 30 天，避免全表扫描（走 idx_hook_calls_day 表达式索引）
+              AND date(started_at, '+8 hours') >= date('now', 'localtime', '-30 days')
             GROUP BY tool_name
             ORDER BY call_count DESC
             LIMIT \(limit)
