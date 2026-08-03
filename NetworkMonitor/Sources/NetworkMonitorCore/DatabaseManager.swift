@@ -456,6 +456,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
                 let oldStatus = String(cString: sqlite3_column_text(selectStmt, 0))
 
                 let isEnd = event.isSessionEnd
+                let isFailed = event.isStopFailure
 
                 // 取最大值 — 每个 Stop/SessionEnd 携带累积值，非增量
                 let newTurns = max(oldTurns, event.turns)
@@ -464,7 +465,15 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
                 let newTotal = max(oldTotal, event.totalTokens)
                 let newReasoning = max(oldReasoning, event.reasoningTokens)
                 let newCost = max(oldCost, event.cost)
-                let newStatus = isEnd ? "'ended'" : "'\(oldStatus)'"
+                // 状态机：SessionEnd → ended；StopFailure → failed（除非已 ended）；否则保持
+                let newStatus: String
+                if isEnd {
+                    newStatus = "'ended'"
+                } else if isFailed, oldStatus != "ended" {
+                    newStatus = "'failed'"
+                } else {
+                    newStatus = "'\(oldStatus)'"
+                }
                 let endedSQL = isEnd ? ", ended_at = '\(event.timestamp)'" : ""
 
                 let updateSQL = """
@@ -493,6 +502,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
                 // 新建记录
                 let startedAt = event.isSessionStart ? event.timestamp : event.timestamp
                 let isEnd = event.isSessionEnd
+                let isFailed = event.isStopFailure
 
                 let insertSQL = """
                 INSERT INTO hook_sessions
@@ -526,7 +536,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
                 sqlite3_bind_int(insertStmt, 10, Int32(event.totalTokens))
                 sqlite3_bind_int(insertStmt, 11, Int32(event.reasoningTokens))
                 sqlite3_bind_double(insertStmt, 12, event.cost)
-                sqlite3_bind_text(insertStmt, 13, (isEnd ? "ended" : "active" as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(insertStmt, 13, ((isEnd ? "ended" : (isFailed ? "failed" : "active")) as NSString).utf8String, -1, nil)
                 sqlite3_bind_text(insertStmt, 14, (now as NSString).utf8String, -1, nil)
 
                 if sqlite3_step(insertStmt) != SQLITE_DONE {
