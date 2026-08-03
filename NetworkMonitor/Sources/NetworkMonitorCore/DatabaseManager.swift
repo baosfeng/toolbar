@@ -278,21 +278,39 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
     /// 创建 Hook 相关索引
     private func createHookIndexes() {
+        // 清理旧的固定 +8 时区表达式索引（时区本地化后定义已过时，需按新时区重建）
+        let legacyDrop = [
+            "DROP INDEX IF EXISTS idx_hook_events_day;",
+            "DROP INDEX IF EXISTS idx_hook_sessions_day;",
+            "DROP INDEX IF EXISTS idx_hook_calls_day;",
+        ]
+        for sql in legacyDrop {
+            var stmt: OpaquePointer?
+            defer { sqlite3_finalize(stmt) }
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
+                  sqlite3_step(stmt) == SQLITE_DONE else {
+                print("⚠️ 旧索引清理失败: \(String(cString: sqlite3_errmsg(db)))")
+                continue
+            }
+        }
+
+        // 表达式索引必须与查询中的 date(列, 偏移) 完全一致才能命中，故使用 SqliteTimeZone
+        let offset = SqliteTimeZone.offsetModifier
         let hookIndexes = [
             "CREATE INDEX IF NOT EXISTS idx_hook_events_session ON hook_events(session_id);",
             "CREATE INDEX IF NOT EXISTS idx_hook_events_type ON hook_events(event_type);",
             "CREATE INDEX IF NOT EXISTS idx_hook_events_time ON hook_events(timestamp);",
             "CREATE INDEX IF NOT EXISTS idx_hook_events_session_time ON hook_events(session_id, timestamp);",
-            // 表达式索引：让 WHERE date(timestamp, '+8 hours') = '...' 走索引而非全表扫描
-            "CREATE INDEX IF NOT EXISTS idx_hook_events_day ON hook_events(date(timestamp, '+8 hours'));",
+            // 表达式索引：让 WHERE date(timestamp, '+N hours') = '...' 走索引而非全表扫描
+            "CREATE INDEX IF NOT EXISTS idx_hook_events_day ON hook_events(date(timestamp, '\(offset)'));",
             "CREATE INDEX IF NOT EXISTS idx_hook_sessions_status ON hook_sessions(status);",
             "CREATE INDEX IF NOT EXISTS idx_hook_sessions_started ON hook_sessions(started_at);",
-            "CREATE INDEX IF NOT EXISTS idx_hook_sessions_day ON hook_sessions(date(started_at, '+8 hours'));",
+            "CREATE INDEX IF NOT EXISTS idx_hook_sessions_day ON hook_sessions(date(started_at, '\(offset)'));",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_session ON hook_tool_calls(session_id);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_session_turn ON hook_tool_calls(session_id, turn);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_status ON hook_tool_calls(status);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_started ON hook_tool_calls(started_at);",
-            "CREATE INDEX IF NOT EXISTS idx_hook_calls_day ON hook_tool_calls(date(started_at, '+8 hours'));",
+            "CREATE INDEX IF NOT EXISTS idx_hook_calls_day ON hook_tool_calls(date(started_at, '\(offset)'));",
         ]
 
         for sql in hookIndexes {

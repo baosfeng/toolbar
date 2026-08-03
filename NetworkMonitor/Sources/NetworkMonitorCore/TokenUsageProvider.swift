@@ -117,7 +117,7 @@ public final class TokenUsageProvider: TokenStatsService {
                        MAX(total_tokens) AS total_tokens,
                        MAX(cost) AS cost
                 FROM hook_events
-                WHERE date(timestamp, '+8 hours') = '\(today)'
+                WHERE date(timestamp, '\(SqliteTimeZone.offsetModifier)') = '\(today)'
                 GROUP BY session_id
             ) s
             GROUP BY s.model
@@ -157,7 +157,7 @@ public final class TokenUsageProvider: TokenStatsService {
             SELECT COALESCE(SUM(total_tokens), 0),
                    COALESCE(SUM(total_cost), 0.0)
             FROM hook_sessions
-            WHERE date(started_at, '+8 hours') = '\(today)'
+            WHERE date(started_at, '\(SqliteTimeZone.offsetModifier)') = '\(today)'
             """
 
         var tokens = 0
@@ -183,13 +183,13 @@ public final class TokenUsageProvider: TokenStatsService {
                    COALESCE(SUM(s.total_tokens), 0),
                    COALESCE(SUM(s.cost), 0.0)
             FROM (
-                SELECT CAST(strftime('%H', MAX(timestamp), '+8 hours') AS INTEGER) AS hour,
+                SELECT CAST(strftime('%H', MAX(timestamp), '\(SqliteTimeZone.offsetModifier)') AS INTEGER) AS hour,
                        MAX(prompt_tokens) AS prompt_tokens,
                        MAX(completion_tokens) AS completion_tokens,
                        MAX(total_tokens) AS total_tokens,
                        MAX(cost) AS cost
                 FROM hook_events
-                WHERE date(timestamp, '+8 hours') = '\(day)'
+                WHERE date(timestamp, '\(SqliteTimeZone.offsetModifier)') = '\(day)'
                 GROUP BY session_id
             ) s
             GROUP BY s.hour
@@ -236,14 +236,14 @@ public final class TokenUsageProvider: TokenStatsService {
                    COALESCE(SUM(s.total_tokens), 0),
                    COALESCE(SUM(s.cost), 0.0)
             FROM (
-                SELECT date(started_at, '+8 hours') AS day,
+                SELECT date(started_at, '\(SqliteTimeZone.offsetModifier)') AS day,
                        total_prompt_tokens AS prompt_tokens,
                        total_completion_tokens AS completion_tokens,
                        total_tokens,
                        total_cost AS cost
                 FROM hook_sessions
                 -- 只统计近 14 天，避免全表扫描（走 idx_hook_sessions_day 表达式索引）
-                WHERE date(started_at, '+8 hours') >= date('now', 'localtime', '-14 days')
+                WHERE date(started_at, '\(SqliteTimeZone.offsetModifier)') >= date('now', 'localtime', '-14 days')
             ) s
             GROUP BY s.day
             ORDER BY s.day DESC
@@ -297,7 +297,7 @@ public final class TokenUsageProvider: TokenStatsService {
             FROM hook_tool_calls
             WHERE status != 'started'
               -- 只统计近 30 天，避免全表扫描（走 idx_hook_calls_day 表达式索引）
-              AND date(started_at, '+8 hours') >= date('now', 'localtime', '-30 days')
+              AND date(started_at, '\(SqliteTimeZone.offsetModifier)') >= date('now', 'localtime', '-30 days')
             GROUP BY tool_name
             ORDER BY call_count DESC
             LIMIT \(limit)
@@ -366,7 +366,7 @@ public final class TokenUsageProvider: TokenStatsService {
                    COALESCE(SUM(total_cost), 0.0),
                    COUNT(*) AS session_count
             FROM hook_sessions
-            WHERE date(started_at, '+8 hours') = '\(today)'
+            WHERE date(started_at, '\(SqliteTimeZone.offsetModifier)') = '\(today)'
             GROUP BY model
             ORDER BY SUM(total_tokens) DESC
             LIMIT \(limit)
@@ -396,7 +396,7 @@ public final class TokenUsageProvider: TokenStatsService {
                    COUNT(*) AS session_count,
                    COALESCE(SUM(total_cost), 0.0)
             FROM hook_sessions
-            WHERE date(started_at, '+8 hours') = '\(today)'
+            WHERE date(started_at, '\(SqliteTimeZone.offsetModifier)') = '\(today)'
             GROUP BY project
             ORDER BY SUM(total_tokens) DESC
             LIMIT \(limit)
@@ -433,7 +433,7 @@ public final class TokenUsageProvider: TokenStatsService {
             SELECT COUNT(*),
                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END)
             FROM hook_sessions
-            WHERE date(started_at, '+8 hours') = '\(today)'
+            WHERE date(started_at, '\(SqliteTimeZone.offsetModifier)') = '\(today)'
             """
         var todayTotal = 0, todayFailed = 0
         database.query(sql: todaySQL) { stmt in
@@ -446,7 +446,7 @@ public final class TokenUsageProvider: TokenStatsService {
             SELECT COALESCE(SUM(total_reasoning_tokens), 0),
                    COALESCE(SUM(total_tokens), 0)
             FROM hook_sessions
-            WHERE date(started_at, '+8 hours') = '\(today)'
+            WHERE date(started_at, '\(SqliteTimeZone.offsetModifier)') = '\(today)'
               AND total_tokens > 0
             """
         var reasoningTokens = 0, totalTokens = 0
