@@ -81,38 +81,63 @@ final class ProcessNetworkMonitor: @preconcurrency ProcessNetworkMonitoringServi
     private(set) var processSpeeds: [ProcessNetUsage] = []
     private var lastUpdateTime: Date?
 
+    /// 上次发起采样的时间（节流用）
+    private var lastPollDate: Date = .distantPast
+    /// 采样最小间隔 — nettop 单次采样约 1 秒，3 秒间隔避免频繁 fork 子进程
+    private static let pollInterval: TimeInterval = 3.0
+    /// 后台采样队列 — nettop 子进程在此队列执行，不阻塞主线程
+    private let workQueue = DispatchQueue(label: "com.networkmonitor.process-poll", qos: .utility)
+
     func poll() {
-        guard let snapshot = try? runNettopSnapshot(), !snapshot.isEmpty else { return }
-
+        // 节流：主线程每秒调用，但真正采样最多每 3 秒一次
         let now = Date()
-        let elapsed: Double
-        if let last = lastUpdateTime {
-            elapsed = now.timeIntervalSince(last)
-        } else {
-            elapsed = 1.0
-        }
-        lastUpdateTime = now
+        guard now.timeIntervalSince(lastPollDate) >= Self.pollInterval else { return }
+        lastPollDate = now
 
-        var speeds: [ProcessNetUsage] = []
-        for current in snapshot {
-            if let prev = previous[current.pid] {
-                let deltaIn = current.bytesIn >= prev.0 ? current.bytesIn - prev.0 : 0
-                let deltaOut = current.bytesOut >= prev.1 ? current.bytesOut - prev.1 : 0
-                let speedIn = Double(deltaIn) / elapsed
-                let speedOut = Double(deltaOut) / elapsed
-                if speedIn > 0 || speedOut > 0 {
-                    speeds.append(ProcessNetUsage(
-                        name: current.name, pid: current.pid,
-                        bytesIn: UInt64(speedIn), bytesOut: UInt64(speedOut)
-                    ))
-                }
+        let previousSnapshot = previous
+        let lastUpdate = lastUpdateTime
+        let defaultElapsed = Self.pollInterval
+
+        workQueue.async { [weak self] in
+            // 后台执行 nettop（约 1 秒），主线程不阻塞
+            guard let snapshot = try? runNettopSnapshot(), !snapshot.isEmpty else { return }
+
+            let sampledAt = Date()
+            let elapsed: Double
+            if let last = lastUpdate {
+                elapsed = sampledAt.timeIntervalSince(last)
+            } else {
+                elapsed = defaultElapsed
             }
-            previous[current.pid] = (current.bytesIn, current.bytesOut)
-        }
-        speeds.sort(by: { $0.total > $1.total })
-        processSpeeds = speeds
 
-        let currentPids = Set(snapshot.map { $0.pid })
-        previous = previous.filter { currentPids.contains($0.key) }
+            var speeds: [ProcessNetUsage] = []
+            var nextPrevious: [Int32: (UInt64, UInt64)] = previousSnapshot
+            for current in snapshot {
+                if let prev = nextPrevious[current.pid] {
+                    let deltaIn = current.bytesIn >= prev.0 ? current.bytesIn - prev.0 : 0
+                    let deltaOut = current.bytesOut >= prev.1 ? current.bytesOut - prev.1 : 0
+                    let speedIn = Double(deltaIn) / elapsed
+                    let speedOut = Double(deltaOut) / elapsed
+                    if speedIn > 0 || speedOut > 0 {
+                        speeds.append(ProcessNetUsage(
+                            name: current.name, pid: current.pid,
+                            bytesIn: UInt64(speedIn), bytesOut: UInt64(speedOut)
+                        ))
+                    }
+                }
+                nextPrevious[current.pid] = (current.bytesIn, current.bytesOut)
+            }
+            speeds.sort(by: { $0.total > $1.total })
+
+            let currentPids = Set(snapshot.map { $0.pid })
+            nextPrevious = nextPrevious.filter { currentPids.contains($0.key) }
+
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.previous = nextPrevious
+                self.lastUpdateTime = sampledAt
+                self.processSpeeds = speeds
+            }
+        }
     }
 }
