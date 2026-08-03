@@ -24,9 +24,3 @@ public protocol TokenStatsService: AnyObject, Sendable {
     /// 会话统计概览
     func fetchSessionOverviewStats() -> SessionOverviewStats
 }
-
-/// 系统数据统计查询服务
-public protocol SystemStatsService: AnyObject, Sendable {
-    /// 查询今日统计数据
-    func fetchTodayStats() -> TodayStats
-}

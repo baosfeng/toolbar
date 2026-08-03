@@ -22,21 +22,6 @@ public protocol DatabaseService: AnyObject, Sendable {
     /// 执行查询，每行回调一次 handler
     func query(sql: String, handler: @escaping (OpaquePointer) -> Void)
 
-    /// 写入一条系统采样数据
-    func writeSystemSample(timestamp: TimeInterval, cpuUsage: Double,
-                           memoryUsedMB: Int, memoryTotalMB: Int,
-                           networkRx: UInt64, networkTx: UInt64)
-
-    /// 写入击键批量数据
-    func writeKeyPressBatch(count: Int, timestamp: TimeInterval)
-
-    /// 写入一条事件
-    func writeEvent(type: EventType, appName: String?, bundleID: String?,
-                    windowTitle: String?, timestamp: TimeInterval)
-
-    /// 立即刷新缓冲区，将事件写入数据库
-    func flush()
-
     // MARK: - Reasonix Hook 操作
 
     /// 写入一条 Hook 事件流水

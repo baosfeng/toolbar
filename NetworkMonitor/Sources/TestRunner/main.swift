@@ -111,6 +111,48 @@ assertEqual(formatBytesFull(1_000_000), "1 MB")
 assertEqual(formatBytesFull(2_500_000_000), "2.5 GB")
 
 // MARK: - Test DatabaseManager (in-memory)
+// MARK: - Test ReasonixHookEvent JSON 解析
+
+print("\n🧪 Testing ReasonixHookEvent JSON 解析...")
+
+let validJSON = """
+{"event":"SessionStart","sessionId":"sess-123","project":"toolbar","model":"gpt-5","topic":"测试","turns":1,"timestamp":"2026-08-03T10:00:00.000Z","usage":{"promptTokens":100,"completionTokens":50,"totalTokens":150,"cost":0.01}}
+"""
+
+if let parsed = try? ReasonixHookEvent.from(jsonData: Data(validJSON.utf8)) {
+    assertEqual(parsed.eventType, .sessionStart, "event type")
+    assertEqual(parsed.sessionId, "sess-123", "session id")
+    assertEqual(parsed.totalTokens, 150, "total tokens")
+    assertEqual(parsed.turns, 1, "turns")
+    assertEqual(parsed.cost, 0.01, "cost")
+} else {
+    print("❌ valid JSON should parse")
+    exit(1)
+}
+
+// snake_case 兼容
+let snakeJSON = """
+{"event":"Stop","sessionId":"sess-456","usage":{"total_tokens":200,"prompt_tokens":100,"completion_tokens":100,"cost":0.02}}
+"""
+if let snake = try? ReasonixHookEvent.from(jsonData: Data(snakeJSON.utf8)) {
+    assertEqual(snake.eventType, .stop, "snake_case event type")
+    assertEqual(snake.totalTokens, 200, "total tokens from snake_case")
+    assertEqual(snake.cost, 0.02, "cost from snake_case")
+} else {
+    print("❌ snake_case JSON should parse")
+    exit(1)
+}
+
+// 缺少 event 字段 → 抛错
+do {
+    _ = try ReasonixHookEvent.from(jsonData: Data("{\"sessionId\":\"sess\"}".utf8))
+    print("❌ should throw for missing event field")
+    exit(1)
+} catch let err as ReasonixHookError {
+    assertEqual(err.localizedDescription.contains("event"), true, "missing field error")
+}
+
+// MARK: - Test DatabaseManager (in-memory)
 
 print("\n🧪 Testing DatabaseManager...")
 
@@ -134,7 +176,12 @@ func collectQuery(_ db: DatabaseManager, sql: String) -> [[String?]] {
     return rows
 }
 
-// RED: Write test, verify it works (code exists, so it should pass)
+/// 同步等待：serialQueue 上的 async 写入会排在 sync query 之前完成
+func drainQueue(_ db: DatabaseManager) {
+    db.query(sql: "SELECT 1") { _ in }
+}
+
+// Test: hook 表自动创建 + writeHookEvent 写入
 do {
     let db = DatabaseManager()
     db.initializeInMemory()
@@ -142,191 +189,94 @@ do {
 
     assertEqual(db.isReady, true, "in-memory db should be ready")
 
-    // Test: writeEvent + flush → data in events table
-    db.writeEvent(type: .appOpen, appName: "TestApp", bundleID: "com.test", timestamp: 1000)
-    db.writeEvent(type: .appClose, appName: "TestApp", bundleID: "com.test", timestamp: 2000)
-    db.flush()
+    let tables = collectQuery(db, sql: "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('hook_events','hook_sessions','hook_tool_calls') ORDER BY name")
+    assertEqual(tables.count, 3, "hook tables should be created")
 
-    let rows = collectQuery(db, sql: "SELECT event_type, app_name, app_bundle_id FROM events ORDER BY timestamp ASC")
-    assertEqual(rows.count, 2, "should have 2 events")
+    let event = try! ReasonixHookEvent.from(jsonData: Data(validJSON.utf8))
+    db.writeHookEvent(event: event)
+    drainQueue(db)
 
-    if rows.count >= 2 {
-        assertEqual(rows[0][0], "app_open", "first event type")
-        assertEqual(rows[0][1], "TestApp", "first event app name")
-        assertEqual(rows[0][2], "com.test", "first event bundle id")
-        assertEqual(rows[1][0], "app_close", "second event type")
-    }
-
-    print("✅ writeEvent + flush works")
-}
-
-// Test: writeSystemSample + flush + query extra_data JSON
-do {
-    let db = DatabaseManager()
-    db.initializeInMemory()
-    defer { db.close() }
-
-    db.writeSystemSample(timestamp: 3000, cpuUsage: 45.5, memoryUsedMB: 4096, memoryTotalMB: 16384, networkRx: 1000, networkTx: 500)
-    db.flush()
-
-    let rows = collectQuery(db, sql: "SELECT event_type, extra_data FROM events")
-    assertEqual(rows.count, 1, "should have 1 system sample")
+    let rows = collectQuery(db, sql: "SELECT session_id, event_type, total_tokens FROM hook_events")
+    assertEqual(rows.count, 1, "should have 1 hook event")
     if rows.count >= 1 {
-        assertEqual(rows[0][0], "system_sample", "event type is system_sample")
-        assertNotNil(rows[0][1], "extra_data should not be nil")
-        if let json = rows[0][1] {
-            // Verify JSON content
-            assertEqual(json.contains("\"cpu\":45.5") || json.contains("\"cpu\":45.5"), true, "extra_data contains cpu")
-            assertEqual(json.contains("\"memory_used_mb\":4096"), true, "extra_data contains memory_used_mb")
-        }
+        assertEqual(rows[0][0], "sess-123", "session id")
+        assertEqual(rows[0][1], "SessionStart", "event type")
+        assertEqual(rows[0][2], "150", "total tokens")
     }
 
-    print("✅ writeSystemSample + flush works")
+    print("✅ writeHookEvent works")
 }
 
-// Test: writeKeyPressBatch + flush
+// Test: upsertHookSession — SessionStart 创建，Stop 更新为累计最大值
 do {
     let db = DatabaseManager()
     db.initializeInMemory()
     defer { db.close() }
 
-    db.writeKeyPressBatch(count: 42, timestamp: 4000)
-    db.flush()
+    let start = try! ReasonixHookEvent.from(jsonData: Data(validJSON.utf8))
+    db.upsertHookSession(event: start)
+    drainQueue(db)
 
-    let rows = collectQuery(db, sql: "SELECT event_type, extra_data FROM events WHERE event_type = 'key_press'")
-    assertEqual(rows.count, 1, "should have 1 key_press event")
+    var rows = collectQuery(db, sql: "SELECT status, total_tokens FROM hook_sessions WHERE session_id='sess-123'")
+    assertEqual(rows.count, 1, "session should be created")
     if rows.count >= 1 {
-        assertEqual(rows[0][0], "key_press", "event type is key_press")
-        assertNotNil(rows[0][1], "extra_data should not be nil")
-        if let json = rows[0][1] {
-            assertEqual(json.contains("\"count\":42"), true, "extra_data contains count")
-        }
+        assertEqual(rows[0][0], "active", "initial status active")
+        assertEqual(rows[0][1], "150", "initial total tokens")
     }
 
-    print("✅ writeKeyPressBatch + flush works")
+    let stopJSON = """
+    {"event":"Stop","sessionId":"sess-123","turns":2,"timestamp":"2026-08-03T10:01:00.000Z","usage":{"promptTokens":200,"completionTokens":100,"totalTokens":300,"cost":0.02}}
+    """
+    let stop = try! ReasonixHookEvent.from(jsonData: Data(stopJSON.utf8))
+    db.upsertHookSession(event: stop)
+    drainQueue(db)
+
+    rows = collectQuery(db, sql: "SELECT total_tokens, total_cost FROM hook_sessions WHERE session_id='sess-123'")
+    assertEqual(rows[0][0], "300", "total tokens updated to max")
+    assertEqual(rows[0][1], "0.02", "cost updated to max")
+
+    print("✅ upsertHookSession works")
 }
 
-// Test: query with empty result
+// Test: startHookToolCall + finishHookToolCall
 do {
     let db = DatabaseManager()
     db.initializeInMemory()
     defer { db.close() }
 
-    let rows = collectQuery(db, sql: "SELECT * FROM events")
+    db.startHookToolCall(sessionId: "sess-1", turn: 1, toolName: "read_file",
+                         toolArgsJSON: "{\"path\":\"a.swift\"}", timestamp: "2026-08-03T10:00:00.000Z")
+    drainQueue(db)
+
+    var rows = collectQuery(db, sql: "SELECT tool_name, status, tool_args_json FROM hook_tool_calls")
+    assertEqual(rows.count, 1, "tool call should be created")
+    if rows.count >= 1 {
+        assertEqual(rows[0][0], "read_file", "tool name")
+        assertEqual(rows[0][1], "started", "initial status")
+        assertEqual(rows[0][2], "{\"path\":\"a.swift\"}", "tool args json")
+    }
+
+    db.finishHookToolCall(sessionId: "sess-1", turn: 1, toolName: "read_file",
+                          status: "success", resultPreview: "ok", error: nil,
+                          timestamp: "2026-08-03T10:00:05.000Z")
+    drainQueue(db)
+
+    rows = collectQuery(db, sql: "SELECT status, duration_ms FROM hook_tool_calls")
+    assertEqual(rows[0][0], "success", "status updated")
+    assertNotNil(rows[0][1], "duration should be computed")
+
+    print("✅ startHookToolCall + finishHookToolCall works")
+}
+
+// Test: 空表查询
+do {
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    defer { db.close() }
+
+    let rows = collectQuery(db, sql: "SELECT * FROM hook_events")
     assertEqual(rows.count, 0, "empty table should return 0 rows")
     print("✅ query returns empty for empty table")
-}
-
-// MARK: - Test StatsProvider
-
-print("\n🧪 Testing StatsProvider...")
-
-do {
-    let db = DatabaseManager()
-    db.initializeInMemory()
-    defer { db.close() }
-
-    let statsProvider = StatsProvider(database: db)
-    let startOfDay = Calendar.current.startOfDay(for: Date()).timeIntervalSince1970
-
-    // Insert test data via db.query (handler not called for INSERT)
-    let switchSQL = "INSERT INTO events (event_type, app_name, app_bundle_id, timestamp) VALUES ('app_switch', 'Browser', 'com.browser', \(startOfDay + 100)), ('app_switch', 'Editor', 'com.editor', \(startOfDay + 200)), ('app_switch', 'Browser', 'com.browser', \(startOfDay + 300)), ('app_switch', 'Editor', 'com.editor', \(startOfDay + 350))"
-    db.query(sql: switchSQL) { _ in }
-
-    // key_press event with count
-    db.query(sql: "INSERT INTO events (event_type, extra_data, timestamp) VALUES ('key_press', '{\"count\":10}', \(startOfDay + 150))") { _ in }
-
-    // screen events
-    db.query(sql: "INSERT INTO events (event_type, timestamp) VALUES ('screen_wake', \(startOfDay + 50)), ('screen_sleep', \(startOfDay + 200))") { _ in }
-
-    // system sample
-    db.query(sql: "INSERT INTO events (event_type, extra_data, timestamp) VALUES ('system_sample', '{\"cpu\":60.0,\"memory_used_mb\":2048,\"memory_total_mb\":16384,\"net_rx\":50000,\"net_tx\":25000}', \(startOfDay + 250))") { _ in }
-
-    // Debug: verify data was inserted
-    var totalEvents: Int32 = 0
-    db.query(sql: "SELECT COUNT(*) FROM events") { stmt in
-        totalEvents = sqlite3_column_int(stmt, 0)
-    }
-    assertEqual(Int(totalEvents), 8, "should have 8 events in table")
-
-    // Debug: check app_switch events specifically
-    var switchCount: Int32 = 0
-    var bundleIDs: [String] = []
-    db.query(sql: "SELECT event_type, app_bundle_id FROM events WHERE event_type = 'app_switch'") { stmt in
-        switchCount += 1
-        if let cStr = sqlite3_column_text(stmt, 1) {
-            bundleIDs.append(String(cString: cStr))
-        }
-    }
-    assertEqual(Int(switchCount), 4, "should have 4 app_switch events")
-    assertEqual(bundleIDs.count, 4, "should have 4 bundle IDs")
-    assertEqual(bundleIDs.filter { $0 == "com.browser" }.count, 2, "browser should appear twice")
-    assertEqual(bundleIDs.filter { $0 == "com.editor" }.count, 2, "editor should appear twice")
-
-    let stats = statsProvider.fetchTodayStats()
-
-    assertEqual(stats.activeSeconds > 0, true, "active seconds should be > 0")
-    assertEqual(stats.keyPressCount, 10, "key press count should be 10")
-    assertEqual(stats.screenOnSeconds > 0, true, "screen on seconds should be > 0")
-    assertEqual(stats.screenOffSeconds, 0, "screen off seconds should be 0 (no matching pair)")
-    assertEqual(stats.appRanking.count, 2, "should have 2 apps in ranking")
-    assertEqual(stats.cpuUsage, 60.0, "cpu usage should be 60.0")
-    assertEqual(stats.memoryUsedMB, 2048, "memory used should be 2048 MB")
-    assertEqual(stats.netDownloadSpeed, 50000, "net download should be 50000")
-    assertEqual(stats.netUploadSpeed, 25000, "net upload should be 25000")
-    assertEqual(stats.memoryTotalMB > 0, true, "total memory should be > 0")
-
-    print("✅ StatsProvider.fetchTodayStats() works with test data")
-}
-
-// Test: StatsProvider with no data → empty stats
-do {
-    let db = DatabaseManager()
-    db.initializeInMemory()
-    defer { db.close() }
-
-    let statsProvider = StatsProvider(database: db)
-    let stats = statsProvider.fetchTodayStats()
-
-    assertEqual(stats.activeSeconds, 0, "no events → 0 active seconds")
-    assertEqual(stats.keyPressCount, 0, "no events → 0 key presses")
-    assertEqual(stats.cpuUsage, 0, "no events → 0 cpu usage")
-    assertEqual(stats.appRanking.isEmpty, true, "no events → empty ranking")
-
-    print("✅ StatsProvider.fetchTodayStats() returns empty stats with no data")
-}
-
-// MARK: - Test ReportGenerator
-
-print("\n🧪 Testing ReportGenerator...")
-
-do {
-    let db = DatabaseManager()
-    db.initializeInMemory()
-    defer { db.close() }
-
-    let statsProvider = StatsProvider(database: db)
-    let reportGen = ReportGenerator(database: db, statsProvider: statsProvider)
-
-    // Insert some data
-    let startOfDay = Calendar.current.startOfDay(for: Date()).timeIntervalSince1970
-    db.query(sql: "INSERT INTO events (event_type, app_name, app_bundle_id, timestamp) VALUES ('app_switch', 'TestApp', 'com.test', \(startOfDay + 100)), ('app_switch', 'TestApp', 'com.test', \(startOfDay + 120))") { _ in }
-    db.query(sql: "INSERT INTO events (event_type, extra_data, timestamp) VALUES ('key_press', '{\"count\":5}', \(startOfDay + 150))") { _ in }
-    db.query(sql: "INSERT INTO events (event_type, extra_data, timestamp) VALUES ('system_sample', '{\"cpu\":30.0,\"memory_used_mb\":1024,\"memory_total_mb\":16384,\"net_rx\":1000,\"net_tx\":500}', \(startOfDay + 200))") { _ in }
-
-    let reportPath = reportGen.generateDailyReport()
-    assertNotNil(reportPath, "daily report should be generated")
-    if let path = reportPath {
-        assertEqual(FileManager.default.fileExists(atPath: path), true, "report file should exist")
-        if let content = try? String(contentsOfFile: path, encoding: .utf8) {
-            assertEqual(content.contains("TestApp"), true, "report should contain app name")
-            assertEqual(content.contains("5"), true, "report should contain keypress count")
-            print("✅ ReportGenerator.generateDailyReport() works")
-        } else {
-            print("❌ cannot read report file")
-            exit(1)
-        }
-    }
 }
 
 // MARK: - Done
