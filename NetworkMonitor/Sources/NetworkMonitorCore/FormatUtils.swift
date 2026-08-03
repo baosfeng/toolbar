@@ -23,6 +23,23 @@ public enum CurrencyConfig {
     }
 }
 
+// MARK: - 时区配置
+
+/// SQLite 时区偏移 — 统计 SQL 统一使用本地时区（而非硬编码 +8 小时）
+///
+/// SQLite 的 `date()` 函数接受 `'+N hours'` 形式的修饰符。
+/// 表达式索引的表达式必须与查询完全一致才能命中，因此
+/// 索引创建与查询语句共用本配置（App 启动时计算一次，时区变更需重启）。
+public enum SqliteTimeZone {
+    /// 当前时区相对 UTC 的偏移修饰符，如 "+8 hours"、"-5 hours"、"+5.5 hours"
+    public static var offsetModifier: String {
+        let seconds = TimeZone.current.secondsFromGMT()
+        let hours = Double(seconds) / 3600.0
+        let value = String(format: "%g", hours)
+        return value.hasPrefix("-") ? "\(value) hours" : "+\(value) hours"
+    }
+}
+
 // MARK: - 格式化工具
 
 /// 通用的格式化工具方法集

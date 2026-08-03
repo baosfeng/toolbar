@@ -311,6 +311,19 @@ do {
     print("✅ cost USD→CNY 迁移 works")
 }
 
+// Test: 时区与货币配置
+do {
+    let offset = SqliteTimeZone.offsetModifier
+    assertEqual(offset.hasSuffix(" hours"), true, "offset should be 'N hours' format, got: \(offset)")
+
+    // 汇率默认 7.2，可被 UserDefaults 覆盖
+    UserDefaults.standard.removeObject(forKey: CurrencyConfig.rateOverrideKey)
+    assertEqual(CurrencyConfig.usdToCnyRate, 7.2, "default rate 7.2")
+    assertEqual(CurrencyConfig.usdToCny(1.0), 7.2, "usdToCny conversion")
+
+    print("✅ 时区与货币配置 works")
+}
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")
