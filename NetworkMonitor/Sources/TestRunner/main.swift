@@ -348,6 +348,144 @@ do {
     print("✅ 过期数据清理 works")
 }
 
+// MARK: - Test TokenUsageProvider（核心业务）
+
+print("\n🧪 Testing TokenUsageProvider...")
+
+// Helper: 构造今天的 ISO8601 时间戳（UTC）
+func todayISO(_ addingMinutes: Int = 0) -> String {
+    let fmt = ISO8601DateFormatter()
+    fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return fmt.string(from: Date().addingTimeInterval(TimeInterval(addingMinutes * 60)))
+}
+
+func makeHookEvent(type: ReasonixHookEventType, sessionId: String, tokens: Int, cost: Double,
+                   model: String = "gpt-5", project: String = "toolbar") throws -> ReasonixHookEvent {
+    let json = """
+    {"event":"\(type.rawValue)","sessionId":"\(sessionId)","model":"\(model)","project":"\(project)","timestamp":"\(todayISO())","usage":{"promptTokens":\(tokens / 2),"completionTokens":\(tokens / 2),"totalTokens":\(tokens),"cost":\(cost)}}
+    """
+    return try ReasonixHookEvent.from(jsonData: Data(json.utf8))
+}
+
+func drainDB(_ db: DatabaseManager) {
+    db.query(sql: "SELECT 1") { _ in }
+}
+
+// 今日统计：总计/汇总/每小时/历史/模型/项目排行
+do {
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    defer { db.close() }
+    let provider = TokenUsageProvider(database: db)
+
+    let stop = try makeHookEvent(type: .stop, sessionId: "s1", tokens: 100, cost: 0.01)
+    db.writeHookEvent(event: stop)
+    db.upsertHookSession(event: stop)
+    drainDB(db)
+
+    let total = provider.fetchTodayTotal()
+    assertEqual(total.tokens, 100, "today total tokens")
+    assertEqual(total.cost, 0.01, "today total cost")
+
+    let summary = provider.fetchTodaySummary()
+    assertEqual(summary.totalTokens, 100, "summary total tokens")
+    assertEqual(summary.byModel.count, 1, "summary by model")
+
+    let hourly = provider.fetchHourlyBreakdown(dateString: nil)
+    assertEqual(hourly.count, 24, "hourly filled 24 hours")
+    assertEqual(hourly.reduce(0) { $0 + $1.totalTokens }, 100, "hourly sum equals total")
+
+    let history = provider.fetchDailyHistory(days: 7)
+    assertEqual(history.count, 7, "daily history filled 7 days")
+
+    let models = provider.fetchModelRanking(limit: 5)
+    assertEqual(models.count, 1, "model ranking count")
+    assertEqual(models[0].model, "gpt-5", "model name")
+
+    let projects = provider.fetchProjectRanking(limit: 5)
+    assertEqual(projects.count, 1, "project ranking count")
+    assertEqual(projects[0].project, "toolbar", "project name")
+
+    print("✅ TokenUsageProvider 今日统计 works")
+}
+
+// 工具调用：排行 + 最近调用
+do {
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    defer { db.close() }
+    let provider = TokenUsageProvider(database: db)
+
+    db.startHookToolCall(sessionId: "s1", turn: 1, toolName: "read_file", toolArgsJSON: nil, timestamp: todayISO())
+    db.startHookToolCall(sessionId: "s1", turn: 2, toolName: "read_file", toolArgsJSON: nil, timestamp: todayISO())
+    db.startHookToolCall(sessionId: "s1", turn: 3, toolName: "bash", toolArgsJSON: nil, timestamp: todayISO())
+    drainDB(db)
+    db.finishHookToolCall(sessionId: "s1", turn: 1, toolName: "read_file", status: "success", resultPreview: nil, error: nil, timestamp: todayISO(1))
+    db.finishHookToolCall(sessionId: "s1", turn: 2, toolName: "read_file", status: "failure", resultPreview: nil, error: "boom", timestamp: todayISO(2))
+    db.finishHookToolCall(sessionId: "s1", turn: 3, toolName: "bash", status: "success", resultPreview: nil, error: nil, timestamp: todayISO(3))
+    drainDB(db)
+
+    let ranking = provider.fetchToolCallRanking(limit: 5)
+    assertEqual(ranking.count, 2, "tool ranking count")
+    let readFile = ranking.first { $0.toolName == "read_file" }
+    assertEqual(readFile?.callCount, 2, "read_file call count")
+    assertEqual(readFile?.successRate, 50, "read_file success rate")
+    let bash = ranking.first { $0.toolName == "bash" }
+    assertEqual(bash?.successRate, 100, "bash success rate")
+
+    let recent = provider.fetchRecentToolCalls(limit: 5)
+    assertEqual(recent.count, 3, "recent tool calls")
+
+    print("✅ TokenUsageProvider 工具统计 works")
+}
+
+// 会话概览：StopFailure 应标记 failed
+do {
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    defer { db.close() }
+    let provider = TokenUsageProvider(database: db)
+
+    let active = try makeHookEvent(type: .sessionStart, sessionId: "s-active", tokens: 0, cost: 0)
+    let failed = try makeHookEvent(type: .stopFailure, sessionId: "s-failed", tokens: 50, cost: 0.01)
+    db.upsertHookSession(event: active)
+    db.upsertHookSession(event: failed)
+    drainDB(db)
+
+    var statuses: [String] = []
+    db.query(sql: "SELECT status FROM hook_sessions ORDER BY session_id") { stmt in
+        statuses.append(String(cString: sqlite3_column_text(stmt, 0)))
+    }
+    assertEqual(statuses.count, 2, "two sessions")
+    assertEqual(statuses.contains("failed"), true, "StopFailure session marked failed")
+
+    let stats = provider.fetchSessionOverviewStats()
+    assertEqual(stats.activeSessions, 1, "active sessions")
+    assertEqual(stats.todayTotal, 2, "today sessions")
+    assertEqual(stats.todayFailed, 1, "today failed")
+    assertEqual(stats.failRate, 50, "fail rate")
+
+    print("✅ TokenUsageProvider 会话概览 works")
+}
+
+// 空库容错
+do {
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    defer { db.close() }
+    let provider = TokenUsageProvider(database: db)
+
+    assertEqual(provider.fetchTodayTotal().tokens, 0, "empty total")
+    assertEqual(provider.fetchTodaySummary().totalTokens, 0, "empty summary")
+    assertEqual(provider.fetchHourlyBreakdown(dateString: nil).count, 24, "empty hourly")
+    assertEqual(provider.fetchDailyHistory(days: 7).count, 7, "empty history")
+    assertEqual(provider.fetchToolCallRanking(limit: 5).isEmpty, true, "empty ranking")
+    assertEqual(provider.fetchModelRanking(limit: 5).isEmpty, true, "empty models")
+    assertEqual(provider.fetchSessionOverviewStats().activeSessions, 0, "empty active")
+
+    print("✅ TokenUsageProvider 空库容错 works")
+}
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")
