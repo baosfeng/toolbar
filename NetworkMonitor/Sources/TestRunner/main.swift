@@ -324,6 +324,30 @@ do {
     print("✅ 时区与货币配置 works")
 }
 
+// Test: 过期数据清理（90 天保留）
+do {
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    defer { db.close() }
+
+    // 插入一条 200 天前的旧事件和一条今天的事件
+    let oldDate = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-200 * 86400))
+    let todayDate = ISO8601DateFormatter().string(from: Date())
+    db.query(sql: """
+        INSERT INTO hook_events (event_type, event_type_cn, session_id, total_tokens, timestamp, created_at)
+        VALUES ('Stop', '轮次完成', 'sess-old', 10, '\(oldDate)', '\(oldDate)'),
+               ('Stop', '轮次完成', 'sess-new', 20, '\(todayDate)', '\(todayDate)')
+        """) { _ in }
+
+    db.purgeExpiredData()
+
+    let rows = collectQuery(db, sql: "SELECT session_id FROM hook_events ORDER BY session_id")
+    assertEqual(rows.count, 1, "old event should be purged")
+    assertEqual(rows[0][0], "sess-new", "new event should remain")
+
+    print("✅ 过期数据清理 works")
+}
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")
