@@ -22,7 +22,7 @@ extension DatabaseManager: TokenUsageRepository {
             defer { sqlite3_finalize(stmt) }
 
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-                print("⚠️ token_usage 写入准备失败: \(String(cString: sqlite3_errmsg(db)))")
+                self?.logger.warning("token_usage 写入准备失败: \(String(cString: sqlite3_errmsg(db)))")
                 return
             }
 
@@ -40,7 +40,7 @@ extension DatabaseManager: TokenUsageRepository {
             sqlite3_bind_int(stmt, 12, record.isTurn ? 1 : 0)
 
             if sqlite3_step(stmt) != SQLITE_DONE {
-                print("⚠️ token_usage 写入失败: \(String(cString: sqlite3_errmsg(db)))")
+                self?.logger.warning("token_usage 写入失败: \(String(cString: sqlite3_errmsg(db)))")
             }
         }
     }

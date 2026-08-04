@@ -24,7 +24,7 @@ extension DatabaseManager: HookEventRepository {
             defer { sqlite3_finalize(stmt) }
 
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-                print("⚠️ hook_events 写入准备失败: \(String(cString: sqlite3_errmsg(db)))")
+                self?.logger.warning("hook_events 写入准备失败: \(String(cString: sqlite3_errmsg(db)))")
                 return
             }
 
@@ -45,7 +45,7 @@ extension DatabaseManager: HookEventRepository {
             sqlite3_bind_text(stmt, 15, (now as NSString).utf8String, -1, nil)
 
             if sqlite3_step(stmt) != SQLITE_DONE {
-                print("⚠️ hook_events 写入失败: \(String(cString: sqlite3_errmsg(db)))")
+                self?.logger.warning("hook_events 写入失败: \(String(cString: sqlite3_errmsg(db)))")
             }
         }
     }
@@ -116,7 +116,7 @@ extension DatabaseManager: HookEventRepository {
 
                 guard sqlite3_prepare_v2(db, updateSQL, -1, &updateStmt, nil) == SQLITE_OK,
                       sqlite3_step(updateStmt) == SQLITE_DONE else {
-                    print("⚠️ hook_sessions 更新失败: \(String(cString: sqlite3_errmsg(db)))")
+                    self?.logger.warning("hook_sessions 更新失败: \(String(cString: sqlite3_errmsg(db)))")
                     return
                 }
             } else {
@@ -137,7 +137,7 @@ extension DatabaseManager: HookEventRepository {
                 defer { sqlite3_finalize(insertStmt) }
 
                 guard sqlite3_prepare_v2(db, insertSQL, -1, &insertStmt, nil) == SQLITE_OK else {
-                    print("⚠️ hook_sessions 插入准备失败: \(String(cString: sqlite3_errmsg(db)))")
+                    self?.logger.warning("hook_sessions 插入准备失败: \(String(cString: sqlite3_errmsg(db)))")
                     return
                 }
 
@@ -161,7 +161,7 @@ extension DatabaseManager: HookEventRepository {
                 sqlite3_bind_text(insertStmt, 14, (now as NSString).utf8String, -1, nil)
 
                 if sqlite3_step(insertStmt) != SQLITE_DONE {
-                    print("⚠️ hook_sessions 插入失败: \(String(cString: sqlite3_errmsg(db)))")
+                    self?.logger.warning("hook_sessions 插入失败: \(String(cString: sqlite3_errmsg(db)))")
                 }
             }
         }
@@ -181,7 +181,7 @@ extension DatabaseManager: HookEventRepository {
             defer { sqlite3_finalize(stmt) }
 
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-                print("⚠️ hook_tool_calls 写入准备失败: \(String(cString: sqlite3_errmsg(db)))")
+                self?.logger.warning("hook_tool_calls 写入准备失败: \(String(cString: sqlite3_errmsg(db)))")
                 return
             }
 
@@ -192,7 +192,7 @@ extension DatabaseManager: HookEventRepository {
             sqlite3_bind_text(stmt, 5, (timestamp as NSString).utf8String, -1, nil)
 
             if sqlite3_step(stmt) != SQLITE_DONE {
-                print("⚠️ hook_tool_calls 写入失败: \(String(cString: sqlite3_errmsg(db)))")
+                self?.logger.warning("hook_tool_calls 写入失败: \(String(cString: sqlite3_errmsg(db)))")
             }
         }
     }
@@ -221,7 +221,7 @@ extension DatabaseManager: HookEventRepository {
             defer { sqlite3_finalize(stmt) }
 
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-                print("⚠️ hook_tool_calls 更新准备失败: \(String(cString: sqlite3_errmsg(db)))")
+                self?.logger.warning("hook_tool_calls 更新准备失败: \(String(cString: sqlite3_errmsg(db)))")
                 return
             }
 
@@ -240,7 +240,7 @@ extension DatabaseManager: HookEventRepository {
             }
 
             if sqlite3_step(stmt) != SQLITE_DONE {
-                print("⚠️ hook_tool_calls 更新失败: \(String(cString: sqlite3_errmsg(db)))")
+                self?.logger.warning("hook_tool_calls 更新失败: \(String(cString: sqlite3_errmsg(db)))")
             }
         }
     }

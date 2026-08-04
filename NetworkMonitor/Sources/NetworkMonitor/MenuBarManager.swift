@@ -26,6 +26,8 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     private var reasonixHookMonitor: ReasonixHookMonitor?
     private let tokenUsageProvider: any TokenStatsService
     private let trafficTracker: any TrafficTrackingService
+    /// 日志服务
+    private let logger: LoggingService
     private var lastHistoryHash: String = ""
     private var lastHourlyHash: String = ""
     /// Hook 数据变更观察者（事件总线订阅，用于立即刷新统计）
@@ -81,13 +83,15 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
         processMonitor: any ProcessNetworkMonitoringService,
         database: any AppDatabase,
         trafficTracker: any TrafficTrackingService,
-        tokenUsageProvider: any TokenStatsService
+        tokenUsageProvider: any TokenStatsService,
+        logger: LoggingService = AppContext.shared.logger
     ) {
         self.monitor = networkMonitor
         self.processMonitor = processMonitor
         self.databaseManager = database
         self.trafficTracker = trafficTracker
         self.tokenUsageProvider = tokenUsageProvider
+        self.logger = logger
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         startReasonixHook()
@@ -414,7 +418,7 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
         // 启动时立即全量导入 stats JSONL（兜底：即使暂无 hook 事件也保证最新数据落库）
         StatsImporter(database: databaseManager).syncAll()
 
-        print("📡 Reasonix Hook 监听器已启动")
+        logger.info("Reasonix Hook 监听器已启动")
     }
 
     // MARK: - Token 用量（一级 + 历史二级菜单）
@@ -663,7 +667,7 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
                 try SMAppService.mainApp.register()
             }
         } catch {
-            print("Failed to toggle launch-at-startup: \(error)")
+            logger.error("Failed to toggle launch-at-startup: \(error)")
         }
 
         if let item = statusItem.menu?.item(withTag: launchAtStartupTag) {
