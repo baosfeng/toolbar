@@ -103,6 +103,24 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 - 提交前必须 ask 工具经用户确认（会话级豁免一次后自动授权）
 - 提交顺序：测试 → 编译 → 打包（如需）→ 提交
 
+## 异常处理规范
+
+- 禁止直接抛出 `Error`/字符串作为异常，必须定义明确异常类型（如 `ReasonixHookError`）
+- 异常按领域划分，禁止跨模块混用；禁止吞没异常（catch 后必须 `logger.error` 或重新抛出）
+- 不过度细化异常类型，用错误描述区分场景
+
+## 版本号管理
+
+- 语义化版本 `主.次.修订`；版本号定义在 `Info.plist` 与 `build-app.sh`
+- 小改动（bug 修复/文档）→ 修订号 +1；新功能 → 次版本 +1；破坏性变更 → 主版本 +1
+- 发版流程：全部测试通过 → 更新版本号 → 编译验证 → 提交 → `git tag vX.Y.Z`
+
+## 代码查询规范
+
+- 代码查询/符号搜索/调用关系分析**必须使用 codebase-memory MCP 知识图谱**（`search_graph` / `trace_path` / `get_code_snippet` / `get_architecture`），禁止直接 grep/glob/lsp 做符号搜索
+- 原始工具仅限：文件读写（read_file/edit_file）、编译诊断（lsp_diagnostics）、构建测试验证（bash）
+- 知识图谱未索引时先 `index_repository`；显著代码结构变更后建议重新索引
+
 ## 自查清单（写完代码逐项过）
 
 - [ ] 依赖协议而非具体实现？
