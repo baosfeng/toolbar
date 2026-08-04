@@ -5,7 +5,7 @@ description: 本项目 UI 设计规范：Design Tokens（系统色/字体/SF Sym
 
 # UI 设计规范（NetworkMonitor / macMonitor）
 
-本项目 UI（菜单栏、下拉菜单、Token 图表）专属设计规范。**开发或修改任何 UI 代码前必须加载本 skill。** 由 `docs/开发指南/UI设计规范.md` 迁入（2026-08 文档瘦身），后续 UI 规范更新一律写在本 skill。
+本项目 UI（菜单栏、下拉菜单、Token 图表）专属设计规范。**开发或修改任何 UI 代码前必须加载本 skill。** 由原「UI 设计规范」文档迁入（2026-08 文档瘦身），后续 UI 规范更新一律写在本 skill。
 
 ## 设计原则
 
