@@ -110,6 +110,142 @@ assertEqual(formatBytesFull(1024), "1 KB")
 assertEqual(formatBytesFull(1_000_000), "1 MB")
 assertEqual(formatBytesFull(2_500_000_000), "2.5 GB")
 
+// MARK: - Test SessionSidecarData.parseTelemetry（上游平铺格式）
+
+print("\n🧪 Testing SessionSidecarData.parseTelemetry...")
+
+do {
+    // 上游 desktop sessionUsageStats 平铺格式（顶层直接是字段）
+    let flatJSON = """
+    {"promptTokens":100,"completionTokens":50,"totalTokens":150,"reasoningTokens":30,
+     "cacheHitTokens":80,"cacheMissTokens":20,"requestCount":3,"elapsedMs":1200,
+     "sessionCost":0.05,"sessionCurrency":"USD","sessionCostUsd":0.05}
+    """
+    let data = SessionSidecarData.parseTelemetry(Data(flatJSON.utf8))
+    assertEqual(data.promptTokens, 100, "flat prompt tokens")
+    assertEqual(data.completionTokens, 50, "flat completion tokens")
+    assertEqual(data.totalTokens, 150, "flat total tokens")
+    assertEqual(data.reasoningTokens, 30, "flat reasoning tokens")
+    assertEqual(data.cost, 0.05, "flat cost uses sessionCostUsd")
+
+    print("✅ parseTelemetry 平铺格式 works")
+}
+
+do {
+    // 上游平铺格式 + snake_case 字段名
+    let snakeJSON = """
+    {"prompt_tokens":200,"completion_tokens":100,"total_tokens":300,"reasoning_tokens":50,
+     "session_cost":0.1,"session_currency":"USD"}
+    """
+    let data = SessionSidecarData.parseTelemetry(Data(snakeJSON.utf8))
+    assertEqual(data.totalTokens, 300, "snake_case total tokens")
+    assertEqual(data.promptTokens, 200, "snake_case prompt tokens")
+    assertEqual(data.cost, 0.1, "snake_case cost")
+
+    print("✅ parseTelemetry snake_case works")
+}
+
+do {
+    // 货币归一：sessionCurrency=CNY 且无 sessionCostUsd → 按汇率反算 USD
+    let cnyJSON = """
+    {"totalTokens":400,"sessionCost":7.2,"sessionCurrency":"CNY"}
+    """
+    let data = SessionSidecarData.parseTelemetry(Data(cnyJSON.utf8))
+    assertEqual(data.totalTokens, 400, "CNY case total tokens")
+    assertEqual(data.cost, 1.0, "CNY cost converted back to USD (7.2/7.2)")
+
+    print("✅ parseTelemetry CNY 货币归一 works")
+}
+
+do {
+    // 旧版 usage 嵌套对象格式仍兼容
+    let legacyJSON = """
+    {"event":"Stop","sessionId":"sess-old","usage":{"promptTokens":50,"completionTokens":50,"totalTokens":100,"cost":0.02}}
+    """
+    let data = SessionSidecarData.parseTelemetry(Data(legacyJSON.utf8))
+    assertEqual(data.totalTokens, 100, "legacy nested usage total tokens")
+    assertEqual(data.cost, 0.02, "legacy nested usage cost")
+
+    print("✅ parseTelemetry 旧版嵌套格式 works")
+}
+
+do {
+    // 空/坏数据 → 全 0
+    let empty = SessionSidecarData.parseTelemetry(Data("not json".utf8))
+    assertEqual(empty.totalTokens, 0, "bad json yields zeros")
+    assertEqual(empty.cost, 0.0, "bad json cost zero")
+
+    print("✅ parseTelemetry 坏数据容错 works")
+}
+
+// MARK: - Test ReasonixStatsLoader（官方 stats JSONL）
+
+print("\n🧪 Testing ReasonixStatsLoader...")
+
+do {
+    let dir = NSTemporaryDirectory() + "stats-test-\(UUID().uuidString)"
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(atPath: dir) }
+
+    // 与上游 stats.record 完全一致的 JSON 行
+    let day = "2026-08-03"
+    let lines = """
+    {"ts":"2026-08-03T10:00:00+08:00","model":"deepseek/deepseek-v4-flash","source":"desktop","prompt":100,"completion":50,"reasoning":20,"cache_hit":80,"cache_miss":70,"total":150}
+    {"ts":"2026-08-03T10:05:00+08:00","model":"deepseek/deepseek-v4-pro","source":"cli","prompt":200,"completion":100,"total":300}
+    {"ts":"2026-08-03T10:06:00+08:00","source":"desktop","turn":true}
+    {"ts":"2026-08-03T10:07:00+08:00","total":        // torn line（崩溃残留）应跳过
+    """
+    try! lines.write(toFile: "\(dir)/\(day).jsonl", atomically: true, encoding: .utf8)
+
+    let records = ReasonixStatsLoader.loadAll(statsDir: dir)
+    assertEqual(records.count, 3, "3 valid records, torn line skipped")
+
+    let total = ReasonixStatsLoader.totalTokens(statsDir: dir)
+    assertEqual(total, 450, "total excludes turn marker (150+300)")
+
+    if records.count >= 1 {
+        assertEqual(records[0].model, "deepseek/deepseek-v4-flash", "model parsed")
+        assertEqual(records[0].cacheHitTokens, 80, "cache_hit parsed")
+        assertEqual(records[0].cacheMissTokens, 70, "cache_miss parsed")
+        assertEqual(records[2].isTurn, true, "turn marker parsed")
+    }
+
+    print("✅ ReasonixStatsLoader works")
+}
+
+do {
+    // 目录不存在 → 空结果不崩溃
+    let total = ReasonixStatsLoader.totalTokens(statsDir: "/nonexistent/stats-dir")
+    assertEqual(total, 0, "missing dir yields 0")
+
+    print("✅ ReasonixStatsLoader 空目录容错 works")
+}
+
+// MARK: - Test ReasonixPath.workspaceSlug（对齐上游 config.WorkspaceSlug）
+
+print("\n🧪 Testing ReasonixPath.workspaceSlug...")
+
+do {
+    let slug = ReasonixPath.workspaceSlug(cwd: "<repo>")
+    assertEqual(slug, "-Users-bsfeng-IdeaProjects-toolbar", "slashes replaced with dashes")
+}
+
+do {
+    // 反斜杠与冒号同样替换（Windows 风格路径）
+    let slug = ReasonixPath.workspaceSlug(cwd: "C:\\Users\\dev\\project")
+    assertEqual(slug, "C--Users-dev-project", "backslash and colon replaced")
+}
+
+do {
+    // 超长路径：截断到 255 字节 + FNV-1a 16 位 hex 后缀
+    let long = String(repeating: "a", count: 300)
+    let slug = ReasonixPath.workspaceSlug(cwd: long)
+    assertEqual(slug.utf8.count, 255, "slug capped at 255 bytes")
+    assertEqual(slug.hasSuffix("-\(String(format: "%016x", ReasonixPath.fnv1a64(long)))"), true, "hash suffix appended")
+
+    print("✅ workspaceSlug 超长路径截断 works")
+}
+
 // MARK: - Test DatabaseManager (in-memory)
 // MARK: - Test ReasonixHookEvent JSON 解析
 
