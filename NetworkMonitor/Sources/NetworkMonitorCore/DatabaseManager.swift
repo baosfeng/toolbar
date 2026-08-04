@@ -315,6 +315,27 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
                 duration_ms INTEGER
             );
             """,
+
+            // Token 用量记录表（stats JSONL 导入，统计唯一权威数据源）
+            """
+            CREATE TABLE IF NOT EXISTS token_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL DEFAULT 'reasonix',  -- 数据来源：reasonix/claude/codex
+                date TEXT NOT NULL,                       -- 本地日期 YYYY-MM-DD（stats 文件名）
+                hour INTEGER NOT NULL,                    -- 本地小时 0-23（ts 解析）
+                ts TEXT NOT NULL,                         -- 原始 ISO8601 时间戳（自带时区）
+                model TEXT NOT NULL DEFAULT '',
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_hit_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                is_turn INTEGER NOT NULL DEFAULT 0,       -- 1 = TurnDone 标记行（不计入统计）
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(source, date, ts, model, total_tokens)  -- 幂等：重复导入自动忽略
+            );
+            """,
         ]
 
         for sql in hookStatements {
@@ -367,6 +388,10 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_session_turn ON hook_tool_calls(session_id, turn);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_status ON hook_tool_calls(status);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_started ON hook_tool_calls(started_at);",
+            // token_usage 查询索引（统计按 date / date+hour / model 聚合）
+            "CREATE INDEX IF NOT EXISTS idx_token_usage_date ON token_usage(date, is_turn);",
+            "CREATE INDEX IF NOT EXISTS idx_token_usage_date_hour ON token_usage(date, hour, is_turn);",
+            "CREATE INDEX IF NOT EXISTS idx_token_usage_model ON token_usage(date, model, is_turn);",
         ]
 
         for sql in hookIndexes {
@@ -377,6 +402,47 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
                   sqlite3_step(stmt) == SQLITE_DONE else {
                 print("⚠️ Hook 索引创建失败: \(String(cString: sqlite3_errmsg(db)))")
                 continue
+            }
+        }
+    }
+
+    // MARK: - Token 用量记录（stats 导入）
+
+    /// 插入一条 token 用量记录（幂等：UNIQUE 冲突时自动忽略，重复导入安全）
+    public func insertTokenUsage(source: String, date: String, hour: Int, record: ReasonixStatsRecord) {
+        let sql = """
+        INSERT OR IGNORE INTO token_usage
+            (source, date, hour, ts, model,
+             prompt_tokens, completion_tokens, reasoning_tokens,
+             cache_hit_tokens, cache_miss_tokens, total_tokens, is_turn)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """
+
+        serialQueue.async { [weak self] in
+            guard let db = self?.db else { return }
+            var stmt: OpaquePointer?
+            defer { sqlite3_finalize(stmt) }
+
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                print("⚠️ token_usage 写入准备失败: \(String(cString: sqlite3_errmsg(db)))")
+                return
+            }
+
+            sqlite3_bind_text(stmt, 1, (source as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 2, (date as NSString).utf8String, -1, nil)
+            sqlite3_bind_int(stmt, 3, Int32(hour))
+            sqlite3_bind_text(stmt, 4, (record.ts as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 5, (record.model as NSString).utf8String, -1, nil)
+            sqlite3_bind_int(stmt, 6, Int32(record.promptTokens))
+            sqlite3_bind_int(stmt, 7, Int32(record.completionTokens))
+            sqlite3_bind_int(stmt, 8, Int32(record.reasoningTokens))
+            sqlite3_bind_int(stmt, 9, Int32(record.cacheHitTokens))
+            sqlite3_bind_int(stmt, 10, Int32(record.cacheMissTokens))
+            sqlite3_bind_int(stmt, 11, Int32(record.totalTokens))
+            sqlite3_bind_int(stmt, 12, record.isTurn ? 1 : 0)
+
+            if sqlite3_step(stmt) != SQLITE_DONE {
+                print("⚠️ token_usage 写入失败: \(String(cString: sqlite3_errmsg(db)))")
             }
         }
     }

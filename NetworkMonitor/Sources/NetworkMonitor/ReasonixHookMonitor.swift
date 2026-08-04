@@ -43,11 +43,14 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     private var slugCache: [String: String] = [:]
     /// sessionId → 上一次 Stop 累计值缓存（避免历史坏数据导致增量计算错误）
     private var lastStopTotal: [String: (tokens: Int, cost: Double)] = [:]
+    /// stats JSONL 导入器 — 每次事件触发后增量导入 token 用量（幂等 + 节流）
+    private let statsImporter: StatsImporter
 
     // MARK: - 初始化
 
     init(database: DatabaseService) {
         self.database = database
+        self.statsImporter = StatsImporter(database: database)
     }
 
     deinit {
@@ -380,6 +383,10 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
                 )
                 print("🔧 工具调用结束: \(toolName) [\(status)]")
             }
+
+            // 4. 每次事件后增量导入官方 stats JSONL（幂等去重 + 3 秒节流），
+            //    保证菜单栏统计与 reasonix 软件同源、实时。
+            statsImporter.syncIfNeeded()
 
         } catch let error as ReasonixHookError {
             print("⚠️ Hook 数据解析失败: \(error.localizedDescription)")
