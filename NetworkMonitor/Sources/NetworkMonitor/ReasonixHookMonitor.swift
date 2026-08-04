@@ -41,16 +41,24 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     private let sidecarCache = SessionSidecarCache(maxCount: 100, ttl: 3600)
     /// sessionId → project slug 缓存（cwd 为空时避免重复扫描目录）
     private var slugCache: [String: String] = [:]
-    /// sessionId → 上一次 Stop 累计值缓存（避免历史坏数据导致增量计算错误）
-    private var lastStopTotal: [String: (tokens: Int, cost: Double)] = [:]
-    /// stats JSONL 导入器 — 每次事件触发后增量导入 token 用量（幂等 + 节流）
-    private let statsImporter: StatsImporter
+    /// 事件分发器 — 将解析后的事件路由到已注册的处理器
+    private let dispatcher = HookEventDispatcher()
 
     // MARK: - 初始化
 
     init(database: any AppDatabase) {
         self.database = database
-        self.statsImporter = StatsImporter(database: database)
+        registerHandlers(database: database)
+    }
+
+    /// 注册事件处理器（按执行顺序：先落库，再工具调用，再通知，最后同步 stats）
+    private func registerHandlers(database: any AppDatabase) {
+        dispatcher.register(HookPersistenceHandler(database: database))
+        dispatcher.register(ToolCallLifecycleHandler(database: database))
+        dispatcher.register(SessionEndNotifier(database: database) { [weak self] event in
+            self?.loadSidecar(for: event) ?? SessionSidecarData()
+        })
+        dispatcher.register(StatsSyncHandler(statsImporter: StatsImporter(database: database)))
     }
 
     deinit {
@@ -318,6 +326,11 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
 
     /// 处理接收到的原始数据
     /// - Parameter data: UTF-8 JSON 数据
+    /// 处理接收到的原始数据
+    /// - Parameter data: UTF-8 JSON 数据
+    ///
+    /// 流程：解析 → 时间戳补全 → 侧车数据补全 → 货币统一 → 分发到已注册处理器。
+    /// 事件处理逻辑通过 `HookEventHandler` 处理器扩展，新增事件类型无需修改本方法。
     private func handleReceivedData(_ data: Data) {
         do {
             var event = try ReasonixHookEvent.from(jsonData: data)
@@ -334,59 +347,8 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             // 统一货币：数据库以 CNY 存储（sidecar 中的 cost 为 USD）
             event.cost = CurrencyConfig.usdToCny(event.cost)
 
-            // 1. 写入事件流水
-            database.writeHookEvent(event: event)
-
-            // 2. 更新会话汇总
-            if event.isSessionStart || event.isSessionEnd || event.isStop || event.isStopFailure {
-                database.upsertHookSession(event: event)
-            }
-
-            // 2b. 轮次完成/失败时弹通知
-            if event.isStop || event.isStopFailure {
-                sendSessionEndNotification(event: event)
-            }
-
-            // 3. 处理工具调用
-            if event.isToolStart {
-                let toolName = event.toolName ?? "unknown"
-                var argsJSON: String? = nil
-                if let args = event.toolArgs,
-                   let jsonData = try? JSONSerialization.data(withJSONObject: args, options: .sortedKeys) {
-                    argsJSON = String(data: jsonData, encoding: .utf8)
-                }
-                database.startHookToolCall(
-                    sessionId: event.sessionId,
-                    turn: event.turns,
-                    toolName: toolName,
-                    toolArgsJSON: argsJSON,
-                    timestamp: event.timestamp
-                )
-                print("🔧 工具调用开始: \(toolName)")
-            }
-
-            if event.isToolEnd {
-                let toolName = event.toolName ?? "unknown"
-                let isSuccess = event.eventType == .postToolUse
-                let status = isSuccess ? "success" : "failure"
-                let resultPreview = isSuccess ? event.resultPreview : nil
-                let errorStr = isSuccess ? nil : event.errorInfo
-
-                database.finishHookToolCall(
-                    sessionId: event.sessionId,
-                    turn: event.turns,
-                    toolName: toolName,
-                    status: status,
-                    resultPreview: resultPreview,
-                    error: errorStr,
-                    timestamp: event.timestamp
-                )
-                print("🔧 工具调用结束: \(toolName) [\(status)]")
-            }
-
-            // 4. 每次事件后增量导入官方 stats JSONL（幂等去重 + 3 秒节流），
-            //    保证菜单栏统计与 reasonix 软件同源、实时。
-            statsImporter.syncIfNeeded()
+            // 分发到已注册的事件处理器（写库/会话汇总/工具调用/通知/stats 导入）
+            dispatcher.dispatch(event)
 
         } catch let error as ReasonixHookError {
             print("⚠️ Hook 数据解析失败: \(error.localizedDescription)")
@@ -398,143 +360,5 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         }
     }
 
-    // MARK: - 轮次完成通知
 
-    /// 轮次完成时弹出系统通知
-    private func sendSessionEndNotification(event: ReasonixHookEvent) {
-        let project = event.project.isEmpty ? "默认项目" : event.project
-        let isFailure = event.isStopFailure
-        let statusStr = isFailure ? "❌ 失败" : "✅ 完成"
-
-        // 计算本轮增量：优先查内存缓存，未命中则查数据库
-        let sid = event.sessionId
-        let prev: (tokens: Int, cost: Double)
-        if let cached = lastStopTotal[sid] {
-            prev = cached
-        } else {
-            prev = previousStopTotal(for: sid)
-        }
-
-        // 如果 totalTokens 为 0，可能是 sidecar 文件尚未就绪，重试加载
-        var effectiveEvent = event
-        if effectiveEvent.totalTokens == 0 {
-            let sidecar = loadSidecar(for: effectiveEvent)
-            if sidecar.totalTokens > 0 {
-                effectiveEvent.enrich(from: sidecar)
-                // 侧车数据为 USD，需再次转换为 CNY 保持一致
-                effectiveEvent.cost = CurrencyConfig.usdToCny(effectiveEvent.cost)
-                // 回写数据库，修复记录
-                let safeId = Self.sanitizeSessionID(sid)
-                let updateSQL = """
-                    UPDATE hook_events SET total_tokens = \(effectiveEvent.totalTokens), cost = \(effectiveEvent.cost)
-                    WHERE session_id = '\(safeId)' AND event_type IN ('Stop', 'StopFailure')
-                      AND id = (SELECT MAX(id) FROM hook_events WHERE session_id = '\(safeId)' AND event_type IN ('Stop', 'StopFailure'))
-                    """
-                database.query(sql: updateSQL) { _ in }
-                print("📝 回填 sidecar 数据: session=\(sid.prefix(30))... tokens=\(effectiveEvent.totalTokens) cost=\(effectiveEvent.cost)")
-            }
-            // sidecar 仍无数据时不兜底：token 统计以官方 stats JSONL 为权威来源，
-            // 避免把全局累计值写入单个会话导致增量计算错误。
-        }
-
-        let roundTokens = effectiveEvent.totalTokens - prev.tokens
-        let roundCost = effectiveEvent.cost - prev.cost   // 数据库与事件均为 CNY
-        // 更新缓存供后续 Stop 事件使用
-        lastStopTotal[sid] = (effectiveEvent.totalTokens, effectiveEvent.cost)
-
-        // 失败事件无论是否有消耗都通知用户；普通 Stop 仅当有消耗时通知
-        if !isFailure {
-            guard roundTokens > 0 else { return }
-        }
-
-        // 格式化
-        let tokensStr = FormatUtils.tokenShort(roundTokens)
-        let costStr = FormatUtils.costShort(roundCost)
-
-        // 清理过期通知（超过 5 分钟）和超量通知（最多 5 条）
-        cleanupNotifications()
-
-        let notification = NSUserNotification()
-        notification.title = "\(project) — 轮次 \(statusStr)"
-        notification.informativeText = "Token 消耗: \(tokensStr), 金额: \(costStr)"
-        notification.soundName = NSUserNotificationDefaultSoundName
-
-        // 保存会话文件路径到 userInfo，点击时用来跳转
-        let slug = ReasonixPath.workspaceSlug(cwd: event.cwd)
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let sessionFile = "\(home)/.reasonix/projects/\(slug)/sessions/\(sid).jsonl"
-        notification.userInfo = [
-            "sessionFile": sessionFile,
-            "sentAt": Date().timeIntervalSince1970
-        ]
-
-        NSUserNotificationCenter.default.deliver(notification)
-    }
-
-    /// 从数据库查询该 session 上一次有效的 Stop/StopFailure 累计值
-    /// 排除 total_tokens=0 的无效记录（sidecar 加载失败时遗留的坏数据）
-    private func previousStopTotal(for sessionId: String) -> (tokens: Int, cost: Double) {
-        let safeId = Self.sanitizeSessionID(sessionId)
-        let sql = """
-            SELECT COALESCE(total_tokens, 0), COALESCE(cost, 0.0)
-            FROM hook_events
-            WHERE session_id = '\(safeId)'
-              AND event_type IN ('Stop', 'StopFailure')
-              AND total_tokens > 0
-              AND id < (SELECT COALESCE(MAX(id), 0) FROM hook_events
-                        WHERE session_id = '\(safeId)' AND event_type IN ('Stop', 'StopFailure') AND total_tokens > 0)
-            ORDER BY id DESC LIMIT 1
-            """
-        var tokens = 0
-        var cost = 0.0
-        database.query(sql: sql) { stmt in
-            tokens = Int(sqlite3_column_int(stmt, 0))
-            cost = sqlite3_column_double(stmt, 1)
-        }
-        return (tokens, cost)
-    }
-
-    /// 清理过期和超量的通知
-    private func cleanupNotifications() {
-        let center = NSUserNotificationCenter.default
-        let now = Date().timeIntervalSince1970
-        let maxAge: TimeInterval = 300  // 5 分钟
-        let maxCount = 5
-
-        var remaining: [NSUserNotification] = []
-        for note in center.deliveredNotifications {
-            guard let info = note.userInfo,
-                  let sentAt = info["sentAt"] as? TimeInterval else {
-                center.removeDeliveredNotification(note)
-                continue
-            }
-            // 超过 5 分钟的移除
-            if now - sentAt > maxAge {
-                center.removeDeliveredNotification(note)
-                continue
-            }
-            remaining.append(note)
-        }
-
-        // 超过 5 条的移除最旧的
-        if remaining.count >= maxCount {
-            // 按发送时间排序，移除最旧的
-            remaining.sort { a, b in
-                let aTime = a.userInfo?["sentAt"] as? TimeInterval ?? 0
-                let bTime = b.userInfo?["sentAt"] as? TimeInterval ?? 0
-                return aTime < bTime
-            }
-            let toRemove = remaining.prefix(remaining.count - maxCount + 1)
-            for note in toRemove {
-                center.removeDeliveredNotification(note)
-            }
-        }
-    }
-
-    // MARK: - 安全辅助
-
-    /// 净化 sessionId，仅保留字母数字和常见分隔符
-    private static func sanitizeSessionID(_ id: String) -> String {
-        id.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
-    }
 }
