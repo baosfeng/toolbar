@@ -6,7 +6,7 @@ import Foundation
 ///
 /// 从 MenuBarManager 提取，使用 KeyValueStorage 替代直接 UserDefaults 调用。
 /// 职责单一：仅计算和存储每日上下行流量。
-public final class TrafficTracker {
+public final class TrafficTracker: TrafficTrackingService {
     private let monitor: NetworkMonitoringService
     private let storage: KeyValueStorage
 

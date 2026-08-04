@@ -15,7 +15,7 @@ import Foundation
 /// 未来扩展：`source` 参数预留了多软件接入（claude/codex 的会话 jsonl 导入时传各自 source）。
 public final class StatsImporter: @unchecked Sendable {
 
-    private let database: DatabaseService
+    private let database: any TokenUsageRepository
     private let statsDir: String
     private let queue = DispatchQueue(label: "com.example.NetworkMonitor.stats-importer")
     private var lastSyncAt = Date.distantPast
@@ -23,10 +23,10 @@ public final class StatsImporter: @unchecked Sendable {
 
     /// 创建导入器
     /// - Parameters:
-    ///   - database: 数据库服务（协议注入，测试可用内存库）
+    ///   - database: Token 用量仓储（协议注入，测试可用内存库）
     ///   - statsDir: stats 目录，默认 `~/.reasonix/stats`
     ///   - minSyncInterval: 最小同步间隔（秒），默认 3 秒
-    public init(database: DatabaseService, statsDir: String? = nil, minSyncInterval: TimeInterval = 3.0) {
+    public init(database: any TokenUsageRepository, statsDir: String? = nil, minSyncInterval: TimeInterval = 3.0) {
         self.database = database
         self.statsDir = statsDir ?? ReasonixStatsLoader.defaultStatsDir()
         self.minSyncInterval = minSyncInterval

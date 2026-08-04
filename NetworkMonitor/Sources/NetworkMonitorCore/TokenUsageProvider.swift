@@ -94,9 +94,9 @@ public struct SessionOverviewStats: Sendable, Equatable {
 /// 求和即当天真实用量，无需任何时区偏移转换。
 public final class TokenUsageProvider: TokenStatsService {
 
-    private let database: DatabaseManager
+    private let database: any DatabaseService
 
-    public init(database: DatabaseManager) {
+    public init(database: any DatabaseService) {
         self.database = database
     }
 

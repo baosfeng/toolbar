@@ -15,15 +15,15 @@ public final class AppCoordinator {
     // MARK: - 服务
 
     /// 网络速度监控
-    private var networkMonitor: NetworkSpeedMonitor!
+    private var networkMonitor: (any NetworkMonitoringService)!
     /// 进程网络监控
-    let processMonitor = ProcessNetworkMonitor()
+    private let processMonitor: any ProcessNetworkMonitoringService = ProcessNetworkMonitor()
     /// 数据库
-    private var database: DatabaseManager!
+    private var database: (any AppDatabase)!
     /// Token 用量查询
-    private var tokenUsageProvider: TokenUsageProvider!
+    private var tokenUsageProvider: (any TokenStatsService)!
     /// 每日流量追踪
-    private var trafficTracker: TrafficTracker!
+    private var trafficTracker: (any TrafficTrackingService)!
 
     // MARK: - 日志
 

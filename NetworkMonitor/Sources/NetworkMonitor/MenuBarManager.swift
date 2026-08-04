@@ -20,12 +20,12 @@ import DGCharts
 final class MenuBarManager: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let monitor: NetworkMonitoringService
-    private let processMonitor: ProcessNetworkMonitor
+    private let processMonitor: any ProcessNetworkMonitoringService
     private var timer: Timer?
-    private let databaseManager: DatabaseService
+    private let databaseManager: any AppDatabase
     private var reasonixHookMonitor: ReasonixHookMonitor?
-    private let tokenUsageProvider: TokenStatsService
-    private let trafficTracker: TrafficTracker
+    private let tokenUsageProvider: any TokenStatsService
+    private let trafficTracker: any TrafficTrackingService
     private var lastHistoryHash: String = ""
     private var lastHourlyHash: String = ""
 
@@ -75,11 +75,11 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     // MARK: - 初始化
 
     init(
-        networkMonitor: NetworkMonitoringService,
-        processMonitor: ProcessNetworkMonitor,
-        database: DatabaseService,
-        trafficTracker: TrafficTracker,
-        tokenUsageProvider: TokenStatsService
+        networkMonitor: any NetworkMonitoringService,
+        processMonitor: any ProcessNetworkMonitoringService,
+        database: any AppDatabase,
+        trafficTracker: any TrafficTrackingService,
+        tokenUsageProvider: any TokenStatsService
     ) {
         self.monitor = networkMonitor
         self.processMonitor = processMonitor
