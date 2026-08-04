@@ -312,6 +312,215 @@ public struct SessionSidecarData: Sendable {
     }
 }
 
+// MARK: - 侧车 telemetry 解析（对齐上游格式）
+
+extension SessionSidecarData {
+    /// 从 desktop 版 telemetry 侧车 JSON（`<session>.jsonl.telemetry.json`）解析 token 数据。
+    ///
+    /// 上游 `sessionUsageStats` 为**顶层平铺字段**（camelCase 为主，兼容 snake_case）：
+    /// ```
+    /// {"promptTokens":…, "completionTokens":…, "totalTokens":…, "reasoningTokens":…,
+    ///  "cacheHitTokens":…, "cacheMissTokens":…, "requestCount":…, "elapsedMs":…,
+    ///  "sessionCost":…, "sessionCurrency":…, "sessionCostUsd":…, "sources":{…}}
+    /// ```
+    /// 同时兼容旧版 `usage` 嵌套对象格式。
+    ///
+    /// cost 统一归一为 **USD 口径**（优先 `sessionCostUsd`；否则取 `sessionCost` 并按
+    /// `sessionCurrency` 换算，非 USD 按当前汇率反算），与调用方 `usdToCny` 转换保持一致。
+    public static func parseTelemetry(_ data: Data) -> SessionSidecarData {
+        guard let tele = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return SessionSidecarData()
+        }
+        // 兼容两种形态：旧版 usage 嵌套对象 / 上游顶层平铺
+        let u: [String: Any] = (tele["usage"] as? [String: Any]) ?? tele
+
+        func intValue(_ key: String) -> Int {
+            if let v = u[key] as? Int { return v }
+            if let v = u[key] as? NSNumber { return v.intValue }
+            return 0
+        }
+        func doubleValue(_ key: String) -> Double {
+            if let v = u[key] as? Double { return v }
+            if let v = u[key] as? NSNumber { return v.doubleValue }
+            return 0
+        }
+        // camelCase 优先，snake_case 兜底
+        func intEither(_ camel: String, _ snake: String) -> Int {
+            let v = intValue(camel)
+            return v != 0 ? v : intValue(snake)
+        }
+
+        let promptTokens = intEither("promptTokens", "prompt_tokens")
+        let completionTokens = intEither("completionTokens", "completion_tokens")
+        let totalTokens = intEither("totalTokens", "total_tokens")
+        let reasoningTokens = intEither("reasoningTokens", "reasoning_tokens")
+
+        // 货币归一为 USD：sessionCostUsd > sessionCost(按 currency) > cost(旧字段视为 USD)
+        var costUSD = 0.0
+        let costUsdRaw = (u["sessionCostUsd"] as? NSNumber) ?? (u["session_cost_usd"] as? NSNumber)
+        if let usd = costUsdRaw, usd.doubleValue > 0 {
+            costUSD = usd.doubleValue
+        } else if let raw = (u["sessionCost"] as? NSNumber) ?? (u["session_cost"] as? NSNumber), raw.doubleValue > 0 {
+            let currency = ((u["sessionCurrency"] as? String) ?? (u["session_currency"] as? String)) ?? "USD"
+            if currency.uppercased() == "USD" || currency.isEmpty {
+                costUSD = raw.doubleValue
+            } else {
+                // 非 USD 货币（如 CNY）：按当前汇率反算为 USD，保持统一口径
+                costUSD = raw.doubleValue / CurrencyConfig.usdToCnyRate
+            }
+        } else if let legacy = u["cost"] as? NSNumber {
+            costUSD = legacy.doubleValue
+        }
+
+        return SessionSidecarData(
+            promptTokens: promptTokens,
+            completionTokens: completionTokens,
+            totalTokens: totalTokens,
+            reasoningTokens: reasoningTokens,
+            cost: costUSD
+        )
+    }
+}
+
+// MARK: - 官方 stats JSONL 解析（<state root>/stats/YYYY-MM-DD.jsonl）
+
+/// 上游 `internal/stats` 每日 JSONL 中的一条记录
+/// （对应上游 `stats.record`：`{ts, model, source, prompt, completion, reasoning,
+///  cache_hit, cache_miss, total, turn}`）。
+public struct ReasonixStatsRecord: Sendable {
+    public let date: String        // 文件日期 YYYY-MM-DD
+    public let model: String
+    public let source: String
+    public let promptTokens: Int
+    public let completionTokens: Int
+    public let reasoningTokens: Int
+    public let cacheHitTokens: Int
+    public let cacheMissTokens: Int
+    public let totalTokens: Int
+    public let isTurn: Bool        // true = TurnDone 标记行（不计入 token）
+
+    public init(date: String = "", model: String = "", source: String = "",
+                promptTokens: Int = 0, completionTokens: Int = 0, reasoningTokens: Int = 0,
+                cacheHitTokens: Int = 0, cacheMissTokens: Int = 0,
+                totalTokens: Int = 0, isTurn: Bool = false) {
+        self.date = date
+        self.model = model
+        self.source = source
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.reasoningTokens = reasoningTokens
+        self.cacheHitTokens = cacheHitTokens
+        self.cacheMissTokens = cacheMissTokens
+        self.totalTokens = totalTokens
+        self.isTurn = isTurn
+    }
+}
+
+/// 官方 stats 文件读取器。
+///
+/// 上游 token 统计把每次模型调用写入 `<state root>/stats/YYYY-MM-DD.jsonl`
+/// （一行一条 JSON 记录，`O_APPEND` 追加）。此类型负责扫描目录、解析记录，
+/// 供本地 hook 在 sidecar telemetry 缺失时作兜底数据源（CLI 用户没有 telemetry 文件）。
+public enum ReasonixStatsLoader {
+    /// 默认 stats 目录：`<state root>/stats`
+    /// state root 优先 `REASONIX_STATE_HOME`，否则 `~/.reasonix`
+    public static func defaultStatsDir() -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let root = ProcessInfo.processInfo.environment["REASONIX_STATE_HOME"]
+            .flatMap { $0.isEmpty ? nil : $0 } ?? "\(home)/.reasonix"
+        return "\(root)/stats"
+    }
+
+    /// 解析一行 JSON 记录（损坏行返回 nil）
+    public static func parseLine(_ line: String, date: String) -> ReasonixStatsRecord? {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let dict = try? JSONSerialization.jsonObject(with: Data(trimmed.utf8)) as? [String: Any] else {
+            return nil
+        }
+        func intValue(_ key: String) -> Int {
+            if let v = dict[key] as? Int { return v }
+            if let v = dict[key] as? NSNumber { return v.intValue }
+            return 0
+        }
+        return ReasonixStatsRecord(
+            date: date,
+            model: dict["model"] as? String ?? "",
+            source: dict["source"] as? String ?? "",
+            promptTokens: intValue("prompt"),
+            completionTokens: intValue("completion"),
+            reasoningTokens: intValue("reasoning"),
+            cacheHitTokens: intValue("cache_hit"),
+            cacheMissTokens: intValue("cache_miss"),
+            totalTokens: intValue("total"),
+            isTurn: dict["turn"] as? Bool ?? false
+        )
+    }
+
+    /// 读取 stats 目录下所有 JSONL 文件，返回全部有效记录（损坏行跳过）
+    public static func loadAll(statsDir: String) -> [ReasonixStatsRecord] {
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: statsDir) else {
+            return []
+        }
+        var records: [ReasonixStatsRecord] = []
+        for name in files where name.hasSuffix(".jsonl") {
+            let date = String(name.dropLast(".jsonl".count))
+            guard let content = try? String(contentsOfFile: "\(statsDir)/\(name)", encoding: .utf8) else {
+                continue
+            }
+            for line in content.components(separatedBy: "\n") {
+                if let rec = parseLine(line, date: date) {
+                    records.append(rec)
+                }
+            }
+        }
+        return records
+    }
+
+    /// 累计 token 总数（不含 turn 标记行）
+    public static func totalTokens(statsDir: String) -> Int {
+        loadAll(statsDir: statsDir).reduce(0) { $0 + ($1.isTurn ? 0 : $1.totalTokens) }
+    }
+}
+
+// MARK: - 路径辅助（对齐上游 config.WorkspaceSlug）
+
+/// Reasonix 数据路径辅助，与上游实现保持一致。
+public enum ReasonixPath {
+    /// 与上游 `config.WorkspaceSlug` 对齐：
+    /// 将 `/`、`\`、`:` 替换为 `-`；超过 255 字节时截断并追加 FNV-1a 64 位哈希，
+    /// 避免超长路径产生 ENAMETOOLONG，也避免不同路径坍缩为同名目录。
+    public static func workspaceSlug(cwd: String) -> String {
+        var s = cwd.replacingOccurrences(of: "/", with: "-")
+        s = s.replacingOccurrences(of: "\\", with: "-")
+        s = s.replacingOccurrences(of: ":", with: "-")
+        return boundFilenameComponent(s, maxLen: 255)
+    }
+
+    /// 截断到 maxLen 字节；超限时保留前缀并追加 `-<16位hex>`（FNV-1a 64）。
+    /// 截断会回退到合法 UTF-8 字符边界，避免切坏多字节字符。
+    static func boundFilenameComponent(_ s: String, maxLen: Int) -> String {
+        guard maxLen > 0, s.utf8.count > maxLen else { return s }
+        let budget = maxLen - 17  // 预留 "-" + 16 位 hex
+        // 按字节截断；若落在多字节字符中间，逐步回退到合法边界
+        var prefix = String(decoding: s.utf8.prefix(budget), as: UTF8.self)
+        while prefix.utf8.count > budget {
+            prefix = String(prefix.dropLast())
+        }
+        return prefix + "-" + String(format: "%016x", fnv1a64(s))
+    }
+
+    /// FNV-1a 64 位哈希
+    public static func fnv1a64(_ s: String) -> UInt64 {
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in s.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x100000001b3
+        }
+        return hash
+    }
+}
+
 // MARK: - TTL + LRU 缓存
 
 /// 带 TTL 过期和 LRU 淘汰的线程安全缓存

@@ -43,6 +43,8 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     private var slugCache: [String: String] = [:]
     /// sessionId → 上一次 Stop 累计值缓存（避免历史坏数据导致增量计算错误）
     private var lastStopTotal: [String: (tokens: Int, cost: Double)] = [:]
+    /// 官方 stats JSONL 全局累计缓存（短 TTL，避免每个事件都扫盘）
+    private var statsTotalCache: (value: Int, fetchedAt: Date)?
 
     // MARK: - 初始化
 
@@ -219,7 +221,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         // 确定 project slug：优先使用 cwd，为空则扫描 projects 目录查找
         let slug: String
         if !event.cwd.isEmpty {
-            slug = event.cwd.replacingOccurrences(of: "/", with: "-")
+            slug = ReasonixPath.workspaceSlug(cwd: event.cwd)
         } else if let found = findProjectSlug(for: sid) {
             slug = found
         } else {
@@ -252,17 +254,16 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             turns = (meta["turns"] as? Int) ?? 0
         }
 
-        // 读取 telemetry
+        // 读取 telemetry —— 上游为顶层平铺字段（兼容旧 usage 嵌套），cost 已归一为 USD
         var promptTokens = 0, completionTokens = 0, totalTokens = 0
         var reasoningTokens = 0, cost = 0.0
-        if let teleData = try? Data(contentsOf: URL(fileURLWithPath: telePath)),
-           let tele = try? JSONSerialization.jsonObject(with: teleData) as? [String: Any],
-           let u = tele["usage"] as? [String: Any] {
-            promptTokens = (u["promptTokens"] as? Int) ?? (u["prompt_tokens"] as? Int) ?? 0
-            completionTokens = (u["completionTokens"] as? Int) ?? (u["completion_tokens"] as? Int) ?? 0
-            totalTokens = (u["totalTokens"] as? Int) ?? (u["total_tokens"] as? Int) ?? 0
-            reasoningTokens = (u["reasoningTokens"] as? Int) ?? (u["reasoning_tokens"] as? Int) ?? 0
-            cost = (u["sessionCost"] as? Double) ?? (u["cost"] as? Double) ?? 0.0
+        if let teleData = try? Data(contentsOf: URL(fileURLWithPath: telePath)) {
+            let tele = SessionSidecarData.parseTelemetry(teleData)
+            promptTokens = tele.promptTokens
+            completionTokens = tele.completionTokens
+            totalTokens = tele.totalTokens
+            reasoningTokens = tele.reasoningTokens
+            cost = tele.cost
         }
 
         let data = SessionSidecarData(
@@ -285,6 +286,20 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     private func fileModTime(_ path: String) -> TimeInterval? {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: path) else { return nil }
         return (attrs[.modificationDate] as? Date)?.timeIntervalSince1970
+    }
+
+    /// 读取上游官方 stats JSONL 的全局累计 token（短 TTL 缓存，3 秒内不重复扫盘）
+    /// - Note: stats 文件是全局每日累计（无 sessionId 维度），多会话并发时无法精确归属，
+    ///   仅在 sidecar telemetry 缺失时作为兜底数据源。
+    private func loadStatsTotal() -> Int {
+        if let cache = statsTotalCache,
+           Date().timeIntervalSince(cache.fetchedAt) < 3.0 {
+            return cache.value
+        }
+        let dir = ReasonixStatsLoader.defaultStatsDir()
+        let total = ReasonixStatsLoader.totalTokens(statsDir: dir)
+        statsTotalCache = (total, Date())
+        return total
     }
 
     /// cwd 为空时，在 ~/.reasonix/projects/ 下查找 sessionId 对应的 project slug
@@ -326,6 +341,16 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             // 补全侧车数据（缓存命中则不读磁盘）
             let sidecar = loadSidecar(for: event)
             event.enrich(from: sidecar)
+
+            // 兜底数据源：sidecar 缺失时（CLI 无 telemetry 文件），
+            // 使用上游官方 stats JSONL 的全局累计 token（上游唯一权威 token 数据源）
+            if event.totalTokens == 0 && (event.isStop || event.isStopFailure || event.isSessionEnd) {
+                let statsTotal = loadStatsTotal()
+                if statsTotal > 0 {
+                    event.totalTokens = statsTotal
+                    print("📊 使用 stats JSONL 兜底: session=\(event.sessionId.prefix(30))... total=\(statsTotal)")
+                }
+            }
 
             // 统一货币：数据库以 CNY 存储（sidecar 中的 cost 为 USD）
             event.cost = CurrencyConfig.usdToCny(event.cost)
@@ -424,6 +449,13 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
                     """
                 database.query(sql: updateSQL) { _ in }
                 print("📝 回填 sidecar 数据: session=\(sid.prefix(30))... tokens=\(effectiveEvent.totalTokens) cost=\(effectiveEvent.cost)")
+            } else {
+                // sidecar 仍无数据时使用官方 stats JSONL 全局累计兜底
+                let statsTotal = loadStatsTotal()
+                if statsTotal > 0 {
+                    effectiveEvent.totalTokens = statsTotal
+                    print("📊 通知兜底 stats JSONL: session=\(sid.prefix(30))... total=\(statsTotal)")
+                }
             }
         }
 
@@ -450,7 +482,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         notification.soundName = NSUserNotificationDefaultSoundName
 
         // 保存会话文件路径到 userInfo，点击时用来跳转
-        let slug = event.cwd.replacingOccurrences(of: "/", with: "-")
+        let slug = ReasonixPath.workspaceSlug(cwd: event.cwd)
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let sessionFile = "\(home)/.reasonix/projects/\(slug)/sessions/\(sid).jsonl"
         notification.userInfo = [
