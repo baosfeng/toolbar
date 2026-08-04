@@ -388,7 +388,8 @@ extension SessionSidecarData {
 /// （对应上游 `stats.record`：`{ts, model, source, prompt, completion, reasoning,
 ///  cache_hit, cache_miss, total, turn}`）。
 public struct ReasonixStatsRecord: Sendable {
-    public let date: String        // 文件日期 YYYY-MM-DD
+    public let date: String        // 文件日期 YYYY-MM-DD（本地日期）
+    public let ts: String          // ISO8601 时间戳（自带时区，如 2026-08-04T21:54:48+08:00）
     public let model: String
     public let source: String
     public let promptTokens: Int
@@ -399,11 +400,12 @@ public struct ReasonixStatsRecord: Sendable {
     public let totalTokens: Int
     public let isTurn: Bool        // true = TurnDone 标记行（不计入 token）
 
-    public init(date: String = "", model: String = "", source: String = "",
+    public init(date: String = "", ts: String = "", model: String = "", source: String = "",
                 promptTokens: Int = 0, completionTokens: Int = 0, reasoningTokens: Int = 0,
                 cacheHitTokens: Int = 0, cacheMissTokens: Int = 0,
                 totalTokens: Int = 0, isTurn: Bool = false) {
         self.date = date
+        self.ts = ts
         self.model = model
         self.source = source
         self.promptTokens = promptTokens
@@ -419,8 +421,10 @@ public struct ReasonixStatsRecord: Sendable {
 /// 官方 stats 文件读取器。
 ///
 /// 上游 token 统计把每次模型调用写入 `<state root>/stats/YYYY-MM-DD.jsonl`
-/// （一行一条 JSON 记录，`O_APPEND` 追加）。此类型负责扫描目录、解析记录，
-/// 供本地 hook 在 sidecar telemetry 缺失时作兜底数据源（CLI 用户没有 telemetry 文件）。
+/// （一行一条 JSON 记录，`O_APPEND` 追加）。每条记录是一次调用的**增量**
+/// （`total` 是该次调用的 token 数，不是累计值），`ts` 为带时区的 ISO8601
+/// 时间戳，文件按**本地日期**命名。SUM 当天文件即当天总量，天然无时区歧义，
+/// 这正是 reasonix 自身统计面板的口径。
 public enum ReasonixStatsLoader {
     /// 默认 stats 目录：`<state root>/stats`
     /// state root 优先 `REASONIX_STATE_HOME`，否则 `~/.reasonix`
@@ -445,6 +449,7 @@ public enum ReasonixStatsLoader {
         }
         return ReasonixStatsRecord(
             date: date,
+            ts: dict["ts"] as? String ?? "",
             model: dict["model"] as? String ?? "",
             source: dict["source"] as? String ?? "",
             promptTokens: intValue("prompt"),
@@ -477,9 +482,64 @@ public enum ReasonixStatsLoader {
         return records
     }
 
+    /// 读取指定日期（YYYY-MM-DD，本地日期）的 stats 文件
+    public static func loadDay(statsDir: String, date: String) -> [ReasonixStatsRecord] {
+        let path = "\(statsDir)/\(date).jsonl"
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return []
+        }
+        var records: [ReasonixStatsRecord] = []
+        for line in content.components(separatedBy: "\n") {
+            if let rec = parseLine(line, date: date) {
+                records.append(rec)
+            }
+        }
+        return records
+    }
+
+    /// stats 目录中已有的日期列表（按日期降序，最新在前）
+    public static func availableDates(statsDir: String) -> [String] {
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: statsDir) else {
+            return []
+        }
+        return files
+            .filter { $0.hasSuffix(".jsonl") }
+            .map { String($0.dropLast(".jsonl".count)) }
+            .sorted(by: >)
+    }
+
+    /// 解析 ts 字段（ISO8601 带时区）为 Date；解析失败返回 nil
+    public static func parseTimestamp(_ ts: String) -> Date? {
+        let fmt = ISO8601DateFormatter()
+        fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = fmt.date(from: ts) { return d }
+        fmt.formatOptions = [.withInternetDateTime]
+        return fmt.date(from: ts)
+    }
+
     /// 累计 token 总数（不含 turn 标记行）
     public static func totalTokens(statsDir: String) -> Int {
         loadAll(statsDir: statsDir).reduce(0) { $0 + ($1.isTurn ? 0 : $1.totalTokens) }
+    }
+
+    /// 累计 token 总数（仅指定日期文件）
+    public static func totalTokens(statsDir: String, date: String) -> Int {
+        loadDay(statsDir: statsDir, date: date).reduce(0) { $0 + ($1.isTurn ? 0 : $1.totalTokens) }
+    }
+
+    /// 按模型分组聚合（不含 turn 标记行）
+    public static func totalsByModel(_ records: [ReasonixStatsRecord]) -> [(model: String, prompt: Int, completion: Int, total: Int)] {
+        var map: [String: (prompt: Int, completion: Int, total: Int)] = [:]
+        for r in records where !r.isTurn {
+            let m = r.model.isEmpty ? "未知" : r.model
+            var acc = map[m] ?? (0, 0, 0)
+            acc.prompt += r.promptTokens
+            acc.completion += r.completionTokens
+            acc.total += r.totalTokens
+            map[m] = acc
+        }
+        return map.map { (model: $0.key, prompt: $0.value.prompt, completion: $0.value.completion, total: $0.value.total) }
+            .sorted { $0.total > $1.total }
     }
 }
 
