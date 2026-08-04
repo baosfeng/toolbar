@@ -452,10 +452,16 @@ do {
     let offset = SqliteTimeZone.offsetModifier
     assertEqual(offset.hasSuffix(" hours"), true, "offset should be 'N hours' format, got: \(offset)")
 
-    // 汇率默认 7.2，可被 UserDefaults 覆盖
-    UserDefaults.standard.removeObject(forKey: CurrencyConfig.rateOverrideKey)
-    assertEqual(CurrencyConfig.usdToCnyRate, 7.2, "default rate 7.2")
-    assertEqual(CurrencyConfig.usdToCny(1.0), 7.2, "usdToCny conversion")
+    // 汇率默认 7.2，可通过注入的 KeyValueStorage 覆盖（不污染 UserDefaults.standard）
+    let currencyStorage = UserDefaultsStorage(defaults: UserDefaults(suiteName: "test.currency")!)
+    CurrencyConfig.shared.storageOverride = currencyStorage
+    currencyStorage.removeObject(forKey: CurrencyConfig.rateOverrideKey)
+    assertEqual(CurrencyConfig.shared.usdToCnyRate, 7.2, "default rate 7.2")
+    assertEqual(CurrencyConfig.shared.usdToCny(1.0), 7.2, "usdToCny conversion")
+    currencyStorage.set(6.5, forKey: CurrencyConfig.rateOverrideKey)
+    assertEqual(CurrencyConfig.shared.usdToCnyRate, 6.5, "override rate 6.5")
+    assertEqual(CurrencyConfig.shared.usdToCny(1.0), 6.5, "usdToCny conversion with override")
+    CurrencyConfig.shared.storageOverride = nil
 
     print("✅ 时区与货币配置 works")
 }

@@ -122,7 +122,7 @@ final class SessionEndNotifier: @unchecked Sendable, HookEventHandler {
             if sidecar.totalTokens > 0 {
                 effectiveEvent.enrich(from: sidecar)
                 // 侧车数据为 USD，需再次转换为 CNY 保持一致
-                effectiveEvent.cost = CurrencyConfig.usdToCny(effectiveEvent.cost)
+                effectiveEvent.cost = CurrencyConfig.shared.usdToCny(effectiveEvent.cost)
                 // 回写数据库，修复记录
                 let safeId = Self.sanitizeSessionID(sid)
                 let updateSQL = """

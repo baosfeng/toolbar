@@ -5,22 +5,33 @@ import Foundation
 /// 货币配置 — 数据库统一以 CNY（人民币）存储与展示
 ///
 /// Reasonix sidecar 文件中的 cost 为 USD，写入数据库前需转换为 CNY。
-public enum CurrencyConfig {
+/// 汇率通过 `KeyValueStorage` 读取（不再直读 UserDefaults），
+/// 测试可注入 `storageOverride` 隔离全局状态。
+public final class CurrencyConfig: @unchecked Sendable {
+    /// 全局共享实例
+    public static let shared = CurrencyConfig()
+
     /// 默认汇率（1 USD ≈ 7.2 CNY），历史数据迁移也按此汇率
     public static let defaultUsdToCnyRate: Double = 7.2
-    /// UserDefaults 键，可用该键覆盖汇率
+    /// 键值存储键，可用该键覆盖汇率
     public static let rateOverrideKey = "usdToCnyRate"
 
-    /// 当前汇率（可通过 UserDefaults 键 `usdToCnyRate` 覆盖）
-    public static var usdToCnyRate: Double {
-        let saved = UserDefaults.standard.object(forKey: rateOverrideKey) as? Double
-        return saved ?? defaultUsdToCnyRate
+    /// 可注入的键值存储（测试用）；nil 时使用 AppContext 共享存储
+    public var storageOverride: KeyValueStorage?
+
+    /// 当前汇率（可通过键值存储的 `usdToCnyRate` 键覆盖）
+    public var usdToCnyRate: Double {
+        let storage = storageOverride ?? AppContext.shared.storage
+        let saved = storage.double(forKey: Self.rateOverrideKey)
+        return saved > 0 ? saved : Self.defaultUsdToCnyRate
     }
 
     /// 将 USD 金额转换为 CNY
-    public static func usdToCny(_ usd: Double) -> Double {
+    public func usdToCny(_ usd: Double) -> Double {
         usd * usdToCnyRate
     }
+
+    private init() {}
 }
 
 // MARK: - 时区配置
