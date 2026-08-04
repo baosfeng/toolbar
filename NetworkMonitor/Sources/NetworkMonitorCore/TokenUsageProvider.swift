@@ -87,57 +87,71 @@ public struct SessionOverviewStats: Sendable, Equatable {
 
 /// Token 用量统计查询器。
 ///
-/// 统计口径与 reasonix 官方一致：读取 `<state root>/stats/YYYY-MM-DD.jsonl`，
-/// 每条记录是一次模型调用的**增量**（`total` 为单次调用 token 数），
-/// 文件按本地日期命名、`ts` 自带时区，因此按天求和即当天真实用量，
-/// 无需任何时区偏移转换。历史 hook 事件中的 token 快照不再作为统计来源。
+/// 统计口径与 reasonix 官方一致：数据来自 `token_usage` 表（由 `StatsImporter`
+/// 在每次 hook 事件后从 `<state root>/stats/YYYY-MM-DD.jsonl` 增量导入）。
+/// 每条记录是一次模型调用的**增量**（`total_tokens` 为单次调用 token 数），
+/// `date` 为文件所属本地日期、`hour` 为 ts 解析出的本地小时，因此按天/按小时
+/// 求和即当天真实用量，无需任何时区偏移转换。
 public final class TokenUsageProvider: TokenStatsService {
 
     private let database: DatabaseManager
-    private let statsDir: String
 
-    public init(database: DatabaseManager, statsDir: String? = nil) {
+    public init(database: DatabaseManager) {
         self.database = database
-        self.statsDir = statsDir ?? ReasonixStatsLoader.defaultStatsDir()
     }
 
     // MARK: - 今日汇总
 
     /// 查询今日 token 用量汇总（按模型分组）
-    /// 数据源：今日 stats 文件（增量记录求和）
+    /// 数据源：token_usage 表（stats 导入）
     public func fetchTodaySummary() -> TodayTokenSummary {
         let today = todayDateString()
-        let records = ReasonixStatsLoader.loadDay(statsDir: statsDir, date: today)
-        let byModel = ReasonixStatsLoader.totalsByModel(records)
-
-        var grandTotalTokens = 0
-        var grandTotalCost = 0.0
-        var models: [TokenUsageByModel] = []
-        for m in byModel {
-            grandTotalTokens += m.total
-            models.append(TokenUsageByModel(
-                model: m.model,
-                promptTokens: m.prompt,
-                completionTokens: m.completion,
-                totalTokens: m.total,
+        let sql = """
+            SELECT COALESCE(model, '未知'),
+                   COALESCE(SUM(prompt_tokens), 0),
+                   COALESCE(SUM(completion_tokens), 0),
+                   COALESCE(SUM(total_tokens), 0)
+            FROM token_usage
+            WHERE date = '\(today)' AND is_turn = 0
+            GROUP BY model
+            ORDER BY SUM(total_tokens) DESC
+            """
+        var byModel: [TokenUsageByModel] = []
+        database.query(sql: sql) { stmt in
+            byModel.append(TokenUsageByModel(
+                model: String(cString: sqlite3_column_text(stmt, 0)),
+                promptTokens: Int(sqlite3_column_int(stmt, 1)),
+                completionTokens: Int(sqlite3_column_int(stmt, 2)),
+                totalTokens: Int(sqlite3_column_int(stmt, 3)),
                 cost: 0
             ))
         }
-        // 花费仍来自 hook 会话汇总（per-session 累计 cost，历史数据已清理后重新积累）
-        grandTotalCost = todaySessionCost(today: today)
+
+        var grandTotalTokens = 0
+        for m in byModel { grandTotalTokens += m.totalTokens }
+        // 花费仍来自 hook 会话汇总（per-session 累计 cost）
+        let grandTotalCost = todaySessionCost(today: today)
 
         return TodayTokenSummary(
             totalTokens: grandTotalTokens,
             totalCost: grandTotalCost,
-            byModel: models
+            byModel: byModel
         )
     }
 
     /// 今日总计（快速查询，无需分组）
-    /// token 来自今日 stats 文件；花费来自今日结束的 hook 会话累计 cost
+    /// token 来自 token_usage 表；花费来自今日结束的 hook 会话累计 cost
     public func fetchTodayTotal() -> (tokens: Int, cost: Double) {
         let today = todayDateString()
-        let tokens = ReasonixStatsLoader.totalTokens(statsDir: statsDir, date: today)
+        let sql = """
+            SELECT COALESCE(SUM(total_tokens), 0)
+            FROM token_usage
+            WHERE date = '\(today)' AND is_turn = 0
+            """
+        var tokens = 0
+        database.query(sql: sql) { stmt in
+            tokens = Int(sqlite3_column_int(stmt, 0))
+        }
         let cost = todaySessionCost(today: today)
         return (tokens, cost)
     }
@@ -159,22 +173,27 @@ public final class TokenUsageProvider: TokenStatsService {
     // MARK: - 每小时明细
 
     /// 查询指定日期的每小时 token 用量明细
-    /// 数据源：stats 文件中 ts 字段解析为本地时间后按小时分组（ts 自带时区，无需偏移）
+    /// 数据源：token_usage 表的 hour 列（导入时由 ts 解析为本地小时，无需偏移）
     /// - Parameter dateString: "2026-07-25" 格式，传 nil 则查今天
     public func fetchHourlyBreakdown(dateString: String? = nil) -> [HourlyTokenUsage] {
         let day = dateString ?? todayDateString()
-        let records = ReasonixStatsLoader.loadDay(statsDir: statsDir, date: day)
-
+        let sql = """
+            SELECT hour,
+                   COALESCE(SUM(prompt_tokens), 0),
+                   COALESCE(SUM(completion_tokens), 0),
+                   COALESCE(SUM(total_tokens), 0)
+            FROM token_usage
+            WHERE date = '\(day)' AND is_turn = 0
+            GROUP BY hour
+            """
         var byHour: [Int: (prompt: Int, completion: Int, total: Int)] = [:]
-        for r in records where !r.isTurn {
-            guard let ts = ReasonixStatsLoader.parseTimestamp(r.ts),
-                  ts.ymdString() == day else { continue }
-            let hour = Calendar.current.component(.hour, from: ts)
-            var acc = byHour[hour] ?? (0, 0, 0)
-            acc.prompt += r.promptTokens
-            acc.completion += r.completionTokens
-            acc.total += r.totalTokens
-            byHour[hour] = acc
+        database.query(sql: sql) { stmt in
+            let hour = Int(sqlite3_column_int(stmt, 0))
+            byHour[hour] = (
+                Int(sqlite3_column_int(stmt, 1)),
+                Int(sqlite3_column_int(stmt, 2)),
+                Int(sqlite3_column_int(stmt, 3))
+            )
         }
 
         var filled: [HourlyTokenUsage] = []
@@ -193,29 +212,49 @@ public final class TokenUsageProvider: TokenStatsService {
     // MARK: - 每日历史
 
     /// 查询最近 N 天的每日汇总
-    /// 数据源：stats 目录中按日期命名的文件（本地日期）
+    /// 数据源：token_usage 表的 date 列（stats 文件名的本地日期）
     public func fetchDailyHistory(days: Int = 7) -> [DailyTokenUsage] {
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
 
-        var results: [DailyTokenUsage] = []
+        // 收集近 N 天的日期字符串
+        var dates: [String] = []
         for offset in 0..<days {
             guard let date = cal.date(byAdding: .day, value: -offset, to: today) else { continue }
-            let dateStr = fmt.string(from: date)
-            let records = ReasonixStatsLoader.loadDay(statsDir: statsDir, date: dateStr)
-            var total = 0, prompt = 0, completion = 0
-            for r in records where !r.isTurn {
-                total += r.totalTokens
-                prompt += r.promptTokens
-                completion += r.completionTokens
-            }
+            dates.append(fmt.string(from: date))
+        }
+
+        // 一次查库拿到所有相关天的汇总
+        let placeholders = dates.map { "'\($0)'" }.joined(separator: ",")
+        let sql = """
+            SELECT date,
+                   COALESCE(SUM(total_tokens), 0),
+                   COALESCE(SUM(prompt_tokens), 0),
+                   COALESCE(SUM(completion_tokens), 0)
+            FROM token_usage
+            WHERE date IN (\(placeholders)) AND is_turn = 0
+            GROUP BY date
+            """
+        var byDate: [String: (total: Int, prompt: Int, completion: Int)] = [:]
+        database.query(sql: sql) { stmt in
+            let d = String(cString: sqlite3_column_text(stmt, 0))
+            byDate[d] = (
+                Int(sqlite3_column_int(stmt, 1)),
+                Int(sqlite3_column_int(stmt, 2)),
+                Int(sqlite3_column_int(stmt, 3))
+            )
+        }
+
+        var results: [DailyTokenUsage] = []
+        for dateStr in dates {
+            let v = byDate[dateStr] ?? (0, 0, 0)
             results.append(DailyTokenUsage(
                 date: dateStr,
-                totalTokens: total,
-                promptTokens: prompt,
-                completionTokens: completion,
+                totalTokens: v.total,
+                promptTokens: v.prompt,
+                completionTokens: v.completion,
                 cost: 0
             ))
         }
@@ -295,11 +334,25 @@ public final class TokenUsageProvider: TokenStatsService {
 
     // MARK: - AI 分析：模型用量排行
 
-    /// 模型用量排行（token 来自 stats 今日文件，花费来自今日 hook 会话）
+    /// 模型用量排行（token 来自 token_usage 表，花费来自今日 hook 会话）
     public func fetchModelRanking(limit: Int = 5) -> [ModelRanking] {
         let today = todayDateString()
-        let records = ReasonixStatsLoader.loadDay(statsDir: statsDir, date: today)
-        let byModel = ReasonixStatsLoader.totalsByModel(records).prefix(limit)
+        let sql = """
+            SELECT COALESCE(model, '未知'),
+                   COALESCE(SUM(total_tokens), 0)
+            FROM token_usage
+            WHERE date = '\(today)' AND is_turn = 0
+            GROUP BY model
+            ORDER BY SUM(total_tokens) DESC
+            LIMIT \(limit)
+            """
+        var tokensByModel: [(model: String, total: Int)] = []
+        database.query(sql: sql) { stmt in
+            tokensByModel.append((
+                String(cString: sqlite3_column_text(stmt, 0)),
+                Int(sqlite3_column_int(stmt, 1))
+            ))
+        }
 
         // 花费按模型聚合（hook_sessions per-session 累计 cost，本地日期）
         let costSQL = """
@@ -319,7 +372,7 @@ public final class TokenUsageProvider: TokenStatsService {
         }
 
         var results: [ModelRanking] = []
-        for m in byModel {
+        for m in tokensByModel {
             let extra = costByModel[m.model] ?? (0, 0)
             results.append(ModelRanking(
                 model: m.model, totalTokens: m.total,
@@ -385,11 +438,17 @@ public final class TokenUsageProvider: TokenStatsService {
             todayFailed = Int(sqlite3_column_int(stmt, 1))
         }
 
-        // 推理 Token 占比（stats 今日文件，reasoning/total）
+        // 推理 Token 占比（token_usage 表今日记录，reasoning/total）
+        let reasoningSQL = """
+            SELECT COALESCE(SUM(reasoning_tokens), 0),
+                   COALESCE(SUM(total_tokens), 0)
+            FROM token_usage
+            WHERE date = '\(today)' AND is_turn = 0
+            """
         var reasoningTokens = 0, totalTokens = 0
-        for r in ReasonixStatsLoader.loadDay(statsDir: statsDir, date: today) where !r.isTurn {
-            reasoningTokens += r.reasoningTokens
-            totalTokens += r.totalTokens
+        database.query(sql: reasoningSQL) { stmt in
+            reasoningTokens = Int(sqlite3_column_int(stmt, 0))
+            totalTokens = Int(sqlite3_column_int(stmt, 1))
         }
         let ratio = totalTokens > 0 ? (Double(reasoningTokens) / Double(totalTokens)) * 100 : 0
         let failRate = todayTotal > 0 ? (Double(todayFailed) / Double(todayTotal)) * 100 : 0

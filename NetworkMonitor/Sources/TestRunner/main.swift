@@ -542,6 +542,21 @@ func drainDB(_ db: DatabaseManager) {
     db.query(sql: "SELECT 1") { _ in }
 }
 
+/// 等待 StatsImporter 异步队列完成导入（测试用：短暂轮询直到 token_usage 有数据或超时）
+func waitForImport(_ db: DatabaseManager) {
+    for _ in 0..<50 {
+        var count = 0
+        db.query(sql: "SELECT COUNT(*) FROM token_usage") { stmt in
+            count = Int(sqlite3_column_int(stmt, 0))
+        }
+        if count > 0 { return }
+        usleep(100_000)  // 100ms
+    }
+    // 超时兜底：再等 500ms 后强制排空数据库队列
+    usleep(500_000)
+    drainDB(db)
+}
+
 // 今日统计：token 来自 stats 文件，花费来自 hook_sessions
 do {
     let db = DatabaseManager()
@@ -555,7 +570,11 @@ do {
     writeStatsLine(statsDir, date: today, ts: localISO(0), model: "gpt-5", prompt: 30, completion: 30, total: 60)
     writeStatsLine(statsDir, date: today, ts: localISO(1), model: "gpt-5", prompt: 20, completion: 20, total: 40)
 
-    let provider = TokenUsageProvider(database: db, statsDir: statsDir)
+    // 通过 StatsImporter 导入（模拟 hook 触发后的增量导入）
+    StatsImporter(database: db, statsDir: statsDir, minSyncInterval: 0).syncAll()
+    waitForImport(db)
+
+    let provider = TokenUsageProvider(database: db)
 
     let total = provider.fetchTodayTotal()
     assertEqual(total.tokens, 100, "today total tokens from stats")
@@ -609,7 +628,10 @@ do {
     writeStatsLine(statsDir, date: today, ts: localISO(0), model: "m1", total: 100)
     writeStatsLine(statsDir, date: yesterday, ts: localISO(-1440), model: "m2", total: 999)
 
-    let provider = TokenUsageProvider(database: db, statsDir: statsDir)
+    StatsImporter(database: db, statsDir: statsDir, minSyncInterval: 0).syncAll()
+    waitForImport(db)
+
+    let provider = TokenUsageProvider(database: db)
     assertEqual(provider.fetchTodayTotal().tokens, 100, "yesterday not counted in today")
     assertEqual(provider.fetchDailyHistory(days: 2).last?.totalTokens, 100, "today tokens")
 
@@ -675,14 +697,14 @@ do {
     print("✅ TokenUsageProvider 会话概览 works")
 }
 
-// 空库容错
+// 空库容错 + 导入幂等验证
 do {
     let db = DatabaseManager()
     db.initializeInMemory()
     defer { db.close() }
     let statsDir = makeStatsDir()
     defer { try? FileManager.default.removeItem(atPath: statsDir) }
-    let provider = TokenUsageProvider(database: db, statsDir: statsDir)
+    let provider = TokenUsageProvider(database: db)
 
     assertEqual(provider.fetchTodayTotal().tokens, 0, "empty total")
     assertEqual(provider.fetchTodaySummary().totalTokens, 0, "empty summary")
@@ -692,7 +714,24 @@ do {
     assertEqual(provider.fetchModelRanking(limit: 5).isEmpty, true, "empty models")
     assertEqual(provider.fetchSessionOverviewStats().activeSessions, 0, "empty active")
 
-    print("✅ TokenUsageProvider 空库容错 works")
+    // 导入幂等：同一文件导入两次，token_usage 不产生重复记录
+    let today = todayYMD()
+    writeStatsLine(statsDir, date: today, ts: localISO(0), model: "m1", prompt: 10, completion: 10, total: 20)
+    let importer = StatsImporter(database: db, statsDir: statsDir, minSyncInterval: 0)
+    importer.syncAll()
+    waitForImport(db)
+    importer.syncAll()
+    usleep(500_000)
+    drainDB(db)
+
+    var count = -1
+    db.query(sql: "SELECT COUNT(*) FROM token_usage") { stmt in
+        count = Int(sqlite3_column_int(stmt, 0))
+    }
+    assertEqual(count, 1, "duplicate import ignored (idempotent)")
+    assertEqual(provider.fetchTodayTotal().tokens, 20, "imported tokens counted once")
+
+    print("✅ TokenUsageProvider 空库容错 + 导入幂等 works")
 }
 
 // MARK: - Done

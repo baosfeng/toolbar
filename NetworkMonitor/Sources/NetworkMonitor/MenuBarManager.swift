@@ -388,6 +388,10 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
         let hookMonitor = ReasonixHookMonitor(database: databaseManager)
         hookMonitor.start()
         reasonixHookMonitor = hookMonitor
+
+        // 启动时立即全量导入 stats JSONL（兜底：即使暂无 hook 事件也保证最新数据落库）
+        StatsImporter(database: databaseManager).syncAll()
+
         print("📡 Reasonix Hook 监听器已启动")
     }
 

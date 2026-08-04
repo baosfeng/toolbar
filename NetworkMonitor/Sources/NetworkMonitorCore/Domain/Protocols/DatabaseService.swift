@@ -44,4 +44,9 @@ public protocol DatabaseService: AnyObject, Sendable {
 
     /// 查询指定会话的工具调用
     func queryToolCalls(sessionId: String, limit: Int) -> [[String: Any]]
+
+    // MARK: - Token 用量记录（stats JSONL 导入）
+
+    /// 插入一条 token 用量记录（幂等：重复导入自动忽略）
+    func insertTokenUsage(source: String, date: String, hour: Int, record: ReasonixStatsRecord)
 }
