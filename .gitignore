@@ -19,7 +19,9 @@
 .build-*
 .build/
 .idea/
-.reasonix
+.reasonix/*
+!.reasonix/skills/
+!.reasonix/skills/**
 .scan-cache/
 DerivedData/
 Packages/
