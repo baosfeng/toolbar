@@ -43,8 +43,6 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     private var slugCache: [String: String] = [:]
     /// sessionId → 上一次 Stop 累计值缓存（避免历史坏数据导致增量计算错误）
     private var lastStopTotal: [String: (tokens: Int, cost: Double)] = [:]
-    /// 官方 stats JSONL 全局累计缓存（短 TTL，避免每个事件都扫盘）
-    private var statsTotalCache: (value: Int, fetchedAt: Date)?
 
     // MARK: - 初始化
 
@@ -288,20 +286,6 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         return (attrs[.modificationDate] as? Date)?.timeIntervalSince1970
     }
 
-    /// 读取上游官方 stats JSONL 的全局累计 token（短 TTL 缓存，3 秒内不重复扫盘）
-    /// - Note: stats 文件是全局每日累计（无 sessionId 维度），多会话并发时无法精确归属，
-    ///   仅在 sidecar telemetry 缺失时作为兜底数据源。
-    private func loadStatsTotal() -> Int {
-        if let cache = statsTotalCache,
-           Date().timeIntervalSince(cache.fetchedAt) < 3.0 {
-            return cache.value
-        }
-        let dir = ReasonixStatsLoader.defaultStatsDir()
-        let total = ReasonixStatsLoader.totalTokens(statsDir: dir)
-        statsTotalCache = (total, Date())
-        return total
-    }
-
     /// cwd 为空时，在 ~/.reasonix/projects/ 下查找 sessionId 对应的 project slug
     /// 找到后缓存结果避免重复扫描
     private func findProjectSlug(for sid: String) -> String? {
@@ -338,19 +322,11 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             event.timestamp = resolveTimestamp(event.timestamp)
             print("🔌 [\(event.eventTypeCN)] \(event.sessionId.prefix(30))... 轮次:\(event.turns)")
 
-            // 补全侧车数据（缓存命中则不读磁盘）
+            // 补全侧车数据（缓存命中则不读磁盘）。
+            // 注意：token 统计以官方 stats JSONL 为权威来源，事件里的 total_tokens
+            // 仅作会话维度展示，不再用全局累计值兜底写入，避免污染数据库。
             let sidecar = loadSidecar(for: event)
             event.enrich(from: sidecar)
-
-            // 兜底数据源：sidecar 缺失时（CLI 无 telemetry 文件），
-            // 使用上游官方 stats JSONL 的全局累计 token（上游唯一权威 token 数据源）
-            if event.totalTokens == 0 && (event.isStop || event.isStopFailure || event.isSessionEnd) {
-                let statsTotal = loadStatsTotal()
-                if statsTotal > 0 {
-                    event.totalTokens = statsTotal
-                    print("📊 使用 stats JSONL 兜底: session=\(event.sessionId.prefix(30))... total=\(statsTotal)")
-                }
-            }
 
             // 统一货币：数据库以 CNY 存储（sidecar 中的 cost 为 USD）
             event.cost = CurrencyConfig.usdToCny(event.cost)
@@ -449,14 +425,9 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
                     """
                 database.query(sql: updateSQL) { _ in }
                 print("📝 回填 sidecar 数据: session=\(sid.prefix(30))... tokens=\(effectiveEvent.totalTokens) cost=\(effectiveEvent.cost)")
-            } else {
-                // sidecar 仍无数据时使用官方 stats JSONL 全局累计兜底
-                let statsTotal = loadStatsTotal()
-                if statsTotal > 0 {
-                    effectiveEvent.totalTokens = statsTotal
-                    print("📊 通知兜底 stats JSONL: session=\(sid.prefix(30))... total=\(statsTotal)")
-                }
             }
+            // sidecar 仍无数据时不兜底：token 统计以官方 stats JSONL 为权威来源，
+            // 避免把全局累计值写入单个会话导致增量计算错误。
         }
 
         let roundTokens = effectiveEvent.totalTokens - prev.tokens

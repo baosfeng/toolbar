@@ -484,17 +484,45 @@ do {
     print("✅ 过期数据清理 works")
 }
 
-// MARK: - Test TokenUsageProvider（核心业务）
+// MARK: - Test TokenUsageProvider（核心业务，stats JSONL 驱动）
 
 print("\n🧪 Testing TokenUsageProvider...")
 
-// Helper: 构造今天的 ISO8601 时间戳（UTC）
-func todayISO(_ addingMinutes: Int = 0) -> String {
+// Helper: 构造今天的本地日期字符串
+func todayYMD() -> String {
+    let fmt = DateFormatter()
+    fmt.dateFormat = "yyyy-MM-dd"
+    return fmt.string(from: Date())
+}
+
+// Helper: 创建临时 stats 目录并写入一条记录
+func makeStatsDir() -> String {
+    let dir = NSTemporaryDirectory() + "stats-tp-\(UUID().uuidString)"
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    return dir
+}
+
+func writeStatsLine(_ dir: String, date: String, ts: String, model: String,
+                    prompt: Int = 0, completion: Int = 0, reasoning: Int = 0, total: Int) {
+    let line = "{\"ts\":\"\(ts)\",\"model\":\"\(model)\",\"source\":\"desktop\",\"prompt\":\(prompt),\"completion\":\(completion),\"reasoning\":\(reasoning),\"total\":\(total)}\n"
+    let path = "\(dir)/\(date).jsonl"
+    if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: path)) {
+        handle.seekToEndOfFile()
+        handle.write(line.data(using: .utf8)!)
+        try? handle.close()
+    } else {
+        try? line.data(using: .utf8)?.write(to: URL(fileURLWithPath: path))
+    }
+}
+
+// Helper: 本地时区 ISO8601 时间戳（ts 字段）
+func localISO(_ addingMinutes: Int = 0) -> String {
     let fmt = ISO8601DateFormatter()
     fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return fmt.string(from: Date().addingTimeInterval(TimeInterval(addingMinutes * 60)))
 }
 
+// Helper: 构造 hook 事件（数据库会话维度展示用）
 func makeHookEvent(type: ReasonixHookEventType, sessionId: String, tokens: Int, cost: Double,
                    model: String = "gpt-5", project: String = "toolbar") throws -> ReasonixHookEvent {
     let json = """
@@ -503,29 +531,47 @@ func makeHookEvent(type: ReasonixHookEventType, sessionId: String, tokens: Int, 
     return try ReasonixHookEvent.from(jsonData: Data(json.utf8))
 }
 
+// Helper: 构造今天的 ISO8601 时间戳（UTC，hook 事件时间戳格式）
+func todayISO(_ addingMinutes: Int = 0) -> String {
+    let fmt = ISO8601DateFormatter()
+    fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return fmt.string(from: Date().addingTimeInterval(TimeInterval(addingMinutes * 60)))
+}
+
 func drainDB(_ db: DatabaseManager) {
     db.query(sql: "SELECT 1") { _ in }
 }
 
-// 今日统计：总计/汇总/每小时/历史/模型/项目排行
+// 今日统计：token 来自 stats 文件，花费来自 hook_sessions
 do {
     let db = DatabaseManager()
     db.initializeInMemory()
     defer { db.close() }
-    let provider = TokenUsageProvider(database: db)
+    let statsDir = makeStatsDir()
+    defer { try? FileManager.default.removeItem(atPath: statsDir) }
 
-    let stop = try makeHookEvent(type: .stop, sessionId: "s1", tokens: 100, cost: 0.01)
-    db.writeHookEvent(event: stop)
-    db.upsertHookSession(event: stop)
-    drainDB(db)
+    let today = todayYMD()
+    // 两条调用记录：total 60 + 40 = 100
+    writeStatsLine(statsDir, date: today, ts: localISO(0), model: "gpt-5", prompt: 30, completion: 30, total: 60)
+    writeStatsLine(statsDir, date: today, ts: localISO(1), model: "gpt-5", prompt: 20, completion: 20, total: 40)
+
+    let provider = TokenUsageProvider(database: db, statsDir: statsDir)
 
     let total = provider.fetchTodayTotal()
-    assertEqual(total.tokens, 100, "today total tokens")
-    assertEqual(total.cost, 0.01, "today total cost")
+    assertEqual(total.tokens, 100, "today total tokens from stats")
+
+    // 花费仍来自 hook_sessions（per-session 累计）
+    let stop = try makeHookEvent(type: .stop, sessionId: "s1", tokens: 100, cost: 0.01)
+    db.upsertHookSession(event: stop)
+    drainDB(db)
+    let totalWithCost = provider.fetchTodayTotal()
+    assertEqual(totalWithCost.tokens, 100, "today total tokens")
+    assertEqual(totalWithCost.cost, 0.01, "today total cost from hook session")
 
     let summary = provider.fetchTodaySummary()
     assertEqual(summary.totalTokens, 100, "summary total tokens")
     assertEqual(summary.byModel.count, 1, "summary by model")
+    assertEqual(summary.byModel[0].model, "gpt-5", "summary model name")
 
     let hourly = provider.fetchHourlyBreakdown(dateString: nil)
     assertEqual(hourly.count, 24, "hourly filled 24 hours")
@@ -533,16 +579,41 @@ do {
 
     let history = provider.fetchDailyHistory(days: 7)
     assertEqual(history.count, 7, "daily history filled 7 days")
+    assertEqual(history.last?.totalTokens, 100, "today in history")
 
     let models = provider.fetchModelRanking(limit: 5)
     assertEqual(models.count, 1, "model ranking count")
     assertEqual(models[0].model, "gpt-5", "model name")
+    assertEqual(models[0].totalTokens, 100, "model tokens from stats")
 
     let projects = provider.fetchProjectRanking(limit: 5)
     assertEqual(projects.count, 1, "project ranking count")
     assertEqual(projects[0].project, "toolbar", "project name")
 
     print("✅ TokenUsageProvider 今日统计 works")
+}
+
+// 跨天验证：昨天的记录不计入今天；按小时分布正确
+do {
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    defer { db.close() }
+    let statsDir = makeStatsDir()
+    defer { try? FileManager.default.removeItem(atPath: statsDir) }
+
+    let today = todayYMD()
+    let yesterdayFmt = DateFormatter()
+    yesterdayFmt.dateFormat = "yyyy-MM-dd"
+    let yesterday = yesterdayFmt.string(from: Date().addingTimeInterval(-86400))
+
+    writeStatsLine(statsDir, date: today, ts: localISO(0), model: "m1", total: 100)
+    writeStatsLine(statsDir, date: yesterday, ts: localISO(-1440), model: "m2", total: 999)
+
+    let provider = TokenUsageProvider(database: db, statsDir: statsDir)
+    assertEqual(provider.fetchTodayTotal().tokens, 100, "yesterday not counted in today")
+    assertEqual(provider.fetchDailyHistory(days: 2).last?.totalTokens, 100, "today tokens")
+
+    print("✅ TokenUsageProvider 跨天统计 works")
 }
 
 // 工具调用：排行 + 最近调用
@@ -609,7 +680,9 @@ do {
     let db = DatabaseManager()
     db.initializeInMemory()
     defer { db.close() }
-    let provider = TokenUsageProvider(database: db)
+    let statsDir = makeStatsDir()
+    defer { try? FileManager.default.removeItem(atPath: statsDir) }
+    let provider = TokenUsageProvider(database: db, statsDir: statsDir)
 
     assertEqual(provider.fetchTodayTotal().tokens, 0, "empty total")
     assertEqual(provider.fetchTodaySummary().totalTokens, 0, "empty summary")

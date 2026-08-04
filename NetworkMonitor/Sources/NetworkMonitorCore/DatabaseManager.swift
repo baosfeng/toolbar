@@ -352,23 +352,21 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             }
         }
 
-        // 表达式索引必须与查询中的 date(列, 偏移) 完全一致才能命中，故使用 SqliteTimeZone
-        let offset = SqliteTimeZone.offsetModifier
+        // 表达式索引必须与查询中的 date(列, 偏移) 完全一致才能命中
+        // 注意：SQLite 不允许在索引中使用非确定性函数（'localtime' 依赖系统时区），
+        // 且 token 统计已改由官方 stats JSONL 驱动（按天文件，无需数据库按天查询），
+        // 因此不再创建按天表达式索引，仅保留普通索引。
         let hookIndexes = [
             "CREATE INDEX IF NOT EXISTS idx_hook_events_session ON hook_events(session_id);",
             "CREATE INDEX IF NOT EXISTS idx_hook_events_type ON hook_events(event_type);",
             "CREATE INDEX IF NOT EXISTS idx_hook_events_time ON hook_events(timestamp);",
             "CREATE INDEX IF NOT EXISTS idx_hook_events_session_time ON hook_events(session_id, timestamp);",
-            // 表达式索引：让 WHERE date(timestamp, '+N hours') = '...' 走索引而非全表扫描
-            "CREATE INDEX IF NOT EXISTS idx_hook_events_day ON hook_events(date(timestamp, '\(offset)'));",
             "CREATE INDEX IF NOT EXISTS idx_hook_sessions_status ON hook_sessions(status);",
             "CREATE INDEX IF NOT EXISTS idx_hook_sessions_started ON hook_sessions(started_at);",
-            "CREATE INDEX IF NOT EXISTS idx_hook_sessions_day ON hook_sessions(date(started_at, '\(offset)'));",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_session ON hook_tool_calls(session_id);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_session_turn ON hook_tool_calls(session_id, turn);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_status ON hook_tool_calls(status);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_started ON hook_tool_calls(started_at);",
-            "CREATE INDEX IF NOT EXISTS idx_hook_calls_day ON hook_tool_calls(date(started_at, '\(offset)'));",
         ]
 
         for sql in hookIndexes {
