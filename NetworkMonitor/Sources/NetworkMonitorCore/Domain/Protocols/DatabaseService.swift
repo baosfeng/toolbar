@@ -5,6 +5,9 @@ import SQLite3
 
 /// 数据库服务协议 — 统一数据库访问接口
 ///
+/// 只保留通用连接管理与查询能力；领域写操作见
+/// `HookEventRepository`（Hook 事件）与 `TokenUsageRepository`（Token 用量）。
+///
 /// 所有写操作必须线程安全；查询通过 `query(sql:handler:)` 在串行队列上执行。
 public protocol DatabaseService: AnyObject, Sendable {
     /// 数据库是否已就绪
@@ -21,32 +24,11 @@ public protocol DatabaseService: AnyObject, Sendable {
 
     /// 执行查询，每行回调一次 handler
     func query(sql: String, handler: @escaping (OpaquePointer) -> Void)
-
-    // MARK: - Reasonix Hook 操作
-
-    /// 写入一条 Hook 事件流水
-    func writeHookEvent(event: ReasonixHookEvent)
-
-    /// 创建或更新会话汇总记录
-    func upsertHookSession(event: ReasonixHookEvent)
-
-    /// 创建工具调用记录
-    func startHookToolCall(sessionId: String, turn: Int, toolName: String,
-                          toolArgsJSON: String?, timestamp: String)
-
-    /// 更新工具调用记录
-    func finishHookToolCall(sessionId: String, turn: Int, toolName: String,
-                           status: String, resultPreview: String?,
-                           error: String?, timestamp: String)
-
-    /// 查询活跃会话列表
-    func queryActiveSessions(limit: Int) -> [[String: Any]]
-
-    /// 查询指定会话的工具调用
-    func queryToolCalls(sessionId: String, limit: Int) -> [[String: Any]]
-
-    // MARK: - Token 用量记录（stats JSONL 导入）
-
-    /// 插入一条 token 用量记录（幂等：重复导入自动忽略）
-    func insertTokenUsage(source: String, date: String, hour: Int, record: ReasonixStatsRecord)
 }
+
+// MARK: - 完整数据库能力组合
+
+/// 应用所需完整数据库能力 — 通用访问 + Hook 仓储 + Token 仓储
+///
+/// 组合根与 UI 层传递数据库实例时使用此组合类型，避免依赖具体实现类。
+public typealias AppDatabase = DatabaseService & HookEventRepository & TokenUsageRepository
