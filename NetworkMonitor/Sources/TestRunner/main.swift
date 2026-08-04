@@ -734,6 +734,46 @@ do {
     print("✅ TokenUsageProvider 空库容错 + 导入幂等 works")
 }
 
+// MARK: - Test HookEventDispatcher（事件处理器注册机制）
+
+do {
+    // 记录被处理的事件
+    final class RecordingHandler: @unchecked Sendable, HookEventHandler {
+        let handledTypes: Set<ReasonixHookEventType>
+        private(set) var received: [ReasonixHookEvent] = []
+
+        init(_ types: Set<ReasonixHookEventType>) {
+            self.handledTypes = types
+        }
+
+        func handle(_ event: ReasonixHookEvent) {
+            received.append(event)
+        }
+    }
+
+    let dispatcher = HookEventDispatcher()
+    let stopOnly = RecordingHandler([.stop])
+    let failureOnly = RecordingHandler([.stopFailure])
+    let allEvents = RecordingHandler([])  // 空集 = 处理所有事件
+
+    dispatcher.register(stopOnly)
+    dispatcher.register(failureOnly)
+    dispatcher.register(allEvents)
+
+    let stopEvent = try makeHookEvent(type: .stop, sessionId: "sess-dispatcher", tokens: 10, cost: 0.01)
+    let failureEvent = try makeHookEvent(type: .stopFailure, sessionId: "sess-dispatcher", tokens: 5, cost: 0.005)
+
+    dispatcher.dispatch(stopEvent)
+    dispatcher.dispatch(failureEvent)
+
+    assertEqual(stopOnly.received.count, 1, "stop 处理器只收到 Stop 事件")
+    assertEqual(stopOnly.received.first?.eventType, .stop, "stop 处理器收到的事件类型")
+    assertEqual(failureOnly.received.count, 1, "stopFailure 处理器只收到 StopFailure 事件")
+    assertEqual(allEvents.received.count, 2, "空集处理器收到所有事件")
+
+    print("✅ HookEventDispatcher 事件路由 works")
+}
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")
