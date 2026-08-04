@@ -33,9 +33,11 @@ final class ToolCallLifecycleHandler: HookEventHandler {
     let handledTypes: Set<ReasonixHookEventType> = [.preToolUse, .postToolUse, .postToolUseFailure]
 
     private let database: any HookEventRepository
+    private let logger: LoggingService
 
-    init(database: any HookEventRepository) {
+    init(database: any HookEventRepository, logger: LoggingService) {
         self.database = database
+        self.logger = logger
     }
 
     func handle(_ event: ReasonixHookEvent) {
@@ -53,7 +55,7 @@ final class ToolCallLifecycleHandler: HookEventHandler {
                 toolArgsJSON: argsJSON,
                 timestamp: event.timestamp
             )
-            print("🔧 工具调用开始: \(toolName)")
+            logger.debug("工具调用开始: \(toolName)")
         }
 
         if event.isToolEnd {
@@ -72,7 +74,7 @@ final class ToolCallLifecycleHandler: HookEventHandler {
                 error: error,
                 timestamp: event.timestamp
             )
-            print("🔧 工具调用结束: \(toolName) [\(status)]")
+            logger.debug("工具调用结束: \(toolName) [\(status)]")
         }
     }
 }
@@ -84,14 +86,18 @@ final class SessionEndNotifier: @unchecked Sendable, HookEventHandler {
     let handledTypes: Set<ReasonixHookEventType> = [.stop, .stopFailure]
 
     private let database: any DatabaseService & HookEventRepository
+    /// 日志服务
+    private let logger: LoggingService
     /// 侧车数据加载器（由监听器注入，复用其 TTL/LRU 缓存）
     private let sidecarProvider: (ReasonixHookEvent) -> SessionSidecarData
     /// sessionId → 上一次 Stop 累计值缓存（避免历史坏数据导致增量计算错误）
     private var lastStopTotal: [String: (tokens: Int, cost: Double)] = [:]
 
     init(database: any DatabaseService & HookEventRepository,
+         logger: LoggingService,
          sidecarProvider: @escaping (ReasonixHookEvent) -> SessionSidecarData) {
         self.database = database
+        self.logger = logger
         self.sidecarProvider = sidecarProvider
     }
 
@@ -125,7 +131,7 @@ final class SessionEndNotifier: @unchecked Sendable, HookEventHandler {
                       AND id = (SELECT MAX(id) FROM hook_events WHERE session_id = '\(safeId)' AND event_type IN ('Stop', 'StopFailure'))
                     """
                 database.query(sql: updateSQL) { _ in }
-                print("📝 回填 sidecar 数据: session=\(sid.prefix(30))... tokens=\(effectiveEvent.totalTokens) cost=\(effectiveEvent.cost)")
+                logger.info("回填 sidecar 数据: session=\(sid.prefix(30))... tokens=\(effectiveEvent.totalTokens) cost=\(effectiveEvent.cost)")
             }
             // sidecar 仍无数据时不兜底：token 统计以官方 stats JSONL 为权威来源，
             // 避免把全局累计值写入单个会话导致增量计算错误。

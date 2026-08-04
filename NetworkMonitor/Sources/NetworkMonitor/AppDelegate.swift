@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorCore
 
 // MARK: - App Delegate
 
@@ -16,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCent
 
     func applicationWillTerminate(_ notification: Notification) {
         coordinator?.stop()
-        print("👋 应用退出")
+        AppContext.shared.logger.info("应用退出")
     }
 
     // MARK: - NSUserNotificationCenterDelegate

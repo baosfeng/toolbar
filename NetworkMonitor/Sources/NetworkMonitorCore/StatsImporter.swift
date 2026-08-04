@@ -17,6 +17,8 @@ public final class StatsImporter: @unchecked Sendable {
 
     private let database: any TokenUsageRepository
     private let statsDir: String
+    /// 日志服务
+    private let logger: LoggingService
     private let queue = DispatchQueue(label: "com.example.NetworkMonitor.stats-importer")
     private var lastSyncAt = Date.distantPast
     private let minSyncInterval: TimeInterval
@@ -26,10 +28,12 @@ public final class StatsImporter: @unchecked Sendable {
     ///   - database: Token 用量仓储（协议注入，测试可用内存库）
     ///   - statsDir: stats 目录，默认 `~/.reasonix/stats`
     ///   - minSyncInterval: 最小同步间隔（秒），默认 3 秒
-    public init(database: any TokenUsageRepository, statsDir: String? = nil, minSyncInterval: TimeInterval = 3.0) {
+    public init(database: any TokenUsageRepository, statsDir: String? = nil, minSyncInterval: TimeInterval = 3.0,
+                logger: LoggingService = AppContext.shared.logger) {
         self.database = database
         self.statsDir = statsDir ?? ReasonixStatsLoader.defaultStatsDir()
         self.minSyncInterval = minSyncInterval
+        self.logger = logger
     }
 
     /// 全量同步一次（不受节流限制）。应用启动时调用，兜底保证最新数据已导入。
@@ -78,7 +82,7 @@ public final class StatsImporter: @unchecked Sendable {
                 imported += 1
             }
             if imported > 0 {
-                print("📥 stats 导入 \(filename): \(imported) 条记录")
+                logger.info("stats 导入 \(filename): \(imported) 条记录")
             }
         }
     }

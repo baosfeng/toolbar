@@ -67,13 +67,13 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
     private func _initialize() {
         let path = (dbPath as NSString).utf8String
         guard let cPath = path else {
-            print("❌ 数据库路径无效")
+            logger.error("数据库路径无效")
             return
         }
 
         let status = sqlite3_open(cPath, &db)
         guard status == SQLITE_OK else {
-            print("❌ 打开数据库失败: \(status)")
+            logger.error("打开数据库失败: \(status)")
             db = nil
             return
         }
@@ -86,20 +86,20 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
         createTables()
         migrateIfNeeded()
         startRetentionTimer()
-        print("✅ 数据库已就绪: \(dbPath)")
+        logger.info("数据库已就绪: \(dbPath)")
     }
 
     private func _openInMemory() {
         let status = sqlite3_open(":memory:", &db)
         guard status == SQLITE_OK else {
-            print("❌ 打开内存数据库失败: \(status)")
+            logger.error("打开内存数据库失败: \(status)")
             db = nil
             return
         }
 
         createTables()
         migrateIfNeeded()
-        print("✅ 内存数据库已就绪")
+        logger.info("内存数据库已就绪")
     }
 
     // MARK: - Schema 迁移
@@ -127,12 +127,12 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             ]
             for sql in migrations {
                 if sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
-                    print("⚠️ 数据迁移 v1 失败: \(String(cString: sqlite3_errmsg(db)))")
+                    logger.warning("数据迁移 v1 失败: \(String(cString: sqlite3_errmsg(db)))")
                     return
                 }
             }
             sqlite3_exec(db, "PRAGMA user_version = 1", nil, nil, nil)
-            print("💱 数据迁移 v1 完成：cost 字段已统一为 CNY")
+            logger.info("数据迁移 v1 完成：cost 字段已统一为 CNY")
         }
     }
 
@@ -144,7 +144,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
               sqlite3_step(stmt) == SQLITE_DONE else {
-            print("⚠️ PRAGMA \(name) 设置失败: \(String(cString: sqlite3_errmsg(db)))")
+            logger.warning("PRAGMA \(name) 设置失败: \(String(cString: sqlite3_errmsg(db)))")
             return
         }
     }
@@ -232,13 +232,13 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             defer { sqlite3_finalize(stmt) }
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
                   sqlite3_step(stmt) == SQLITE_DONE else {
-                print("⚠️ 过期数据清理失败: \(String(cString: sqlite3_errmsg(db)))")
+                logger.warning("过期数据清理失败: \(String(cString: sqlite3_errmsg(db)))")
                 continue
             }
             deleted += Int(sqlite3_changes(db))
         }
         if deleted > 0 {
-            print("🧹 已清理 \(deleted) 条过期数据")
+            logger.info("已清理 \(deleted) 条过期数据")
         }
     }
 
@@ -350,12 +350,12 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
             let status = sqlite3_prepare_v2(db, sql, -1, &stmt, nil)
             guard status == SQLITE_OK else {
-                print("❌ Hook 建表失败: \(String(cString: sqlite3_errmsg(db)))")
+                logger.error("Hook 建表失败: \(String(cString: sqlite3_errmsg(db)))")
                 return
             }
 
             if sqlite3_step(stmt) != SQLITE_DONE {
-                print("❌ Hook 建表执行失败: \(String(cString: sqlite3_errmsg(db)))")
+                logger.error("Hook 建表执行失败: \(String(cString: sqlite3_errmsg(db)))")
                 return
             }
         }
@@ -374,7 +374,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             defer { sqlite3_finalize(stmt) }
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
                   sqlite3_step(stmt) == SQLITE_DONE else {
-                print("⚠️ 旧索引清理失败: \(String(cString: sqlite3_errmsg(db)))")
+                logger.warning("旧索引清理失败: \(String(cString: sqlite3_errmsg(db)))")
                 continue
             }
         }
@@ -406,7 +406,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
                   sqlite3_step(stmt) == SQLITE_DONE else {
-                print("⚠️ Hook 索引创建失败: \(String(cString: sqlite3_errmsg(db)))")
+                logger.warning("Hook 索引创建失败: \(String(cString: sqlite3_errmsg(db)))")
                 continue
             }
         }

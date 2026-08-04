@@ -31,6 +31,8 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     // MARK: - 属性
 
     private let database: any DatabaseService & HookEventRepository
+    /// 日志服务
+    private let logger: LoggingService
     private var socketFd: Int32 = -1
     private var readSource: DispatchSourceRead?
     /// 事件处理队列 — DispatchSourceRead 在此队列上派发事件
@@ -46,19 +48,20 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
 
     // MARK: - 初始化
 
-    init(database: any AppDatabase) {
+    init(database: any AppDatabase, logger: LoggingService = AppContext.shared.logger) {
         self.database = database
+        self.logger = logger
         registerHandlers(database: database)
     }
 
     /// 注册事件处理器（按执行顺序：先落库，再工具调用，再通知，最后同步 stats）
     private func registerHandlers(database: any AppDatabase) {
         dispatcher.register(HookPersistenceHandler(database: database))
-        dispatcher.register(ToolCallLifecycleHandler(database: database))
-        dispatcher.register(SessionEndNotifier(database: database) { [weak self] event in
+        dispatcher.register(ToolCallLifecycleHandler(database: database, logger: logger))
+        dispatcher.register(SessionEndNotifier(database: database, logger: logger) { [weak self] event in
             self?.loadSidecar(for: event) ?? SessionSidecarData()
         })
-        dispatcher.register(StatsSyncHandler(statsImporter: StatsImporter(database: database)))
+        dispatcher.register(StatsSyncHandler(statsImporter: StatsImporter(database: database, logger: logger)))
     }
 
     deinit {
@@ -70,13 +73,13 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     /// 启动 UDS 监听器
     func start() {
         guard readSource == nil else {
-            print("⚠️ ReasonixHookMonitor 已在运行中")
+            logger.warning("ReasonixHookMonitor 已在运行中")
             return
         }
 
         let fd = socket(AF_UNIX, SOCK_DGRAM, 0)
         guard fd >= 0 else {
-            print("❌ ReasonixHookMonitor socket 创建失败: \(String(cString: strerror(errno)))")
+            logger.error("ReasonixHookMonitor socket 创建失败: \(String(cString: strerror(errno)))")
             return
         }
         socketFd = fd
@@ -99,7 +102,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         let maxPath = MemoryLayout.size(ofValue: addr.sun_path) - 1
 
         guard pathLen <= maxPath else {
-            print("❌ ReasonixHookMonitor socket 路径过长")
+            logger.error("ReasonixHookMonitor socket 路径过长")
             stop()
             return
         }
@@ -123,12 +126,12 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         }
 
         guard bindResult == 0 else {
-            print("❌ ReasonixHookMonitor bind 失败: \(String(cString: strerror(errno)))")
+            logger.error("ReasonixHookMonitor bind 失败: \(String(cString: strerror(errno)))")
             stop()
             return
         }
 
-        print("✅ ReasonixHookMonitor 已绑定到 \(Self.sockPath)")
+        logger.info("ReasonixHookMonitor 已绑定到 \(Self.sockPath)")
 
         // 使用 DispatchSourceRead 监听 socket 可读事件
         // 事件处理器在 eventQueue 上运行，不会阻塞
@@ -157,14 +160,14 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             }
         }
 
-        source.setCancelHandler {
+        source.setCancelHandler { [weak self] in
             close(fd)
-            print("📡 ReasonixHookMonitor socket 已关闭")
+            self?.logger.info("ReasonixHookMonitor socket 已关闭")
         }
 
         source.resume()
 
-        print("📡 ReasonixHookMonitor 已启动 — 监听 \(Self.sockPath)")
+        logger.info("ReasonixHookMonitor 已启动 — 监听 \(Self.sockPath)")
 
         startHealthCheck()
     }
@@ -195,7 +198,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             guard let self = self else { return }
             let sockPath = Self.sockPath
             if !FileManager.default.fileExists(atPath: sockPath) {
-                print("⚠️ socket 文件丢失，正在重建...")
+                self.logger.warning("socket 文件丢失，正在重建...")
                 // stop() 会清理 FD；start() 内部调用 cleanupSocket() + bind
                 self.stop()
                 self.start()
@@ -217,7 +220,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
     private func loadSidecar(for event: ReasonixHookEvent) -> SessionSidecarData {
         let sid = event.sessionId
         guard !sid.contains(".."), !sid.contains("/") else {
-            print("⚠️ 拒绝路径遍历: sid=\(sid.prefix(50))")
+            logger.warning("拒绝路径遍历: sid=\(sid.prefix(50))")
             return SessionSidecarData()
         }
         if let cached = sidecarCache.get(sid) {
@@ -287,7 +290,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
         )
         sidecarCache.set(sid, data, metaMtime: fileModTime(metaPath) ?? 0,
                          teleMtime: fileModTime(telePath) ?? 0)
-        print("📖 加载侧车数据: \(sid.prefix(30))... turns=\(turns) tokens=\(totalTokens)")
+        logger.debug("加载侧车数据: \(sid.prefix(30))... turns=\(turns) tokens=\(totalTokens)")
         return data
     }
 
@@ -336,7 +339,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             var event = try ReasonixHookEvent.from(jsonData: data)
             // 补全缺失的时间戳
             event.timestamp = resolveTimestamp(event.timestamp)
-            print("🔌 [\(event.eventTypeCN)] \(event.sessionId.prefix(30))... 轮次:\(event.turns)")
+            logger.debug("[\(event.eventTypeCN)] \(event.sessionId.prefix(30))... 轮次:\(event.turns)")
 
             // 补全侧车数据（缓存命中则不读磁盘）。
             // 注意：token 统计以官方 stats JSONL 为权威来源，事件里的 total_tokens
@@ -354,12 +357,12 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             AppEvents.postHookDataChanged()
 
         } catch let error as ReasonixHookError {
-            print("⚠️ Hook 数据解析失败: \(error.localizedDescription)")
+            logger.error("Hook 数据解析失败: \(error.localizedDescription)")
             if let rawStr = String(data: data, encoding: .utf8) {
-                print("  原始数据: \(rawStr.prefix(300))")
+                logger.error("原始数据: \(rawStr.prefix(300))")
             }
         } catch {
-            print("⚠️ Hook 数据处理异常: \(error.localizedDescription)")
+            logger.error("Hook 数据处理异常: \(error.localizedDescription)")
         }
     }
 
