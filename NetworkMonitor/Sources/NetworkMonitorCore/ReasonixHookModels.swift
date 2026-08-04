@@ -366,7 +366,7 @@ extension SessionSidecarData {
                 costUSD = raw.doubleValue
             } else {
                 // 非 USD 货币（如 CNY）：按当前汇率反算为 USD，保持统一口径
-                costUSD = raw.doubleValue / CurrencyConfig.usdToCnyRate
+                costUSD = raw.doubleValue / CurrencyConfig.shared.usdToCnyRate
             }
         } else if let legacy = u["cost"] as? NSNumber {
             costUSD = legacy.doubleValue

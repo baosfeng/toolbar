@@ -348,7 +348,7 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             event.enrich(from: sidecar)
 
             // 统一货币：数据库以 CNY 存储（sidecar 中的 cost 为 USD）
-            event.cost = CurrencyConfig.usdToCny(event.cost)
+            event.cost = CurrencyConfig.shared.usdToCny(event.cost)
 
             // 分发到已注册的事件处理器（写库/会话汇总/工具调用/通知/stats 导入）
             dispatcher.dispatch(event)
