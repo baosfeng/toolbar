@@ -350,6 +350,9 @@ final class ReasonixHookMonitor: @unchecked Sendable, HookEventService {
             // 分发到已注册的事件处理器（写库/会话汇总/工具调用/通知/stats 导入）
             dispatcher.dispatch(event)
 
+            // 数据已落库，通知 UI 层立即刷新统计（绕过低频轮询延迟）
+            AppEvents.postHookDataChanged()
+
         } catch let error as ReasonixHookError {
             print("⚠️ Hook 数据解析失败: \(error.localizedDescription)")
             if let rawStr = String(data: data, encoding: .utf8) {

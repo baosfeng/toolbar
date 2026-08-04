@@ -28,6 +28,8 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     private let trafficTracker: any TrafficTrackingService
     private var lastHistoryHash: String = ""
     private var lastHourlyHash: String = ""
+    /// Hook 数据变更观察者（事件总线订阅，用于立即刷新统计）
+    nonisolated(unsafe) private var hookDataObserver: NSObjectProtocol?
 
     // MARK: - 子菜单
     private let processSubmenu = NSMenu()
@@ -89,8 +91,28 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         startReasonixHook()
+        observeHookDataChanges()
         setupMenu()
         setupTimer()
+    }
+
+    /// 订阅 Hook 数据变更事件 — 落库后立即刷新统计，不等 15 秒轮询
+    private func observeHookDataChanges() {
+        hookDataObserver = NotificationCenter.default.addObserver(
+            forName: AppEvents.hookDataChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshTokenStatsOnDataChange()
+            }
+        }
+    }
+
+    /// Hook 数据变更后立即刷新 Token 统计与 AI 分析（绕过 15 秒节流）
+    private func refreshTokenStatsOnDataChange() {
+        lastStatsUpdate = Date()
+        updateLowFrequency()
     }
 
 
@@ -652,5 +674,10 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
 
 
 
-    nonisolated deinit {}
+    nonisolated deinit {
+        // 移除事件总线观察者，避免闭包观察者残留
+        if let hookDataObserver {
+            NotificationCenter.default.removeObserver(hookDataObserver)
+        }
+    }
 }

@@ -774,6 +774,24 @@ do {
     print("✅ HookEventDispatcher 事件路由 works")
 }
 
+// MARK: - Test AppEvents（应用事件总线）
+
+do {
+    var received = false
+    let token = NotificationCenter.default.addObserver(
+        forName: AppEvents.hookDataChanged,
+        object: nil,
+        queue: nil
+    ) { _ in
+        received = true
+    }
+    AppEvents.postHookDataChanged()
+    NotificationCenter.default.removeObserver(token)
+    assertEqual(received, true, "hookDataChanged 事件已发布并接收")
+
+    print("✅ AppEvents 事件总线 works")
+}
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")

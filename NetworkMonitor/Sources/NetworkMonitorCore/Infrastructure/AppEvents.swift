@@ -1,0 +1,19 @@
+import Foundation
+
+// MARK: - 应用事件总线
+
+/// 应用级事件通知 — 数据变更后发布，UI 层订阅以即时刷新
+///
+/// 基于 `NotificationCenter` 的轻量事件总线：
+/// - 发布可在任意线程调用（如后台事件队列）
+/// - 订阅方通过 `queue: .main` 或 `Task { @MainActor }` 回到主线程更新 UI
+/// - 事件名集中定义，避免散落的字符串
+public enum AppEvents {
+    /// Hook 数据（token 统计 / AI 分析）已变化 — 订阅方应立即刷新统计
+    public static let hookDataChanged = Notification.Name("AppEvents.hookDataChanged")
+
+    /// 发布 Hook 数据变更通知（线程安全，可任意队列调用）
+    public static func postHookDataChanged() {
+        NotificationCenter.default.post(name: hookDataChanged, object: nil)
+    }
+}
