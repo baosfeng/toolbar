@@ -74,15 +74,15 @@ public final class StatsImporter: @unchecked Sendable {
             let path = (statsDir as NSString).appendingPathComponent(filename)
             guard let content = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
 
-            var imported = 0
+            var entries: [(hour: Int, record: ReasonixStatsRecord)] = []
             for line in content.split(separator: "\n") {
                 guard let record = ReasonixStatsLoader.parseLine(String(line), date: date) else { continue }
-                let hour = localHour(from: record.ts)
-                database.insertTokenUsage(source: "reasonix", date: date, hour: hour, record: record)
-                imported += 1
+                entries.append((localHour(from: record.ts), record))
             }
-            if imported > 0 {
-                logger.info("stats 导入 \(filename): \(imported) 条记录")
+            if !entries.isEmpty {
+                // 批量插入（单事务），避免逐条 WAL 提交带来的大量 fsync
+                database.insertTokenUsages(source: "reasonix", date: date, entries: entries)
+                logger.info("stats 导入 \(filename): \(entries.count) 条记录")
             }
         }
     }

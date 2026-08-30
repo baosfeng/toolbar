@@ -221,6 +221,133 @@ do {
     print("✅ ReasonixStatsLoader 空目录容错 works")
 }
 
+// MARK: - Test ReasonixStatsLoader.parseTimestamp（缓存解析器）
+
+print("\n🧪 Testing parseTimestamp...")
+
+do {
+    // 带小数秒（stats 记录典型格式，与上游 ISO8601DateFormatter 行为一致）
+    let withMs = ReasonixStatsLoader.parseTimestamp("2026-08-03T10:00:00.123+08:00")
+    assertNotNil(withMs, "fractional seconds parsed")
+    if let d = withMs {
+        let ref = ISO8601DateFormatter()
+        ref.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let expect = ref.date(from: "2026-08-03T10:00:00.123+08:00")!
+        assertEqual(d.timeIntervalSince1970 == expect.timeIntervalSince1970, true, "fractional ts identical to ISO8601DateFormatter")
+    }
+
+    // 不带小数秒（补齐边缘格式，回退解析）
+    let noMs = ReasonixStatsLoader.parseTimestamp("2026-08-03T10:00:00+08:00")
+    assertNotNil(noMs, "non-fractional parsed")
+
+    // UTC Z 后缀
+    let utc = ReasonixStatsLoader.parseTimestamp("2026-08-03T02:00:00Z")
+    assertNotNil(utc, "UTC Z parsed")
+
+    // 非法字符串 → nil（不崩溃）
+    let bad = ReasonixStatsLoader.parseTimestamp("not-a-date")
+    assertEqual(bad, nil, "invalid ts returns nil")
+
+    print("✅ parseTimestamp 解析正确性 works")
+}
+
+do {
+    // 并发解析验证缓存锁安全性：多条线程同时解析，结果稳定且无崩溃
+    final class ResultBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [Bool]
+
+        init(count: Int) {
+            values = [Bool](repeating: false, count: count)
+        }
+
+        func set(_ v: Bool, at index: Int) {
+            lock.lock()
+            values[index] = v
+            lock.unlock()
+        }
+
+        var allOK: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return values.allSatisfy { $0 }
+        }
+    }
+
+    let counts = 8
+    let box = ResultBox(count: counts)
+    let group = DispatchGroup()
+    for i in 0..<counts {
+        group.enter()
+        DispatchQueue.global().async {
+            var ok = true
+            for _ in 0..<200 {
+                // 带小数秒（走 fractional 分支）与不带小数秒（走 plain 分支）交替验证
+                let ts = i % 2 == 0
+                    ? "2026-08-03T10:00:00.123+08:00"
+                    : "2026-08-03T10:00:00+08:00"
+                if ReasonixStatsLoader.parseTimestamp(ts) == nil { ok = false; break }
+            }
+            box.set(ok, at: i)
+            group.leave()
+        }
+    }
+    group.wait()
+    assertEqual(box.allOK, true, "concurrent parseTimestamp stable")
+
+    print("✅ parseTimestamp 并发安全 works")
+}
+
+// MARK: - Test TrafficTracker（每日流量追踪）
+
+print("\n🧪 Testing TrafficTracker...")
+
+do {
+    // 模拟网络监控（累计值可变）
+    final class MockMonitor: NetworkMonitoringService {
+        var downloadSpeed: Double = 0
+        var uploadSpeed: Double = 0
+        var totalRx: UInt64
+        var totalTx: UInt64
+
+        init(totalRx: UInt64, totalTx: UInt64) {
+            self.totalRx = totalRx
+            self.totalTx = totalTx
+        }
+
+        func poll() {}
+    }
+
+    let suite = UserDefaults(suiteName: "test.traffic-\(UUID().uuidString)")!
+    let monitor = MockMonitor(totalRx: 1000, totalTx: 500)
+    let tracker = TrafficTracker(
+        monitor: monitor,
+        storage: UserDefaultsStorage(defaults: suite)
+    )
+
+    // 启动基准入库：累计值未变 → 今日流量 0
+    assertEqual(tracker.todayRx, 0, "initial todayRx zero")
+    assertEqual(tracker.todayTx, 0, "initial todayTx zero")
+
+    // 累计增加 2.5MB / 1MB → 今日流量等于增量
+    monitor.totalRx = 1_000 + 2_500_000
+    monitor.totalTx = 500 + 1_000_000
+    assertEqual(tracker.todayRx, 2_500_000, "todayRx equals increment")
+    assertEqual(tracker.todayTx, 1_000_000, "todayTx equals increment")
+
+    // weekEntries：无日志时仅今天一条，label 为短日期格式
+    let entries = tracker.weekEntries
+    assertEqual(entries.count, 1, "weekEntries only today without log")
+    assertEqual(entries[0].rx, 2_500_000, "weekEntries today rx")
+    assertEqual(entries[0].label.contains("/"), true, "week label short format")
+
+    // 当天 update() 不切换日期、无副作用
+    tracker.update()
+    assertEqual(tracker.todayRx, 2_500_000, "update keeps today rx")
+
+    print("✅ TrafficTracker 每日流量 works")
+}
+
 // MARK: - Test ReasonixPath.workspaceSlug（对齐上游 config.WorkspaceSlug）
 
 print("\n🧪 Testing ReasonixPath.workspaceSlug...")

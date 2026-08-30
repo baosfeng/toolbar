@@ -19,6 +19,20 @@ public final class TrafficTracker: TrafficTrackingService {
     private static let dayStartTxKey = "dayStartTx"
     private static let dailyLogKey = "dailyTrafficLog"
 
+    /// 周标签格式化器缓存（`DateFormatter` 初始化昂贵且非线程安全；本类仅主线程使用）
+    private let weekFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M/d"
+        return f
+    }()
+
+    /// 日志日期格式化器缓存（本地 `yyyy-MM-dd`）
+    private let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
     /// 今日流量（下行）
     public var todayRx: UInt64 {
         monitor.totalRx >= dayStartRx ? monitor.totalRx - dayStartRx : 0
@@ -32,27 +46,23 @@ public final class TrafficTracker: TrafficTrackingService {
     /// 近 7 日每日流量明细（日期降序：今天在最前）
     public var weekEntries: [(label: String, rx: UInt64, tx: UInt64)] {
         var entries: [(label: String, rx: UInt64, tx: UInt64)] = []
-        let fmt = DateFormatter()
-        fmt.dateFormat = "M/d"
 
         // 今天
-        entries.append((label: fmt.string(from: Date()), rx: todayRx, tx: todayTx))
+        entries.append((label: weekFormatter.string(from: Date()), rx: todayRx, tx: todayTx))
 
         // 从日志取前 6 天
         let log = storage.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
-        let dateFmt = DateFormatter()
-        dateFmt.dateFormat = "yyyy-MM-dd"
         let cal = Calendar.current
         let today = cal.startOfDay(for: Date())
 
         for entry in log.reversed() {
             guard let dateStr = entry["date"] as? String,
-                  let date = dateFmt.date(from: dateStr),
+                  let date = dayFormatter.date(from: dateStr),
                   let rx = entry["rx"] as? UInt64,
                   let tx = entry["tx"] as? UInt64 else { continue }
             let daysDiff = cal.dateComponents([.day], from: date, to: today).day ?? 7
             guard daysDiff > 0, daysDiff < 7 else { continue }
-            entries.append((label: fmt.string(from: date), rx: rx, tx: tx))
+            entries.append((label: weekFormatter.string(from: date), rx: rx, tx: tx))
         }
 
         return entries
@@ -96,9 +106,7 @@ public final class TrafficTracker: TrafficTrackingService {
 
         if yesterdayRx > 0 || yesterdayTx > 0 {
             var log = storage.array(forKey: Self.dailyLogKey) as? [[String: Any]] ?? []
-            let fmt = DateFormatter()
-            fmt.dateFormat = "yyyy-MM-dd"
-            log.append(["date": fmt.string(from: savedDate), "rx": yesterdayRx, "tx": yesterdayTx])
+            log.append(["date": dayFormatter.string(from: savedDate), "rx": yesterdayRx, "tx": yesterdayTx])
             if log.count > 30 { log = Array(log.suffix(30)) }
             storage.set(log, forKey: Self.dailyLogKey)
         }

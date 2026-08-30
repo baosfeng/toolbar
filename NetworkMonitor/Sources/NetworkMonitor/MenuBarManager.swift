@@ -30,6 +30,8 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     private let logger: LoggingService
     private var lastHistoryHash: String = ""
     private var lastHourlyHash: String = ""
+    /// 流量汇总菜单内容哈希 — 内容未变化时跳过重建，避免每 5 秒销毁/重建菜单项与 SF Symbol
+    private var lastTrafficHash: String = ""
     /// Hook 数据变更观察者（事件总线订阅，用于立即刷新统计）
     nonisolated(unsafe) private var hookDataObserver: NSObjectProtocol?
 
@@ -235,8 +237,11 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
         let downStr = formatSpeedShort(downSpeed)
         let upStr = formatSpeedShort(upSpeed)
 
-        // 更新菜单栏属性字符串
-        statusItem.button?.attributedTitle = StatusBarView.attributedString(downSpeed: downStr, upSpeed: upStr)
+        // 更新菜单栏属性字符串（仅内容变化时设置，避免每秒触发 Auto Layout 全链布局）
+        let title = StatusBarView.attributedString(downSpeed: downStr, upSpeed: upStr)
+        if statusItem.button?.attributedTitle != title {
+            statusItem.button?.attributedTitle = title
+        }
 
         // 历史记录
         downHistory.append(downSpeed)
@@ -383,16 +388,24 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     }
 
     /// 更新流量汇总子菜单（今日 + 近7日逐日明细）
+    /// 内容未变化时跳过重建（每 5 秒执行一次，避免反复移除/创建菜单项）
     private func updateTrafficSubmenu() {
-        trafficSubmenu.removeAllItems()
-
         // 今日
         let todayDown = formatBytesFull(trafficTracker.todayRx)
         let todayUp = formatBytesFull(trafficTracker.todayTx)
-        trafficSubmenu.addItem(menuItem(title: "今日  ↓\(todayDown)  ↑\(todayUp)", symbol: "sun.max", tag: trafficTodayTag, isEnabled: false))
-
         // 近7日逐日明细
         let entries = trafficTracker.weekEntries
+
+        // 内容哈希：仅变化时才重建
+        let hash = "\(todayDown)|\(todayUp)|" + entries
+            .map { "\($0.label):\($0.rx):\($0.tx)" }
+            .joined(separator: ",")
+        guard hash != lastTrafficHash else { return }
+        lastTrafficHash = hash
+
+        trafficSubmenu.removeAllItems()
+        trafficSubmenu.addItem(menuItem(title: "今日  ↓\(todayDown)  ↑\(todayUp)", symbol: "sun.max", tag: trafficTodayTag, isEnabled: false))
+
         if entries.count > 1 {
             trafficSubmenu.addItem(NSMenuItem.separator())
             for i in 1..<entries.count {
