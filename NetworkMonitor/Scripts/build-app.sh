@@ -12,12 +12,12 @@ APP_DIR="dist/${APP_NAME}.app"
 
 echo "🔨 正在构建 ${APP_NAME}（${BUILD_MODE}）..."
 
-# 1. 使用 Swift PM 构建
+# 1. 使用 Swift PM 构建（完整构建，保证链接出可执行文件；--target 在 SwiftPM 6.3 下不产出二进制）
 if [ "$BUILD_MODE" = "release" ]; then
-    swift build -c release --target ${APP_NAME} --disable-sandbox
+    swift build -c release --disable-sandbox
     BINARY_PATH=".build/arm64-apple-macosx/release/${APP_NAME}"
 else
-    swift build --target ${APP_NAME} --disable-sandbox
+    swift build --disable-sandbox
     BINARY_PATH=".build/arm64-apple-macosx/debug/${APP_NAME}"
 fi
 
