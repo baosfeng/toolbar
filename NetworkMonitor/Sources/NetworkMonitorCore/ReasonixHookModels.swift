@@ -509,13 +509,40 @@ public enum ReasonixStatsLoader {
     }
 
     /// 解析 ts 字段（ISO8601 带时区）为 Date；解析失败返回 nil
+    ///
+    /// 性能说明：`ISO8601DateFormatter` 初始化会触发 ICU / 时区数据装载（每次约数毫秒），
+    /// stats 导入按行调用本方法，绝不能在热路径中重复构造。这里复用两个缓存实例
+    /// （带/不带小数秒），并用锁保护（`NSISO8601DateFormatter` 非线程安全）。
     public static func parseTimestamp(_ ts: String) -> Date? {
-        let fmt = ISO8601DateFormatter()
-        fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = fmt.date(from: ts) { return d }
-        fmt.formatOptions = [.withInternetDateTime]
-        return fmt.date(from: ts)
+        timestampCache.parse(ts)
     }
+
+    /// ISO8601 时间戳解析缓存容器
+    private final class TimestampParser: @unchecked Sendable {
+        private let lock = NSLock()
+        /// 带小数秒解析器（`.withFractionalSeconds` 格式）
+        private let fractional: ISO8601DateFormatter
+        /// 不带小数秒解析器（兜底）
+        private let plain: ISO8601DateFormatter
+
+        init() {
+            fractional = ISO8601DateFormatter()
+            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            plain = ISO8601DateFormatter()
+            plain.formatOptions = [.withInternetDateTime]
+        }
+
+        /// 解析 ISO8601 时间戳（先尝试带小数秒，失败后回退到无小数秒）
+        func parse(_ ts: String) -> Date? {
+            lock.lock()
+            defer { lock.unlock() }
+            if let d = fractional.date(from: ts) { return d }
+            return plain.date(from: ts)
+        }
+    }
+
+    /// 全局共享的解析器实例（静态初始化一次，进程内复用）
+    private static let timestampCache = TimestampParser()
 
     /// 累计 token 总数（不含 turn 标记行）
     public static func totalTokens(statsDir: String) -> Int {

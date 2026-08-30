@@ -9,4 +9,9 @@ import Foundation
 public protocol TokenUsageRepository: AnyObject, Sendable {
     /// 插入一条 token 用量记录（幂等：重复导入自动忽略）
     func insertTokenUsage(source: String, date: String, hour: Int, record: ReasonixStatsRecord)
+
+    /// 批量插入 token 用量记录（单事务提交，幂等：重复记录自动忽略）
+    /// - 导入大量记录时应使用本方法：逐条插入会产生大量独立 WAL 提交（fsync），
+    ///   单事务批量提交可显著降低磁盘 I/O。
+    func insertTokenUsages(source: String, date: String, entries: [(hour: Int, record: ReasonixStatsRecord)])
 }
