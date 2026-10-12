@@ -1483,6 +1483,38 @@ do {
     print("✅ ClipboardRelativeTime works")
 }
 
+// MARK: - Test MenuTagRange（每小时条目可清理区间，Core 纯函数）
+
+print("\n🧪 Testing MenuTagRange...")
+do {
+    // 常量本身锁定：起止值一旦漂移，下面的区间断言会一同失效
+    assertEqual(MenuTagRange.hourlyBaseTag, 4200, "每小时条目起始 tag 锁定为 4200")
+    assertEqual(MenuTagRange.hourlySpan, 100, "每小时条目占用 tag 数锁定为 100")
+
+    let base = MenuTagRange.hourlyBaseTag
+    let span = MenuTagRange.hourlySpan
+
+    // 不该被删：剪贴板两个入口（7001/7002）与高 tag 的 AI 分析入口（5100），以及开区间上界
+    assertEqual(MenuTagRange.isDynamicHourlyTag(7001), false,
+                "剪贴板历史入口 tag 不落入每小时条目清理区间")
+    assertEqual(MenuTagRange.isDynamicHourlyTag(7002), false,
+                "剪贴板设置入口 tag 不落入每小时条目清理区间")
+    assertEqual(MenuTagRange.isDynamicHourlyTag(base + span), false,
+                "区间上界 4200+span 为开区间端点，不属于可清理区间")
+    assertEqual(MenuTagRange.isDynamicHourlyTag(5100), false,
+                "AI 分析入口 tag 不落入每小时条目清理区间")
+
+    // 该被删：区间内的动态条目（含下界、下界 +1、上界前一位）
+    assertEqual(MenuTagRange.isDynamicHourlyTag(base), true,
+                "区间下界 4200 属于可清理区间")
+    assertEqual(MenuTagRange.isDynamicHourlyTag(base + 1), true,
+                "4201 属于可清理区间")
+    assertEqual(MenuTagRange.isDynamicHourlyTag(base + span - 1), true,
+                "区间上界前一位 4299 属于可清理区间")
+
+    print("✅ MenuTagRange works")
+}
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")
