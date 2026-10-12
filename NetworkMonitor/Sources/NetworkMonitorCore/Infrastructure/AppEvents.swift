@@ -16,4 +16,12 @@ public enum AppEvents {
     public static func postHookDataChanged() {
         NotificationCenter.default.post(name: hookDataChanged, object: nil)
     }
+
+    /// 剪贴板历史已变化（新采集落库、收藏、删除、清空、Paste Stack 推进）— 订阅方应立即刷新面板
+    public static let clipboardChanged = Notification.Name("AppEvents.clipboardChanged")
+
+    /// 发布剪贴板历史变更通知（线程安全，可任意队列调用）
+    public static func postClipboardChanged() {
+        NotificationCenter.default.post(name: clipboardChanged, object: nil)
+    }
 }

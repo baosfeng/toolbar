@@ -9,6 +9,8 @@
 - [Swift 6 @unchecked Sendable 标记需求](swift-并发/unchecked-sendable.md)
 - [@MainActor 类适配协议需要 @preconcurrency](swift-并发/preconcurrency-mainactor.md)
 - [os_log_with_type 宏在 Swift 中不可用](swift-并发/os_log_swift_api.md)
+- [swift build 会话初始化失败（本机无 Xcode）](构建/swift-build-会话初始化失败.md)
+- [bash 变量后紧跟中文标点导致 unbound variable](构建/bash-变量后紧跟中文标点.md)
 
 ---
 

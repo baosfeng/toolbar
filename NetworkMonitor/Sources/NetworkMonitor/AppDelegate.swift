@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCent
     private var menuBarManager: MenuBarManager?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppContext.shared.configure(logger: OSLogLogger(category: "App"))
         let coordinator = AppCoordinator()
         self.coordinator = coordinator
         menuBarManager = coordinator.start()

@@ -24,7 +24,9 @@ let package = Package(
                 .linkedFramework("AppKit"),
                 .linkedFramework("Foundation"),
                 .linkedFramework("ServiceManagement"),
-                .linkedFramework("CoreWLAN")
+                .linkedFramework("CoreWLAN"),
+                // 全局快捷键（剪贴板历史）依赖 Carbon 的 RegisterEventHotKey
+                .linkedFramework("Carbon")
             ]
         ),
         .executableTarget(
