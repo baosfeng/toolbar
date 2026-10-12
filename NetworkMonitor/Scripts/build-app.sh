@@ -1,6 +1,12 @@
 #!/bin/bash
 # 一键构建 + 打包 NetworkMonitor.app（含 macMonitor 本机监控功能）
 # Usage: ./Scripts/build-app.sh [debug|release]
+#
+# 注意：下面两条构建命令都追加了 --build-system 参数（取值 native）。本机只装了 Command Line Tools
+# （无 Xcode.app），默认的 swiftbuild/XCBuild 后端在 session 初始化阶段就会失败
+# （SessionFailedError: Unknown error parsing property list），该参数用于绕开此故障。
+# native 引擎已被官方标记 deprecated，构建时会多一条 deprecation 警告；装好 Xcode 后
+# （sudo xcode-select -s /Applications/Xcode.app/Contents/Developer）即可删掉这两个参数。
 
 set -e
 
@@ -14,10 +20,10 @@ echo "🔨 正在构建 ${APP_NAME}（${BUILD_MODE}）..."
 
 # 1. 使用 Swift PM 构建（完整构建，保证链接出可执行文件；--target 在 SwiftPM 6.3 下不产出二进制）
 if [ "$BUILD_MODE" = "release" ]; then
-    swift build -c release --disable-sandbox
+    swift build -c release --disable-sandbox --build-system native
     BINARY_PATH=".build/arm64-apple-macosx/release/${APP_NAME}"
 else
-    swift build --disable-sandbox
+    swift build --disable-sandbox --build-system native
     BINARY_PATH=".build/arm64-apple-macosx/debug/${APP_NAME}"
 fi
 
@@ -68,7 +74,7 @@ echo "📦 正在部署到 /Applications..."
 # 杀掉正在运行的应用
 RUNNING_PID=$(pgrep -f "${APP_NAME}" || true)
 if [ -n "$RUNNING_PID" ]; then
-    echo "   🛑 正在关闭正在运行的 ${APP_NAME}（PID: $RUNNING_PID）..."
+    echo "   🛑 正在关闭正在运行的 ${APP_NAME}（PID: ${RUNNING_PID}）..."
     kill "$RUNNING_PID" 2>/dev/null || true
     sleep 1
     # 确保进程已退出

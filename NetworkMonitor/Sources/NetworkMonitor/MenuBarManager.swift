@@ -48,6 +48,14 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     private let networkIPTag = 1002
 
     private let launchAtStartupTag = 3001
+    /// 剪贴板历史入口（面板）+ 剪贴板设置入口
+    private let clipboardHistoryTag = 7001
+    private let clipboardSettingsTag = 7002
+
+    /// 剪贴板面板入口（由组合根装配，点击时调用）
+    var onOpenClipboardHistory: (() -> Void)?
+    /// 剪贴板设置窗入口（由组合根装配）
+    var onOpenClipboardSettings: (() -> Void)?
     private let tokenSummaryTag = 4001
     private let tokenHourBaseTag = 4200
 
@@ -59,7 +67,7 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     private let aiSessionTag = 5104
     private let maxProcessItems = 10
 
-    private static let launchPrefKey = "launchAtStartup"
+    private static let launchPrefKey = ClipboardPreferences.launchAtStartupKey
 
     private var downHistory: [Double] = []
     private var upHistory: [Double] = []
@@ -186,6 +194,13 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
         let aiItem = menuItem(title: "AI 分析", symbol: "brain.head.profile")
         aiItem.submenu = aiAnalysisSubmenu
         menu.addItem(aiItem)
+
+        // ── 剪贴板历史 ──
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(menuItem(title: "剪贴板历史", action: #selector(openClipboardHistory),
+                              symbol: "doc.on.clipboard", tag: clipboardHistoryTag))
+        menu.addItem(menuItem(title: "剪贴板设置…", action: #selector(openClipboardSettings),
+                              symbol: "gearshape", tag: clipboardSettingsTag))
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(menuItem(title: "开机自启动", action: #selector(toggleLaunchAtStartup),
@@ -660,6 +675,16 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
 
 
 
+
+    /// 打开 / 收起剪贴板历史面板
+    @objc private func openClipboardHistory() {
+        onOpenClipboardHistory?()
+    }
+
+    /// 打开剪贴板设置窗
+    @objc private func openClipboardSettings() {
+        onOpenClipboardSettings?()
+    }
 
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)

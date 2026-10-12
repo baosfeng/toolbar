@@ -16,6 +16,7 @@ import SQLite3
 /// - `DatabaseService`（连接与查询）：本文件
 /// - `HookEventRepository`（Hook 领域写入/查询）：`DatabaseManager+HookEventRepository.swift`
 /// - `TokenUsageRepository`（Token 用量写入）：`DatabaseManager+TokenUsageRepository.swift`
+/// - `ClipboardRepository`（剪贴板历史）：`DatabaseManager+ClipboardRepository.swift`（建表与迁移见 `+ClipboardSchema.swift`）
 public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
     // MARK: - 属性
@@ -134,6 +135,9 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             sqlite3_exec(db, "PRAGMA user_version = 1", nil, nil, nil)
             logger.info("数据迁移 v1 完成：cost 字段已统一为 CNY")
         }
+
+        // v2：剪贴板历史表（幂等建表，user_version 1 → 2）
+        migrateClipboardSchema()
     }
 
     /// 执行 PRAGMA 语句
