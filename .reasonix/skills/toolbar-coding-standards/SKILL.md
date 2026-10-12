@@ -67,6 +67,10 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 - 禁止 `print`（`ConsoleLogger` 内部除外）；统一 `LoggingService`：error / warning / info / debug
 - 组件注入 `logger: LoggingService = AppContext.shared.logger`
 
+### 8. 清理判据必须有界
+- 清理 / 移除类判据禁止「`tag >= 阈值`」这种「阈值以上全部」的无界扫描：tag / ID 是跨模块共享的扁平命名空间，别的模块新增高位值后会被静默误删（无编译错误、无异常，界面入口直接消失）
+- 共享 tag / ID 一律按有界区间 `[base, base + span)` 分配并显式声明跨度，判定收敛到一个纯函数供调用方与测试共用
+
 ## 编码风格
 
 ### 命名约定

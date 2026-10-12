@@ -57,7 +57,8 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
     /// 剪贴板设置窗入口（由组合根装配）
     var onOpenClipboardSettings: (() -> Void)?
     private let tokenSummaryTag = 4001
-    private let tokenHourBaseTag = 4200
+    /// 每小时迷你图表的起始 tag — 与 Core 的可清理区间同源，避免两处各写一份判断
+    private let tokenHourBaseTag = MenuTagRange.hourlyBaseTag
 
     // MARK: - AI 分析标签
     private let aiDynamicTag = 5100
@@ -475,10 +476,17 @@ final class MenuBarManager: NSObject, NSMenuDelegate {
         guard hash != lastHourlyHash else { return }
         lastHourlyHash = hash
 
-        // 移除旧的每小时条目（tag 从 tokenHourBaseTag 开始）
+        // 移除旧的每小时条目：只清理**有界区间** [tokenHourBaseTag, tokenHourBaseTag + MenuTagRange.hourlySpan) 内的动态条目。
+        //
+        // 为什么必须有界（本区间不能写成「tag >= tokenHourBaseTag」）：
+        // 历史上这里曾按「tag >= 4200」从后往前无界扫描整个一级菜单并 removeItem，
+        // 于是 tag 7001（剪贴板历史）/ 7002（剪贴板设置）这类高位一级菜单项被一并误删。
+        // 该函数在 menuWillOpen 阶段（菜单显示之前）被调用，两个入口在用户看到菜单前就被清掉，
+        // 现场表现是「AI 分析」与「开机自启动」之间只剩一条 tag=0 的孤立分隔线。
+        // 判定统一收敛到 MenuTagRange.isDynamicHourlyTag（Core 纯函数，有 TestRunner 回归覆盖）。
         var idx = menu.numberOfItems - 1
         while idx >= 0 {
-            if let item = menu.item(at: idx), item.tag >= tokenHourBaseTag {
+            if let item = menu.item(at: idx), MenuTagRange.isDynamicHourlyTag(item.tag) {
                 menu.removeItem(at: idx)
             }
             idx -= 1
