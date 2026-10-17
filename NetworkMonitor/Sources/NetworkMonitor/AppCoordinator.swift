@@ -1,14 +1,6 @@
 import AppKit
 import NetworkMonitorCore
 
-// MARK: - 剪贴板数据库能力组合
-
-/// 剪贴板数据库能力组合 — 组合根装配剪贴板链路时使用，避免依赖具体实现类
-///
-/// 与既有 AppDatabase 先例一致（DatabaseService & HookEventRepository & TokenUsageRepository），
-/// 这里只做能力拼接：通用连接管理 + 剪贴板仓储，不修改任何旧协议。
-typealias ClipboardDatabase = DatabaseService & ClipboardRepository
-
 // MARK: - 应用协调器
 
 /// 应用协调器 — 管理所有服务的生命周期和依赖注入（唯一组合根）
@@ -28,8 +20,6 @@ public final class AppCoordinator {
     private let processMonitor: any ProcessNetworkMonitoringService = ProcessNetworkMonitor()
     /// 数据库
     private var database: (any AppDatabase)!
-    /// Token 用量查询
-    private var tokenUsageProvider: (any TokenStatsService)!
     /// 每日流量追踪
     private var trafficTracker: (any TrafficTrackingService)!
 
@@ -62,7 +52,7 @@ public final class AppCoordinator {
 
     /// 启动所有服务
     func start() -> MenuBarManager {
-        // 1. 数据库（同一实例同时满足 AppDatabase 与 ClipboardDatabase）
+        // 1. 数据库（同一实例满足 DatabaseService 与 ClipboardRepository）
         let databaseManager = DatabaseManager()
         databaseManager.initialize()
         database = databaseManager
@@ -72,27 +62,22 @@ public final class AppCoordinator {
         let savedTx = UInt64(AppContext.shared.storage.integer(forKey: "totalTx"))
         networkMonitor = NetworkSpeedMonitor(totalRx: savedRx, totalTx: savedTx)
 
-        // 3. Token 用量
-        tokenUsageProvider = TokenUsageProvider(database: database)
-
-        // 4. 流量追踪
+        // 3. 流量追踪
         trafficTracker = TrafficTracker(monitor: networkMonitor)
 
-        // 5. 剪贴板历史链路
-        setupClipboard(database: databaseManager)
+        // 4. 剪贴板历史链路
+        setupClipboard(database: database)
 
-        // 6. 创建 MenuBarManager（注入依赖 + 剪贴板入口）
+        // 5. 创建 MenuBarManager（注入依赖 + 剪贴板入口）
         let manager = MenuBarManager(
             networkMonitor: networkMonitor,
             processMonitor: processMonitor,
-            database: database,
-            trafficTracker: trafficTracker,
-            tokenUsageProvider: tokenUsageProvider
+            trafficTracker: trafficTracker
         )
         manager.onOpenClipboardHistory = { [weak self] in self?.clipboardPanel.toggle() }
         manager.onOpenClipboardSettings = { [weak self] in self?.clipboardSettings.show() }
 
-        // 7. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
+        // 6. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
         logger.info("AppCoordinator 启动完成")
         return manager
     }
@@ -108,9 +93,6 @@ public final class AppCoordinator {
         clipboardStack?.stop()
         globalHotKey?.unregister()
 
-        // 清理 Hook socket
-        ReasonixHookMonitor.cleanupSocket()
-
         database?.close()
         logger.info("AppCoordinator 已关闭")
     }
@@ -118,7 +100,7 @@ public final class AppCoordinator {
     // MARK: - 剪贴板历史装配
 
     /// 装配剪贴板链路：偏好 → 写回 → 粘贴 → 采集 → 栈 → 面板 → 设置 → 全局热键
-    private func setupClipboard(database: any ClipboardDatabase) {
+    private func setupClipboard(database: any AppDatabase) {
         let preferences = ClipboardPreferences()
         clipboardPreferences = preferences
 
@@ -155,7 +137,7 @@ public final class AppCoordinator {
     /// 死锁红线：仓储方法全部是串行队列 sync，必须在主线程调用；
     /// 禁止在 db.query(sql:handler:) 回调内或数据库串行队列上下文调用，否则立即死锁。
     private func persistClipboardDraft(_ draft: ClipboardDraft) {
-        guard let repository = database as? any ClipboardRepository else { return }
+        guard let repository = database else { return }
         guard repository.saveClipboardItem(draft) != nil else {
             logger.warning("剪贴板条目落库失败（数据库未就绪或内容无效）")
             return
