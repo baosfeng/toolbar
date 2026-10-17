@@ -14,9 +14,11 @@ import SQLite3
 ///
 /// 协议实现分布：
 /// - `DatabaseService`（连接与查询）：本文件
-/// - `HookEventRepository`（Hook 领域写入/查询）：`DatabaseManager+HookEventRepository.swift`
-/// - `TokenUsageRepository`（Token 用量写入）：`DatabaseManager+TokenUsageRepository.swift`
 /// - `ClipboardRepository`（剪贴板历史）：`DatabaseManager+ClipboardRepository.swift`（建表与迁移见 `+ClipboardSchema.swift`）
+///
+/// 历史表说明：`hook_events` / `hook_sessions` / `hook_tool_calls` / `token_usage` 四张表
+/// 为历史数据保留（旧版本 AI 助手事件与 token 统计落库），代码已不再使用，
+/// 也不做删表迁移，避免误删用户既有数据。
 public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
     // MARK: - 属性
@@ -120,7 +122,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
         if version < 1 {
             // v1：cost 字段统一为 CNY（此前存的是 USD，展示时误当人民币）
-            // 历史数据按默认汇率迁移；此后新写入在 ReasonixHookMonitor 中转换
+            // 仅处理历史数据（相关写入链路已移除）：表为历史数据保留，代码已不再使用
             let rate = CurrencyConfig.defaultUsdToCnyRate
             let migrations = [
                 "UPDATE hook_events SET cost = ROUND(cost * \(rate), 6) WHERE cost > 0;",
@@ -196,9 +198,9 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
     // MARK: - 数据保留
 
-    /// 明细数据保留天数（hook_events / hook_tool_calls）
+    /// 明细数据保留天数（hook_events / hook_tool_calls，历史表，代码已不再写入）
     private static let eventRetentionDays = 90
-    /// 会话汇总保留天数（hook_sessions，数据量小可保留更久）
+    /// 会话汇总保留天数（hook_sessions，历史表，数据量小可保留更久）
     private static let sessionRetentionDays = 180
     /// 清理间隔（小时）
     private static let retentionIntervalHours = 24
@@ -250,23 +252,26 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
     /// 创建所有需要的表（仅首次运行时执行）
     private func createTables() {
-        // 创建 Reasonix Hook 事件表
-        createHookTables()
+        // 历史表（AI 助手事件 / token 统计）：表为历史数据保留，代码已不再使用
+        createLegacyTables()
 
         createIndexes()
     }
 
     /// 创建索引以优化查询性能
     private func createIndexes() {
-        // Reasonix Hook 索引
-        createHookIndexes()
+        // 历史表索引（同上，仅保留既有数据结构）
+        createLegacyIndexes()
     }
 
-    // MARK: - Hook 表创建
+    // MARK: - 历史表创建（保留）
 
-    /// 创建 Reasonix Hook 事件相关表
-    private func createHookTables() {
-        let hookStatements = [
+    /// 创建历史事件与用量相关表
+    ///
+    /// 说明：AI 助手与 token 统计链路已整体移除，建表与索引语句保留仅为兼容既有用户数据，
+    /// 不做删表迁移（删表有损坏用户数据的风险）。
+    private func createLegacyTables() {
+        let legacyStatements = [
             // 事件流水表
             """
             CREATE TABLE IF NOT EXISTS hook_events (
@@ -330,7 +335,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             """
             CREATE TABLE IF NOT EXISTS token_usage (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source TEXT NOT NULL DEFAULT 'reasonix',  -- 数据来源：reasonix/claude/codex
+                source TEXT NOT NULL DEFAULT 'desktop',   -- 数据来源（历史字段，取值由旧版本写入）
                 date TEXT NOT NULL,                       -- 本地日期 YYYY-MM-DD（stats 文件名）
                 hour INTEGER NOT NULL,                    -- 本地小时 0-23（ts 解析）
                 ts TEXT NOT NULL,                         -- 原始 ISO8601 时间戳（自带时区）
@@ -348,25 +353,25 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             """,
         ]
 
-        for sql in hookStatements {
+        for sql in legacyStatements {
             var stmt: OpaquePointer?
             defer { sqlite3_finalize(stmt) }
 
             let status = sqlite3_prepare_v2(db, sql, -1, &stmt, nil)
             guard status == SQLITE_OK else {
-                logger.error("Hook 建表失败: \(String(cString: sqlite3_errmsg(db)))")
+                logger.error("历史表建表失败: \(String(cString: sqlite3_errmsg(db)))")
                 return
             }
 
             if sqlite3_step(stmt) != SQLITE_DONE {
-                logger.error("Hook 建表执行失败: \(String(cString: sqlite3_errmsg(db)))")
+                logger.error("历史表建表执行失败: \(String(cString: sqlite3_errmsg(db)))")
                 return
             }
         }
     }
 
-    /// 创建 Hook 相关索引
-    private func createHookIndexes() {
+    /// 创建历史表相关索引
+    private func createLegacyIndexes() {
         // 清理旧的固定 +8 时区表达式索引（时区本地化后定义已过时，需按新时区重建）
         let legacyDrop = [
             "DROP INDEX IF EXISTS idx_hook_events_day;",
@@ -385,9 +390,8 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
         // 表达式索引必须与查询中的 date(列, 偏移) 完全一致才能命中
         // 注意：SQLite 不允许在索引中使用非确定性函数（'localtime' 依赖系统时区），
-        // 且 token 统计已改由官方 stats JSONL 驱动（按天文件，无需数据库按天查询），
-        // 因此不再创建按天表达式索引，仅保留普通索引。
-        let hookIndexes = [
+        // 历史用量统计已随链路移除，因此不再创建按天表达式索引，仅保留普通索引。
+        let legacyIndexes = [
             "CREATE INDEX IF NOT EXISTS idx_hook_events_session ON hook_events(session_id);",
             "CREATE INDEX IF NOT EXISTS idx_hook_events_type ON hook_events(event_type);",
             "CREATE INDEX IF NOT EXISTS idx_hook_events_time ON hook_events(timestamp);",
@@ -398,19 +402,19 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_session_turn ON hook_tool_calls(session_id, turn);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_status ON hook_tool_calls(status);",
             "CREATE INDEX IF NOT EXISTS idx_hook_calls_started ON hook_tool_calls(started_at);",
-            // token_usage 查询索引（统计按 date / date+hour / model 聚合）
+            // 历史 token_usage 表索引（表为历史数据保留，代码已不再使用）
             "CREATE INDEX IF NOT EXISTS idx_token_usage_date ON token_usage(date, is_turn);",
             "CREATE INDEX IF NOT EXISTS idx_token_usage_date_hour ON token_usage(date, hour, is_turn);",
             "CREATE INDEX IF NOT EXISTS idx_token_usage_model ON token_usage(date, model, is_turn);",
         ]
 
-        for sql in hookIndexes {
+        for sql in legacyIndexes {
             var stmt: OpaquePointer?
             defer { sqlite3_finalize(stmt) }
 
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
                   sqlite3_step(stmt) == SQLITE_DONE else {
-                logger.warning("Hook 索引创建失败: \(String(cString: sqlite3_errmsg(db)))")
+                logger.warning("历史表索引创建失败: \(String(cString: sqlite3_errmsg(db)))")
                 continue
             }
         }

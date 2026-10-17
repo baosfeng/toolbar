@@ -5,8 +5,7 @@ import SQLite3
 
 /// 数据库服务协议 — 统一数据库访问接口
 ///
-/// 只保留通用连接管理与查询能力；领域写操作见
-/// `HookEventRepository`（Hook 事件）与 `TokenUsageRepository`（Token 用量）。
+/// 只保留通用连接管理与查询能力；领域写操作见 `ClipboardRepository`（剪贴板历史）。
 ///
 /// 所有写操作必须线程安全；查询通过 `query(sql:handler:)` 在串行队列上执行。
 public protocol DatabaseService: AnyObject, Sendable {
@@ -28,7 +27,7 @@ public protocol DatabaseService: AnyObject, Sendable {
 
 // MARK: - 完整数据库能力组合
 
-/// 应用所需完整数据库能力 — 通用访问 + Hook 仓储 + Token 仓储
+/// 应用所需完整数据库能力 — 通用访问 + 剪贴板仓储
 ///
 /// 组合根与 UI 层传递数据库实例时使用此组合类型，避免依赖具体实现类。
-public typealias AppDatabase = DatabaseService & HookEventRepository & TokenUsageRepository
+public typealias AppDatabase = DatabaseService & ClipboardRepository
