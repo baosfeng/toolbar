@@ -18,7 +18,7 @@ public enum ClipboardLimit {
 
 // MARK: - 剪贴板仓储
 
-/// 剪贴板历史仓储协议 — 新增领域，独立于 DatabaseService / HookEventRepository / TokenUsageRepository
+/// 剪贴板历史仓储协议 — 新增领域，独立于 DatabaseService
 ///
 /// 线程模型：实现须自行保证线程安全（DatabaseManager 实现全部经由其串行队列同步执行）。
 /// 容错约定（实现必须遵守，不得崩溃）：

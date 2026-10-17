@@ -2,11 +2,10 @@ import Foundation
 
 // MARK: - 货币配置
 
-/// 货币配置 — 数据库统一以 CNY（人民币）存储与展示
+/// 货币配置 — 数据库历史金额字段统一以 CNY（人民币）存储与展示
 ///
-/// Reasonix sidecar 文件中的 cost 为 USD，写入数据库前需转换为 CNY。
-/// 汇率通过 `KeyValueStorage` 读取（不再直读 UserDefaults），
-/// 测试可注入 `storageOverride` 隔离全局状态。
+/// 历史数据迁移（v1）需要 USD → CNY 换算，汇率通过 `KeyValueStorage` 读取
+/// （不再直读 UserDefaults），测试可注入 `storageOverride` 隔离全局状态。
 public final class CurrencyConfig: @unchecked Sendable {
     /// 全局共享实例
     public static let shared = CurrencyConfig()
@@ -48,33 +47,5 @@ public enum SqliteTimeZone {
         let hours = Double(seconds) / 3600.0
         let value = String(format: "%g", hours)
         return value.hasPrefix("-") ? "\(value) hours" : "+\(value) hours"
-    }
-}
-
-// MARK: - 格式化工具
-
-/// 通用的格式化工具方法集
-public enum FormatUtils {
-
-    /// 短格式 Token 数（中文单位：万/亿）
-    /// - Parameter count: Token 数量
-    /// - Returns: 格式化后的字符串，如 "1.2万"、"3.5亿"
-    nonisolated public static func tokenShort(_ count: Int) -> String {
-        if count >= 100_000_000 {
-            return String(format: "%.1f亿", Double(count) / 100_000_000)
-        }
-        if count >= 10_000 {
-            return String(format: "%.1f万", Double(count) / 10_000)
-        }
-        return "\(count)"
-    }
-
-    /// 短格式花费（人民币 ¥）
-    /// - Parameter cost: 金额（元）
-    /// - Returns: 格式化后的字符串，如 "¥0.0040"、"¥0.050"、"¥1.23"
-    nonisolated public static func costShort(_ cost: Double) -> String {
-        if cost < 0.01 { return String(format: "¥%.4f", cost) }
-        if cost < 1 { return String(format: "¥%.3f", cost) }
-        return String(format: "¥%.2f", cost)
     }
 }
