@@ -21,6 +21,8 @@ protocol MenuPanelViewDelegate: AnyObject {
 /// 菜单栏面板根视图 — 顶部细分段三 tab + 互斥内容区
 ///
 /// 背景用 `NSVisualEffectView(.popover)` 材质，颜色全部走 `NSColor` 语义色，深浅色自适应。
+/// 内容区包在 `NSScrollView` 里：高度仍 clamp ≤520pt，但内容超出（进程变多 / 字体放大 / 多语言）
+/// 时改为垂直滚动而不是被裁掉；隐式滚动条（overlay + autohides）。
 /// 键盘：`←/→` 切页、`Tab`/`↑`/`↓` 在可点击行间移动、`Return`/`Space` 触发、
 /// `1/2/3` 直接切页、`Esc` 收起、`⌘Q` 退出、`⌘,` 打开剪贴板设置。
 final class MenuPanelView: NSVisualEffectView {
@@ -32,7 +34,10 @@ final class MenuPanelView: NSVisualEffectView {
     let clipboardPane = ClipboardPaneView()
     let systemPane = SystemPaneView()
 
-    private let paneStack = NSStackView()
+    /// 可滚动内容区（高度 clamp 后仍能容纳超高内容）
+    private let scrollView = NSScrollView()
+    /// 分页容器（作为 scrollView 的 documentView；flipped 保证初始停在顶部）
+    private let paneStack = MenuPanelDocumentStack()
     private(set) var currentTab: MenuPanelTab = .network
     /// 当前键盘聚焦行下标（nil = 未聚焦任何行）
     private var focusedRowIndex: Int?
@@ -52,8 +57,24 @@ final class MenuPanelView: NSVisualEffectView {
         paneStack.addArrangedSubview(networkPane)
         paneStack.addArrangedSubview(clipboardPane)
         paneStack.addArrangedSubview(systemPane)
+        paneStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let contentStack = NSStackView(views: [tabBar, paneStack])
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.scrollerStyle = .overlay
+        scrollView.documentView = paneStack
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        // 文档视图宽度跟随可视区（内容只做垂直滚动），高度由分页内容自然撑开
+        NSLayoutConstraint.activate([
+            paneStack.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            paneStack.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
+            paneStack.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            paneStack.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+        ])
+
+        let contentStack = NSStackView(views: [tabBar, scrollView])
         contentStack.orientation = .vertical
         contentStack.alignment = .leading
         contentStack.spacing = 12
@@ -68,7 +89,7 @@ final class MenuPanelView: NSVisualEffectView {
             contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -MenuPanelStyle.inset),
         ])
         tabBar.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
-        paneStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+        scrollView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         // 三页都撑满面板内容宽度（NSStackView 的 leading 对齐不会自动拉伸子视图）
         for pane in [networkPane, clipboardPane, systemPane] {
             pane.widthAnchor.constraint(equalTo: paneStack.widthAnchor).isActive = true
@@ -89,6 +110,32 @@ final class MenuPanelView: NSVisualEffectView {
     func configureMaterialForSnapshot() {
         material = .windowBackground
         state = .inactive
+    }
+#endif
+
+    /// 内容所需高度（pt）：顶 10 + 分段 28 + 间距 12 + 当前页高度 + 底部留白 12
+    ///
+    /// 控制器据此设置 popover.contentSize（clamp ≤ MenuPanelStyle.maxHeight）；
+    /// 超出上限时由内部 NSScrollView 接管滚动，不做硬截断。
+    var desiredContentHeight: CGFloat {
+        layoutSubtreeIfNeeded()
+        let paneHeight = activePane.fittingSize.height
+        return 10 + MenuTabBarView.barHeight + 12 + paneHeight + MenuPanelStyle.inset
+    }
+
+#if DEBUG
+    /// 快照自证专用：返回（文档高度, 滚动视口高度）
+    func snapshotScrollMetrics() -> (document: CGFloat, viewport: CGFloat) {
+        layoutSubtreeIfNeeded()
+        return (paneStack.frame.height, scrollView.contentView.bounds.height)
+    }
+
+    /// 快照自证专用：滚到内容底部
+    func scrollToBottomForSnapshot() {
+        layoutSubtreeIfNeeded()
+        let maxY = max(0, paneStack.frame.height - scrollView.contentView.bounds.height)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: maxY))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 #endif
 
@@ -244,4 +291,11 @@ final class MenuPanelView: NSVisualEffectView {
         guard rows.indices.contains(index) else { return }
         rows[index].activate()
     }
+}
+
+// MARK: - 可滚动内容容器
+
+/// 分页容器 — flipped，保证作为 NSScrollView.documentView 时初始停在顶部
+private final class MenuPanelDocumentStack: NSStackView {
+    override var isFlipped: Bool { true }
 }

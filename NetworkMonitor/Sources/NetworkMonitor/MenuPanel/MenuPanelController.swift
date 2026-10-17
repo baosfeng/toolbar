@@ -217,9 +217,12 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
     }
 
     /// 按内容自适应高度（≤ 520pt），高度变化时才调整 popover
+    ///
+    /// 内容高于 520pt 时不做硬截断：面板内部 NSScrollView 转为垂直滚动（隐式滚动条），
+    /// 因此进程数变多 / 字体放大 / 多语言换行时仍能看到全部内容。
     private func updateContentSize(force: Bool = false) {
         content.layoutSubtreeIfNeeded()
-        let needed = content.fittingSize.height
+        let needed = content.desiredContentHeight
         let height = min(max(needed, 180), MenuPanelStyle.maxHeight)
         guard force || abs(popover.contentSize.height - height) > 0.5 else { return }
         popover.contentSize = NSSize(width: MenuPanelStyle.panelWidth, height: height)
