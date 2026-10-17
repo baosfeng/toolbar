@@ -105,7 +105,7 @@ assertEqual(desc, "█▆▅▃▂▁", "descending")
 // MARK: - Test formatBytesFull
 
 print("\n🧪 Testing formatBytesFull...")
-assertEqual(formatBytesFull(0), "Zero KB")
+assertEqual(formatBytesFull(0), "0 KB", "0 字节显示 0 KB（不再出现 Zero KB）")
 assertEqual(formatBytesFull(1024), "1 KB")
 assertEqual(formatBytesFull(1_000_000), "1 MB")
 assertEqual(formatBytesFull(2_500_000_000), "2.5 GB")

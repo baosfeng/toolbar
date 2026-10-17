@@ -67,6 +67,33 @@ final class MenuBarManager: NSObject {
         panel.toggle(relativeTo: button.bounds, of: button)
     }
 
+#if DEBUG
+    /// 取证专用（仅 DEBUG）：走与点击状态栏完全相同的 toggle 路径打开面板
+    func openPanelForEvidence() {
+        togglePanel()
+    }
+
+    /// 取证专用（仅 DEBUG）：popover 窗口号与 frame
+    func evidenceWindow() -> (number: Int, frame: NSRect)? {
+        panel.evidenceWindow()
+    }
+
+    /// 取证专用（仅 DEBUG）：强制 popover 外观（浅色/深色）
+    func forceAppearanceForEvidence(_ name: NSAppearance.Name) {
+        panel.forceAppearanceForEvidence(name)
+    }
+
+    /// 取证专用（仅 DEBUG）：切换到指定分页
+    func selectTabForEvidence(_ tab: MenuPanelTab) {
+        panel.selectTabForEvidence(tab)
+    }
+
+    /// 取证专用（仅 DEBUG）：强制空态（进程 / 剪贴板）
+    func forceEmptyForEvidence() {
+        panel.forceEmptyDataForEvidence = true
+    }
+#endif
+
     // MARK: - 定时器
 
     private func setupTimer() {

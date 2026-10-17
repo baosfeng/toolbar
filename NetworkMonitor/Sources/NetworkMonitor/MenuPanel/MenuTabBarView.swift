@@ -98,7 +98,9 @@ final class MenuTabBarView: NSView {
 
     /// 绘制单个分段：图标 + 文字整体居中
     private func drawContent(tab: MenuPanelTab, in rect: NSRect, isSelected: Bool) {
-        let color = isSelected ? MenuPanelStyle.accentColor : NSColor.secondaryLabelColor
+        // 未选中态用 62% labelColor：secondaryLabelColor 在不透明底色上实测 ~4.5:1 临界，
+        // 62% 混合灰在浅/深色下都能稳定 ≥4.5:1
+        let color = isSelected ? MenuPanelStyle.accentColor : NSColor.labelColor.withAlphaComponent(0.62)
         let font = isSelected
             ? NSFont.systemFont(ofSize: 12, weight: .semibold)
             : NSFont.systemFont(ofSize: 12, weight: .regular)

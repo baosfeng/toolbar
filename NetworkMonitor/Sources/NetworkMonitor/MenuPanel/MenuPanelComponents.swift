@@ -45,15 +45,21 @@ enum MenuPanelStyle {
 
     // MARK: 颜色
 
+    /// 次要文字 — 替代 secondaryLabelColor：后者在小字号（10-12pt）+
+    /// windowBackgroundColor 上实测只有 ~3.9:1，达不到 4.5:1，故用 75% labelColor
+    static var secondaryText: NSColor { NSColor.labelColor.withAlphaComponent(0.75) }
+    /// 三级文字（9pt 图表坐标等）— 60% labelColor
+    static var tertiaryText: NSColor { NSColor.labelColor.withAlphaComponent(0.62) }
+
     static var downColor: NSColor { .systemGreen }
     static var upColor: NSColor { .systemOrange }
     static var accentColor: NSColor { .controlAccentColor }
     /// 轨道底色（labelColor 带透明度，深浅色自适应）
-    static var trackColor: NSColor { NSColor.labelColor.withAlphaComponent(0.12) }
+    static var trackColor: NSColor { NSColor.labelColor.withAlphaComponent(0.14) }
     /// 轻量填充（今日流量卡片 / 悬停行）
-    static var subtleFill: NSColor { NSColor.labelColor.withAlphaComponent(0.06) }
-    /// 图表柱（非今天）
-    static var barColor: NSColor { NSColor.labelColor.withAlphaComponent(0.18) }
+    static var subtleFill: NSColor { NSColor.labelColor.withAlphaComponent(0.07) }
+    /// 图表柱（非今天）— 不透明背景上 0.18 偏淡，提到 0.24
+    static var barColor: NSColor { NSColor.labelColor.withAlphaComponent(0.24) }
 }
 
 // MARK: - 标签工厂
@@ -76,7 +82,7 @@ enum MenuPanelLabel {
 
     /// 分区标题（次要色 + 小号加粗）
     static func section(_ content: String) -> NSTextField {
-        text(content, font: MenuPanelStyle.sectionFont, color: .secondaryLabelColor)
+        text(content, font: MenuPanelStyle.sectionFont, color: MenuPanelStyle.secondaryText)
     }
 
     /// 弹性占位视图（NSStackView 中撑开两侧内容）
@@ -243,7 +249,7 @@ final class MenuPanelKeyValueRow: MenuPanelRow {
         if let symbol, let icon = MenuPanelLabel.symbol(symbol) {
             contentStack.addArrangedSubview(icon)
         }
-        let titleLabel = MenuPanelLabel.text(title, font: MenuPanelStyle.bodyFont, color: .secondaryLabelColor)
+        let titleLabel = MenuPanelLabel.text(title, font: MenuPanelStyle.bodyFont, color: MenuPanelStyle.secondaryText)
         contentStack.addArrangedSubview(titleLabel)
         contentStack.addArrangedSubview(MenuPanelLabel.spacer())
         valueLabel.setContentHuggingPriority(.required, for: .horizontal)
@@ -261,7 +267,7 @@ final class MenuPanelKeyValueRow: MenuPanelRow {
 /// 开关行（开机自启动）— 勾选图标 + 状态文案，整行可点击
 final class MenuPanelToggleRow: MenuPanelRow {
     private let iconView = NSImageView()
-    private let stateLabel = MenuPanelLabel.value("已关闭", color: .secondaryLabelColor)
+    private let stateLabel = MenuPanelLabel.value("已关闭", color: MenuPanelStyle.secondaryText)
 
     init(title: String, isOn: Bool, onToggle: @escaping () -> Void) {
         super.init(height: MenuPanelStyle.rowHeight, onClick: onToggle)
