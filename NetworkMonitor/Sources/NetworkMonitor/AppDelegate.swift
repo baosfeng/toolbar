@@ -13,6 +13,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let coordinator = AppCoordinator()
         self.coordinator = coordinator
         menuBarManager = coordinator.start()
+#if DEBUG
+        // 仅 DEBUG：设置 NM_SNAPSHOT_DIR 时渲染面板快照并退出（见 MenuPanelSnapshot）
+        MenuPanelSnapshot.runIfRequested(repository: coordinator.snapshotClipboardRepository)
+#endif
     }
 
     func applicationWillTerminate(_ notification: Notification) {
