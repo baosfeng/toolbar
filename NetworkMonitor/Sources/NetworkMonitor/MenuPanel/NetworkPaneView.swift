@@ -40,6 +40,12 @@ final class NetworkPaneView: MenuPanelPaneView {
     /// 进程行签名 — 内容未变化时跳过重建，避免每 5 秒重建视图
     private var processSignature = ""
 
+#if DEBUG
+    /// 快照自证专用（仅 DEBUG）：临时抬高进程行上限，用来构造「内容高于 520pt」的场景；
+    /// 发布路径固定 Top5（`MenuPanelMetrics.topProcesses(..., limit: 5)`）。
+    var processRowLimitOverride: Int?
+#endif
+
     // MARK: - 初始化
 
     init() {
@@ -237,7 +243,12 @@ final class NetworkPaneView: MenuPanelPaneView {
 
     /// 更新活跃进程 Top5（5 秒一次）
     func updateProcesses(_ processes: [ProcessNetUsage]) {
-        let top = MenuPanelMetrics.topProcesses(processes, limit: 5)
+#if DEBUG
+        let limit = processRowLimitOverride ?? 5
+#else
+        let limit = 5
+#endif
+        let top = MenuPanelMetrics.topProcesses(processes, limit: limit)
         processHeader.updateTrailing("\(top.count) 个")
 
         // 内容签名：名称 + 速率未变时不重建视图

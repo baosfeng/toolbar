@@ -12,7 +12,7 @@ enum MenuPanelStyle {
     static let panelWidth: CGFloat = 320
     /// 内容左右留白
     static let inset: CGFloat = 12
-    /// 面板最大高度（超出后内部区域滚动/截断，不无限长）
+    /// 面板最大高度 — 超出后由内部 NSScrollView 垂直滚动（不裁切内容）
     static let maxHeight: CGFloat = 520
     /// 内容可用宽度
     static var contentWidth: CGFloat { panelWidth - inset * 2 }
