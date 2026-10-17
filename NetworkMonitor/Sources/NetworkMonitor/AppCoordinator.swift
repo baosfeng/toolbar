@@ -50,6 +50,11 @@ public final class AppCoordinator {
         logger.info("AppCoordinator 初始化中...")
     }
 
+#if DEBUG
+    /// 快照钩子专用（仅 DEBUG）：暴露数据库以便渲染真实剪贴板条目
+    var snapshotClipboardRepository: (any ClipboardRepository)? { database }
+#endif
+
     /// 启动所有服务
     func start() -> MenuBarManager {
         // 1. 数据库（同一实例满足 DatabaseService 与 ClipboardRepository）
