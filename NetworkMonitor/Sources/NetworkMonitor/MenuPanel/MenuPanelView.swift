@@ -20,12 +20,14 @@ protocol MenuPanelViewDelegate: AnyObject {
 
 /// 菜单栏面板根视图 — 顶部细分段三 tab + 互斥内容区
 ///
-/// 背景用 `NSVisualEffectView(.popover)` 材质，颜色全部走 `NSColor` 语义色，深浅色自适应。
+/// 背景是**不透明**的 `NSColor.windowBackgroundColor`（跟随系统外观），不再叠 NSVisualEffectView 材质：
+/// 真实 popover 合成下 `.popover` 材质会把背景压成中灰，与语义文字色对比度不足（实机截图打回）。
+/// 圆角与投影由 NSPopover 自身提供，内容层不重复绘制。
 /// 内容区包在 `NSScrollView` 里：高度仍 clamp ≤520pt，但内容超出（进程变多 / 字体放大 / 多语言）
 /// 时改为垂直滚动而不是被裁掉；隐式滚动条（overlay + autohides）。
 /// 键盘：`←/→` 切页、`Tab`/`↑`/`↓` 在可点击行间移动、`Return`/`Space` 触发、
 /// `1/2/3` 直接切页、`Esc` 收起、`⌘Q` 退出、`⌘,` 打开剪贴板设置。
-final class MenuPanelView: NSVisualEffectView {
+final class MenuPanelView: NSView {
 
     weak var delegate: MenuPanelViewDelegate?
 
@@ -46,9 +48,7 @@ final class MenuPanelView: NSVisualEffectView {
 
     init() {
         super.init(frame: .zero)
-        material = .popover
-        blendingMode = .behindWindow
-        state = .active
+        wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
 
         paneStack.orientation = .vertical
@@ -104,14 +104,20 @@ final class MenuPanelView: NSVisualEffectView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-#if DEBUG
-    /// 快照专用（仅 DEBUG）：离屏渲染时 popover 材质会退化成灰色块，
-    /// 换成窗口底色材质以便截图里判读深浅色（不影响运行时外观）
-    func configureMaterialForSnapshot() {
-        material = .windowBackground
-        state = .inactive
+    // MARK: - 背景
+
+    /// 不透明底色（windowBackgroundColor 随外观切换：浅色近白、深色近黑）
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.windowBackgroundColor.setFill()
+        bounds.fill()
+        super.draw(dirtyRect)
     }
-#endif
+
+    /// 系统外观切换时重绘底色（避免 layer 缓存旧颜色）
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
 
     /// 内容所需高度（pt）：顶 10 + 分段 28 + 间距 12 + 当前页高度 + 底部留白 12
     ///

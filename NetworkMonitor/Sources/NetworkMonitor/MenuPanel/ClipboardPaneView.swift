@@ -21,7 +21,7 @@ final class ClipboardPaneView: MenuPanelPaneView {
 
     private let header = MenuPanelHeaderRow(title: "最近复制", trailing: "0 条 · 全部")
     private let rowsStack = NSStackView()
-    private let hintLabel = MenuPanelLabel.text("", font: MenuPanelStyle.smallValueFont, color: .secondaryLabelColor)
+    private let hintLabel = MenuPanelLabel.text("", font: MenuPanelStyle.smallValueFont, color: MenuPanelStyle.secondaryText)
     private let emptyView = NSStackView()
     private let settingsRow: MenuPanelKeyValueRow
 
@@ -84,12 +84,19 @@ final class ClipboardPaneView: MenuPanelPaneView {
         emptyView.alignment = .centerX
         emptyView.spacing = 4
 
-        if let icon = MenuPanelLabel.symbol("doc.on.clipboard", pointSize: 26, color: .tertiaryLabelColor) {
+        if let icon = MenuPanelLabel.symbol("doc.on.clipboard", pointSize: 26, color: MenuPanelStyle.tertiaryText) {
             emptyView.addArrangedSubview(icon)
         }
-        emptyView.addArrangedSubview(MenuPanelLabel.text("还没有复制记录", font: MenuPanelStyle.bodyFont))
-        let hint = MenuPanelLabel.text("复制任意内容后会出现在这里", font: MenuPanelStyle.sectionFont,
-                                       color: .secondaryLabelColor)
+        let title = MenuPanelLabel.text("还没有复制记录",
+                                        font: NSFont.systemFont(ofSize: 12, weight: .regular),
+                                        color: .labelColor)
+        title.alignment = .center
+        title.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        emptyView.addArrangedSubview(title)
+        let hint = MenuPanelLabel.text("复制任意内容后会出现在这里",
+                                       font: NSFont.systemFont(ofSize: 10, weight: .regular),
+                                       color: MenuPanelStyle.tertiaryText)
+        hint.alignment = .center
         emptyView.addArrangedSubview(hint)
     }
 
@@ -150,7 +157,7 @@ final class MenuPanelClipboardRow: MenuPanelRow {
         super.init(height: MenuPanelStyle.rowHeight, onClick: {})
 
         let timeLabel = MenuPanelLabel.text(ClipboardRelativeTime.string(from: item.createdAt),
-                                            font: MenuPanelStyle.sectionFont, color: .secondaryLabelColor)
+                                            font: MenuPanelStyle.sectionFont, color: MenuPanelStyle.secondaryText)
         timeLabel.font = MenuPanelStyle.sectionFont
         timeLabel.widthAnchor.constraint(equalToConstant: Self.timeWidth).isActive = true
         timeLabel.setContentHuggingPriority(.required, for: .horizontal)
@@ -164,7 +171,7 @@ final class MenuPanelClipboardRow: MenuPanelRow {
         contentStack.addArrangedSubview(MenuPanelLabel.spacer())
 
         let kindLabel = MenuPanelLabel.text(Self.kindLabel(for: item), font: MenuPanelStyle.sectionFont,
-                                            color: .secondaryLabelColor)
+                                            color: MenuPanelStyle.secondaryText)
         kindLabel.font = MenuPanelStyle.sectionFont
         kindLabel.setContentHuggingPriority(.required, for: .horizontal)
         kindLabel.setContentCompressionResistancePriority(.required, for: .horizontal)

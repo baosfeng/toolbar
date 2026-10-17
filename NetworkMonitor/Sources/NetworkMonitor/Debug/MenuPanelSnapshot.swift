@@ -126,7 +126,6 @@ enum MenuPanelSnapshot {
     private static func makeMenuPanel(tab: MenuPanelTab, items: [ClipboardItem],
                                       processCount: Int = 5) -> MenuPanelView {
         let panel = MenuPanelView()
-        panel.configureMaterialForSnapshot()
         panel.updateSpeeds(down: 1_200_000, up: 340_000,
                            downHistory: sampleHistory(base: 900_000, amplitude: 700_000),
                            upHistory: sampleHistory(base: 180_000, amplitude: 260_000))
@@ -195,8 +194,8 @@ enum MenuPanelSnapshot {
 
     /// 把视图渲染成 PNG（强制指定外观，浅色/深色各一份）
     ///
-    /// 步骤：套一层纯色背景容器（popover 材质是半透明的，没有背景会得到透明 PNG）→ 放进
-    /// 离屏 borderless 窗口 → 布局 → `cacheDisplay` 抓位图 → 写 PNG。任何一步失败只记日志。
+    /// 步骤：套一层纯色背景容器 → 放进离屏 borderless 窗口 → 布局 → `cacheDisplay` 抓位图 → 写 PNG。
+    /// 面板本身已是不透明背景，这里不改材质，保证离屏结果与真实窗口一致。任何一步失败只记日志。
     private static func render(view: NSView, size: NSSize,
                                appearanceName: NSAppearance.Name, to url: URL,
                                postLayout: ((NSView) -> Void)? = nil) {

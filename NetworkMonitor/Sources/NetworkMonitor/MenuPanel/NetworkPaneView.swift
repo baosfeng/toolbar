@@ -10,10 +10,10 @@ final class NetworkPaneView: MenuPanelPaneView {
 
     private let downValueLabel = MenuPanelLabel.text("0", font: MenuPanelStyle.heroFont, color: MenuPanelStyle.downColor)
     private let downUnitLabel = MenuPanelLabel.text("B/s", font: MenuPanelStyle.heroUnitFont,
-                                                    color: .secondaryLabelColor)
+                                                    color: MenuPanelStyle.secondaryText)
     private let upValueLabel = MenuPanelLabel.text("0", font: MenuPanelStyle.sideValueFont, color: MenuPanelStyle.upColor)
     private let upUnitLabel = MenuPanelLabel.text("B/s", font: MenuPanelStyle.heroUnitFont,
-                                                  color: .secondaryLabelColor)
+                                                  color: MenuPanelStyle.secondaryText)
     private let downSparkline = MenuPanelSparklineView(lineColor: MenuPanelStyle.downColor)
     private let upSparkline = MenuPanelSparklineView(lineColor: MenuPanelStyle.upColor)
 
@@ -22,9 +22,9 @@ final class NetworkPaneView: MenuPanelPaneView {
     private let todayDownLabel = MenuPanelLabel.value("—", color: MenuPanelStyle.downColor)
     private let todayUpLabel = MenuPanelLabel.value("—", color: MenuPanelStyle.upColor)
     private let todayDownShareLabel = MenuPanelLabel.text("", font: MenuPanelStyle.smallValueFont,
-                                                          color: .tertiaryLabelColor)
+                                                          color: MenuPanelStyle.tertiaryText)
     private let todayUpShareLabel = MenuPanelLabel.text("", font: MenuPanelStyle.smallValueFont,
-                                                        color: .tertiaryLabelColor)
+                                                        color: MenuPanelStyle.tertiaryText)
     private let downTrack = MenuPanelTrackView(fillColor: MenuPanelStyle.downColor)
     private let upTrack = MenuPanelTrackView(fillColor: MenuPanelStyle.upColor)
 
@@ -32,8 +32,16 @@ final class NetworkPaneView: MenuPanelPaneView {
 
     private let processHeader = MenuPanelHeaderRow(title: "活跃进程", trailing: "0 个")
     private let processStack = NSStackView()
-    private let processEmptyLabel = MenuPanelLabel.text("当前没有进程在使用网络", font: MenuPanelStyle.bodyFont,
-                                                        color: .secondaryLabelColor)
+    private let processEmptyLabel: NSTextField = {
+        let label = MenuPanelLabel.text("当前没有进程在使用网络",
+                                        font: NSFont.systemFont(ofSize: 12, weight: .regular),
+                                        color: .labelColor)
+        label.alignment = .left
+        label.maximumNumberOfLines = 1
+        label.lineBreakMode = .byTruncatingTail
+        label.setContentHuggingPriority(.required, for: .vertical)
+        return label
+    }()
     private let chartHeader = MenuPanelHeaderRow(title: "近 6 日下行")
     private let barsView = MenuPanelBarsView()
 
@@ -161,7 +169,7 @@ final class NetworkPaneView: MenuPanelPaneView {
     /// 今日流量单行：标题 + 数值 + 占比说明
     private func makeTodayRow(title: String, value: NSTextField, share: NSTextField) -> NSView {
         let row = NSStackView(views: [MenuPanelLabel.text(title, font: MenuPanelStyle.sectionFont,
-                                                          color: .secondaryLabelColor),
+                                                          color: MenuPanelStyle.secondaryText),
                                       value,
                                       MenuPanelLabel.spacer(),
                                       share])
@@ -177,6 +185,8 @@ final class NetworkPaneView: MenuPanelPaneView {
         processStack.alignment = .leading
         processStack.spacing = 0
         processEmptyLabel.isHidden = false
+        // 空态统一 12pt regular + 18pt 行高（此前被 NSStackView 拉伸显得偏大）
+        processEmptyLabel.heightAnchor.constraint(equalToConstant: 18).isActive = true
 
         let section = NSStackView(views: [processHeader, processStack, processEmptyLabel])
         section.orientation = .vertical
@@ -297,7 +307,7 @@ final class MenuPanelProcessRow: MenuPanelRow {
         iconView.imageScaling = .scaleProportionallyDown
         iconView.image = AppIconProvider.icon(forProcess: process.name, size: 20)
             ?? AppIconProvider.placeholderIcon(size: 20)
-        iconView.contentTintColor = .tertiaryLabelColor
+        iconView.contentTintColor = MenuPanelStyle.tertiaryText
         NSLayoutConstraint.activate([
             iconView.widthAnchor.constraint(equalToConstant: 20),
             iconView.heightAnchor.constraint(equalToConstant: 20),
@@ -310,7 +320,7 @@ final class MenuPanelProcessRow: MenuPanelRow {
         let downText = "↓" + formatSpeedShort(Double(process.bytesIn))
         let upText = "↑" + formatSpeedShort(Double(process.bytesOut))
         let speeds = MenuPanelLabel.text("\(downText)  \(upText)", font: MenuPanelStyle.smallValueFont,
-                                        color: .secondaryLabelColor)
+                                        color: MenuPanelStyle.secondaryText)
         speeds.setContentHuggingPriority(.required, for: .horizontal)
         contentStack.addArrangedSubview(speeds)
     }

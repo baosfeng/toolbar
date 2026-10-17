@@ -18,7 +18,11 @@ public func formatSpeedShort(_ bps: Double) -> String {
 }
 
 /// Formats bytes in full form (e.g., "1.2 MB").
+///
+/// 0 单独处理为 "0 KB"：ByteCountFormatter 对 0 会返回本地化文案 "Zero KB"，
+/// 菜单/面板里看着像异常值（实机反馈「Zero KB」）。
 public func formatBytesFull(_ bytes: UInt64) -> String {
+    guard bytes > 0 else { return "0 KB" }
     let f = ByteCountFormatter()
     f.countStyle = .decimal
     f.includesUnit = true

@@ -61,6 +61,10 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
     /// 中频刷新间隔
     private static let midInterval: TimeInterval = 5.0
     private var lastMidRefresh: Date = .distantPast
+#if DEBUG
+    /// 取证专用（仅 DEBUG）：强制进程/剪贴板空态，用于核对空态字号
+    var forceEmptyDataForEvidence = false
+#endif
     /// 最近一次收起时间 — 用于吞掉「点击状态栏按钮先触发 transient 收起、再触发按钮动作」的重复开合
     private var lastCloseDate: Date = .distantPast
     nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
@@ -197,7 +201,11 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
         content.updateTraffic(todayRx: trafficTracker.todayRx,
                               todayTx: trafficTracker.todayTx,
                               dailyBars: bars)
+#if DEBUG
+        content.updateProcesses(forceEmptyDataForEvidence ? [] : processMonitor.processSpeeds)
+#else
         content.updateProcesses(processMonitor.processSpeeds)
+#endif
         content.updateSystem(ip: getLocalIPAddress() ?? "",
                              wifi: SystemInfoProvider.wifiDisplayName(),
                              launchAtStartup: isLaunchAtStartupSaved)
@@ -205,8 +213,37 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
 
     /// 剪贴板刷新：仓储按时间倒序取最近 5 条
     private func refreshClipboard() {
+#if DEBUG
+        if forceEmptyDataForEvidence {
+            content.updateClipboardItems([])
+            return
+        }
+#endif
         content.updateClipboardItems(repository.fetchClipboardItems(kind: nil, limit: 5))
     }
+
+#if DEBUG
+    /// 取证专用（仅 DEBUG）：强制 popover 内容与窗口外观（真实窗口渲染，非离屏缓存）
+    func forceAppearanceForEvidence(_ name: NSAppearance.Name) {
+        guard let appearance = NSAppearance(named: name) else { return }
+        NSApp.appearance = appearance
+        content.appearance = appearance
+        popover.contentViewController?.view.appearance = appearance
+        popover.contentViewController?.view.window?.appearance = appearance
+    }
+
+    /// 取证专用（仅 DEBUG）：切换展示分页
+    func selectTabForEvidence(_ tab: MenuPanelTab) {
+        content.select(tab: tab)
+        updateContentSize(force: true)
+    }
+
+    /// 取证专用（仅 DEBUG）：popover 真实窗口号与 frame（供 screencapture -l 用）
+    func evidenceWindow() -> (number: Int, frame: NSRect)? {
+        guard popover.isShown, let window = popover.contentViewController?.view.window else { return nil }
+        return (window.windowNumber, window.frame)
+    }
+#endif
 
     /// 采样折线（仅面板展开时采样，避免无谓累积）
     private func sampleHistory() {
