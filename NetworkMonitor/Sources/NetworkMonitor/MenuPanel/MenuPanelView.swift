@@ -83,6 +83,15 @@ final class MenuPanelView: NSVisualEffectView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
+#if DEBUG
+    /// 快照专用（仅 DEBUG）：离屏渲染时 popover 材质会退化成灰色块，
+    /// 换成窗口底色材质以便截图里判读深浅色（不影响运行时外观）
+    func configureMaterialForSnapshot() {
+        material = .windowBackground
+        state = .inactive
+    }
+#endif
+
     // MARK: - 分页切换
 
     /// 切换分页（键盘 ←/→、点击分段、数字键均走这里）
