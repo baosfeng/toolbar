@@ -10,23 +10,13 @@ enum ClipboardFilter: Int, CaseIterable {
     case image
     case pinned
 
-    /// 中文名称（无障碍描述与提示文案）
+    /// 中文名称（过滤控件文案与无障碍描述）
     var label: String {
         switch self {
         case .all: return "全部"
         case .text: return "文本"
         case .image: return "图片"
         case .pinned: return "收藏"
-        }
-    }
-
-    /// SF Symbol（禁止 emoji）
-    var symbolName: String {
-        switch self {
-        case .all: return "square.grid.2x2"
-        case .text: return "text.alignleft"
-        case .image: return "photo"
-        case .pinned: return "star.fill"
         }
     }
 
@@ -88,11 +78,28 @@ final class ClipboardPanel: NSPanel {
 
 // MARK: - 面板内容视图
 
-/// 剪贴板面板内容视图 — 搜索框、过滤切换、卡片流、栈进度与权限状态
+/// 剪贴板面板内容视图 — 搜索框、过滤切换、卡片流、栈进度与权限入口
 ///
-/// 布局：顶部搜索 + 过滤 + 采集按钮，中部卡片流（含空态），底部栈进度 / 提示 / 权限入口。
+/// 布局（翻转坐标，自上而下）：工具条 32pt（搜索 + 过滤 + 采集）→ 卡片区（面板高 − 32 − 24）→ 提示行 24pt。
+/// 左右内边距统一 10pt；卡片区高度随面板高度自适应，保证卡片始终垂直居中。
 @MainActor
 final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
+
+    /// 布局口径（设计规格：内边距 10、工具条 32、提示行 24、搜索框弹性 300–420）
+    private enum Metrics {
+        static let padding: CGFloat = 10
+        static let toolbarHeight: CGFloat = 32
+        static let footerHeight: CGFloat = 24
+        static let controlHeight: CGFloat = 24
+        static let searchMinWidth: CGFloat = 300
+        static let searchMaxWidth: CGFloat = 420
+        static let filterWidth: CGFloat = 160
+        static let gap: CGFloat = 8
+        static let footerTextHeight: CGFloat = 16
+    }
+
+    /// 底部常驻按键提示（设计稿固定文案）
+    static let keyHint = "↑↓ 选择 / ⌘ 粘贴 / ⌘1–9 直选 / Esc 收起"
 
     weak var delegate: ClipboardPanelViewDelegate?
 
@@ -143,15 +150,22 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         cardFlow.updateSelection(index)
     }
 
-    /// 更新栈进度（如「栈 2 / 5」）
+    /// 更新栈进度（如「堆叠 2 条」；栈空时收起该标签，不占提示行）
     func updateStack(remaining: Int, total: Int) {
-        let suffix = remaining > 0 ? "\(remaining) / \(total)" : "空"
-        stackLabel.stringValue = "栈 \(suffix)"
+        guard remaining > 0 else {
+            stackLabel.stringValue = ""
+            stackLabel.isHidden = true
+            needsLayout = true
+            return
+        }
+        stackLabel.isHidden = false
+        stackLabel.stringValue = "堆叠 \(remaining) 条"
+        needsLayout = true
     }
 
-    /// 更新辅助功能权限状态（无权限时显示入口，不得静默）
+    /// 更新辅助功能权限状态（无权限时高亮入口，不得静默）
     func updatePermission(accessibilityGranted: Bool) {
-        accessibilityButton.isHidden = accessibilityGranted
+        applyPermissionStyle(accessibilityGranted: accessibilityGranted)
         needsLayout = true
     }
 
@@ -184,37 +198,65 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         super.layout()
         let width = bounds.width
         let height = bounds.height
-        let padding: CGFloat = 10
-        let headerHeight: CGFloat = 24
+        let padding = Metrics.padding
 
-        let searchWidth = min(max(180, width * 0.38), 360)
-        searchField.frame = NSRect(x: padding, y: padding, width: searchWidth, height: headerHeight)
-        filterControl.frame = NSRect(x: padding + searchWidth + 10, y: padding, width: 136, height: headerHeight)
-        let buttonX = padding + searchWidth + 156
-        captureButton.frame = NSRect(x: buttonX, y: padding, width: max(120, width - buttonX - padding), height: headerHeight)
+        layoutToolbar(width: width)
+        layoutFooter(width: width, height: height)
 
-        let footerY = height - 28
-        stackLabel.frame = NSRect(x: padding, y: footerY, width: 110, height: 18)
-        let permissionWidth: CGFloat = accessibilityButton.isHidden ? 0 : 132
-        if !accessibilityButton.isHidden {
-            accessibilityButton.frame = NSRect(x: width - padding - permissionWidth, y: footerY - 3,
-                                               width: permissionWidth, height: 22)
-        }
-        let hintX = padding + 116
-        hintLabel.frame = NSRect(x: hintX, y: footerY,
-                                 width: max(0, width - hintX - padding - permissionWidth - 8), height: 18)
+        // 卡片区 = 面板高 − 工具条 − 提示行（左右 10pt，上下不留白，由卡片流自身垂直居中）
+        let cardsHeight = max(0, height - Metrics.toolbarHeight - Metrics.footerHeight)
+        cardFlow.frame = NSRect(x: padding, y: Metrics.toolbarHeight,
+                                width: max(0, width - padding * 2), height: cardsHeight)
+    }
 
-        // scrollTop 与 footerY 取值保证默认面板高度 260 下可完整容纳 190 高卡片
-        let scrollTop = padding + headerHeight + 4
-        cardFlow.frame = NSRect(x: padding - 6, y: scrollTop,
-                                width: width - (padding - 6) * 2,
-                                height: max(0, footerY - scrollTop - 4))
+    /// 工具条：搜索框弹性 300–420、类型过滤、右侧「采集当前剪贴板」
+    private func layoutToolbar(width: CGFloat) {
+        let padding = Metrics.padding
+        let controlY = (Metrics.toolbarHeight - Metrics.controlHeight) / 2
+        let captureWidth = max(96, ceil(captureButton.fittingSize.width))
+        let searchWidth = min(Metrics.searchMaxWidth,
+                              max(Metrics.searchMinWidth,
+                                  width - padding * 2 - captureWidth - Metrics.filterWidth - Metrics.gap * 2))
+        searchField.frame = NSRect(x: padding, y: controlY,
+                                   width: searchWidth, height: Metrics.controlHeight)
+        filterControl.frame = NSRect(x: padding + searchWidth + Metrics.gap, y: controlY,
+                                     width: Metrics.filterWidth, height: Metrics.controlHeight)
+        captureButton.frame = NSRect(x: width - padding - captureWidth, y: controlY,
+                                     width: captureWidth, height: Metrics.controlHeight)
+    }
+
+    /// 提示行：左侧栈进度、右侧按键提示与「辅助功能权限」入口
+    private func layoutFooter(width: CGFloat, height: CGFloat) {
+        let padding = Metrics.padding
+        let textY = height - Metrics.footerHeight + (Metrics.footerHeight - Metrics.footerTextHeight) / 2
+        let permissionWidth = max(72, ceil(accessibilityButton.fittingSize.width))
+        let permissionX = width - padding - permissionWidth
+        accessibilityButton.frame = NSRect(x: permissionX, y: textY,
+                                           width: permissionWidth, height: Metrics.footerTextHeight)
+
+        let stackWidth = stackLabel.isHidden
+            ? 0
+            : min(120, ceil(stackLabel.intrinsicContentSize.width))
+        stackLabel.frame = NSRect(x: padding, y: textY, width: stackWidth, height: Metrics.footerTextHeight)
+
+        let hintX = padding + stackWidth + (stackWidth > 0 ? Metrics.gap : 0)
+        let hintRight = permissionX - Metrics.gap
+        hintLabel.frame = NSRect(x: hintX, y: textY,
+                                 width: max(0, hintRight - hintX), height: Metrics.footerTextHeight)
+    }
+
+    /// 工具条上下发丝分隔线（设计稿：工具条底部、提示行顶部各一条）
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        NSColor.separatorColor.withAlphaComponent(0.5).setFill()
+        NSRect(x: 0, y: Metrics.toolbarHeight, width: bounds.width, height: 1).fill()
+        NSRect(x: 0, y: bounds.height - Metrics.footerHeight, width: bounds.width, height: 1).fill()
     }
 
     // MARK: 子视图构建
 
     private func buildSearchField() {
-        searchField.placeholderString = "搜索剪贴板历史"
+        searchField.placeholderString = "搜索剪贴板"
         searchField.delegate = self
         searchField.font = NSFont.systemFont(ofSize: 13)
         // 置空 nextKeyView：Tab 不进入搜索框焦点环（Tab 由面板统一拦截为切换过滤）
@@ -226,9 +268,10 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         filterControl.segmentCount = ClipboardFilter.allCases.count
         filterControl.segmentStyle = .texturedRounded
         filterControl.trackingMode = .selectOne
+        filterControl.font = NSFont.systemFont(ofSize: 12)
         for filter in ClipboardFilter.allCases {
-            filterControl.setImage(symbolImage(named: filter.symbolName), forSegment: filter.rawValue)
-            filterControl.setWidth(32, forSegment: filter.rawValue)
+            filterControl.setLabel(filter.label, forSegment: filter.rawValue)
+            filterControl.setWidth(40, forSegment: filter.rawValue)
             filterControl.setToolTip(filter.label, forSegment: filter.rawValue)
         }
         filterControl.selectedSegment = ClipboardFilter.all.rawValue
@@ -242,8 +285,6 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         captureButton.bezelStyle = .rounded
         captureButton.controlSize = .small
         captureButton.font = NSFont.systemFont(ofSize: 12)
-        captureButton.image = symbolImage(named: "arrow.clockwise")
-        captureButton.imagePosition = .imageLeading
         captureButton.target = self
         captureButton.action = #selector(captureNow)
         addSubview(captureButton)
@@ -252,23 +293,34 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     private func buildFooter() {
         stackLabel.font = NSFont.systemFont(ofSize: 11)
         stackLabel.textColor = .secondaryLabelColor
+        stackLabel.lineBreakMode = .byTruncatingTail
+        stackLabel.isHidden = true
         addSubview(stackLabel)
 
         hintLabel.font = NSFont.systemFont(ofSize: 11)
         hintLabel.textColor = .secondaryLabelColor
         hintLabel.lineBreakMode = .byTruncatingTail
+        hintLabel.alignment = .right
+        hintLabel.stringValue = Self.keyHint
         addSubview(hintLabel)
 
-        accessibilityButton.title = "前往系统设置"
-        accessibilityButton.bezelStyle = .rounded
-        accessibilityButton.controlSize = .mini
-        accessibilityButton.font = NSFont.systemFont(ofSize: 11)
-        accessibilityButton.contentTintColor = .systemOrange
-        accessibilityButton.image = symbolImage(named: "exclamationmark.triangle")
-        accessibilityButton.imagePosition = .imageLeading
+        accessibilityButton.isBordered = false
         accessibilityButton.target = self
         accessibilityButton.action = #selector(openAccessibilitySettings)
+        applyPermissionStyle(accessibilityGranted: true)
         addSubview(accessibilityButton)
+    }
+
+    /// 权限入口样式：有权限时 10pt muted，无权限时改为 systemOrange 并带警示符号（不得静默）
+    private func applyPermissionStyle(accessibilityGranted: Bool) {
+        let color: NSColor = accessibilityGranted ? .secondaryLabelColor : .systemOrange
+        accessibilityButton.attributedTitle = NSAttributedString(
+            string: "辅助功能权限",
+            attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: color])
+        accessibilityButton.image = accessibilityGranted
+            ? nil
+            : symbolImage(named: "exclamationmark.triangle", color: .systemOrange)
+        accessibilityButton.imagePosition = accessibilityGranted ? .noImage : .imageLeading
     }
 
     /// 卡片流：点击 / 双击动作全部转交控制器，视图不持有业务依赖
@@ -284,8 +336,11 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         addSubview(cardFlow)
     }
 
-    private func symbolImage(named name: String) -> NSImage? {
-        NSImage(systemSymbolName: name, accessibilityDescription: nil)
+    private func symbolImage(named name: String, color: NSColor) -> NSImage? {
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
+        let configuration = NSImage.SymbolConfiguration(pointSize: 10, weight: .regular)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+        return image.withSymbolConfiguration(configuration) ?? image
     }
 
     // MARK: 动作

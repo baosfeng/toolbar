@@ -3,16 +3,49 @@ import NetworkMonitorCore
 
 // MARK: - 卡片视图
 
-/// 剪贴板卡片 — 168 × 190，选中态 controlAccentColor 2pt 描边 + 缩放 1.02 + 阴影
+/// 剪贴板卡片 — 176 × 198，圆角 12，内边距 10
 ///
+/// 视觉口径：内容区垂直居中，底部单行 meta（左：类型图标 + ⌘N + 收藏星；右：相对时间 + 来源 App 图标），
+/// 选中态为 controlAccentColor 1.5pt 描边 + accent 5% 底色（不缩放、不加阴影）。
 /// 仅使用 SF Symbols 与系统语义色，浅色 / 深色自适应，禁止 emoji。
+/// 静态资源（符号 / 缩略图 / 来源 App 图标）见 `ClipboardCardView+Resources.swift`。
 @MainActor
 final class ClipboardCardView: NSView {
 
-    /// 卡片尺寸（设计规格第 9 节）
-    static let cardSize = NSSize(width: 168, height: 190)
+    /// 卡片尺寸（设计规格：176 × 198）
+    static let cardSize = NSSize(width: 176, height: 198)
     /// 卡片圆角
-    private static let cornerRadius: CGFloat = 12
+    static let cornerRadius: CGFloat = 12
+    /// 卡片内边距
+    static let padding: CGFloat = 10
+    /// 正文字号
+    static let bodyFontSize: CGFloat = 13
+    /// 等宽字号（URL / 命令 / JSON）
+    static let monospacedFontSize: CGFloat = 12
+    /// meta 字号
+    static let metaFontSize: CGFloat = 11
+    /// 类型图标尺寸
+    static let typeIconSize: CGFloat = 14
+
+    /// meta 行高
+    private static let metaHeight: CGFloat = 16
+    /// 内容区与 meta 行间距
+    private static let bodyGap: CGFloat = 6
+    /// 正文最大行数
+    private static let maxTextLines = 7
+    /// meta 行内元素间距
+    private static let metaGap: CGFloat = 6
+    /// 来源 App 图标尺寸
+    private static let appIconSize: CGFloat = 12
+    /// 收藏星尺寸
+    private static let starSize: CGFloat = 12
+
+    /// 缩略图缓存（原图按需懒加载，卡片只持有缩略图）
+    ///
+    /// internal：由 `ClipboardCardView+Resources.swift` 跨文件访问（Swift 扩展不能声明存储属性）。
+    static let thumbnailCache = NSCache<NSString, NSImage>()
+    /// 来源 App 图标缓存（internal 原因同上）
+    static let iconCache = NSCache<NSString, NSImage>()
 
     /// 点击（选中）回调
     var onClick: ((ClipboardCardView) -> Void)?
@@ -21,52 +54,24 @@ final class ClipboardCardView: NSView {
 
     private(set) var item: ClipboardItem?
     private(set) var isSelected = false
-
-    /// 缩略图缓存（原图按需懒加载，卡片只持有缩略图）
-    private static let thumbnailCache = NSCache<NSString, NSImage>()
-    /// 来源 App 图标缓存
-    private static let iconCache = NSCache<NSString, NSImage>()
+    /// 卡片在匹配列表中的序号（1…9 显示 ⌘N，超出不显示）
+    private(set) var shortcutNumber: Int?
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { false }
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.cornerRadius = Self.cornerRadius
-        layer?.masksToBounds = false
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("不支持从 nib 初始化") }
-
-    /// 配置内容
-    func configure(with item: ClipboardItem, isSelected: Bool) {
+    /// 配置内容与序号（视图池复用：内容变化必须无条件重绘）
+    func configure(with item: ClipboardItem, isSelected: Bool, number: Int) {
         self.item = item
-        setSelected(isSelected, animated: false)
+        self.shortcutNumber = number
+        self.isSelected = isSelected
         needsDisplay = true
     }
 
-    /// 设置选中态：描边 + 缩放 1.02 + 阴影
-    func setSelected(_ selected: Bool, animated: Bool) {
-        guard isSelected != selected || !animated else { return }
+    /// 设置选中态：描边 + 底色重绘（不缩放、不改阴影）
+    func setSelected(_ selected: Bool) {
+        guard isSelected != selected else { return }
         isSelected = selected
-        let transform = selected ? CATransform3DMakeScale(1.02, 1.02, 1) : CATransform3DIdentity
-        let apply = {
-            self.layer?.transform = transform
-            self.layer?.shadowColor = NSColor.black.cgColor
-            self.layer?.shadowOpacity = selected ? 0.28 : 0
-            self.layer?.shadowRadius = selected ? 6 : 0
-            self.layer?.shadowOffset = CGSize(width: 0, height: -2)
-        }
-        if animated {
-            CATransaction.begin()
-            CATransaction.setAnimationDuration(0.12)
-            apply()
-            CATransaction.commit()
-        } else {
-            apply()
-        }
         needsDisplay = true
     }
 
@@ -83,170 +88,156 @@ final class ClipboardCardView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let item else { return }
-        let bounds = self.bounds.insetBy(dx: 2, dy: 2)
-        let path = NSBezierPath(roundedRect: bounds, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius)
+        // 描边内缩半个线宽，避免被视图边界裁掉
+        let strokeInset: CGFloat = isSelected ? 0.75 : 0.5
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: strokeInset, dy: strokeInset),
+                                xRadius: Self.cornerRadius, yRadius: Self.cornerRadius)
+        drawBackground(path)
 
+        let content = bounds.insetBy(dx: Self.padding, dy: Self.padding)
+        let body = bodyRect(in: content)
         if item.kind == .image {
-            drawImageCard(item: item, in: bounds, path: path)
+            drawThumbnail(item: item, in: body)
         } else {
-            (isSelected ? NSColor.controlBackgroundColor : NSColor.controlBackgroundColor.withAlphaComponent(0.72)).setFill()
-            path.fill()
-            drawTextCard(item: item, in: bounds)
+            drawText(item: item, in: body)
         }
 
-        // 选中态：controlAccentColor 2pt 描边
+        NSColor.separatorColor.setStroke()
+        path.lineWidth = 1
         if isSelected {
             NSColor.controlAccentColor.setStroke()
-            path.lineWidth = 2
-        } else {
-            NSColor.separatorColor.setStroke()
-            path.lineWidth = 1
+            path.lineWidth = 1.5
         }
         path.stroke()
 
-        if let position = item.stackPosition { drawStackBadge(position, in: bounds) }
+        drawMeta(item: item, in: content)
+        if let position = item.stackPosition { drawStackBadge(position, in: content) }
     }
 
-    /// 文本卡：类型符号 + 收藏星 + 4 行摘要 + 底部来源/时间/次数
-    private func drawTextCard(item: ClipboardItem, in bounds: NSRect) {
-        Self.symbolImage(named: Self.symbolName(for: item.kind), color: .secondaryLabelColor)?
-            .draw(in: NSRect(x: 12, y: 12, width: 14, height: 14))
-        if item.isPinned {
-            Self.symbolImage(named: "star.fill", color: .systemYellow)?
-                .draw(in: NSRect(x: bounds.width - 26, y: 11, width: 14, height: 14))
-        }
+    /// 卡片底色：选中 = 常规底色 + accent 5% 叠加
+    private func drawBackground(_ path: NSBezierPath) {
+        NSColor.controlBackgroundColor.withAlphaComponent(isSelected ? 1 : 0.72).setFill()
+        path.fill()
+        guard isSelected else { return }
+        NSColor.controlAccentColor.withAlphaComponent(0.05).setFill()
+        path.fill()
+    }
+
+    /// 内容区（去掉底部 meta 行）
+    private func bodyRect(in content: NSRect) -> NSRect {
+        NSRect(x: content.minX, y: content.minY, width: content.width,
+               height: max(0, content.height - Self.metaHeight - Self.bodyGap))
+    }
+
+    /// 文本卡：可断行正文垂直居中，最多 7 行，超出尾部省略
+    private func drawText(item: ClipboardItem, in body: NSRect) {
+        let monospaced = ClipboardCardTextStyle.isMonospaced(item.preview)
+        let font = monospaced
+            ? NSFont.monospacedSystemFont(ofSize: Self.monospacedFontSize, weight: .regular)
+            : NSFont.systemFont(ofSize: Self.bodyFontSize)
 
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingTail
+        paragraph.lineBreakMode = .byWordWrapping
         paragraph.lineSpacing = 2
-        let text = (item.preview.isEmpty ? "（空内容）" : item.preview) as NSString
-        text.draw(with: NSRect(x: 12, y: 36, width: bounds.width - 24, height: 76),
-                  options: [.usesLineFragmentOrigin, .usesFontLeading],
-                  attributes: [.font: NSFont.systemFont(ofSize: 13),
-                               .foregroundColor: NSColor.labelColor,
-                               .paragraphStyle: paragraph])
+        paragraph.alignment = .left
 
-        drawFooter(item: item, in: bounds)
+        let text = item.preview.isEmpty ? "（空内容）" : item.preview
+        let attributed = NSAttributedString(
+            string: ClipboardCardTextStyle.breakable(text, monospaced: monospaced),
+            attributes: [.font: font,
+                         .foregroundColor: NSColor.labelColor,
+                         .paragraphStyle: paragraph])
+
+        let lineHeight = ceil(font.ascender - font.descender + paragraph.lineSpacing)
+        let maxHeight = lineHeight * CGFloat(Self.maxTextLines)
+        let measured = attributed.boundingRect(
+            with: NSSize(width: body.width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]).height
+        let drawHeight = min(maxHeight, ceil(measured))
+        let rect = NSRect(x: body.minX,
+                          y: body.minY + max(0, (body.height - drawHeight) / 2),
+                          width: body.width,
+                          height: drawHeight)
+        attributed.draw(with: rect,
+                        options: [.usesLineFragmentOrigin, .usesFontLeading, .truncatesLastVisibleLine])
     }
 
-    /// 图片卡：缩略图铺满 + 底部渐变遮罩上叠尺寸与时间
-    private func drawImageCard(item: ClipboardItem, in bounds: NSRect, path: NSBezierPath) {
+    /// 图片卡：缩略图为主体（圆角 6，等比填充裁剪），取不到图时降级为占位符号
+    private func drawThumbnail(item: ClipboardItem, in body: NSRect) {
+        guard body.width > 0, body.height > 0 else { return }
+        let path = NSBezierPath(roundedRect: body, xRadius: 6, yRadius: 6)
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
         NSColor.underPageBackgroundColor.setFill()
-        bounds.fill()
+        body.fill()
         if let image = Self.thumbnail(for: item) {
-            Self.drawAspectFill(image: image, in: bounds)
+            Self.drawAspectFill(image: image, in: body)
         } else {
-            Self.symbolImage(named: "photo", color: .secondaryLabelColor)?
-                .draw(in: NSRect(x: bounds.midX - 12, y: bounds.midY - 12, width: 24, height: 24))
+            Self.symbolImage(named: "photo", color: .secondaryLabelColor, pointSize: 24)?
+                .draw(in: NSRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24))
         }
-        if let gradient = NSGradient(colors: [NSColor.black.withAlphaComponent(0), NSColor.black.withAlphaComponent(0.65)]) {
-            gradient.draw(in: NSRect(x: bounds.minX, y: bounds.maxY - 54, width: bounds.width, height: 54), angle: -90)
-        }
-        let overlay: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11),
-                                                      .foregroundColor: NSColor.white]
-        let size = "\(item.imageWidth ?? 0)×\(item.imageHeight ?? 0)" as NSString
-        size.draw(at: NSPoint(x: 12, y: bounds.maxY - 20), withAttributes: overlay)
-        let time = ClipboardRelativeTime.string(from: item.createdAt) as NSString
-        let timeSize = time.size(withAttributes: overlay)
-        time.draw(at: NSPoint(x: bounds.maxX - 12 - timeSize.width, y: bounds.maxY - 20), withAttributes: overlay)
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    /// 底部行：来源 App 图标 + 相对时间 + ×N 复制次数
-    private func drawFooter(item: ClipboardItem, in bounds: NSRect) {
-        let y = bounds.height - 34
-        var x: CGFloat = 12
+    /// 底部单行 meta：左「类型图标 + ⌘N + 收藏星」，右「相对时间 + 来源 App 图标」
+    ///
+    /// 不渲染来源 App 名与复制次数（设计稿口径：元信息降级）。
+    private func drawMeta(item: ClipboardItem, in content: NSRect) {
+        let rowY = content.maxY - Self.metaHeight
+        let metaAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: Self.metaFontSize, weight: .regular),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+
+        // 左：类型图标
+        var leftX = content.minX
+        Self.symbolImage(named: Self.symbolName(for: item), color: .secondaryLabelColor,
+                         pointSize: Self.typeIconSize)?
+            .draw(in: NSRect(x: leftX, y: rowY + (Self.metaHeight - Self.typeIconSize) / 2,
+                             width: Self.typeIconSize, height: Self.typeIconSize))
+        leftX += Self.typeIconSize + Self.metaGap
+
+        // 左：⌘N 直选提示（只有 1…9 有位）
+        if let number = shortcutNumber, (1...9).contains(number) {
+            let label = "⌘\(number)" as NSString
+            let size = label.size(withAttributes: metaAttributes)
+            label.draw(at: NSPoint(x: leftX, y: rowY + (Self.metaHeight - size.height) / 2),
+                       withAttributes: metaAttributes)
+            leftX += size.width + Self.metaGap
+        }
+
+        // 左：收藏星（未收藏空心、已收藏实心）
+        let starName = item.isPinned ? "star.fill" : "star"
+        let starColor = item.isPinned ? NSColor.systemYellow : NSColor.secondaryLabelColor
+        Self.symbolImage(named: starName, color: starColor, pointSize: Self.starSize)?
+            .draw(in: NSRect(x: leftX, y: rowY + (Self.metaHeight - Self.starSize) / 2,
+                             width: Self.starSize, height: Self.starSize))
+
+        // 右：来源 App 图标（12pt、75% 不透明度，不显示 App 名） + 相对时间
+        var rightX = content.maxX
         if let icon = Self.applicationIcon(bundleID: item.sourceBundleID) {
-            icon.draw(in: NSRect(x: x, y: y + 1, width: 14, height: 14))
-            x += 18
+            icon.draw(in: NSRect(x: rightX - Self.appIconSize,
+                                 y: rowY + (Self.metaHeight - Self.appIconSize) / 2,
+                                 width: Self.appIconSize, height: Self.appIconSize),
+                      from: .zero, operation: .sourceOver, fraction: 0.75)
+            rightX -= Self.appIconSize + Self.metaGap
         }
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11),
-                                                         .foregroundColor: NSColor.secondaryLabelColor]
         let time = ClipboardRelativeTime.string(from: item.createdAt) as NSString
-        time.draw(at: NSPoint(x: x, y: y), withAttributes: attributes)
-        if item.copyCount > 1 {
-            let count = "×\(item.copyCount)" as NSString
-            let size = count.size(withAttributes: attributes)
-            count.draw(at: NSPoint(x: bounds.maxX - 12 - size.width, y: y), withAttributes: attributes)
-        }
+        let timeSize = time.size(withAttributes: metaAttributes)
+        time.draw(at: NSPoint(x: rightX - timeSize.width, y: rowY + (Self.metaHeight - timeSize.height) / 2),
+                  withAttributes: metaAttributes)
     }
 
     /// Paste Stack 角标（右上角 ①②③，按 stack_position 编号）
-    private func drawStackBadge(_ position: Int, in bounds: NSRect) {
+    private func drawStackBadge(_ position: Int, in content: NSRect) {
         let badge = Self.badgeText(position) as NSString
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold),
                                                          .foregroundColor: NSColor.white]
         let size = badge.size(withAttributes: attributes)
-        let rect = NSRect(x: bounds.maxX - size.width - 14, y: 8, width: size.width + 8, height: size.height + 3)
+        let rect = NSRect(x: content.maxX - size.width - 8, y: content.minY,
+                          width: size.width + 8, height: size.height + 2)
         NSColor.controlAccentColor.setFill()
         NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
         badge.draw(at: NSPoint(x: rect.minX + 4, y: rect.minY + 1), withAttributes: attributes)
-    }
-
-    // MARK: 静态资源
-
-    /// 类型符号名
-    private static func symbolName(for kind: ClipboardItemKind) -> String {
-        switch kind {
-        case .text: return "text.alignleft"
-        case .image: return "photo"
-        case .file: return "doc"
-        case .rtf: return "textformat"
-        }
-    }
-
-    /// SF Symbol 着色图（禁止 emoji，全部使用系统符号）
-    private static func symbolImage(named name: String, color: NSColor) -> NSImage? {
-        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
-        let configuration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-        return image.withSymbolConfiguration(configuration) ?? image
-    }
-
-    /// 缩略图（懒加载 + 缓存）
-    private static func thumbnail(for item: ClipboardItem) -> NSImage? {
-        let key = item.contentHash as NSString
-        if let cached = thumbnailCache.object(forKey: key) { return cached }
-        let path = ClipboardImageStore.thumbnailURL(for: item.contentHash).path
-        guard let image = NSImage(contentsOfFile: path) ?? item.imagePath.flatMap({ NSImage(contentsOfFile: $0) }) else {
-            return nil
-        }
-        thumbnailCache.setObject(image, forKey: key)
-        return image
-    }
-
-    /// 来源 App 图标（缓存；取不到时返回 nil，由调用方降级为纯文字）
-    private static func applicationIcon(bundleID: String?) -> NSImage? {
-        guard let bundleID, !bundleID.isEmpty else { return nil }
-        let key = bundleID as NSString
-        if let cached = iconCache.object(forKey: key) { return cached }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
-        guard let icon = NSImage(contentsOf: url.appendingPathComponent("Contents/Resources/app.icns"))
-                ?? NSWorkspace.shared.icon(forFile: url.path) as NSImage? else { return nil }
-        icon.size = NSSize(width: 14, height: 14)
-        iconCache.setObject(icon, forKey: key)
-        return icon
-    }
-
-    /// 等比填充绘制（铺满卡片，超出部分裁剪）
-    private static func drawAspectFill(image: NSImage, in rect: NSRect) {
-        let imageSize = image.size
-        guard imageSize.width > 0, imageSize.height > 0 else { return }
-        let scale = max(rect.width / imageSize.width, rect.height / imageSize.height)
-        let drawnSize = NSSize(width: imageSize.width * scale, height: imageSize.height * scale)
-        let target = NSRect(x: rect.midX - drawnSize.width / 2,
-                            y: rect.midY - drawnSize.height / 2,
-                            width: drawnSize.width,
-                            height: drawnSize.height)
-        image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1)
-    }
-
-    /// 角标文案：1→①，20 以上回退为数字
-    static func badgeText(_ position: Int) -> String {
-        let circled = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
-        guard position >= 1, position <= circled.count else { return "\(position)" }
-        return String(Array(circled)[position - 1])
     }
 }
