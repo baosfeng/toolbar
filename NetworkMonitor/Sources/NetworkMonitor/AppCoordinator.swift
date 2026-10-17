@@ -68,11 +68,13 @@ public final class AppCoordinator {
         // 4. 剪贴板历史链路
         setupClipboard(database: database)
 
-        // 5. 创建 MenuBarManager（注入依赖 + 剪贴板入口）
+        // 5. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
         let manager = MenuBarManager(
             networkMonitor: networkMonitor,
             processMonitor: processMonitor,
-            trafficTracker: trafficTracker
+            trafficTracker: trafficTracker,
+            clipboardRepository: databaseManager,
+            paster: clipboardPaster
         )
         manager.onOpenClipboardHistory = { [weak self] in self?.clipboardPanel.toggle() }
         manager.onOpenClipboardSettings = { [weak self] in self?.clipboardSettings.show() }
