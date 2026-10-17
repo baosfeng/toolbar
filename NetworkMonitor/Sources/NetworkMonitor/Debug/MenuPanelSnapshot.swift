@@ -20,6 +20,8 @@ enum MenuPanelSnapshot {
 
     /// 触发开关的环境变量名
     static let directoryEnvKey = "NM_SNAPSHOT_DIR"
+    /// 超高内容自证开关（进程 12 个，验证滚动兜底）
+    static let stressEnvKey = "NM_SNAPSHOT_STRESS"
     /// 启动后延迟（等 Dock / 菜单栏 / 剪贴板采集初始化完成）
     private static let delayNanoseconds: UInt64 = 700_000_000
     /// 剪贴板面板画布尺寸（与 07-contract 的 640×260 画布口径一致）
@@ -42,7 +44,8 @@ enum MenuPanelSnapshot {
 
     private static func captureAll(directory: URL, repository: (any ClipboardRepository)?) {
         let items = repository?.fetchClipboardItems(kind: nil, limit: 5) ?? []
-        logger.info("快照模式启动：目录=\(directory.path)，剪贴板条目 \(items.count) 条")
+        let stress = (ProcessInfo.processInfo.environment[stressEnvKey]?.isEmpty == false)
+        logger.info("快照模式启动：目录=\(directory.path)，剪贴板条目 \(items.count) 条，超高自证=\(stress)")
 
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -54,8 +57,7 @@ enum MenuPanelSnapshot {
         // 1. 菜单面板：三个 tab × 深浅色
         for tab in MenuPanelTab.allCases {
             let panel = makeMenuPanel(tab: tab, items: items)
-            panel.layoutSubtreeIfNeeded()
-            let needed = panel.fittingSize.height
+            let needed = panel.desiredContentHeight
             let height = min(max(needed, 180), MenuPanelStyle.maxHeight)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
@@ -65,7 +67,12 @@ enum MenuPanelSnapshot {
             }
         }
 
-        // 2. 剪贴板面板：一个视图 × 深浅色
+        // 2. 超高内容自证：进程 12 个 → 内容高度 > 520pt，验证不裁切且可滚动
+        if stress {
+            captureStress(directory: directory, items: items)
+        }
+
+        // 3. 剪贴板面板：一个视图 × 深浅色
         let clipboardBackdrop = makeClipboardPanel(items: items)
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let suffix = appearance == .aqua ? "light" : "dark"
@@ -77,8 +84,47 @@ enum MenuPanelSnapshot {
         logger.info("快照完成：目录=\(directory.path)")
     }
 
+    /// 超高内容自证：把进程数拉到 12（内容 > 520pt），截「视口顶部」与「滚到底部」两张图，
+    /// 并把文档高度 / 视口高度写进 metrics 文本，证明内容没有被裁切、而是变成可滚动。
+    private static func captureStress(directory: URL, items: [ClipboardItem]) {
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let suffix = appearance == .aqua ? "light" : "dark"
+            let panel = makeMenuPanel(tab: .network, items: items, processCount: 12)
+            let needed = panel.desiredContentHeight
+            let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
+
+            render(view: panel, size: size, appearanceName: appearance,
+                   to: directory.appendingPathComponent("menu-network-stress-\(suffix).png"))
+
+            let scrolledPanel = makeMenuPanel(tab: .network, items: items, processCount: 12)
+            render(view: scrolledPanel, size: size, appearanceName: appearance,
+                   to: directory.appendingPathComponent("menu-network-stress-\(suffix)-scrolled.png")) { view in
+                guard let panel = view as? MenuPanelView else { return }
+                let metrics = panel.snapshotScrollMetrics()
+                panel.scrollToBottomForSnapshot()
+                writeMetrics(directory: directory, needed: needed, size: size, metrics: metrics)
+            }
+        }
+    }
+
+    /// 写自证指标文本（仅快照目录内，便于 review 时不依赖肉眼）
+    private static func writeMetrics(directory: URL, needed: CGFloat, size: NSSize,
+                                     metrics: (document: CGFloat, viewport: CGFloat)) {
+        let text = """
+        content_needed_pt = \(Int(needed.rounded()))
+        popover_height_pt = \(Int(size.height))
+        scroll_document_pt = \(Int(metrics.document.rounded()))
+        scroll_viewport_pt = \(Int(metrics.viewport.rounded()))
+        scrollable = \(metrics.document > metrics.viewport + 1)
+        """ + "\n"
+        let url = directory.appendingPathComponent("menu-network-stress-metrics.txt")
+        try? text.write(to: url, atomically: true, encoding: .utf8)
+        logger.info("超高自证：需要 \(Int(needed))pt，视口 \(Int(metrics.viewport))pt，文档 \(Int(metrics.document))pt")
+    }
+
     /// 构建菜单面板并填入快照数据（速率/流量/进程为固定示意值，剪贴板/系统取真实数据）
-    private static func makeMenuPanel(tab: MenuPanelTab, items: [ClipboardItem]) -> MenuPanelView {
+    private static func makeMenuPanel(tab: MenuPanelTab, items: [ClipboardItem],
+                                      processCount: Int = 5) -> MenuPanelView {
         let panel = MenuPanelView()
         panel.configureMaterialForSnapshot()
         panel.updateSpeeds(down: 1_200_000, up: 340_000,
@@ -86,7 +132,13 @@ enum MenuPanelSnapshot {
                            upHistory: sampleHistory(base: 180_000, amplitude: 260_000))
         panel.updateTraffic(todayRx: 12_500_000_000, todayTx: 3_200_000_000,
                             dailyBars: sampleDailyBars())
-        panel.updateProcesses(sampleProcesses())
+#if DEBUG
+        if processCount > 5 {
+            // 产品路径固定 Top5；快照自证需要把上限临时抬高才能构造超高内容
+            panel.networkPane.processRowLimitOverride = processCount
+        }
+#endif
+        panel.updateProcesses(sampleProcesses(count: processCount))
         panel.updateClipboardItems(items)
         panel.updateSystem(ip: getLocalIPAddress() ?? "",
                            wifi: SystemInfoProvider.wifiDisplayName(),
@@ -126,14 +178,17 @@ enum MenuPanelSnapshot {
     }
 
     /// 活跃进程示意数据（进程名真实 → 可验证 NSWorkspace 真实图标解析）
-    private static func sampleProcesses() -> [ProcessNetUsage] {
-        [
-            ProcessNetUsage(name: "Safari", pid: 1201, bytesIn: 1_200_000, bytesOut: 90_000),
-            ProcessNetUsage(name: "Google Chrome", pid: 1202, bytesIn: 640_000, bytesOut: 40_000),
-            ProcessNetUsage(name: "Terminal", pid: 1203, bytesIn: 210_000, bytesOut: 8_000),
-            ProcessNetUsage(name: "WeChat", pid: 1204, bytesIn: 96_000, bytesOut: 32_000),
-            ProcessNetUsage(name: "Spotify", pid: 1205, bytesIn: 42_000, bytesOut: 2_000),
-        ]
+    ///
+    /// - Parameter count: 条数；超过 5 条时用于「内容高于 520pt」的可滚动自证
+    private static func sampleProcesses(count: Int = 5) -> [ProcessNetUsage] {
+        let names = ["Safari", "Google Chrome", "Terminal", "WeChat", "Spotify",
+                     "Xcode", "Slack", "Notes", "Mail", "Finder", "Firefox", "Discord"]
+        return (0..<max(0, count)).map { index in
+            let name = names[index % names.count] + (index < names.count ? "" : " \(index + 1)")
+            return ProcessNetUsage(name: name, pid: Int32(1200 + index),
+                                   bytesIn: UInt64(1_200_000 / (index + 1)),
+                                   bytesOut: UInt64(90_000 / (index + 1)))
+        }
     }
 
     // MARK: - 离屏渲染
@@ -143,7 +198,8 @@ enum MenuPanelSnapshot {
     /// 步骤：套一层纯色背景容器（popover 材质是半透明的，没有背景会得到透明 PNG）→ 放进
     /// 离屏 borderless 窗口 → 布局 → `cacheDisplay` 抓位图 → 写 PNG。任何一步失败只记日志。
     private static func render(view: NSView, size: NSSize,
-                               appearanceName: NSAppearance.Name, to url: URL) {
+                               appearanceName: NSAppearance.Name, to url: URL,
+                               postLayout: ((NSView) -> Void)? = nil) {
         guard let appearance = NSAppearance(named: appearanceName) else {
             logger.error("快照外观不可用：\(appearanceName.rawValue)")
             return
@@ -171,6 +227,10 @@ enum MenuPanelSnapshot {
         view.needsDisplay = true
         container.needsDisplay = true
         view.displayIfNeeded()
+        container.displayIfNeeded()
+        // 布局完成后、抓图前插入的钩子（滚动自证 / 指标读取）
+        postLayout?(view)
+        container.needsDisplay = true
         container.displayIfNeeded()
 
         defer {
