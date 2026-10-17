@@ -8,6 +8,46 @@ private final class ClipboardCardFlowContainer: NSView {
     override var isFlipped: Bool { true }
 }
 
+// MARK: - 空态视图
+
+/// 空态视图 — 居中一句话 + 轻量 SF Symbol 图形（禁止 emoji）
+private final class ClipboardEmptyStateView: NSView {
+
+    private let message: String
+    private let symbolName = "doc.on.clipboard"
+    private let iconSize: CGFloat = 24
+    private let iconGap: CGFloat = 10
+
+    init(message: String) {
+        self.message = message
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("不支持从 nib 初始化") }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        let text = message as NSString
+        let textSize = text.size(withAttributes: attributes)
+        let totalHeight = iconSize + iconGap + textSize.height
+        let top = max(0, (bounds.height - totalHeight) / 2)
+
+        let configuration = NSImage.SymbolConfiguration(pointSize: iconSize, weight: .regular)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [NSColor.tertiaryLabelColor]))
+        NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(configuration)?
+            .draw(in: NSRect(x: bounds.midX - iconSize / 2, y: top, width: iconSize, height: iconSize))
+        text.draw(at: NSPoint(x: bounds.midX - textSize.width / 2, y: top + iconSize + iconGap),
+                  withAttributes: attributes)
+    }
+}
+
 // MARK: - 卡片流视图
 
 /// 卡片流视图 — 单行横向滚动 + 视图池 + 滑动窗口
@@ -15,7 +55,7 @@ private final class ClipboardCardFlowContainer: NSView {
 /// 三层各有界，互不牵连：
 /// 1. 布局：卡片单行横向排列，容器宽度 = 条目数 ×（卡宽 + 间距），只横向滚动，不换行、不纵向滚动；
 /// 2. 视图：同一时刻最多存在 `windowSize` 张卡片视图 —— 数量不足才补建、多余只隐藏，
-///    已存在的视图只做 `configure(with:isSelected:)` 与 frame 重设，禁止全删全建；
+///    已存在的视图只做 `configure(with:isSelected:number:)` 与 frame 重设，禁止全删全建；
 /// 3. 窗口：`windowStart` 决定当前建的是哪一段条目；选中项接近窗口边缘时窗口滑动到新位置并复用视图，
 ///    因此 `items` 可以是全部匹配项（上限由偏好 maxItems 决定），任意条数都能靠方向键走到。
 @MainActor
@@ -25,12 +65,10 @@ final class ClipboardCardFlowView: NSView {
     static let windowSize = 120
     /// 窗口边缘缓冲：选中项落在窗口两端这么多条以内时滑动窗口
     private static let windowMargin = 8
-    /// 卡片间距
-    private static let spacing: CGFloat = 14
+    /// 卡片间距（设计规格 10pt）
+    private static let spacing: CGFloat = 10
     /// 卡片流左右内边距
-    private static let insetX: CGFloat = 12
-    /// 卡片流上下内边距
-    private static let insetY: CGFloat = 2
+    private static let insetX: CGFloat = 10
 
     /// 卡片被点选（参数为条目在 items 中的下标）
     var onSelect: ((Int) -> Void)?
@@ -39,7 +77,7 @@ final class ClipboardCardFlowView: NSView {
 
     private let scrollView = NSScrollView()
     private let cardsContainer = ClipboardCardFlowContainer()
-    private let emptyLabel = NSTextField(labelWithString: "暂无剪贴板记录")
+    private let emptyView = ClipboardEmptyStateView(message: "没有匹配的剪贴板条目")
     /// 视图池：只增不减，靠 isHidden 与内容重设实现复用
     private var cardViews: [ClipboardCardView] = []
     /// 全部匹配项（视图只覆盖 windowStart 起的一段）
@@ -67,8 +105,8 @@ final class ClipboardCardFlowView: NSView {
         self.selectedIndex = selectedIndex
         self.windowStart = 0
         slideWindow(force: true)
-        syncCards(animated: false)
-        emptyLabel.isHidden = !items.isEmpty
+        syncCards()
+        emptyView.isHidden = !items.isEmpty
         needsLayout = true
         layoutSubtreeIfNeeded()
         scrollToSelection()
@@ -79,7 +117,7 @@ final class ClipboardCardFlowView: NSView {
         guard index >= 0, index < items.count else { return }
         selectedIndex = index
         slideWindow(force: false)
-        syncCards(animated: true)
+        syncCards()
         layoutCards()
         scrollToSelection()
     }
@@ -92,20 +130,24 @@ final class ClipboardCardFlowView: NSView {
         layoutCards()
     }
 
-    /// 单行横向摆放：卡片 frame 由全局下标决定，容器宽度覆盖全部条目
+    /// 单行横向摆放：卡片 frame 由全局下标决定，容器宽度覆盖全部条目；卡片在可视高度内垂直居中
     private func layoutCards() {
         let contentSize = scrollView.contentSize
         let cardSize = ClipboardCardView.cardSize
         let count = visibleCount()
+        let cardY = max(0, (contentSize.height - cardSize.height) / 2)
         for (slot, card) in cardViews.enumerated() where slot < count {
             card.frame = NSRect(x: Self.insetX + CGFloat(windowStart + slot) * (cardSize.width + Self.spacing),
-                                y: Self.insetY, width: cardSize.width, height: cardSize.height)
+                                y: cardY, width: cardSize.width, height: cardSize.height)
         }
-        let allWidth = Self.insetX * 2 + CGFloat(items.count) * (cardSize.width + Self.spacing)
+        // 容器宽度必须覆盖「全部匹配项」而非当前窗口：窗口滑动后卡片仍按全局下标摆放
+        let allWidth = Self.insetX * 2
+            + CGFloat(items.count) * (cardSize.width + Self.spacing)
+            - (items.isEmpty ? 0 : Self.spacing)
         cardsContainer.frame = NSRect(x: 0, y: 0,
                                       width: max(contentSize.width, allWidth),
-                                      height: max(contentSize.height, cardSize.height + Self.insetY * 2))
-        emptyLabel.frame = NSRect(x: 0, y: max(0, (contentSize.height - 20) / 2), width: contentSize.width, height: 20)
+                                      height: max(contentSize.height, cardSize.height))
+        emptyView.frame = cardsContainer.bounds
     }
 
     /// 窗口滑动：选中项接近窗口边缘时把窗口重新居中到选中项，保证任意下标都能走到
@@ -127,7 +169,7 @@ final class ClipboardCardFlowView: NSView {
     // MARK: 视图池
 
     /// 同步视图池：不足补建、多余隐藏，已存在的仅重设内容与选中态（禁止全删全建）
-    private func syncCards(animated: Bool) {
+    private func syncCards() {
         let count = visibleCount()
         while cardViews.count < count { cardViews.append(makeCardView()) }
         for (slot, card) in cardViews.enumerated() {
@@ -135,11 +177,10 @@ final class ClipboardCardFlowView: NSView {
             let index = windowStart + slot
             card.isHidden = false
             let item = items[index]
-            if card.item?.id == item.id {
-                card.setSelected(index == selectedIndex, animated: animated)
-            } else {
-                card.configure(with: item, isSelected: index == selectedIndex)
+            if card.item?.id == item.id, card.isSelected == (index == selectedIndex) {
+                continue
             }
+            card.configure(with: item, isSelected: index == selectedIndex, number: index + 1)
         }
     }
 
@@ -177,9 +218,7 @@ final class ClipboardCardFlowView: NSView {
         scrollView.borderType = .noBorder
         addSubview(scrollView)
 
-        emptyLabel.font = NSFont.systemFont(ofSize: 13)
-        emptyLabel.textColor = .tertiaryLabelColor
-        emptyLabel.alignment = .center
-        cardsContainer.addSubview(emptyLabel)
+        emptyView.isHidden = false
+        cardsContainer.addSubview(emptyView)
     }
 }
