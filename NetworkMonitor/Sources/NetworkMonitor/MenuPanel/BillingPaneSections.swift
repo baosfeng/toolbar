@@ -162,19 +162,35 @@ final class BillingUsageSectionView: NSView {
 
     /// 分桶 → 柱体数据
     ///
-    /// `Bar.value` 用微美元整数（避免浮点柱高抖动）；柱数较多时只给最大桶显示数值文案，
-    /// 否则 9pt 数值在 25/31 根柱上会互相重叠（原型用悬停提示，这里用稀疏数值代替）。
+    /// 度量自适应：优先按金额绘制；遗留计划只返回请求数（无 usage_usd）时改用请求数，
+    /// 否则所有柱高为 0、数值全是 "$0.000"，图表不可读。
+    /// 柱数较多时只给最大桶显示数值文案，避免 9pt 数值互相重叠。
     private static func makeBars(_ usage: BillingUsage) -> [MenuPanelBarsView.Bar] {
         let buckets = usage.buckets
-        let showEveryValue = buckets.count <= 10
-        let maxUSD = buckets.map { max(0, $0.metrics.usageUSD ?? 0) }.max() ?? 0
-        return buckets.enumerated().map { index, bucket in
-            let usd = max(0, bucket.metrics.usageUSD ?? 0)
+        let showEveryValue = buckets.count <= 6
+        let usesUSD = buckets.contains { ($0.metrics.usageUSD ?? 0) > 0 }
+        let values = buckets.map { bucket -> Double in
+            usesUSD ? max(0, bucket.metrics.usageUSD ?? 0) : Double(max(0, bucket.metrics.requestCount))
+        }
+        let maxValue = values.max() ?? 0
+        return buckets.enumerated().map { index, _ in
+            let value = values[index]
             let isLast = index == buckets.count - 1
-            let showsValue = showEveryValue || (maxUSD > 0 && usd >= maxUSD)
+            let showsValue = maxValue > 0 && (showEveryValue || value >= maxValue)
+            let valueText: String
+            if !showsValue {
+                valueText = ""
+            } else if usesUSD {
+                valueText = formatUSD(value)
+            } else {
+                valueText = "\(Int(value)) 次"
+            }
+            let rawValue: UInt64 = usesUSD
+                ? UInt64(min(value * 1_000_000, 1e15))
+                : UInt64(min(value, 1e15))
             return MenuPanelBarsView.Bar(label: "",
-                                         value: UInt64(min(usd * 1_000_000, 1e15)),
-                                         valueText: showsValue ? formatUSD(usd) : "",
+                                         value: rawValue,
+                                         valueText: valueText,
                                          isToday: isLast)
         }
     }
@@ -202,7 +218,14 @@ final class BillingUsageSectionView: NSView {
     }
 
     /// 指标行 2：输入 / 缓存 / 输出 token
+    ///
+    /// 遗留计划只返回请求数（金额与 token 均为空）→ 明确提示，而不是三处「—」。
     private static func tokenLine(totals: BillingMetrics?) -> NSAttributedString {
+        if let totals,
+           totals.inputTokens == nil, totals.cachedInputTokens == nil, totals.outputTokens == nil {
+            return segment("该计划不返回 token 明细", font: BillingPaneStyle.labelFont,
+                           color: BillingPaneStyle.tertiaryText)
+        }
         let result = NSMutableAttributedString()
         let items: [(String, String)] = [
             ("输入 ", tokenText(totals?.inputTokens ?? nil)),

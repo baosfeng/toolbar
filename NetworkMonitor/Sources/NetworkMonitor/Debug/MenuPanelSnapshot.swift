@@ -90,20 +90,25 @@ enum MenuPanelSnapshot {
         logger.info("快照完成：目录=\(directory.path)")
     }
 
-    /// 额度页补充状态 — 未配置凭据 / 查询失败（含遗留计划限额），各出浅色、深色两张
+    /// 额度页补充状态 — 未配置 / 查询失败（含遗留计划限额）/ 遗留计划用量，各出浅色、深色两张
     private static func captureCreditsStates(directory: URL) {
-        let states: [(String, Bool, String?)] = [("unconfigured", false, nil),
-                                                 ("error", true, "API Key 无效或已过期")]
-        for (suffix, configured, error) in states {
+        let states: [(suffix: String, configured: Bool, error: String?, legacyUsage: Bool)] = [
+            ("unconfigured", false, nil, false),
+            ("error", true, "API Key 无效或已过期", false),
+            ("legacy", true, nil, true),
+        ]
+        for state in states {
             let panel = MenuPanelView()
-            panel.billingPane.injectPreview(configured: configured, errorMessage: error,
-                                            legacyLimits: error != nil)
+            panel.billingPane.injectPreview(configured: state.configured,
+                                            errorMessage: state.error,
+                                            legacyLimits: state.error != nil || state.legacyUsage,
+                                            legacyUsage: state.legacyUsage)
             panel.select(tab: .credits)
             let height = min(max(panel.desiredContentHeight, 180), MenuPanelStyle.maxHeight)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let name = appearance == .aqua ? "light" : "dark"
-                let url = directory.appendingPathComponent("menu-credits-\(suffix)-\(name).png")
+                let url = directory.appendingPathComponent("menu-credits-\(state.suffix)-\(name).png")
                 render(view: panel, size: size, appearanceName: appearance, to: url)
             }
         }

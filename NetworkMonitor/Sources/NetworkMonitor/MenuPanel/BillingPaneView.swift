@@ -227,9 +227,11 @@ final class BillingPaneView: MenuPanelPaneView {
     ///   - configured: false 时渲染「配置 API Key」态
     ///   - errorMessage: 非空时渲染错误条（同时保留余额/用量数据）
     ///   - legacyLimits: 是否注入遗留计划百分比限额（原型 D 状态）
+    ///   - legacyUsage: 是否注入「只有请求数、无金额/token」的用量（遗留计划真实返回形态）
     func injectPreview(configured: Bool = true,
                        errorMessage: String? = nil,
-                       legacyLimits: Bool = false) {
+                       legacyLimits: Bool = false,
+                       legacyUsage: Bool = false) {
         let provider = BillingMonitor.ProviderDescriptor(id: "ollama",
                                                          displayName: "Ollama",
                                                          symbolName: "cloud",
@@ -265,7 +267,7 @@ final class BillingPaneView: MenuPanelPaneView {
                                        selectedProviderID: provider.id,
                                        isConfigured: true,
                                        balance: balance,
-                                       usage: Self.previewUsage(endingAt: now),
+                                       usage: Self.previewUsage(endingAt: now, legacyOnly: legacyUsage),
                                        range: .last24Hours,
                                        lastUpdated: now,
                                        isLoading: false,
@@ -273,11 +275,31 @@ final class BillingPaneView: MenuPanelPaneView {
     }
 
     /// 24 小时示意用量：25 个小时桶（含 3 个非零）+ 2 个模型
-    private static func previewUsage(endingAt now: Date) -> BillingUsage {
+    ///
+    /// - Parameter legacyOnly: 遗留计划真实返回只有 request_count（无金额 / token / 模型分组）
+    private static func previewUsage(endingAt now: Date, legacyOnly: Bool = false) -> BillingUsage {
         let calendar = Calendar.current
         let components = calendar.dateComponents([.year, .month, .day, .hour], from: now)
         let end = calendar.date(from: components) ?? now
         let start = end.addingTimeInterval(-24 * 3_600)
+        if legacyOnly {
+            let counts = [0, 0, 0, 0, 120, 0, 0, 0, 0, 0, 860, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                          0, 2_400, 6_300, 8_200, 3_400]
+            let legacyBuckets = counts.enumerated().map { index, count in
+                let bucketStart = start.addingTimeInterval(Double(index) * 3_600)
+                return BillingBucket(start: bucketStart,
+                                     end: bucketStart.addingTimeInterval(3_600),
+                                     isPartial: index == counts.count - 1,
+                                     metrics: BillingMetrics(requestCount: count))
+            }
+            return BillingUsage(range: .last24Hours,
+                                granularity: .hour,
+                                start: start,
+                                end: end.addingTimeInterval(3_600),
+                                totals: BillingMetrics(requestCount: 26_118),
+                                buckets: legacyBuckets,
+                                groups: [])
+        }
         let amounts: [Double] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0052,
                                  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                  0.0088, 0.0042, 0.0032]
