@@ -98,6 +98,22 @@ fi
 cp -R "$APP_DIR" "$INSTALL_PATH"
 echo "   ✅ 已复制到 ${INSTALL_PATH}"
 
+# 显式 ad-hoc 签名并固定标识符（com.example.NetworkMonitor）。
+# 不指定 --identifier 时系统会生成「NetworkMonitor-<hash>」临时标识，每次构建都变，
+# 导致 macOS 把 App 当成新应用，本地网络权限每次重新部署都失效（表现为 UDP errno 65）。
+echo "   🔏 签名（固定标识符 + 固定证书）..."
+# 优先用本机自签名证书：签名身份 = 证书 + identifier，不随代码变化，
+# macOS 的本地网络授权才能「记住」，不会每次重新部署都弹窗。
+# 证书不存在时回落 ad-hoc（身份随 cdhash 变化，权限需重新授权）。
+SIGN_IDENTITY="NetworkMonitor Local Signing"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "${SIGN_IDENTITY}"; then
+    codesign --force --deep --sign "${SIGN_IDENTITY}" --identifier com.example.NetworkMonitor "${INSTALL_PATH}" 2>&1 | tail -2 || true
+    echo "      使用证书：${SIGN_IDENTITY}"
+else
+    codesign --force --deep --sign - --identifier com.example.NetworkMonitor "${INSTALL_PATH}" 2>&1 | tail -2 || true
+    echo "      未找到证书，回落 ad-hoc（每次构建权限会重新询问）"
+fi
+
 # 打开应用
 echo "   🚀 正在启动 ${APP_NAME}..."
 open "$INSTALL_PATH"

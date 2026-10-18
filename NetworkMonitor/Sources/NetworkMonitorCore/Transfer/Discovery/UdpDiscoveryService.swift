@@ -17,6 +17,8 @@ public final class UdpDiscoveryService: @unchecked Sendable {
     private let identity: LocalIdentity
     private let registry: DeviceRegistry
     private let logger: LoggingService
+    /// 已知设备地址记忆（可为空：测试或不启用快速路径）
+    private let knownPeers: KnownPeerStore?
 
     /// 网络收发串行队列
     private let queue = DispatchQueue(label: "com.networkmonitor.transfer.discovery")
@@ -35,9 +37,11 @@ public final class UdpDiscoveryService: @unchecked Sendable {
 
     public init(identity: LocalIdentity,
                 registry: DeviceRegistry,
+                knownPeers: KnownPeerStore? = nil,
                 logger: LoggingService = AppContext.shared.logger) {
         self.identity = identity
         self.registry = registry
+        self.knownPeers = knownPeers
         self.logger = logger
     }
 
@@ -62,8 +66,11 @@ public final class UdpDiscoveryService: @unchecked Sendable {
                 return
             }
             self.running = true
+            self.logger.info("发现层 socket 就绪：receiveFD=\(self.receiveFD) sendFD=\(self.sendFD)")
             self.startReadSource()
             self.startTimers()
+            // 快速路径：先单播探测上次见过的设备，命中即入表，不必等组播降级链
+            self.probeKnownHosts()
             // 启动连发 3 次，间隔 500ms
             for index in 0..<DiscoveryMessage.startupBurstCount {
                 let delay = Double(index) * DiscoveryMessage.startupBurstInterval
@@ -105,6 +112,7 @@ public final class UdpDiscoveryService: @unchecked Sendable {
             guard let self, self.running else { return }
             self.cancelFallbackTasks()
             let baseline = self.onlineCount()
+            self.probeKnownHosts()
             self.sendDiscover(to: DiscoveryMessage.multicastHost)
 
             self.scheduleFallback(delay: 3) { [weak self] in
@@ -129,6 +137,15 @@ public final class UdpDiscoveryService: @unchecked Sendable {
         send(data, to: DiscoveryMessage.multicastHost)
     }
 
+    /// 对上次见过的地址逐个单播探测（快速路径）
+    private func probeKnownHosts() {
+        guard let knownPeers else { return }
+        let hosts = knownPeers.knownHosts()
+        guard !hosts.isEmpty else { return }
+        logger.info("优先探测已知设备 \(hosts.count) 个：\(hosts.joined(separator: ", "))")
+        for host in hosts { sendDiscover(to: host) }
+    }
+
     /// 发送主动查询
     private func sendDiscover(to host: String) {
         guard running, sendFD >= 0 else { return }
@@ -142,6 +159,10 @@ public final class UdpDiscoveryService: @unchecked Sendable {
         switch message.type {
         case .announce, .offer:
             registry.upsert(message: message, ip: ip)
+            // 不记录自己（本机回环也会收到自己的公告），否则冷启动会探测自身浪费一次往返
+            if message.deviceId != identity.deviceId {
+                knownPeers?.remember(deviceId: message.deviceId, ip: ip)
+            }
         case .discover:
             replyOffer(to: ip)
         }
@@ -254,13 +275,46 @@ public final class UdpDiscoveryService: @unchecked Sendable {
         // 加入组播组；失败不致命（广播与单播兜底仍可用），但记录告警
         var membership = ip_mreq()
         membership.imr_multiaddr.s_addr = inet_addr(DiscoveryMessage.multicastHost)
-        membership.imr_interface.s_addr = INADDR_ANY
+        // 指定加入的主接口：多网卡时 INADDR_ANY 可能只加到第一个（往往是桥接）接口
+        if let primary = Self.primaryIPv4Address() {
+            membership.imr_interface.s_addr = inet_addr(primary)
+        } else {
+            membership.imr_interface.s_addr = INADDR_ANY
+        }
         let joinResult = setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &membership,
                                     socklen_t(MemoryLayout<ip_mreq>.size))
         if joinResult != 0 {
             logger.warning("加入组播组 \(DiscoveryMessage.multicastHost) 失败（errno \(errno)），仅依赖广播与单播兜底")
         }
         return fd
+    }
+
+    /// 主 IPv4 地址：第一个非回环、UP、非 awdl/llw 的接口地址（典型即 en0）
+    static func primaryIPv4Address() -> String? {
+        var addrs: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&addrs) == 0, let first = addrs else { return nil }
+        defer { freeifaddrs(addrs) }
+        var pointer: UnsafeMutablePointer<ifaddrs>? = first
+        while let current = pointer {
+            let flags = Int32(current.pointee.ifa_flags)
+            if let sockaddr = current.pointee.ifa_addr,
+               sockaddr.pointee.sa_family == UInt8(AF_INET),
+               flags & IFF_LOOPBACK == 0,
+               flags & IFF_UP != 0 {
+                let name = String(cString: current.pointee.ifa_name)
+                if !name.hasPrefix("awdl"), !name.hasPrefix("llw"), !name.hasPrefix("utun") {
+                    var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                    let rc = getnameinfo(sockaddr, socklen_t(sockaddr.pointee.sa_len),
+                                         &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST)
+                    if rc == 0 {
+                        let ip = String(cString: host)
+                        if !ip.isEmpty { return ip }
+                    }
+                }
+            }
+            pointer = current.pointee.ifa_next
+        }
+        return nil
     }
 
     /// 打开发送 socket：组播 TTL 1 + 允许广播
@@ -272,6 +326,19 @@ public final class UdpDiscoveryService: @unchecked Sendable {
         setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, socklen_t(MemoryLayout<UInt8>.size))
         var enable: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &enable, socklen_t(MemoryLayout<Int32>.size))
+        // 关键：多网卡（含桥接/PROMISC 接口）时内核可能选错组播出口，
+        // 表现为 sendto 成功但包不出网卡、对端收不到。显式固定到主 IPv4 接口。
+        if let primary = Self.primaryIPv4Address() {
+            var iface = in_addr()
+            inet_pton(AF_INET, primary, &iface)
+            let rc = setsockopt(fd, IPPROTO_IP, IP_MULTICAST_IF, &iface,
+                                socklen_t(MemoryLayout<in_addr>.size))
+            if rc == 0 {
+                logger.info("组播出口固定为 \(primary)")
+            } else {
+                logger.warning("固定组播出口失败 errno=\(errno)")
+            }
+        }
         return fd
     }
 
@@ -297,7 +364,10 @@ public final class UdpDiscoveryService: @unchecked Sendable {
 
     /// 发送一个 UDP 报文（失败仅记录，不中断心跳）
     private func send(_ data: Data, to host: String) {
-        guard sendFD >= 0 else { return }
+        guard sendFD >= 0 else {
+            logger.warning("UDP 发送被跳过：发送 socket 未打开（host=\(host)）")
+            return
+        }
         var address = sockaddr_in()
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         address.sin_family = sa_family_t(AF_INET)
@@ -313,7 +383,7 @@ public final class UdpDiscoveryService: @unchecked Sendable {
             }
         }
         if sent < 0 {
-            logger.debug("UDP 发送失败 host=\(host) errno=\(errno)")
+            logger.warning("UDP 发送失败 host=\(host) errno=\(errno)")
         }
     }
 

@@ -125,10 +125,12 @@ public final class AppCoordinator {
             receiveDirectory: TransferService.Configuration.defaultReceiveDirectory(),
             appVersion: appVersion)
         let preferences = TransferPreferences(storage: AppContext.shared.storage)
+        let knownPeers = KnownPeerStore(storage: AppContext.shared.storage, logger: logger)
         let service = TransferService(identity: identity,
                                       registry: registry,
                                       configuration: configuration,
                                       preferences: preferences,
+                                      knownPeers: knownPeers,
                                       logger: logger)
         let controller = TransferController(service: service, registry: registry,
                                             preferences: preferences, logger: logger)
