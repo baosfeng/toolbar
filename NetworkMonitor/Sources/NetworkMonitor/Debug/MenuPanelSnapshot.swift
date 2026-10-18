@@ -109,7 +109,12 @@ enum MenuPanelSnapshot {
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let name = appearance == .aqua ? "light" : "dark"
                 let url = directory.appendingPathComponent("menu-credits-\(state.suffix)-\(name).png")
-                render(view: panel, size: size, appearanceName: appearance, to: url)
+                // 遗留计划快照额外强制悬停一根有数据的柱，用于 tooltip 取证
+                let hover: ((NSView) -> Void)? = state.legacyUsage ? { view in
+                    (view as? MenuPanelView)?.billingPane.forceChartHoverForSnapshot(23)
+                } : nil
+                render(view: panel, size: size, appearanceName: appearance, to: url,
+                       postLayout: hover)
             }
         }
     }

@@ -143,6 +143,13 @@ final class BillingPaneView: MenuPanelPaneView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
+#if DEBUG
+    /// 快照自证专用（仅 DEBUG）：强制悬停用量柱状图的某根柱
+    func forceChartHoverForSnapshot(_ index: Int?) {
+        usageSection.forceHoverForSnapshot(index)
+    }
+#endif
+
     // MARK: - 键盘可达
 
     override var focusableRows: [MenuPanelRow] {
