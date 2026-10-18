@@ -43,6 +43,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
     private let repository: any ClipboardRepository
     private let paster: ClipboardPaster
     private let transferController: TransferController?
+    /// 额度页状态管理器（nil = 未装配计费链路）
+    private let billingMonitor: BillingMonitor?
     private let storage: any KeyValueStorage
     private let logger: LoggingService
 
@@ -78,6 +80,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
          repository: any ClipboardRepository,
          paster: ClipboardPaster,
          transferController: TransferController? = nil,
+         billingMonitor: BillingMonitor? = nil,
          storage: any KeyValueStorage = AppContext.shared.storage,
          logger: LoggingService = AppContext.shared.logger) {
         self.monitor = networkMonitor
@@ -86,6 +89,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
         self.repository = repository
         self.paster = paster
         self.transferController = transferController
+        self.billingMonitor = billingMonitor
         self.storage = storage
         self.logger = logger
         super.init()
@@ -94,6 +98,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
         transferController?.attach(panel: content.transferPane)
         wireActions()
         observeClipboardChanges()
+        bindBilling()
     }
 
     nonisolated deinit {
@@ -118,6 +123,27 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
         content.clipboardPane.onRequestHistory = { [weak self] in self?.requestClipboardHistory() }
         content.systemPane.onToggleLaunchAtStartup = { [weak self] in self?.toggleLaunchAtStartup() }
         content.systemPane.onQuit = { NSApplication.shared.terminate(nil) }
+        content.billingPane.onRefresh = { [weak self] in self?.billingMonitor?.refresh(force: true) }
+        content.billingPane.onRetry = { [weak self] in self?.billingMonitor?.refresh(force: true) }
+        content.billingPane.onRangeChange = { [weak self] range in
+            self?.billingMonitor?.selectRange(range)
+        }
+        content.billingPane.onSaveCredential = { [weak self] key in
+            self?.billingMonitor?.saveCredential(key)
+        }
+        content.billingPane.onOpenProviderSite = {
+            NSWorkspace.shared.open(BillingPaneView.credentialPageURL)
+        }
+        content.billingPane.onProviderChange = { [weak self] id in
+            self?.billingMonitor?.selectProvider(id: id)
+        }
+    }
+
+    /// 额度页数据回调（状态管理器 → 面板 → 高度自适应）
+    private func bindBilling() {
+        billingMonitor?.onUpdate = { [weak self] snapshot in
+            self?.content.updateBilling(snapshot)
+        }
     }
 
     private func observeClipboardChanges() {
@@ -195,6 +221,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
                              upHistory: upHistory)
         refreshMidFrequency()
         refreshClipboard()
+        // 额度页：打开面板强制刷新一次（monitor 内部处理未配置/退避）
+        billingMonitor?.refresh(force: true)
         updateContentSize(force: true)
     }
 
@@ -213,6 +241,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
         content.updateSystem(ip: getLocalIPAddress() ?? "",
                              wifi: SystemInfoProvider.wifiDisplayName(),
                              launchAtStartup: isLaunchAtStartupSaved)
+        // 额度：中频分支 5 秒调用一次，monitor 内部 60 秒节流，不会打满 provider 限流
+        billingMonitor?.refresh()
     }
 
     /// 剪贴板刷新：仓储按时间倒序取最近 5 条
@@ -331,6 +361,10 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
 
     func menuPanelViewDidChangeContent(_ view: MenuPanelView) {
         updateContentSize()
+        // 切到额度页时才触发刷新（monitor 内部 60 秒节流）
+        if view.currentTab == .credits {
+            billingMonitor?.refresh()
+        }
     }
 
     func menuPanelViewDidRequestClose(_ view: MenuPanelView) {

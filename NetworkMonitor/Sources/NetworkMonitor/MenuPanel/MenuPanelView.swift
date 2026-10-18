@@ -40,6 +40,7 @@ final class MenuPanelView: NSView {
     let clipboardPane = ClipboardPaneView()
     let systemPane = SystemPaneView()
     let transferPane = TransferPaneView()
+    let billingPane = BillingPaneView()
 
     /// 可滚动内容区（高度 clamp 后仍能容纳超高内容）
     private let scrollView = NSScrollView()
@@ -63,6 +64,7 @@ final class MenuPanelView: NSView {
         paneStack.addArrangedSubview(clipboardPane)
         paneStack.addArrangedSubview(systemPane)
         paneStack.addArrangedSubview(transferPane)
+        paneStack.addArrangedSubview(billingPane)
         paneStack.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.hasVerticalScroller = true
@@ -86,7 +88,7 @@ final class MenuPanelView: NSView {
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .medium))
         transferSettingsButton.isBordered = false
         transferSettingsButton.bezelStyle = .inline
-        transferSettingsButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.62)
+        transferSettingsButton.contentTintColor = MenuPanelStyle.tertiaryText
         transferSettingsButton.toolTip = "传送设置"
         transferSettingsButton.setAccessibilityLabel("传送设置")
         transferSettingsButton.target = self
@@ -121,8 +123,8 @@ final class MenuPanelView: NSView {
         // 齿轮 24 + 间距 8 之外宽度归分段控件
         tabBar.widthAnchor.constraint(equalTo: headerStack.widthAnchor, constant: -32).isActive = true
         scrollView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
-        // 三页都撑满面板内容宽度（NSStackView 的 leading 对齐不会自动拉伸子视图）
-        for pane in [networkPane, clipboardPane, systemPane, transferPane] {
+        // 各页都撑满面板内容宽度（NSStackView 的 leading 对齐不会自动拉伸子视图）
+        for pane in [networkPane, clipboardPane, systemPane, transferPane, billingPane] {
             pane.widthAnchor.constraint(equalTo: paneStack.widthAnchor).isActive = true
         }
 
@@ -208,6 +210,7 @@ final class MenuPanelView: NSView {
         clipboardPane.isHidden = currentTab != .clipboard
         systemPane.isHidden = currentTab != .system
         transferPane.isHidden = currentTab != .transfer
+        billingPane.isHidden = currentTab != .credits
         tabBar.selected = currentTab
     }
 
@@ -218,6 +221,7 @@ final class MenuPanelView: NSView {
         case .clipboard: return clipboardPane
         case .system: return systemPane
         case .transfer: return transferPane
+        case .credits: return billingPane
         }
     }
 
@@ -251,6 +255,12 @@ final class MenuPanelView: NSView {
     /// 系统页信息（5 秒）
     func updateSystem(ip: String, wifi: String, launchAtStartup: Bool) {
         systemPane.update(ip: ip, wifi: wifi, launchAtStartup: launchAtStartup)
+    }
+
+    /// 额度页快照（状态管理器回调）
+    func updateBilling(_ snapshot: BillingMonitor.Snapshot) {
+        billingPane.update(snapshot)
+        delegate?.menuPanelViewDidChangeContent(self)
     }
 
     /// 清除键盘焦点（面板收起时调用）

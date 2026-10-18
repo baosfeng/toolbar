@@ -78,19 +78,27 @@ public final class AppCoordinator {
         // 5. 局域网互传（发现层 + 传输服务 + 面板控制器）
         let transfer = makeTransferController()
 
-        // 6. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
+        // 6. 额度页链路（provider 注册表 + 凭据存储 + 状态管理器）
+        let billingRegistry = BillingProviderRegistry(providers: [OllamaBillingProvider(logger: logger)])
+        let billingCredentials = PreferencesBillingCredentialStore()
+        let billingMonitor = BillingMonitor(registry: billingRegistry,
+                                            credentialStore: billingCredentials,
+                                            logger: logger)
+
+        // 7. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
         let manager = MenuBarManager(
             networkMonitor: networkMonitor,
             processMonitor: processMonitor,
             trafficTracker: trafficTracker,
             clipboardRepository: databaseManager,
             paster: clipboardPaster,
-            transferController: transfer
+            transferController: transfer,
+            billingMonitor: billingMonitor
         )
         manager.onOpenClipboardHistory = { [weak self] in self?.clipboardPanel.toggle() }
         manager.onOpenClipboardSettings = { [weak self] in self?.clipboardSettings.show() }
 
-        // 7. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
+        // 8. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
         logger.info("AppCoordinator 启动完成")
         return manager
     }

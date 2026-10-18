@@ -45,21 +45,34 @@ enum MenuPanelStyle {
 
     // MARK: 颜色
 
+    /// 动态半透明前景色 — 随外观变化重新解析
+    ///
+    /// 不能直接用 `NSColor.labelColor.withAlphaComponent(...)`：该调用会在创建瞬间
+    /// 按当前外观解析并固化颜色，强制外观渲染（快照取证）或运行期切换深浅色时，
+    /// 旧颜色会残留在新外观上（浅色下文字发白）。dynamicProvider 每次解析都重新取基准色。
+    static func dynamicLabel(alpha: CGFloat) -> NSColor {
+        NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            let base: NSColor = isDark ? .white : .black
+            return base.withAlphaComponent(alpha)
+        }
+    }
+
     /// 次要文字 — 替代 secondaryLabelColor：后者在小字号（10-12pt）+
-    /// windowBackgroundColor 上实测只有 ~3.9:1，达不到 4.5:1，故用 75% labelColor
-    static var secondaryText: NSColor { NSColor.labelColor.withAlphaComponent(0.88) }
-    /// 三级文字（9pt 图表坐标等）— 60% labelColor
-    static var tertiaryText: NSColor { NSColor.labelColor.withAlphaComponent(0.62) }
+    /// windowBackgroundColor 上实测只有 ~3.9:1，达不到 4.5:1，故用 88% labelColor
+    static var secondaryText: NSColor { dynamicLabel(alpha: 0.88) }
+    /// 三级文字（9pt 图表坐标等）— 62% labelColor
+    static var tertiaryText: NSColor { dynamicLabel(alpha: 0.62) }
 
     static var downColor: NSColor { .systemGreen }
     static var upColor: NSColor { .systemOrange }
     static var accentColor: NSColor { .controlAccentColor }
     /// 轨道底色（labelColor 带透明度，深浅色自适应）
-    static var trackColor: NSColor { NSColor.labelColor.withAlphaComponent(0.14) }
+    static var trackColor: NSColor { dynamicLabel(alpha: 0.14) }
     /// 轻量填充（今日流量卡片 / 悬停行）
-    static var subtleFill: NSColor { NSColor.labelColor.withAlphaComponent(0.07) }
+    static var subtleFill: NSColor { dynamicLabel(alpha: 0.07) }
     /// 图表柱（非今天）— 不透明背景上 0.18 偏淡，提到 0.24
-    static var barColor: NSColor { NSColor.labelColor.withAlphaComponent(0.24) }
+    static var barColor: NSColor { dynamicLabel(alpha: 0.24) }
 }
 
 // MARK: - 标签工厂

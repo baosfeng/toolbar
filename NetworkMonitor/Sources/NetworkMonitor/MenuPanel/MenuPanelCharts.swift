@@ -36,12 +36,18 @@ final class MenuPanelBarsView: NSView {
         }
     }
 
+    /// 柱与柱之间的间距（默认 8pt；额度页 25/31 桶时调小到 3pt 保证柱宽可读）
+    var columnGap: CGFloat = 8 {
+        didSet {
+            guard columnGap != oldValue else { return }
+            needsDisplay = true
+        }
+    }
+
     /// 数值行高度
     private static let valueRowHeight: CGFloat = 12
     /// 日期行高度
     private static let labelRowHeight: CGFloat = 12
-    /// 柱与柱之间的间距
-    private static let columnGap: CGFloat = 8
     /// 单柱最大宽度（只有 1-2 天数据时不把整行撑满）
     private static let maxColumnWidth: CGFloat = 44
     /// 柱体区最大高度
@@ -66,17 +72,17 @@ final class MenuPanelBarsView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard !bars.isEmpty else { return }
         let count = CGFloat(bars.count)
-        let available = max(1, (bounds.width - Self.columnGap * (count - 1)) / count)
+        let available = max(1, (bounds.width - columnGap * (count - 1)) / count)
         let columnWidth = min(Self.maxColumnWidth, available)
         // 整体居中（少量数据时两侧留白，不贴着左边缘）
-        let groupWidth = columnWidth * count + Self.columnGap * (count - 1)
+        let groupWidth = columnWidth * count + columnGap * (count - 1)
         let leftInset = max(0, (bounds.width - groupWidth) / 2)
         let barAreaTop = Self.valueRowHeight + 4
         let barBottom = barAreaTop + Self.barAreaHeight
         let ratios = MenuPanelMetrics.barRatios(values: bars.map(\.value))
 
         for (index, bar) in bars.enumerated() {
-            let x = leftInset + CGFloat(index) * (columnWidth + Self.columnGap)
+            let x = leftInset + CGFloat(index) * (columnWidth + columnGap)
             let centerX = x + columnWidth / 2
 
             // 数值（柱顶上方居中）
