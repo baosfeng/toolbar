@@ -185,6 +185,13 @@ final class BillingUsageSectionView: NSView {
         modelRows = []
     }
 
+#if DEBUG
+    /// 快照自证专用（仅 DEBUG）：强制悬停某根柱
+    func forceHoverForSnapshot(_ index: Int?) {
+        barsView.forceHoverForSnapshot(index)
+    }
+#endif
+
     // MARK: - 柱状图数据
 
     /// 分桶 → 柱体数据
@@ -200,7 +207,7 @@ final class BillingUsageSectionView: NSView {
             usesUSD ? max(0, bucket.metrics.usageUSD ?? 0) : Double(max(0, bucket.metrics.requestCount))
         }
         let maxValue = values.max() ?? 0
-        return buckets.enumerated().map { index, _ in
+        return buckets.enumerated().map { index, bucket in
             let value = values[index]
             let isLast = index == buckets.count - 1
             let showsValue = maxValue > 0 && (showEveryValue || value >= maxValue)
@@ -215,10 +222,17 @@ final class BillingUsageSectionView: NSView {
             let rawValue: UInt64 = usesUSD
                 ? UInt64(min(value * 1_000_000, 1e15))
                 : UInt64(min(value, 1e15))
+            // 悬停提示：桶的时间范围 + 完整数值（不显示时也能看到这一小时/一天的数据）
+            let startLabel = formatBucketLabel(bucket.start, granularity: usage.granularity)
+            let endLabel = formatBucketLabel(bucket.end, granularity: usage.granularity)
+            let detail = usesUSD
+                ? "\(startLabel)–\(endLabel) · \(formatUSD(value))"
+                : "\(startLabel)–\(endLabel) · \(Int(value)) 次"
             return MenuPanelBarsView.Bar(label: "",
                                          value: rawValue,
                                          valueText: valueText,
-                                         isToday: isLast)
+                                         isToday: isLast,
+                                         detail: detail)
         }
     }
 

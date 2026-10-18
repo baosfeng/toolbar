@@ -19,12 +19,15 @@ final class MenuPanelBarsView: NSView {
         let valueText: String
         /// 是否今天（强调色高亮）
         let isToday: Bool
+        /// 悬停提示文案（如 "22:00–23:00 · 302 次"）；nil 时回退到 valueText
+        let detail: String?
 
-        init(label: String, value: UInt64, valueText: String, isToday: Bool) {
+        init(label: String, value: UInt64, valueText: String, isToday: Bool, detail: String? = nil) {
             self.label = label
             self.value = value
             self.valueText = valueText
             self.isToday = isToday
+            self.detail = detail
         }
     }
 
@@ -53,6 +56,10 @@ final class MenuPanelBarsView: NSView {
     /// 柱体区最大高度
     private static let barAreaHeight: CGFloat = 56
 
+    /// 当前悬停柱下标（nil = 未悬停）
+    private var hoveredIndex: Int?
+    private var trackingAreaRef: NSTrackingArea?
+
     override var isFlipped: Bool { true }
 
     init() {
@@ -71,24 +78,21 @@ final class MenuPanelBarsView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard !bars.isEmpty else { return }
-        let count = CGFloat(bars.count)
-        let available = max(1, (bounds.width - columnGap * (count - 1)) / count)
-        let columnWidth = min(Self.maxColumnWidth, available)
-        // 整体居中（少量数据时两侧留白，不贴着左边缘）
-        let groupWidth = columnWidth * count + columnGap * (count - 1)
-        let leftInset = max(0, (bounds.width - groupWidth) / 2)
+        let layout = columnLayout(for: bars.count)
         let barAreaTop = Self.valueRowHeight + 4
         let barBottom = barAreaTop + Self.barAreaHeight
         let ratios = MenuPanelMetrics.barRatios(values: bars.map(\.value))
 
         for (index, bar) in bars.enumerated() {
-            let x = leftInset + CGFloat(index) * (columnWidth + columnGap)
-            let centerX = x + columnWidth / 2
+            let x = layout.leftInset + CGFloat(index) * (layout.width + columnGap)
+            let centerX = x + layout.width / 2
+            let isHovered = index == hoveredIndex
 
-            // 数值（柱顶上方居中）
+            // 数值（柱顶上方居中；悬停柱也显示）
             let valueAttributes: [NSAttributedString.Key: Any] = [
                 .font: MenuPanelStyle.smallValueFont,
-                .foregroundColor: bar.isToday ? MenuPanelStyle.accentColor : NSColor.tertiaryLabelColor,
+                .foregroundColor: (bar.isToday || isHovered)
+                    ? MenuPanelStyle.accentColor : NSColor.tertiaryLabelColor,
             ]
             let valueText = bar.valueText as NSString
             let valueSize = valueText.size(withAttributes: valueAttributes)
@@ -96,23 +100,121 @@ final class MenuPanelBarsView: NSView {
             let valueX = min(max(0, centerX - valueSize.width / 2), max(0, bounds.width - valueSize.width))
             valueText.draw(at: NSPoint(x: valueX, y: 0), withAttributes: valueAttributes)
 
-            // 柱体：相对最大值归一化，最小 2pt 保证「有数据就一定看得见」
+            // 柱体：相对最大值归一化，最小 2pt 保证「有数据就一定看得见」；悬停柱用强调色
             let ratio = ratios[index]
             let height = max(2, Self.barAreaHeight * CGFloat(ratio))
-            let barRect = NSRect(x: x, y: barBottom - height, width: columnWidth, height: height)
-            (bar.isToday ? MenuPanelStyle.accentColor : MenuPanelStyle.barColor).setFill()
+            let barRect = NSRect(x: x, y: barBottom - height, width: layout.width, height: height)
+            // 悬停柱用满色强调，今天用 75% 强调色，普通柱 24% 前景色
+            let fillColor: NSColor = isHovered
+                ? MenuPanelStyle.accentColor
+                : (bar.isToday ? MenuPanelStyle.accentColor.withAlphaComponent(0.75) : MenuPanelStyle.barColor)
+            fillColor.setFill()
             NSBezierPath(roundedRect: barRect, xRadius: 2, yRadius: 2).fill()
 
             // 日期（底部居中）
             let labelAttributes: [NSAttributedString.Key: Any] = [
                 .font: MenuPanelStyle.smallValueFont,
-                .foregroundColor: bar.isToday ? MenuPanelStyle.accentColor : NSColor.secondaryLabelColor,
+                .foregroundColor: (bar.isToday || isHovered)
+                    ? MenuPanelStyle.accentColor : NSColor.secondaryLabelColor,
             ]
             let label = bar.label as NSString
             let labelSize = label.size(withAttributes: labelAttributes)
             let labelX = min(max(0, centerX - labelSize.width / 2), max(0, bounds.width - labelSize.width))
             label.draw(at: NSPoint(x: labelX, y: barBottom + 6), withAttributes: labelAttributes)
         }
+
+        // 悬停提示气泡最后绘制，保证盖在柱体与数值之上
+        if let hoveredIndex, bars.indices.contains(hoveredIndex) {
+            let bar = bars[hoveredIndex]
+            if let detail = bar.detail ?? (bar.valueText.isEmpty ? nil : bar.valueText) {
+                drawTooltip(detail, barIndex: hoveredIndex, layout: layout,
+                            barBottom: barBottom, ratios: ratios)
+            }
+        }
+    }
+
+    // MARK: - 悬停交互
+
+    /// 柱布局（宽 + 左侧留白），draw 与命中测试共用
+    private func columnLayout(for count: Int) -> (width: CGFloat, leftInset: CGFloat) {
+        let n = CGFloat(count)
+        let available = max(1, (bounds.width - columnGap * (n - 1)) / n)
+        let width = min(Self.maxColumnWidth, available)
+        let groupWidth = width * n + columnGap * (n - 1)
+        return (width, max(0, (bounds.width - groupWidth) / 2))
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaRef { removeTrackingArea(trackingAreaRef) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .mouseMoved,
+                                            .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingAreaRef = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateHover(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard hoveredIndex != nil else { return }
+        hoveredIndex = nil
+        needsDisplay = true
+    }
+
+    /// 命中测试：落在柱体区（数值行以下）且在该柱宽度内才高亮
+    private func updateHover(at point: NSPoint) {
+        guard !bars.isEmpty, bounds.contains(point), point.y >= Self.valueRowHeight else {
+            guard hoveredIndex != nil else { return }
+            hoveredIndex = nil
+            needsDisplay = true
+            return
+        }
+        let layout = columnLayout(for: bars.count)
+        let step = layout.width + columnGap
+        let index = Int((point.x - layout.leftInset) / step)
+        let columnStart = layout.leftInset + CGFloat(index) * step
+        let inColumn = index >= 0 && index < bars.count
+            && point.x >= columnStart && point.x <= columnStart + layout.width
+        let newValue = inColumn ? index : nil
+        guard newValue != hoveredIndex else { return }
+        hoveredIndex = newValue
+        needsDisplay = true
+    }
+
+#if DEBUG
+    /// 快照自证专用（仅 DEBUG）：强制悬停某根柱，用于渲染 tooltip 取证
+    func forceHoverForSnapshot(_ index: Int?) {
+        hoveredIndex = index
+        needsDisplay = true
+    }
+#endif
+
+    /// 悬停气泡：深色底 + 反色文字，贴边自动钳制
+    private func drawTooltip(_ text: String, barIndex: Int,
+                             layout: (width: CGFloat, leftInset: CGFloat),
+                             barBottom: CGFloat, ratios: [Double]) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: MenuPanelStyle.smallValueFont,
+            .foregroundColor: NSColor.windowBackgroundColor,
+        ]
+        let textSize = (text as NSString).size(withAttributes: attributes)
+        let padding: CGFloat = 4
+        let width = textSize.width + padding * 2
+        let height = textSize.height + 2
+        let centerX = layout.leftInset + CGFloat(barIndex) * (layout.width + columnGap) + layout.width / 2
+        let barHeight = max(2, Self.barAreaHeight * CGFloat(ratios[barIndex]))
+        let barTop = barBottom - barHeight
+        let x = min(max(0, centerX - width / 2), max(0, bounds.width - width))
+        let y = max(0, barTop - height - 4)
+        let rect = NSRect(x: x, y: y, width: width, height: height)
+        MenuPanelStyle.dynamicLabel(alpha: 0.92).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
+        (text as NSString).draw(at: NSPoint(x: rect.minX + padding, y: rect.minY + 1),
+                                withAttributes: attributes)
     }
 }
 
