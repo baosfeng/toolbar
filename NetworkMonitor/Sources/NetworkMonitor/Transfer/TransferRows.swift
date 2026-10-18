@@ -77,7 +77,7 @@ final class MenuPanelTransferDeviceRow: MenuPanelRow {
 /// 任务行 — 方向 + 文件名 + 状态 + 进度条（点击取消进行中的任务）
 ///
 /// 动效：进度条 120ms 插值；完成显示对勾并弹入；失败整行抖动。
-final class MenuPanelTransferTaskRow: MenuPanelRow {
+final class MenuPanelTransferTaskRow: MenuPanelRow, NSDraggingSource {
 
     /// 是否允许点击（进行中才可取消）
     var onClickEnabled = true {
@@ -162,6 +162,30 @@ final class MenuPanelTransferTaskRow: MenuPanelRow {
         contentStack.addArrangedSubview(vertical)
         vertical.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         setAccessibilityLabel("\(Self.titleText(session))，\(Self.stateText(session))")
+    }
+
+    /// 可拖出的文件（仅接收且已完成的任务），拖到 Finder/其他 App 即复制真实文件
+    var draggableFileURLs: [URL] = []
+
+    override func mouseDragged(with event: NSEvent) {
+        guard !draggableFileURLs.isEmpty else {
+            super.mouseDragged(with: event)
+            return
+        }
+        let items: [NSDraggingItem] = draggableFileURLs.map { url in
+            let item = NSDraggingItem(pasteboardWriter: url as NSURL)
+            let icon = NSWorkspace.shared.icon(forFile: url.path)
+            icon.size = NSSize(width: 36, height: 36)
+            item.setDraggingFrame(NSRect(x: 8, y: bounds.midY - 18, width: 36, height: 36),
+                                  contents: icon)
+            return item
+        }
+        beginDraggingSession(with: items, event: event, source: self)
+    }
+
+    @objc func draggingSession(_ session: NSDraggingSession,
+                               sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        .copy
     }
 
     /// 更新进度与状态（进度插值，状态迁移触发完成/失败动效）
