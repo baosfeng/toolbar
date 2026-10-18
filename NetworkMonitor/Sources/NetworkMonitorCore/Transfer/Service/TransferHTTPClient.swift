@@ -6,15 +6,15 @@ import Foundation
 ///
 /// 错误约定：对端返回非 0 业务码时抛 `TransferError.remote`，保留远端 code 与 message；
 /// 网络层失败统一抛 `ioFailed`，由 Service 决定是否按 1s/2s/4s 退避重试。
-public final class TransferHTTPClient: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+public final class TransferHTTPClient: @unchecked Sendable {
 
     private let logger: LoggingService
     private let configuration: URLSessionConfiguration
+    /// 上传进度 delegate —— 独立对象且被 session 强引用，避免 session 失效时回调已析构的 client
+    private let progressDelegate = UploadProgressDelegate()
     private lazy var session: URLSession = URLSession(configuration: configuration,
-                                                     delegate: self,
+                                                     delegate: progressDelegate,
                                                      delegateQueue: nil)
-    private let progressLock = NSLock()
-    private var progressHandler: (@Sendable (String, Int64) -> Void)?
 
     /// 请求超时（秒）；大文件上传靠 `timeoutIntervalForResource` 兜底
     public static let requestTimeout: TimeInterval = 60
@@ -29,18 +29,16 @@ public final class TransferHTTPClient: NSObject, URLSessionTaskDelegate, @unchec
         configuration.waitsForConnectivity = false
         configuration.httpShouldSetCookies = false
         self.configuration = configuration
-        super.init()
     }
 
     deinit {
+        // delegate 是独立对象，失效回调不会触碰已析构的 client
         session.invalidateAndCancel()
     }
 
-    /// 设置上传进度回调（fileId → 已发送字节）
+    /// 设置上传进度回调（progressKey → 已发送字节）
     public func setProgressHandler(_ handler: (@Sendable (String, Int64) -> Void)?) {
-        progressLock.lock()
-        progressHandler = handler
-        progressLock.unlock()
+        progressDelegate.setHandler(handler)
     }
 
     // MARK: - 路由
@@ -224,16 +222,29 @@ public final class TransferHTTPClient: NSObject, URLSessionTaskDelegate, @unchec
         throw TransferError.ioFailed("响应结构非法（HTTP \(status)）")
     }
 
-    // MARK: - 进度
+}
 
-    public func urlSession(_ session: URLSession, task: URLSessionTask,
-                           didSendBodyData bytesSent: Int64,
-                           totalBytesSent: Int64,
-                           totalBytesExpectedToSend: Int64) {
-        guard let fileId = task.taskDescription else { return }
-        progressLock.lock()
-        let handler = progressHandler
-        progressLock.unlock()
-        handler?(fileId, totalBytesSent)
+// MARK: - 上传进度 delegate
+
+/// 独立的上传进度 delegate —— 与 client 解耦，避免 session 失效时回调已析构对象
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var handler: (@Sendable (String, Int64) -> Void)?
+
+    func setHandler(_ handler: (@Sendable (String, Int64) -> Void)?) {
+        lock.lock()
+        self.handler = handler
+        lock.unlock()
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    didSendBodyData bytesSent: Int64,
+                    totalBytesSent: Int64,
+                    totalBytesExpectedToSend: Int64) {
+        guard let key = task.taskDescription else { return }
+        lock.lock()
+        let handler = self.handler
+        lock.unlock()
+        handler?(key, totalBytesSent)
     }
 }
