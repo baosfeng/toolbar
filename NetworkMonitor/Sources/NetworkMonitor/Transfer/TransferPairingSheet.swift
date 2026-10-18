@@ -29,22 +29,38 @@ final class TransferPairingSheet {
         self.onExpire = onExpire
 
         let title = Self.titleLabel("\(peerName) 想发送 \(fileNames.count) 个文件")
-        let pinLabel = NSTextField(labelWithString: pin)
-        pinLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 30, weight: .semibold)
-        pinLabel.alignment = .center
-        pinLabel.setAccessibilityLabel("配对码 \(pin)")
+        let subtitle = Self.hintLabel("把下面的配对码告诉对方，或直接接受")
 
-        let hint = Self.hintLabel("把这对数字告诉对方，或直接接受")
-        let fileLines = fileNames.prefix(3).map { "· \($0)" }.joined(separator: "\n")
-        let filesLabel = Self.hintLabel(fileLines.isEmpty ? "" : fileLines)
+        // 配对码：大字号 + 圆角底块，扫一眼即可读出
+        let pinField = NSTextField(labelWithString: pin)
+        pinField.font = NSFont.monospacedDigitSystemFont(ofSize: 46, weight: .semibold)
+        pinField.alignment = .center
+        pinField.isBezeled = false
+        pinField.drawsBackground = false
+        pinField.setAccessibilityLabel("配对码 \(pin)")
+        let pinBox = NSView()
+        pinBox.wantsLayer = true
+        pinBox.layer?.backgroundColor = NSColor.quaternaryLabelColor.withAlphaComponent(0.22).cgColor
+        pinBox.layer?.cornerRadius = 12
+        pinField.translatesAutoresizingMaskIntoConstraints = false
+        pinBox.addSubview(pinField)
+        NSLayoutConstraint.activate([
+            pinBox.widthAnchor.constraint(equalToConstant: 252),
+            pinBox.heightAnchor.constraint(equalToConstant: 86),
+            pinField.centerXAnchor.constraint(equalTo: pinBox.centerXAnchor),
+            pinField.centerYAnchor.constraint(equalTo: pinBox.centerYAnchor),
+        ])
+
+        let filesLabel = Self.filesLabel(fileNames)
 
         let approve = Self.actionButton("接受", keyEquivalent: "\r") { onApprove() }
         let deny = Self.actionButton("拒绝", keyEquivalent: "\u{1b}") { onDeny() }
         let buttons = Self.horizontalStack([deny, approve])
         buttons.distribution = .fillEqually
+        buttons.widthAnchor.constraint(equalToConstant: 252).isActive = true
 
-        let content = Self.verticalStack([title, pinLabel, hint, filesLabel, countdownLabel, buttons])
-        present(content: content, title: "接收文件", size: NSSize(width: 260, height: 240))
+        let content = Self.verticalStack([title, subtitle, pinBox, filesLabel, countdownLabel, buttons])
+        present(content: content, title: "接收文件", size: NSSize(width: 348, height: 330))
     }
 
     // MARK: - 发送方：输入 PIN
@@ -138,14 +154,19 @@ final class TransferPairingSheet {
 
     private func updateCountdown() {
         let seconds = max(0, Int(expiresAt.timeIntervalSinceNow.rounded()))
-        countdownLabel.stringValue = expiresAt > Date() ? "\(seconds) 秒内有效" : ""
+        if expiresAt > Date() {
+            countdownLabel.stringValue = "\(seconds) 秒后自动拒绝"
+            countdownLabel.textColor = seconds <= 10 ? .systemRed : .systemOrange
+        } else {
+            countdownLabel.stringValue = ""
+        }
     }
 
     // MARK: - 控件工厂
 
     private static func titleLabel(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
-        label.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        label.font = NSFont.systemFont(ofSize: 15.5, weight: .semibold)
         label.alignment = .center
         label.maximumNumberOfLines = 2
         label.lineBreakMode = .byWordWrapping
@@ -154,11 +175,26 @@ final class TransferPairingSheet {
 
     private static func hintLabel(_ text: String) -> NSTextField {
         let label = NSTextField(labelWithString: text)
-        label.font = NSFont.systemFont(ofSize: 10)
-        label.textColor = NSColor.labelColor.withAlphaComponent(0.75)
+        label.font = NSFont.systemFont(ofSize: 12.5)
+        label.textColor = NSColor.labelColor.withAlphaComponent(0.72)
         label.alignment = .center
         label.maximumNumberOfLines = 3
         label.lineBreakMode = .byTruncatingMiddle
+        return label
+    }
+
+    /// 文件清单：最多 3 行 + 「等 N 个文件」，字号跟提示一致
+    private static func filesLabel(_ names: [String]) -> NSTextField {
+        let shown = Array(names.prefix(3))
+        var lines = shown.map { "· \($0)" }
+        if names.count > shown.count { lines.append("等 \(names.count) 个文件") }
+        let label = NSTextField(labelWithString: lines.joined(separator: "\n"))
+        label.font = NSFont.systemFont(ofSize: 13)
+        label.textColor = NSColor.labelColor.withAlphaComponent(0.72)
+        label.alignment = .left
+        label.maximumNumberOfLines = 4
+        label.lineBreakMode = .byTruncatingMiddle
+        label.widthAnchor.constraint(equalToConstant: 252).isActive = true
         return label
     }
 
@@ -167,6 +203,9 @@ final class TransferPairingSheet {
         let button = ClosureButton(title: title, action: action)
         button.keyEquivalent = keyEquivalent
         button.bezelStyle = .rounded
+        button.controlSize = .large
+        button.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        button.heightAnchor.constraint(equalToConstant: 32).isActive = true
         return button
     }
 

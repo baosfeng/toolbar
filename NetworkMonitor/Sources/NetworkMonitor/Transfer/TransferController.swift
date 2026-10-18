@@ -12,6 +12,7 @@ final class TransferController {
 
     private let service: TransferService
     private let registry: DeviceRegistry
+    private let preferences: TransferPreferences
     private let logger: LoggingService
     private weak var panel: TransferPaneView?
 
@@ -23,6 +24,9 @@ final class TransferController {
 
     private let pairingSheet = TransferPairingSheet()
     private let notification: TransferNotification
+    private lazy var settingsWindow = TransferSettingsWindow(preferences: preferences,
+                                                             service: service,
+                                                             logger: logger)
     private var currentPendingOfferId: String?
     private var pollTimer: Timer?
     private var appearedDeviceIds: Set<String> = []
@@ -31,11 +35,13 @@ final class TransferController {
 
     init(service: TransferService,
          registry: DeviceRegistry,
+         preferences: TransferPreferences = TransferPreferences(),
          logger: LoggingService = AppContext.shared.logger) {
         self.service = service
         self.registry = registry
+        self.preferences = preferences
         self.logger = logger
-        self.notification = TransferNotification(logger: logger)
+        self.notification = TransferNotification(preferences: preferences, logger: logger)
     }
 
     /// 绑定面板并安装交互回调（`MenuPanelController` 装配时调用一次）
@@ -46,6 +52,16 @@ final class TransferController {
         panel.onDropFiles = { [weak self] urls in self?.send(urls) }
         panel.onPickFiles = { [weak self] in self?.presentFilePicker() }
         panel.onCancelSession = { [weak self] sessionId in self?.cancel(sessionId: sessionId) }
+        panel.onOpenSettings = { [weak self] in self?.showSettings() }
+        panel.onDismissSession = { [weak self] sessionId, deleteFiles in
+            guard let self else { return }
+            Task { @MainActor in
+                let removed = await self.service.dismissSession(id: sessionId, deleteFiles: deleteFiles)
+                self.panel?.showHint(removed
+                                     ? (deleteFiles ? "已移除记录并删除文件" : "已移除记录")
+                                     : "进行中的任务不能移除")
+            }
+        }
         render()
     }
 
@@ -96,7 +112,11 @@ final class TransferController {
         }
 
         pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.pollPendingOffers() }
+            Task { @MainActor [weak self] in
+                self?.pollPendingOffers()
+                // 每秒刷新免配对窗口倒计时
+                self?.render()
+            }
         }
     }
 
@@ -105,16 +125,25 @@ final class TransferController {
         pollTimer?.invalidate()
         pollTimer = nil
         pairingSheet.close()
+        settingsWindow.close()
         Task { await self.service.stop() }
+    }
+
+    /// 打开传送设置（标题栏齿轮 / 面板状态行）
+    func showSettings() {
+        settingsWindow.show()
     }
 
     // MARK: - 面板交互
 
     private func render() {
+        let windowActive = preferences.isWindowActive()
         panel?.update(devices: devices,
                       sessions: sessions,
                       selectedDeviceId: selectedDeviceId,
-                      statusText: statusText)
+                      statusText: statusText,
+                      autoAcceptText: windowActive ? preferences.windowRemainingText() : "",
+                      autoAcceptActive: windowActive)
         notifyNewDevices()
     }
 
@@ -249,7 +278,12 @@ final class TransferController {
 
     /// 接收方 PIN 展示窗
     private func presentReceivePIN(_ offer: TransferService.PendingOffer) {
-        let peerName = devices.first { $0.deviceId == offer.peerDeviceId }?.alias ?? "未知设备"
+        // 别名优先取 offer 自身携带的 senderAlias，发现层表仅作兜底——
+        // 发现层可能尚未收录该设备（或 deviceId 不匹配），此时不应显示「未知设备」
+        let discovered = devices.first { $0.deviceId == offer.peerDeviceId }?.alias
+        let peerName = [offer.senderAlias, discovered]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? "未知设备"
         let fileNames = sessions.first { $0.id == offer.sessionId }?.files.map(\.name) ?? []
         pairingSheet.showReceive(pin: offer.pin, peerName: peerName, fileNames: fileNames,
                                  expiresAt: offer.expiresAt,
