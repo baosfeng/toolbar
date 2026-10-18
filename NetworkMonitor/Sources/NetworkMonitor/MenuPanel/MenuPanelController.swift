@@ -142,7 +142,9 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
     /// 额度页数据回调（状态管理器 → 面板 → 高度自适应）
     private func bindBilling() {
         billingMonitor?.onUpdate = { [weak self] snapshot in
-            self?.content.updateBilling(snapshot)
+            guard let self else { return }
+            // 收起时仍更新视图数据（下次打开即最新），但不触发布局与 popover 尺寸调整
+            self.content.updateBilling(snapshot, notifySize: self.popover.isShown)
         }
     }
 
@@ -199,6 +201,9 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
 
     /// 每秒调用（由状态栏定时器驱动）：速率必刷，其余按 5 秒节流
     func tick() {
+        // 计费刷新与面板是否展开无关：收起时也要拉余额做阈值提醒
+        // （60s 节流与 429 退避在 BillingMonitor 内部，这里每秒调用是安全的）
+        billingMonitor?.refresh()
         guard popover.isShown else { return }
         sampleHistory()
         content.updateSpeeds(down: max(monitor.downloadSpeed, 0),

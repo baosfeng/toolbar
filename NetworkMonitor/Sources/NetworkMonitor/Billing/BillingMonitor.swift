@@ -94,6 +94,8 @@ final class BillingMonitor {
     private var retryNotBefore: Date?
     /// 请求代次 — 切换 provider / 范围后自增，旧任务结果直接丢弃
     private var generation = 0
+    /// 屏幕锁定 / 休眠时暂停后台刷新（不调接口，也不发提醒）
+    private var isPaused = false
 
     /// 自动刷新最小间隔（Ollama 限流 10 次/分钟，留出余量）
     static let refreshInterval: TimeInterval = 60
@@ -134,6 +136,8 @@ final class BillingMonitor {
     ///
     /// - Parameter force: 跳过 60 秒节流与限流退避（打开面板、保存凭据、切换 provider 时使用）
     func refresh(force: Bool = false) {
+        // 锁屏 / 休眠期间不调接口（解锁后 resume() 会强制刷新一次）
+        guard !isPaused else { return }
         guard let provider = currentProvider else {
             // 注册表为空：只回报空态，不发请求
             emit()
@@ -215,6 +219,23 @@ final class BillingMonitor {
         isLoading = false
         logger.info("切换计费 provider：\(id)")
         emit()
+        refresh(force: true)
+    }
+
+    // MARK: - 屏幕活动
+
+    /// 屏幕锁定 / 休眠：暂停后台刷新
+    func pause() {
+        guard !isPaused else { return }
+        isPaused = true
+        logger.debug("计费刷新暂停：屏幕锁定 / 休眠")
+    }
+
+    /// 解锁 / 唤醒：恢复并立即刷新一次
+    func resume() {
+        guard isPaused else { return }
+        isPaused = false
+        logger.debug("计费刷新恢复：屏幕可用")
         refresh(force: true)
     }
 

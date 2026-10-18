@@ -258,9 +258,11 @@ final class MenuPanelView: NSView {
     }
 
     /// 额度页快照（状态管理器回调）
-    func updateBilling(_ snapshot: BillingMonitor.Snapshot) {
+    func updateBilling(_ snapshot: BillingMonitor.Snapshot, notifySize: Bool = true) {
         billingPane.update(snapshot)
-        delegate?.menuPanelViewDidChangeContent(self)
+        if notifySize {
+            delegate?.menuPanelViewDidChangeContent(self)
+        }
     }
 
     /// 清除键盘焦点（面板收起时调用）
