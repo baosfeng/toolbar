@@ -116,7 +116,8 @@ final class BillingBalanceSectionView: NSView {
             periodLabel.isHidden = true
         }
 
-        purchasedRow.isHidden = balance.purchasedUSD == nil
+        // 无内含额度时 hero 数字本身就是已购额度，下方不再重复一行
+        purchasedRow.isHidden = balance.purchasedUSD == nil || balance.included == nil
         if let purchased = balance.purchasedUSD {
             purchasedValue.stringValue = formatUSD(purchased)
         }
