@@ -29,7 +29,7 @@ public enum TransferProtocol {
     public static let transferTokenHeader = "X-Transfer-Token"
 
     /// 确认超时时长（秒）
-    public static let confirmTimeout: TimeInterval = 30
+    public static let confirmTimeout: TimeInterval = 60
     /// 无字节进展超时（秒）
     public static let idleTimeout: TimeInterval = 60
     /// 单次读取 / 写入缓冲区（64 KiB，内存与文件大小无关）
