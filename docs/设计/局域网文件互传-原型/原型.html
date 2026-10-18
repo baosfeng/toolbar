@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>局域网文件互传 · 两端原型 v2</title>
+<style>
+  /* ===== 移动端 8 套主题：直接取 android-monitor 的 DesignTokenTable 真实值 ===== */
+  [data-theme="apple"]{--bg:#ffffff;--surface:#f5f5f7;--warm:#fbfbfd;--fg:#1d1d1f;--fg2:#424245;--muted:#6e6e73;--meta:#86868b;--border:#d2d2d7;--soft:#e8e8ed;--accent:#0071e3;--accent-on:#ffffff;--success:#16a34a;--warn:#eab308;--danger:#dc2626;--r-sm:8px;--r-md:12px;--r-lg:18px}
+  [data-theme="glassmorphism"]{--bg:#eef6ff;--surface:rgba(255,255,255,.74);--warm:rgba(238,246,255,.72);--fg:#102033;--fg2:#34465f;--muted:#60708a;--meta:#4f8cff;--border:rgba(255,255,255,.64);--soft:rgba(255,255,255,.38);--accent:#3e6ec9;--accent-on:#fff;--success:#22c55e;--warn:#f59e0b;--danger:#ef4444;--r-sm:16px;--r-md:24px;--r-lg:36px}
+  [data-theme="notion"]{--bg:#ffffff;--surface:#f6f5f4;--warm:#f6f5f4;--fg:rgba(0,0,0,.95);--fg2:#31302e;--muted:#615d59;--meta:#a39e98;--border:rgba(0,0,0,.1);--soft:rgba(0,0,0,.06);--accent:#0075de;--accent-on:#fff;--success:#1aae39;--warn:#dd5b00;--danger:#dc2626;--r-sm:4px;--r-md:8px;--r-lg:12px}
+  [data-theme="stripe"]{--bg:#ffffff;--surface:#ffffff;--warm:#f6f9fc;--fg:#061b31;--fg2:#273951;--muted:#64748d;--meta:#64748d;--border:#e5edf5;--soft:#e5edf5;--accent:#533afd;--accent-on:#fff;--success:#15be53;--warn:#9b6829;--danger:#ea2261;--r-sm:4px;--r-md:6px;--r-lg:8px}
+  [data-theme="claude"]{--bg:#f5f4ed;--surface:#faf9f5;--warm:#e8e6dc;--fg:#141413;--fg2:#3d3d3a;--muted:#5e5d59;--meta:#87867f;--border:#f0eee6;--soft:#e8e6dc;--accent:#aa5538;--accent-on:#faf9f5;--success:#17a34a;--warn:#eab308;--danger:#b53333;--r-sm:8px;--r-md:12px;--r-lg:16px}
+  [data-theme="ibm"]{--bg:#ffffff;--surface:#f4f4f4;--warm:#edf5ff;--fg:#161616;--fg2:#525252;--muted:#6f6f6f;--meta:#8d8d8d;--border:#c6c6c6;--soft:#e0e0e0;--accent:#0f62fe;--accent-on:#fff;--success:#24a148;--warn:#f1c21b;--danger:#da1e28;--r-sm:0px;--r-md:0px;--r-lg:0px}
+  [data-theme="kami"]{--bg:#f5f4ed;--surface:#faf9f5;--warm:#e8e6dc;--fg:#141413;--fg2:#3d3d3a;--muted:#504e49;--meta:#6b6a64;--border:#e8e6dc;--soft:#e5e3d8;--accent:#1b365d;--accent-on:#faf9f5;--success:#4a6b3a;--warn:#8a6b1f;--danger:#8a3a30;--r-sm:4px;--r-md:8px;--r-lg:12px}
+  [data-theme="bento"]{--bg:#f5f8ff;--surface:#ffffff;--warm:#eaf1ff;--fg:#101828;--fg2:#344054;--muted:#667085;--meta:#2563eb;--border:#d7e0ef;--soft:#edf2f8;--accent:#2563eb;--accent-on:#fff;--success:#16a34a;--warn:#f59e0b;--danger:#ef4444;--r-sm:10px;--r-md:16px;--r-lg:24px}
+
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  body{margin:0;padding:36px 40px 48px;background:#E9E9EE;color:#1d1d1f;
+       font-family:-apple-system,"SF Pro Text","Helvetica Neue","PingFang SC",sans-serif}
+  .doc-title{font-size:15px;font-weight:600;margin:0 0 4px}
+  .doc-sub{font-size:12px;color:rgba(60,60,67,.6);margin:0 0 26px;line-height:1.6}
+  .doc-sub code{background:rgba(0,0,0,.055);border-radius:4px;padding:1px 5px;font-size:11px}
+  .row{display:flex;gap:36px;align-items:flex-start;justify-content:center;margin-bottom:40px}
+  .col{display:flex;flex-direction:column;align-items:center;gap:9px}
+  .cap{font-size:11px;color:rgba(60,60,67,.5);letter-spacing:.3px}
+  .mono{font-variant-numeric:tabular-nums}
+
+  /* ===================== Mac 面板（NSColor 系统色，不随移动端主题） ===================== */
+  .mac{width:320px;min-height:520px;background:#fff;border-radius:14px;display:flex;flex-direction:column;
+       box-shadow:0 12px 34px rgba(0,0,0,.14),0 1px 0 rgba(0,0,0,.04);overflow:hidden;position:relative}
+  .m-tabs{display:flex;height:44px;border-bottom:1px solid #E5E5EA;padding:0 8px;gap:2px;flex:none}
+  .m-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+         font-size:10px;color:rgba(60,60,67,.6);border-radius:8px;margin:6px 2px}
+  .m-tab.on{background:rgba(0,122,255,.10);color:#007AFF;font-weight:600}
+  .m-tab svg{width:14px;height:14px}
+  .m-body{padding:12px 14px 10px;flex:1}
+  .m-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .m-head h2{font-size:13px;font-weight:600;margin:0}
+  .m-tools{display:flex;gap:11px;color:#8E8E93;align-items:center}
+  .m-tools svg{width:14px;height:14px}
+  .m-status{display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(60,60,67,.6);margin-bottom:12px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#34C759;flex:none}
+  .dot.off{background:#8E8E93}
+  .m-sec{font-size:10px;font-weight:600;color:rgba(60,60,67,.6);letter-spacing:.4px;margin:14px 0 6px;
+         display:flex;justify-content:space-between;align-items:baseline}
+  .m-sec a{font-size:9.5px;font-weight:500;color:#007AFF;text-decoration:none}
+
+  .m-dev{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:9px;background:#F2F2F7}
+  .m-ico{width:26px;height:26px;border-radius:7px;background:#fff;display:flex;align-items:center;justify-content:center;
+         color:#007AFF;flex:none;box-shadow:0 0 0 .5px rgba(0,0,0,.06)}
+  .m-ico svg{width:14px;height:14px}
+  .m-devmain{flex:1;min-width:0}
+  .m-devname{font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .m-devmeta{font-size:9.5px;color:rgba(60,60,67,.6);margin-top:1px}
+  .m-btn{font-size:10.5px;font-weight:600;border-radius:6px;padding:3px 9px;background:#007AFF;color:#fff;border:none;flex:none}
+
+  .m-empty{padding:16px 10px;text-align:center;background:#F2F2F7;border-radius:9px}
+  .m-empty svg{width:20px;height:20px;color:#8E8E93;margin-bottom:6px}
+  .m-empty .t{font-size:11px;font-weight:600;color:#3C3C43}
+  .m-empty .s{font-size:9.5px;color:rgba(60,60,67,.6);margin:3px 0 9px;line-height:1.5}
+  .m-empty button{font-size:10px;font-weight:600;color:#007AFF;background:rgba(0,122,255,.1);border:none;border-radius:6px;padding:4px 12px}
+
+  .m-drop{margin-top:10px;border:1px dashed #C7C7CC;border-radius:9px;padding:12px 10px;text-align:center;background:rgba(242,242,247,.6)}
+  .m-drop svg{width:18px;height:18px;color:#8E8E93;margin-bottom:5px}
+  .m-drop .t{font-size:11px;font-weight:500;color:#3C3C43}
+  .m-drop .s{font-size:9.5px;color:rgba(60,60,67,.6);margin-top:2px}
+
+  .m-task{border:1px solid #E5E5EA;border-radius:9px;padding:8px 9px;margin-top:7px}
+  .m-task.done{background:rgba(52,199,89,.07);border-color:transparent}
+  .m-tasktop{display:flex;align-items:center;gap:7px}
+  .m-taskname{font-size:11px;font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .m-x{color:#8E8E93;font-size:10px}
+  .m-taskmeta{display:flex;justify-content:space-between;font-size:9.5px;color:rgba(60,60,67,.6);margin-top:5px}
+  .m-bar{height:3px;border-radius:2px;background:#E5E5EA;margin-top:6px;overflow:hidden}
+  .m-bar i{display:block;height:100%;border-radius:2px;background:#007AFF}
+  .m-bar i.in{background:#34C759}
+  .m-foot{flex:none;height:34px;border-top:1px solid #E5E5EA;display:flex;align-items:center;justify-content:space-between;
+          padding:0 14px;font-size:10px;color:rgba(60,60,67,.6)}
+  .m-foot span{display:flex;align-items:center;gap:5px}
+  .m-foot svg{width:11px;height:11px}
+  .m-foot b{color:#007AFF;font-weight:500}
+
+  .m-veil{position:absolute;inset:0;background:rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;border-radius:14px}
+  .m-sheet{width:262px;background:#fff;border-radius:12px;padding:16px 16px 14px;box-shadow:0 16px 40px rgba(0,0,0,.26)}
+  .m-sheet h3{font-size:12.5px;font-weight:600;margin:0 0 6px}
+  .m-sheet .from{font-size:10.5px;color:rgba(60,60,67,.6);margin:0 0 12px;line-height:1.5}
+  .m-files{background:#F2F2F7;border-radius:8px;padding:7px 9px;font-size:10px;color:#3C3C43;margin-bottom:13px}
+  .m-files div{display:flex;justify-content:space-between;line-height:1.75}
+  .m-files b{font-weight:500}
+  .pinlab{font-size:9.5px;color:rgba(60,60,67,.6);text-align:center;margin-bottom:6px}
+  .pins{display:flex;gap:9px;justify-content:center;margin-bottom:14px}
+  .pins b{width:38px;height:44px;border-radius:8px;background:#F2F2F7;display:flex;align-items:center;justify-content:center;
+          font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;color:#1C1C1E}
+  .m-acts{display:flex;gap:8px}
+  .m-acts button{flex:1;height:28px;border-radius:7px;font-size:11px;font-weight:600;border:none}
+  .m-acts .no{background:#F2F2F7;color:#3C3C43}
+  .m-acts .ok{background:#007AFF;color:#fff}
+  .m-note{font-size:9px;color:rgba(60,60,67,.6);text-align:center;margin-top:9px}
+
+  /* ===================== Android ===================== */
+  .phone{width:393px;height:852px;background:#17181A;border-radius:46px;padding:10px;position:relative;
+         box-shadow:0 18px 50px rgba(0,0,0,.22)}
+  .screen{width:100%;height:100%;background:var(--bg);border-radius:37px;overflow:hidden;position:relative;
+          display:flex;flex-direction:column;color:var(--fg)}
+  .notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:96px;height:26px;background:#17181A;border-radius:14px;z-index:5}
+  .sb{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:12px;
+      font-weight:600;color:var(--fg);flex:none}
+  .sb-r{display:flex;align-items:center;gap:5px}
+  .sb svg{width:14px;height:11px}
+
+  .a-body{flex:1;overflow:hidden;padding:0 16px}
+  .a-head{display:flex;align-items:flex-end;justify-content:space-between;padding:7px 0 14px}
+  .a-head h1{font-size:28px;font-weight:700;margin:0;letter-spacing:-.3px;color:var(--fg)}
+  .a-head .tools{display:flex;align-items:center;gap:14px;color:var(--muted)}
+  .a-head .tools svg{width:20px;height:20px}
+
+  .card{background:var(--surface);border:1px solid var(--soft);border-radius:var(--r-md);padding:13px 14px;
+        margin-bottom:11px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .card-h{display:flex;align-items:center;gap:10px}
+  .card-ico{width:34px;height:34px;border-radius:var(--r-sm);background:var(--warm);color:var(--accent);
+            display:flex;align-items:center;justify-content:center;flex:none;border:1px solid var(--soft)}
+  .card-ico svg{width:17px;height:17px}
+  .card-t{flex:1;min-width:0}
+  .card-t .t{font-size:14px;font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card-t .s{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sw{width:44px;height:26px;border-radius:13px;background:var(--accent);position:relative;flex:none}
+  .sw i{position:absolute;top:3px;right:3px;width:20px;height:20px;border-radius:50%;background:var(--accent-on);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .card-f{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:11px;
+          padding-top:9px;border-top:1px solid var(--soft)}
+
+  .sec-a{font-size:12px;font-weight:600;color:var(--muted);margin:4px 4px 8px;display:flex;justify-content:space-between;align-items:baseline}
+  .sec-a a{font-size:11px;font-weight:500;color:var(--accent);text-decoration:none}
+
+  .dev-a{display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--soft);
+         border-radius:var(--r-md);padding:11px 13px;margin-bottom:9px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .dev-a .card-ico{width:38px;height:38px}
+  .dev-a .card-ico svg{width:19px;height:19px}
+  .pill{font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;
+        background:color-mix(in srgb, var(--success) 14%, transparent);color:var(--success);flex:none}
+  .btn-a{font-size:13px;font-weight:600;color:var(--accent);background:color-mix(in srgb, var(--accent) 10%, transparent);
+         border:none;border-radius:var(--r-sm);padding:6px 12px;flex:none}
+
+  .empty-a{background:var(--surface);border:1px dashed var(--border);border-radius:var(--r-md);padding:22px 16px;text-align:center}
+  .empty-a svg{width:26px;height:26px;color:var(--muted);margin-bottom:9px}
+  .empty-a .t{font-size:14px;font-weight:600;color:var(--fg)}
+  .empty-a .s{font-size:12px;color:var(--muted);margin:5px 0 12px;line-height:1.5}
+  .empty-a button{font-size:13px;font-weight:600;color:var(--accent);background:color-mix(in srgb, var(--accent) 10%, transparent);
+                  border:none;border-radius:var(--r-sm);padding:8px 18px}
+
+  .task-a{background:var(--surface);border:1px solid var(--soft);border-radius:var(--r-md);padding:12px 13px;
+          margin-bottom:9px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .task-a .r1{display:flex;align-items:center;gap:9px}
+  .task-a .nm{font-size:13.5px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg)}
+  .task-a .dir{font-size:11px;color:var(--muted);flex:none}
+  .task-a .r2{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:8px}
+  .bar-a{height:5px;background:var(--soft);border-radius:3px;margin-top:7px;overflow:hidden}
+  .bar-a i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+  .bar-a i.in{background:var(--success)}
+
+  .tabbar{height:78px;background:var(--surface);border-top:1px solid var(--soft);display:flex;
+          align-items:flex-start;padding-top:9px;flex:none}
+  .tb{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--muted)}
+  .tb.on{color:var(--accent);font-weight:600}
+  .tb svg{width:21px;height:21px}
+  .home-ind{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);width:134px;height:5px;background:currentColor;border-radius:3px;opacity:.75}
+
+  .veil-a{position:absolute;inset:0;background:rgba(0,0,0,.28);display:flex;align-items:flex-end;border-radius:37px}
+  .sheet-a{width:100%;background:var(--surface);border-radius:var(--r-lg) var(--r-lg) 37px 37px;padding:18px 20px 26px;
+           border-top:1px solid var(--soft)}
+  .sheet-a h3{font-size:17px;font-weight:700;margin:0 0 4px;color:var(--fg)}
+  .sheet-a .sub{font-size:12.5px;color:var(--muted);margin:0 0 16px}
+  .pin-a{display:flex;gap:11px;justify-content:center;margin-bottom:18px}
+  .pin-a b{width:56px;height:62px;border-radius:var(--r-sm);background:var(--bg);border:1.5px solid var(--border);
+           display:flex;align-items:center;justify-content:center;font-size:27px;font-weight:600;
+           font-variant-numeric:tabular-nums;color:var(--fg)}
+  .pin-a b.f{border-color:var(--accent);background:color-mix(in srgb, var(--accent) 7%, transparent);color:var(--accent)}
+  .acts-a{display:flex;gap:10px}
+  .acts-a button{flex:1;height:46px;border-radius:var(--r-md);font-size:15px;font-weight:600;border:none}
+  .acts-a .no{background:var(--warm);color:var(--fg2)}
+  .acts-a .ok{background:var(--accent);color:var(--accent-on)}
+
+  /* ===================== 主题对比网格 ===================== */
+  .theme-grid{display:grid;grid-template-columns:repeat(4,286px);gap:26px 22px;justify-content:center}
+  .tw{display:flex;flex-direction:column;gap:7px;align-items:center}
+  .tw .name{font-size:11px;font-weight:600;color:#3C3C43}
+  .tw .id{font-size:9.5px;color:rgba(60,60,67,.45);margin-top:-4px}
+  .mini{width:286px;height:452px;background:var(--bg);border-radius:26px;overflow:hidden;
+        display:flex;flex-direction:column;box-shadow:0 6px 18px rgba(0,0,0,.10);color:var(--fg);border:1px solid rgba(0,0,0,.06)}
+  .mini .m-sb{height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:10px;font-weight:600;flex:none}
+  .mini .m-body{padding:0 13px;flex:1;overflow:hidden}
+  .mini .m-title{font-size:19px;font-weight:700;margin:2px 0 11px;letter-spacing:-.2px}
+  .mini .m-card{background:var(--surface);border:1px solid var(--soft);border-radius:var(--r-md);padding:9px 10px;margin-bottom:8px}
+  .mini .m-row{display:flex;align-items:center;gap:8px}
+  .mini .m-ci{width:26px;height:26px;border-radius:var(--r-sm);background:var(--warm);color:var(--accent);
+              display:flex;align-items:center;justify-content:center;flex:none;border:1px solid var(--soft)}
+  .mini .m-ci svg{width:13px;height:13px}
+  .mini .m-t1{font-size:11px;font-weight:600;color:var(--fg)}
+  .mini .m-t2{font-size:9px;color:var(--muted);margin-top:1px}
+  .mini .m-sw{width:32px;height:19px;border-radius:10px;background:var(--accent);position:relative;flex:none;margin-left:auto}
+  .mini .m-sw i{position:absolute;top:2.5px;right:2.5px;width:14px;height:14px;border-radius:50%;background:var(--accent-on)}
+  .mini .m-btn{font-size:10px;font-weight:600;color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);
+               border-radius:var(--r-sm);padding:4px 9px;border:none;flex:none}
+  .mini .m-bar{height:4px;background:var(--soft);border-radius:2px;margin-top:6px;overflow:hidden}
+  .mini .m-bar i{display:block;height:100%;background:var(--accent);border-radius:2px}
+  .mini .m-bar i.in{background:var(--success)}
+  .mini .m-tabbar{height:52px;background:var(--surface);border-top:1px solid var(--soft);display:flex;align-items:center;flex:none}
+  .mini .m-tb{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:8px;color:var(--muted)}
+  .mini .m-tb.on{color:var(--accent);font-weight:600}
+  .mini .m-tb svg{width:14px;height:14px}
+
+  /* ===================== 动效演示 ===================== */
+  @keyframes od-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes od-pop{0%{transform:scale(.9);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+  @keyframes od-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+  @keyframes od-sheet{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+  .od-rise{animation:od-rise 340ms cubic-bezier(.2,0,0,1) both}
+  .od-pop{animation:od-pop 220ms cubic-bezier(.34,1.56,.64,1) both}
+  .od-shake{animation:od-shake 300ms cubic-bezier(.4,0,1,1) both}
+  .od-sheet{animation:od-sheet 220ms cubic-bezier(.2,0,0,1) both}
+  .demo-bar{transition:width 120ms cubic-bezier(.28,0,.22,1)}
+  .ctl{width:340px;display:flex;flex-direction:column;gap:13px}
+  .ctl-card{background:#fff;border-radius:12px;padding:15px 16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .ctl-t{font-size:12px;font-weight:600;margin:0 0 11px;color:#1d1d1f}
+  .ctl-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .ctl-btns button{height:36px;border-radius:9px;border:1px solid #E5E5EA;background:#F2F2F7;font-size:12px;
+                   font-weight:600;color:#3C3C43;cursor:pointer;transition:transform 120ms cubic-bezier(.28,0,.22,1),background 120ms}
+  .ctl-btns button:active{transform:scale(.96)}
+  .ctl-btns button.primary{background:#007AFF;color:#fff;border-color:transparent}
+  .ctl-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#3C3C43;padding:5px 0}
+  .ctl-row .hint{color:rgba(60,60,67,.55);font-size:11px}
+  .tsw{width:42px;height:24px;border-radius:12px;background:#34C759;position:relative;cursor:pointer;flex:none;transition:background 120ms}
+  .tsw.off{background:#E5E5EA}
+  .tsw i{position:absolute;top:2.5px;right:2.5px;width:19px;height:19px;border-radius:50%;background:#fff;
+         box-shadow:0 1px 3px rgba(0,0,0,.2);transition:right 150ms cubic-bezier(.28,0,.22,1)}
+  .tsw.off i{right:20.5px}
+  .spec{font-size:11px;color:rgba(60,60,67,.7);line-height:1.85}
+  .spec code{background:#F2F2F7;border-radius:4px;padding:1px 4px;font-size:10px}
+  .demo-empty{font-size:12px;color:rgba(60,60,67,.5);text-align:center;padding:22px 0}
+</style>
+</head>
+<body>
+
+<!-- ============ 视图 1：Mac 三态 ============ -->
+<section id="sec-mac">
+  <p class="doc-title">Mac 传送面板 · 日常 / 空态 / 未配对</p>
+  <p class="doc-sub">320×520pt 弹出面板，沿用现有菜单面板尺寸；第 4 个 tab；标题行右侧新增「历史」入口，完成的任务不再堆在面板里</p>
+  <div class="row">
+
+    <!-- 日常 -->
+    <div class="col">
+      <div class="mac">
+        <div class="m-tabs">
+          <div class="m-tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 12.2v.3M5.3 9.4a4 4 0 0 1 5.4 0M2.8 6.9a7.5 7.5 0 0 1 10.4 0"/></svg>网络</div>
+          <div class="m-tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="2.5" width="9" height="11" rx="1.6"/><path d="M6 5.5h4M6 8h4M6 10.5h2.5"/></svg>剪贴板</div>
+          <div class="m-tab on"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 5.5h7M7.2 3.2l2.3 2.3-2.3 2.3M13.5 10.5h-7M8.8 8.2 6.5 10.5l2.3 2.3"/></svg>传送</div>
+          <div class="m-tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.8v1.8M8 12.4v1.8M1.8 8h1.8M12.4 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M12.4 3.6l-1.3 1.3M4.9 11.1l-1.3 1.3"/></svg>系统</div>
+        </div>
+        <div class="m-body">
+          <div class="m-head">
+            <h2>传送</h2>
+            <div class="m-tools">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/></svg>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13.5 8a5.5 5.5 0 1 1-1.7-4M13.5 2.5V6H10"/></svg>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg>
+            </div>
+          </div>
+          <div class="m-status"><span class="dot"></span>可被附近设备发现 · 端口 53319</div>
+
+          <div class="m-sec">附近设备</div>
+          <div class="m-dev">
+            <div class="m-ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="1.6" width="7" height="12.8" rx="1.6"/><path d="M7 12.6h2"/></svg></div>
+            <div class="m-devmain">
+              <div class="m-devname">小米14</div>
+              <div class="m-devmeta">已配对 · 上次互传 2 分钟前</div>
+            </div>
+            <button class="m-btn">发送</button>
+          </div>
+
+          <div class="m-drop">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
+            <div class="t">拖文件到这里，或点击选择</div>
+            <div class="s">支持多文件 · 断点续传</div>
+          </div>
+
+          <div class="m-sec">进行中<span style="font-weight:500;color:rgba(60,60,67,.5)">2 个</span></div>
+          <div class="m-task">
+            <div class="m-tasktop">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#8E8E93" stroke-width="1.4"><path d="M9.2 1.8H4.5a1.3 1.3 0 0 0-1.3 1.3v9.8a1.3 1.3 0 0 0 1.3 1.3h7a1.3 1.3 0 0 0 1.3-1.3V5.3z"/><path d="M9.2 1.8v3.5h3.6"/></svg>
+              <div class="m-taskname">照片.jpg</div><div class="m-x">✕</div>
+            </div>
+            <div class="m-taskmeta"><span>→ 小米14</span><span class="mono">1.2 / 4.1 MB · 8.4 MB/s</span></div>
+            <div class="m-bar"><i style="width:30%"></i></div>
+          </div>
+          <div class="m-task">
+            <div class="m-tasktop">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#8E8E93" stroke-width="1.4"><path d="M1.8 4.5A1.3 1.3 0 0 1 3.1 3.2h2.7l1.3 1.6h4.8a1.3 1.3 0 0 1 1.3 1.3v5.7a1.3 1.3 0 0 1-1.3 1.3H3.1a1.3 1.3 0 0 1-1.3-1.3z"/></svg>
+              <div class="m-taskname">设计稿.zip</div><div class="m-x">✕</div>
+            </div>
+            <div class="m-taskmeta"><span>← 小米14</span><span class="mono">62% · 2.6 MB/s</span></div>
+            <div class="m-bar"><i class="in" style="width:62%"></i></div>
+          </div>
+
+          <div class="m-sec">最近完成<a href="#">3 个 · 查看历史 ›</a></div>
+          <div class="m-task done">
+            <div class="m-tasktop">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#34C759" stroke-width="2" stroke-linecap="round"><path d="M3.2 8.6 6.3 11.7 12.8 5.2"/></svg>
+              <div class="m-taskname">会议纪要.pdf</div>
+              <div class="m-x" style="font-size:9px">2.3 MB</div>
+            </div>
+          </div>
+        </div>
+        <div class="m-foot">
+          <span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.8 4.5A1.3 1.3 0 0 1 3.1 3.2h2.7l1.3 1.6h4.8a1.3 1.3 0 0 1 1.3 1.3v5.7a1.3 1.3 0 0 1-1.3 1.3H3.1a1.3 1.3 0 0 1-1.3-1.3z"/></svg>局域网互传</span>
+          <span><b>打开</b></span>
+        </div>
+      </div>
+      <div class="cap">日常态</div>
+    </div>
+
+    <!-- 空态 -->
+    <div class="col">
+      <div class="mac">
+        <div class="m-tabs">
+          <div class="m-tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 12.2v.3M5.3 9.4a4 4 0 0 1 5.4 0M2.8 6.9a7.5 7.5 0 0 1 10.4 0"/></svg>网络</div>
+          <div class="m-tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="2.5" width="9" height="11" rx="1.6"/><path d="M6 5.5h4M6 8h4M6 10.5h2.5"/></svg>剪贴板</div>
+          <div class="m-tab on"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 5.5h7M7.2 3.2l2.3 2.3-2.3 2.3M13.5 10.5h-7M8.8 8.2 6.5 10.5l2.3 2.3"/></svg>传送</div>
+          <div class="m-tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.8v1.8M8 12.4v1.8M1.8 8h1.8M12.4 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M12.4 3.6l-1.3 1.3M4.9 11.1l-1.3 1.3"/></svg>系统</div>
+        </div>
+        <div class="m-body">
+          <div class="m-head">
+            <h2>传送</h2>
+            <div class="m-tools">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/></svg>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13.5 8a5.5 5.5 0 1 1-1.7-4M13.5 2.5V6H10"/></svg>
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg>
+            </div>
+          </div>
+          <div class="m-status"><span class="dot off"></span>未发现设备 · 端口 53319</div>
+
+          <div class="m-sec">附近设备</div>
+          <div class="m-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+            <div class="t">附近没有设备</div>
+            <div class="s">确认手机与本机连的是同一个 Wi-Fi<br>部分公共网络会屏蔽设备发现</div>
+            <button>重新扫描</button>
+          </div>
+
+          <div class="m-drop">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
+            <div class="t">拖文件到这里，或点击选择</div>
+            <div class="s">选好后等待对方上线即可发送</div>
+          </div>
+
+          <div class="m-sec">进行中<span style="font-weight:500;color:rgba(60,60,67,.5)">0 个</span></div>
+          <div class="m-empty" style="background:transparent;padding:12px 10px">
+            <div class="s" style="margin:0">没有正在进行的传输</div>
+          </div>
+
+          <div class="m-sec">最近完成<a href="#">3 个 · 查看历史 ›</a></div>
+        </div>
+        <div class="m-foot">
+          <span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.8 4.5A1.3 1.3 0 0 1 3.1 3.2h2.7l1.3 1.6h4.8a1.3 1.3 0 0 1 1.3 1.3v5.7a1.3 1.3 0 0 1-1.3 1.3H3.1a1.3 1.3 0 0 1-1.3-1.3z"/></svg>局域网互传</span>
+          <span><b>打开</b></span>
+        </div>
+      </div>
+      <div class="cap">空态（未发现设备 / 无任务）</div>
+    </div>
+
+    <!-- 未配对 -->
+    <div class="col">
+      <div class="mac">
+        <div class="m-tabs">
+          <div class="m-tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 12.2v.3M5.3 9.4a4 4 0 0 1 5.4 0M2.8 6.9a7.5 7.5 0 0 1 10.4 0"/></svg>网络</div>
+          <div class="m-tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="2.5" width="9" height="11" rx="1.6"/><path d="M6 5.5h4M6 8h4M6 10.5h2.5"/></svg>剪贴板</div>
+          <div class="m-tab on"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 5.5h7M7.2 3.2l2.3 2.3-2.3 2.3M13.5 10.5h-7M8.8 8.2 6.5 10.5l2.3 2.3"/></svg>传送</div>
+          <div class="m-tab"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.8v1.8M8 12.4v1.8M1.8 8h1.8M12.4 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M12.4 3.6l-1.3 1.3M4.9 11.1l-1.3 1.3"/></svg>系统</div>
+        </div>
+        <div class="m-body" style="filter:blur(.5px);opacity:.45">
+          <div class="m-head"><h2>传送</h2></div>
+          <div class="m-status"><span class="dot"></span>可被附近设备发现 · 端口 53319</div>
+          <div class="m-sec">附近设备</div>
+          <div class="m-dev">
+            <div class="m-ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="1.6" width="7" height="12.8" rx="1.6"/><path d="M7 12.6h2"/></svg></div>
+            <div class="m-devmain"><div class="m-devname">小米14</div><div class="m-devmeta">未配对</div></div>
+            <button class="m-btn">发送</button>
+          </div>
+          <div class="m-drop">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
+            <div class="t">拖文件到这里，或点击选择</div>
+          </div>
+        </div>
+        <div class="m-veil">
+          <div class="m-sheet">
+            <h3>小米14 请求发送</h3>
+            <p class="from">设备未配对，确认后在手机上输入配对码</p>
+            <div class="m-files">
+              <div><b>照片.jpg</b><span class="mono">4.1 MB</span></div>
+              <div><b>设计稿.zip</b><span class="mono">18.2 MB</span></div>
+              <div><b>会议纪要.pdf</b><span class="mono">2.3 MB</span></div>
+            </div>
+            <div class="pinlab">配对码</div>
+            <div class="pins"><b>4</b><b>2</b><b>8</b><b>6</b></div>
+            <div class="m-acts"><button class="no">拒绝</button><button class="ok">接受</button></div>
+            <div class="m-note">确认后记住此设备，下次直接传输</div>
+          </div>
+        </div>
+        <div class="m-foot">
+          <span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.8 4.5A1.3 1.3 0 0 1 3.1 3.2h2.7l1.3 1.6h4.8a1.3 1.3 0 0 1 1.3 1.3v5.7a1.3 1.3 0 0 1-1.3 1.3H3.1a1.3 1.3 0 0 1-1.3-1.3z"/></svg>局域网互传</span>
+          <span><b>打开</b></span>
+        </div>
+      </div>
+      <div class="cap">未配对设备发来文件</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 视图 2：Android 三态（apple 主题） ============ -->
+<section id="sec-and" style="display:none">
+  <p class="doc-title">Android 传送 Tab · 日常 / 空态 / 配对</p>
+  <p class="doc-sub">配色、圆角、边框取 DesignTokenTable 的 apple 主题真值：页面 #ffffff、卡片 #f5f5f7、主色 #0071e3、圆角 8/12/18</p>
+  <div class="row" data-theme="apple">
+
+    <!-- 日常 -->
+    <div class="col">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="sb"><span>16:09</span><div class="sb-r">
+            <svg viewBox="0 0 16 12" fill="currentColor"><rect x="0" y="8" width="2.5" height="4" rx=".6"/><rect x="4" y="5.5" width="2.5" height="6.5" rx=".6"/><rect x="8" y="3" width="2.5" height="9" rx=".6"/><rect x="12" y="0" width="2.5" height="12" rx=".6"/></svg>
+            <svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 10.4 5.6 8a3.4 3.4 0 0 1 4.8 0zM8 6.2c-1.6 0-3.1.6-4.2 1.7L2.4 6.5A8 8 0 0 1 8 4.2a8 8 0 0 1 5.6 2.3l-1.4 1.4A5.9 5.9 0 0 0 8 6.2z"/></svg>
+            <svg viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="1"><rect x=".6" y=".6" width="19" height="10.8" rx="2.6"/><rect x="2.4" y="2.4" width="13" height="7.2" rx="1.4" fill="currentColor" stroke="none"/></svg>
+          </div></div>
+          <div class="a-body">
+            <div class="a-head">
+              <h1>传送</h1>
+              <div class="tools">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/></svg>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h">
+                <div class="card-ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="1.6" width="7" height="12.8" rx="1.6"/><path d="M7 12.6h2"/></svg></div>
+                <div class="card-t"><div class="t">本机可被发现</div><div class="s">同一 Wi-Fi 下的设备可向你发送文件</div></div>
+                <div class="sw"><i></i></div>
+              </div>
+              <div class="card-f"><span class="mono">192.168.10.87 · 53319</span><span>小米14</span></div>
+            </div>
+
+            <div class="sec-a">附近设备</div>
+            <div class="dev-a">
+              <div class="card-ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.2" y="3.2" width="11.6" height="7.4" rx="1.3"/><path d="M5.2 13.2h5.6M8 10.6v2.6"/></svg></div>
+              <div class="card-t">
+                <div class="t">bsfeng 的 MacBook Pro</div>
+                <div class="s">已配对 · 2 分钟前互传</div>
+              </div>
+              <span class="pill">在线</span>
+              <button class="btn-a">发送</button>
+            </div>
+
+            <div class="sec-a">进行中<span style="font-weight:500;color:var(--muted)">2 个</span></div>
+            <div class="task-a">
+              <div class="r1">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--muted)" stroke-width="1.4"><path d="M9.2 1.8H4.5a1.3 1.3 0 0 0-1.3 1.3v9.8a1.3 1.3 0 0 0 1.3 1.3h7a1.3 1.3 0 0 0 1.3-1.3V5.3z"/><path d="M9.2 1.8v3.5h3.6"/></svg>
+                <div class="nm">照片.jpg</div><div class="dir">→ MacBook Pro</div>
+              </div>
+              <div class="bar-a"><i style="width:30%"></i></div>
+              <div class="r2"><span class="mono">1.2 / 4.1 MB</span><span class="mono">30% · 8.4 MB/s</span></div>
+            </div>
+            <div class="task-a">
+              <div class="r1">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--muted)" stroke-width="1.4"><path d="M1.8 4.5A1.3 1.3 0 0 1 3.1 3.2h2.7l1.3 1.6h4.8a1.3 1.3 0 0 1 1.3 1.3v5.7a1.3 1.3 0 0 1-1.3 1.3H3.1a1.3 1.3 0 0 1-1.3-1.3z"/></svg>
+                <div class="nm">设计稿.zip</div><div class="dir">← MacBook Pro</div>
+              </div>
+              <div class="bar-a"><i class="in" style="width:62%"></i></div>
+              <div class="r2"><span class="mono">11.3 / 18.2 MB</span><span class="mono">62% · 2.6 MB/s</span></div>
+            </div>
+
+            <div class="sec-a">最近完成<a href="#">3 个 · 查看历史 ›</a></div>
+            <div class="task-a" style="border-color:transparent;background:color-mix(in srgb, var(--success) 8%, transparent)">
+              <div class="r1">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round"><path d="M3.2 8.6 6.3 11.7 12.8 5.2"/></svg>
+                <div class="nm">会议纪要.pdf</div><div class="dir">2.3 MB</div>
+              </div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <div class="tb on"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 5.5h7M7.2 3.2l2.3 2.3-2.3 2.3M13.5 10.5h-7M8.8 8.2 6.5 10.5l2.3 2.3"/></svg>传送</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8h11M2.5 4h11M2.5 12h6"/></svg>实时</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8s2.4-4.2 6.5-4.2S14.5 8 14.5 8s-2.4 4.2-6.5 4.2S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/></svg>广告</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v6M5 8h6"/></svg>记账</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg>设置</div>
+          </div>
+          <div class="home-ind"></div>
+        </div>
+      </div>
+      <div class="cap">日常态 · apple 主题</div>
+    </div>
+
+    <!-- 空态 -->
+    <div class="col">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="sb"><span>16:09</span><div class="sb-r">
+            <svg viewBox="0 0 16 12" fill="currentColor"><rect x="0" y="8" width="2.5" height="4" rx=".6"/><rect x="4" y="5.5" width="2.5" height="6.5" rx=".6"/><rect x="8" y="3" width="2.5" height="9" rx=".6"/><rect x="12" y="0" width="2.5" height="12" rx=".6"/></svg>
+            <svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 10.4 5.6 8a3.4 3.4 0 0 1 4.8 0zM8 6.2c-1.6 0-3.1.6-4.2 1.7L2.4 6.5A8 8 0 0 1 8 4.2a8 8 0 0 1 5.6 2.3l-1.4 1.4A5.9 5.9 0 0 0 8 6.2z"/></svg>
+            <svg viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="1"><rect x=".6" y=".6" width="19" height="10.8" rx="2.6"/><rect x="2.4" y="2.4" width="13" height="7.2" rx="1.4" fill="currentColor" stroke="none"/></svg>
+          </div></div>
+          <div class="a-body">
+            <div class="a-head">
+              <h1>传送</h1>
+              <div class="tools">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/></svg>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h">
+                <div class="card-ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="1.6" width="7" height="12.8" rx="1.6"/><path d="M7 12.6h2"/></svg></div>
+                <div class="card-t"><div class="t">本机可被发现</div><div class="s">同一 Wi-Fi 下的设备可向你发送文件</div></div>
+                <div class="sw"><i></i></div>
+              </div>
+              <div class="card-f"><span class="mono">192.168.10.87 · 53319</span><span>小米14</span></div>
+            </div>
+
+            <div class="sec-a">附近设备<a href="#">重新扫描</a></div>
+            <div class="empty-a">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+              <div class="t">附近没有设备</div>
+              <div class="s">确认对方与本机连的是同一个 Wi-Fi<br>部分公共网络会屏蔽设备发现</div>
+              <button>重新扫描</button>
+            </div>
+
+            <div class="sec-a" style="margin-top:14px">进行中</div>
+            <div class="empty-a" style="padding:18px;border-style:solid;border-color:var(--soft)">
+              <div class="s" style="margin:0">没有正在进行的传输</div>
+            </div>
+
+            <div class="sec-a" style="margin-top:14px">最近完成<a href="#">3 个 · 查看历史 ›</a></div>
+          </div>
+          <div class="tabbar">
+            <div class="tb on"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 5.5h7M7.2 3.2l2.3 2.3-2.3 2.3M13.5 10.5h-7M8.8 8.2 6.5 10.5l2.3 2.3"/></svg>传送</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8h11M2.5 4h11M2.5 12h6"/></svg>实时</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8s2.4-4.2 6.5-4.2S14.5 8 14.5 8s-2.4 4.2-6.5 4.2S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/></svg>广告</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v6M5 8h6"/></svg>记账</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg>设置</div>
+          </div>
+          <div class="home-ind"></div>
+        </div>
+      </div>
+      <div class="cap">空态 · apple 主题</div>
+    </div>
+
+    <!-- 配对 -->
+    <div class="col">
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="sb"><span>16:09</span><div class="sb-r">
+            <svg viewBox="0 0 16 12" fill="currentColor"><rect x="0" y="8" width="2.5" height="4" rx=".6"/><rect x="4" y="5.5" width="2.5" height="6.5" rx=".6"/><rect x="8" y="3" width="2.5" height="9" rx=".6"/><rect x="12" y="0" width="2.5" height="12" rx=".6"/></svg>
+            <svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 10.4 5.6 8a3.4 3.4 0 0 1 4.8 0zM8 6.2c-1.6 0-3.1.6-4.2 1.7L2.4 6.5A8 8 0 0 1 8 4.2a8 8 0 0 1 5.6 2.3l-1.4 1.4A5.9 5.9 0 0 0 8 6.2z"/></svg>
+            <svg viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="1"><rect x=".6" y=".6" width="19" height="10.8" rx="2.6"/><rect x="2.4" y="2.4" width="13" height="7.2" rx="1.4" fill="currentColor" stroke="none"/></svg>
+          </div></div>
+          <div class="a-body" style="filter:blur(.6px);opacity:.5">
+            <div class="a-head"><h1>传送</h1></div>
+            <div class="card">
+              <div class="card-h">
+                <div class="card-ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="1.6" width="7" height="12.8" rx="1.6"/><path d="M7 12.6h2"/></svg></div>
+                <div class="card-t"><div class="t">本机可被发现</div><div class="s">同一 Wi-Fi 下的设备可向你发送文件</div></div>
+                <div class="sw"><i></i></div>
+              </div>
+            </div>
+            <div class="sec-a">附近设备</div>
+            <div class="dev-a">
+              <div class="card-ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.2" y="3.2" width="11.6" height="7.4" rx="1.3"/><path d="M5.2 13.2h5.6M8 10.6v2.6"/></svg></div>
+              <div class="card-t"><div class="t">bsfeng 的 MacBook Pro</div><div class="s">未配对</div></div>
+              <button class="btn-a">发送</button>
+            </div>
+          </div>
+          <div class="veil-a">
+            <div class="sheet-a">
+              <h3>输入配对码</h3>
+              <p class="sub">在 Mac 的传送面板上查看 4 位配对码</p>
+              <div class="pin-a"><b>4</b><b>2</b><b>8</b><b class="f">6</b></div>
+              <div class="acts-a"><button class="no">取消</button><button class="ok">确认发送</button></div>
+            </div>
+          </div>
+          <div class="home-ind" style="z-index:6;color:#000"></div>
+        </div>
+      </div>
+      <div class="cap">作为发送方输入配对码</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============ 视图 4：动效与音效 ============ -->
+<section id="sec-motion" style="display:none">
+  <p class="doc-title">动效与音效演示</p>
+  <p class="doc-sub">点按钮触发真实动画与合成音效；时长与曲线取 DesignTokenTable 的 dur-* / ease-*，完成音默认开、其余默认关</p>
+  <div class="row" style="gap:48px;align-items:flex-start">
+
+    <div class="col">
+      <div class="phone" data-theme="apple">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="sb"><span>16:09</span><div class="sb-r">
+            <svg viewBox="0 0 16 12" fill="currentColor"><rect x="0" y="8" width="2.5" height="4" rx=".6"/><rect x="4" y="5.5" width="2.5" height="6.5" rx=".6"/><rect x="8" y="3" width="2.5" height="9" rx=".6"/><rect x="12" y="0" width="2.5" height="12" rx=".6"/></svg>
+            <svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 10.4 5.6 8a3.4 3.4 0 0 1 4.8 0zM8 6.2c-1.6 0-3.1.6-4.2 1.7L2.4 6.5A8 8 0 0 1 8 4.2a8 8 0 0 1 5.6 2.3l-1.4 1.4A5.9 5.9 0 0 0 8 6.2z"/></svg>
+            <svg viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="1"><rect x=".6" y=".6" width="19" height="10.8" rx="2.6"/><rect x="2.4" y="2.4" width="13" height="7.2" rx="1.4" fill="currentColor" stroke="none"/></svg>
+          </div></div>
+          <div class="a-body">
+            <div class="a-head"><h1>传送</h1>
+              <div class="tools">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/></svg>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-h">
+                <div class="card-ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="1.6" width="7" height="12.8" rx="1.6"/><path d="M7 12.6h2"/></svg></div>
+                <div class="card-t"><div class="t">本机可被发现</div><div class="s">同一 Wi-Fi 下的设备可向你发送文件</div></div>
+                <div class="sw"><i></i></div>
+              </div>
+            </div>
+            <div class="sec-a">附近设备</div>
+            <div id="demo-devices"></div>
+            <div class="sec-a">进行中</div>
+            <div id="demo-tasks"><div class="demo-empty" id="demo-empty">点右侧按钮试试</div></div>
+          </div>
+          <div class="tabbar">
+            <div class="tb on"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 5.5h7M7.2 3.2l2.3 2.3-2.3 2.3M13.5 10.5h-7M8.8 8.2 6.5 10.5l2.3 2.3"/></svg>传送</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8h11M2.5 4h11M2.5 12h6"/></svg>实时</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8s2.4-4.2 6.5-4.2S14.5 8 14.5 8s-2.4 4.2-6.5 4.2S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/></svg>广告</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v6M5 8h6"/></svg>记账</div>
+            <div class="tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg>设置</div>
+          </div>
+          <div class="home-ind"></div>
+        </div>
+      </div>
+      <div class="cap">按钮触发的都是真实动画</div>
+    </div>
+
+    <div class="ctl">
+      <div class="ctl-card">
+        <div class="ctl-t">触发一个场景</div>
+        <div class="ctl-btns">
+          <button class="primary" data-act="recv">接收一个文件</button>
+          <button data-act="send">发送一个文件</button>
+          <button data-act="fail">传输失败</button>
+          <button data-act="pair">弹出配对</button>
+          <button data-act="online">设备上线</button>
+          <button data-act="clear">清空</button>
+        </div>
+      </div>
+
+      <div class="ctl-card">
+        <div class="ctl-t">音效</div>
+        <div class="ctl-row"><span>传输完成音</span><span class="hint">默认开</span><div class="tsw" id="sw-done"><i></i></div></div>
+        <div class="ctl-row"><span>失败提示音</span><span class="hint">默认关</span><div class="tsw off" id="sw-fail"><i></i></div></div>
+        <div class="ctl-row"><span>新设备提示音</span><span class="hint">默认关</span><div class="tsw off" id="sw-dev"><i></i></div></div>
+        <div class="ctl-row"><span class="hint">音色：系统通知音 / ToneGenerator</span></div>
+      </div>
+
+      <div class="ctl-card">
+        <div class="ctl-t">本演示用到的动效</div>
+        <div class="spec">
+          卡片入场 <code>rise 340ms ease-out</code><br>
+          进度推进 <code>width 120ms ease-standard</code><br>
+          完成 <code>pop 220ms ease-spring</code><br>
+          失败 <code>shake 300ms ease-in</code><br>
+          配对弹层 <code>scale 220ms ease-out</code><br>
+          按钮按下 <code>scale .96 / 120ms</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="veil-a" id="demo-veil" style="display:none;position:absolute;inset:0;border-radius:0;align-items:center">
+    <div class="sheet-a od-sheet" style="width:320px;border-radius:20px" data-theme="apple">
+      <h3>输入配对码</h3>
+      <p class="sub">在 Mac 的传送面板上查看 4 位配对码</p>
+      <div class="pin-a"><b>4</b><b>2</b><b>8</b><b class="f">6</b></div>
+      <div class="acts-a"><button class="no" onclick="document.getElementById('demo-veil').style.display='none'">取消</button><button class="ok" onclick="document.getElementById('demo-veil').style.display='none'">确认发送</button></div>
+    </div>
+  </div>
+</section>
+<!-- ============ 视图 3：8 套主题对比 ============ -->
+<section id="sec-themes" style="display:none">
+  <p class="doc-title">同一屏 · 8 套主题</p>
+  <p class="doc-sub">颜色、圆角、边框全部走 DesignTokenTable token，不写死色值；切主题时 bg / surface / accent / radius 同步变化</p>
+  <div class="theme-grid" id="theme-grid"></div>
+</section>
+
+<template id="tpl-mini">
+  <div class="tw">
+    <div class="mini">
+      <div class="m-sb"><span>16:09</span><span style="opacity:.45;letter-spacing:1px">▮▮▮</span></div>
+      <div class="m-body">
+        <div class="m-title">传送</div>
+        <div class="m-card">
+          <div class="m-row">
+            <div class="m-ci"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4.5" y="1.6" width="7" height="12.8" rx="1.6"/><path d="M7 12.6h2"/></svg></div>
+            <div><div class="m-t1">本机可被发现</div><div class="m-t2">同一 Wi-Fi 下可见</div></div>
+            <div class="m-sw"><i></i></div>
+          </div>
+        </div>
+        <div class="m-card">
+          <div class="m-row">
+            <div class="m-ci"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.2" y="3.2" width="11.6" height="7.4" rx="1.3"/><path d="M5.2 13.2h5.6M8 10.6v2.6"/></svg></div>
+            <div style="min-width:0"><div class="m-t1">MacBook Pro</div><div class="m-t2">已配对 · 2 分钟前</div></div>
+            <button class="m-btn">发送</button>
+          </div>
+        </div>
+        <div class="m-card">
+          <div class="m-row">
+            <div><div class="m-t1">照片.jpg</div><div class="m-t2">→ MacBook Pro</div></div>
+            <div class="m-t2 mono" style="margin-left:auto">30%</div>
+          </div>
+          <div class="m-bar"><i style="width:30%"></i></div>
+        </div>
+        <div class="m-card">
+          <div class="m-row">
+            <div><div class="m-t1">设计稿.zip</div><div class="m-t2">← MacBook Pro</div></div>
+            <div class="m-t2 mono" style="margin-left:auto">62%</div>
+          </div>
+          <div class="m-bar"><i class="in" style="width:62%"></i></div>
+        </div>
+      </div>
+      <div class="m-tabbar">
+        <div class="m-tb on"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 5.5h7M7.2 3.2l2.3 2.3-2.3 2.3M13.5 10.5h-7M8.8 8.2 6.5 10.5l2.3 2.3"/></svg>传送</div>
+        <div class="m-tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 8h11M2.5 4h11M2.5 12h6"/></svg>实时</div>
+        <div class="m-tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8s2.4-4.2 6.5-4.2S14.5 8 14.5 8s-2.4 4.2-6.5 4.2S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/></svg>广告</div>
+        <div class="m-tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2"/><path d="M8 5v6M5 8h6"/></svg>记账</div>
+        <div class="m-tb"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg>设置</div>
+      </div>
+    </div>
+    <div class="name"></div>
+    <div class="id"></div>
+  </div>
+</template>
+
+<script>
+  const THEMES = [["apple","Apple"],["glassmorphism","玻璃拟态"],["notion","Notion"],["stripe","Stripe"],
+                  ["claude","Claude"],["ibm","IBM"],["kami","Kami"],["bento","Bento"]];
+  const grid = document.getElementById('theme-grid');
+  const tpl = document.getElementById('tpl-mini');
+  THEMES.forEach(([id,name])=>{
+    const n = tpl.content.cloneNode(true);
+    n.querySelector('.mini').setAttribute('data-theme', id);
+    n.querySelector('.name').textContent = name;
+    n.querySelector('.id').textContent = id;
+    grid.appendChild(n);
+  });
+  
+  // ===== 动效与音效演示 =====
+  let ac = null;
+  const snd = { done:true, fail:false, dev:false };
+  function tone(freq, start, dur, type='triangle', gain=0.055){
+    if(!ac) return;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, ac.currentTime + start);
+    g.gain.linearRampToValueAtTime(gain, ac.currentTime + start + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0008, ac.currentTime + start + dur);
+    o.connect(g).connect(ac.destination);
+    o.start(ac.currentTime + start); o.stop(ac.currentTime + start + dur + 0.02);
+  }
+  function play(kind){
+    if(!ac){ try{ ac = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; } }
+    if(ac.state === 'suspended') ac.resume();
+    if(kind === 'done' && snd.done){ tone(880,0,.09); tone(1108,.08,.09); tone(1318,.16,.16); }
+    if(kind === 'sent' && snd.done){ tone(988,0,.1); tone(740,.09,.15); }
+    if(kind === 'fail' && snd.fail){ tone(330,0,.13,'sawtooth',.04); tone(220,.12,.2,'sawtooth',.04); }
+    if(kind === 'dev' && snd.dev){ tone(1320,0,.07); }
+  }
+  document.querySelectorAll('.tsw').forEach(sw=>{
+    sw.addEventListener('click', ()=>{
+      sw.classList.toggle('off');
+      const on = !sw.classList.contains('off');
+      if(sw.id==='sw-done') snd.done = on;
+      if(sw.id==='sw-fail') snd.fail = on;
+      if(sw.id==='sw-dev') snd.dev = on;
+      if(on) play('dev');
+    });
+  });
+
+  const taskBox = document.getElementById('demo-tasks');
+  const emptyTip = document.getElementById('demo-empty');
+  const devBox = document.getElementById('demo-devices');
+  let seq = 0;
+
+  function addTask(name, dir, ok){
+    if(emptyTip) emptyTip.style.display = 'none';
+    const el = document.createElement('div');
+    el.className = 'task-a od-rise';
+    el.innerHTML = `<div class="r1">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--muted)" stroke-width="1.4"><path d="M9.2 1.8H4.5a1.3 1.3 0 0 0-1.3 1.3v9.8a1.3 1.3 0 0 0 1.3 1.3h7a1.3 1.3 0 0 0 1.3-1.3V5.3z"/><path d="M9.2 1.8v3.5h3.6"/></svg>
+        <div class="nm">${name}</div><div class="dir">${dir}</div></div>
+      <div class="bar-a"><i class="${ok?'':'in'}" style="width:0%"></i></div>
+      <div class="r2"><span class="mono px">0.0 / 4.1 MB</span><span class="mono pc">0%</span></div>`;
+    taskBox.prepend(el);
+    const bar = el.querySelector('.bar-a i');
+    bar.classList.add('demo-bar');
+    return { el, bar, name, ok };
+  }
+
+  function run(t, fail){
+    let p = 0;
+    const pc = t.el.querySelector('.pc'), px = t.el.querySelector('.px');
+    const timer = setInterval(()=>{
+      p = Math.min(100, p + (fail ? 7 : 11));
+      t.bar.style.width = p + '%';
+      pc.textContent = p + '%';
+      px.textContent = (4.1*p/100).toFixed(1) + ' / 4.1 MB';
+      if(p >= 100 || (fail && p >= 42)){
+        clearInterval(timer);
+        if(fail){
+          t.el.classList.add('od-shake');
+          t.el.style.borderColor = 'var(--danger)';
+          t.el.style.background = 'color-mix(in srgb, var(--danger) 7%, transparent)';
+          t.el.querySelector('.dir').textContent = '传输失败';
+          play('fail');
+        } else {
+          t.el.style.borderColor = 'transparent';
+          t.el.style.background = 'color-mix(in srgb, var(--success) 8%, transparent)';
+          t.el.querySelector('.dir').innerHTML = '<span class="od-pop" style="display:inline-block;color:var(--success)">已完成 ✓</span>';
+          play(t.ok ? 'done' : 'sent');
+        }
+      }
+    }, 90);
+  }
+
+  document.querySelectorAll('[data-act]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const a = b.dataset.act;
+      if(a === 'clear'){
+        taskBox.innerHTML = '<div class="demo-empty" id="demo-empty">点右侧按钮试试</div>';
+        devBox.innerHTML = ''; return;
+      }
+      if(a === 'pair'){
+        const v = document.getElementById('demo-veil');
+        v.style.display = 'flex';
+        v.querySelector('.sheet-a').classList.remove('od-sheet');
+        void v.offsetWidth;
+        v.querySelector('.sheet-a').classList.add('od-sheet');
+        return;
+      }
+      if(a === 'online'){
+        devBox.innerHTML = '';
+        const d = document.createElement('div');
+        d.className = 'dev-a od-rise';
+        d.innerHTML = `<div class="card-ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.2" y="3.2" width="11.6" height="7.4" rx="1.3"/><path d="M5.2 13.2h5.6M8 10.6v2.6"/></svg></div>
+          <div class="card-t"><div class="t">bsfeng 的 MacBook Pro</div><div class="s">已配对 · 刚刚上线</div></div>
+          <span class="pill">在线</span><button class="btn-a">发送</button>`;
+        devBox.appendChild(d);
+        play('dev');
+        return;
+      }
+      seq++;
+      const recv = a === 'recv';
+      const t = addTask(recv ? `照片${seq}.jpg` : `文档${seq}.pdf`, recv ? '← MacBook Pro' : '→ MacBook Pro', recv);
+      run(t, a === 'fail');
+    });
+  });
+
+  const q = new URLSearchParams(location.search);
+  if(q.get('auto')){
+    setTimeout(()=>{ document.querySelector('[data-act="recv"]').click(); }, 150);
+    setTimeout(()=>{ document.querySelector('[data-act="online"]').click(); }, 350);
+  }
+  const v = new URLSearchParams(location.search).get('view') || 'mac';
+  document.querySelectorAll('section').forEach(s=>{ s.style.display = (s.id === 'sec-'+v) ? 'block' : 'none'; });
+</script>
+</body>
+</html>
