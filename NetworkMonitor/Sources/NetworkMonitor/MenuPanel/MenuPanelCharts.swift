@@ -92,8 +92,9 @@ final class MenuPanelBarsView: NSView {
             ]
             let valueText = bar.valueText as NSString
             let valueSize = valueText.size(withAttributes: valueAttributes)
-            valueText.draw(at: NSPoint(x: centerX - valueSize.width / 2, y: 0),
-                           withAttributes: valueAttributes)
+            // 贴边钳制：最右桶的数值文案不会被画布裁掉
+            let valueX = min(max(0, centerX - valueSize.width / 2), max(0, bounds.width - valueSize.width))
+            valueText.draw(at: NSPoint(x: valueX, y: 0), withAttributes: valueAttributes)
 
             // 柱体：相对最大值归一化，最小 2pt 保证「有数据就一定看得见」
             let ratio = ratios[index]
@@ -109,8 +110,8 @@ final class MenuPanelBarsView: NSView {
             ]
             let label = bar.label as NSString
             let labelSize = label.size(withAttributes: labelAttributes)
-            label.draw(at: NSPoint(x: centerX - labelSize.width / 2, y: barBottom + 6),
-                       withAttributes: labelAttributes)
+            let labelX = min(max(0, centerX - labelSize.width / 2), max(0, bounds.width - labelSize.width))
+            label.draw(at: NSPoint(x: labelX, y: barBottom + 6), withAttributes: labelAttributes)
         }
     }
 }

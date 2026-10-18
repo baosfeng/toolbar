@@ -11,6 +11,8 @@ final class BillingUsageSectionView: NSView {
 
     private let rangeSelector = BillingRangeSegmentedView()
     private let headerRow = NSStackView()
+    /// 明细缺失说明入口（悬停提示；正常数据下隐藏）
+    private let metricHintButton = NSButton()
     private let metricsLine1 = BillingUsageSectionView.makeLineLabel()
     private let metricsLine2 = BillingUsageSectionView.makeLineLabel()
     private let barsView = MenuPanelBarsView()
@@ -40,8 +42,25 @@ final class BillingUsageSectionView: NSView {
         headerRow.orientation = .horizontal
         headerRow.alignment = .centerY
         headerRow.spacing = 6
+        // 服务端不返回金额 / token 时的说明入口（悬停提示），正常数据下隐藏
+        metricHintButton.image = NSImage(systemSymbolName: "questionmark.circle",
+                                         accessibilityDescription: "用量明细说明")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .regular))
+        metricHintButton.isBordered = false
+        metricHintButton.bezelStyle = .inline
+        metricHintButton.contentTintColor = BillingPaneStyle.secondaryText
+        metricHintButton.toolTip = "该计划仅返回请求数，Ollama 不提供金额与 token 明细"
+        metricHintButton.setAccessibilityLabel("用量明细说明")
+        metricHintButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            metricHintButton.widthAnchor.constraint(equalToConstant: 14),
+            metricHintButton.heightAnchor.constraint(equalToConstant: 14),
+        ])
+        metricHintButton.isHidden = true
+
         headerRow.addArrangedSubview(usageTitle)
         headerRow.addArrangedSubview(MenuPanelLabel.spacer())
+        headerRow.addArrangedSubview(metricHintButton)
         headerRow.addArrangedSubview(rangeSelector)
 
         // 柱状图无障碍标签按额度页语义覆盖（复用视图默认是「近 6 日下行流量」）
@@ -103,6 +122,8 @@ final class BillingUsageSectionView: NSView {
         guard let usage else {
             metricsLine1.attributedStringValue = Self.metricsLine(totals: nil)
             metricsLine2.attributedStringValue = Self.tokenLine(totals: nil)
+            metricsLine2.isHidden = false
+            metricHintButton.isHidden = true
             barsView.bars = []
             axisRow.update(left: "", right: "")
             updateModels(groups: [], shows: false)
@@ -110,7 +131,13 @@ final class BillingUsageSectionView: NSView {
         }
 
         metricsLine1.attributedStringValue = Self.metricsLine(totals: usage.totals)
-        metricsLine2.attributedStringValue = Self.tokenLine(totals: usage.totals)
+        let hasTokens = Self.hasTokenDetail(usage.totals)
+        metricsLine2.isHidden = !hasTokens
+        if hasTokens {
+            metricsLine2.attributedStringValue = Self.tokenLine(totals: usage.totals)
+        }
+        // 金额与 token 都缺（遗留计划只返回 request_count）：正文不占位，改由「?」悬停说明
+        metricHintButton.isHidden = usage.totals.usageUSD != nil || hasTokens
         barsView.bars = Self.makeBars(usage)
         axisRow.update(left: Self.axisLeft(usage), right: usage.granularity == .hour ? "现在" : "今天")
         updateModels(groups: usage.groups, shows: showsModelBreakdown)
@@ -203,6 +230,11 @@ final class BillingUsageSectionView: NSView {
 
     // MARK: - 指标文案
 
+    /// 是否有 token 明细（遗留计划不返回；全空时整行隐藏）
+    private static func hasTokenDetail(_ totals: BillingMetrics) -> Bool {
+        totals.inputTokens != nil || totals.cachedInputTokens != nil || totals.outputTokens != nil
+    }
+
     /// 指标行 1：请求 N 次 · 花费 $X
     private static func metricsLine(totals: BillingMetrics?) -> NSAttributedString {
         let result = NSMutableAttributedString()
@@ -210,22 +242,20 @@ final class BillingUsageSectionView: NSView {
         result.append(segment(totals.map { "\($0.requestCount)" } ?? "—",
                               font: BillingPaneStyle.metricValueFont, color: .labelColor))
         result.append(segment(" 次", font: BillingPaneStyle.labelFont, color: BillingPaneStyle.secondaryText))
-        result.append(segment(" · ", font: BillingPaneStyle.labelFont, color: BillingPaneStyle.tertiaryText))
-        result.append(segment("花费 ", font: BillingPaneStyle.labelFont, color: BillingPaneStyle.secondaryText))
-        result.append(segment(totals?.usageUSD.flatMap { formatUSD($0) } ?? "—",
-                              font: BillingPaneStyle.metricValueFont, color: .labelColor))
+        // 金额缺失（遗留计划）时不占位，说明见表头「?」
+        if let usd = totals?.usageUSD {
+            result.append(segment(" · ", font: BillingPaneStyle.labelFont,
+                                  color: BillingPaneStyle.tertiaryText))
+            result.append(segment("花费 ", font: BillingPaneStyle.labelFont,
+                                  color: BillingPaneStyle.secondaryText))
+            result.append(segment(formatUSD(usd), font: BillingPaneStyle.metricValueFont,
+                                  color: .labelColor))
+        }
         return result
     }
 
     /// 指标行 2：输入 / 缓存 / 输出 token
-    ///
-    /// 遗留计划只返回请求数（金额与 token 均为空）→ 明确提示，而不是三处「—」。
     private static func tokenLine(totals: BillingMetrics?) -> NSAttributedString {
-        if let totals,
-           totals.inputTokens == nil, totals.cachedInputTokens == nil, totals.outputTokens == nil {
-            return segment("该计划不返回 token 明细", font: BillingPaneStyle.labelFont,
-                           color: BillingPaneStyle.tertiaryText)
-        }
         let result = NSMutableAttributedString()
         let items: [(String, String)] = [
             ("输入 ", tokenText(totals?.inputTokens ?? nil)),
@@ -261,102 +291,5 @@ final class BillingUsageSectionView: NSView {
         label.maximumNumberOfLines = 1
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
-    }
-}
-
-// MARK: - 图表坐标轴 / 分隔线
-
-/// 图表首尾坐标轴 — 左首桶时间、右「现在 / 今天」
-final class BillingAxisRow: NSView {
-
-    private let leftLabel = MenuPanelLabel.text("", font: BillingPaneStyle.axisFont,
-                                                color: BillingPaneStyle.tertiaryText)
-    private let rightLabel = MenuPanelLabel.text("", font: BillingPaneStyle.axisFont,
-                                                 color: BillingPaneStyle.tertiaryText)
-
-    init() {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        rightLabel.alignment = .right
-        let stack = NSStackView(views: [leftLabel, MenuPanelLabel.spacer(), rightLabel])
-        stack.orientation = .horizontal
-        stack.alignment = .firstBaseline
-        stack.spacing = 8
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            heightAnchor.constraint(equalToConstant: 14),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    func update(left: String, right: String) {
-        leftLabel.stringValue = left
-        rightLabel.stringValue = right
-    }
-}
-
-/// 1pt 浅分隔线（10% 前景色，深浅色自适应）
-final class BillingDividerView: NSView {
-
-    init() {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: 1).isActive = true
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override func draw(_ dirtyRect: NSRect) {
-        BillingPaneStyle.hairline.setFill()
-        bounds.fill()
-    }
-}
-
-// MARK: - 模型明细行
-
-/// 模型明细行 — 模型名（等宽截断）+ 请求次数 + 金额（右对齐，最小 52pt）
-final class BillingModelRow: MenuPanelRow {
-
-    private let nameLabel: NSTextField
-    private let requestLabel: NSTextField
-    private let amountLabel: NSTextField
-
-    init() {
-        nameLabel = MenuPanelLabel.text("", font: BillingPaneStyle.modelNameFont,
-                                        color: BillingPaneStyle.secondaryText)
-        requestLabel = MenuPanelLabel.text("", font: BillingPaneStyle.modelRequestFont,
-                                           color: BillingPaneStyle.tertiaryText)
-        amountLabel = MenuPanelLabel.text("", font: BillingPaneStyle.modelAmountFont, color: .labelColor)
-        super.init(height: 22, onClick: nil)
-        requestLabel.setContentHuggingPriority(.required, for: .horizontal)
-        requestLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        amountLabel.alignment = .right
-        amountLabel.setContentHuggingPriority(.required, for: .horizontal)
-        amountLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        contentStack.addArrangedSubview(nameLabel)
-        contentStack.addArrangedSubview(MenuPanelLabel.spacer())
-        contentStack.addArrangedSubview(requestLabel)
-        contentStack.addArrangedSubview(amountLabel)
-        amountLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    /// 更新一行模型明细
-    func update(name: String, requests: Int, usd: Double?) {
-        nameLabel.stringValue = name
-        nameLabel.toolTip = name
-        requestLabel.stringValue = "\(requests) 次"
-        amountLabel.stringValue = usd.map { formatUSD($0) } ?? "—"
-        setAccessibilityLabel("\(name) \(requests) 次 \(amountLabel.stringValue)")
     }
 }
