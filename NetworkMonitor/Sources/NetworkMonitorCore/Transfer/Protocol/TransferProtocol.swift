@@ -366,6 +366,7 @@ public extension TransferError {
     var httpStatus: Int {
         switch self {
         case .routeNotFound: return 404
+        case .payloadTooLarge: return 413
         case .invalidRequest, .malformedBody, .tokenMismatch, .sessionNotFound,
              .offsetMismatch, .diskFull, .checksumMismatch, .denied, .confirmTimeout,
              .illegalTransition, .remote:

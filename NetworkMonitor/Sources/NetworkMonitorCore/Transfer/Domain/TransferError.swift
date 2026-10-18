@@ -26,6 +26,8 @@ public enum TransferError: Error, Equatable, Sendable {
     case offsetMismatch(expected: Int64, received: Int64)
     /// 接收端磁盘空间不足
     case diskFull(required: Int64, available: Int64)
+    /// 上传体积超过上限（扫码接收单文件 2 GiB，HTTP 413）
+    case payloadTooLarge(limit: Int64)
     /// sha256 校验失败
     case checksumMismatch(expected: String, actual: String)
     /// 用户拒绝
@@ -46,6 +48,7 @@ public enum TransferError: Error, Equatable, Sendable {
         case .sessionNotFound: return 4002
         case .offsetMismatch: return 4003
         case .diskFull: return 4004
+        case .payloadTooLarge: return 4008
         case .checksumMismatch: return 4005
         case .denied: return 4006
         case .confirmTimeout: return 4007
@@ -70,6 +73,8 @@ public enum TransferError: Error, Equatable, Sendable {
             return "offset 与已收字节不匹配（期望 \(expected)，收到 \(received)）"
         case .diskFull(let required, let available):
             return "磁盘空间不足：需要 \(formatBytesFull(UInt64(max(0, required))))，可用 \(formatBytesFull(UInt64(max(0, available))))"
+        case .payloadTooLarge(let limit):
+            return "文件超过单文件上限（\(formatBytesFull(UInt64(max(0, limit))))）"
         case .checksumMismatch(let expected, let actual):
             return "sha256 校验失败（期望 \(expected)，实际 \(actual)）"
         case .denied: return "用户拒绝接收"
