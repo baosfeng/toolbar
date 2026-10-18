@@ -36,7 +36,8 @@ extension TransferService {
             decision: nil,
             receiveFiles: [:],
             sourceFiles: prepared.sources,
-            peerDeviceId: device.deviceId)
+            peerDeviceId: device.deviceId,
+            peerAlias: device.alias)
         contexts[sessionId] = context
         notifySessions()
 

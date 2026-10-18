@@ -57,7 +57,7 @@ extension TransferService {
     // MARK: - 会话构造
 
     /// 创建接收会话（文件名在此阶段一次确定）
-    func makeOfferContext(request: OfferRequest, paired: Bool,
+    func makeOfferContext(request: OfferRequest, approved: Bool,
                                   now: Date) -> SessionContext {
         let sessionId = Self.randomHex(bytes: 16)
         let token = Self.randomHex(bytes: 16)
@@ -84,19 +84,20 @@ extension TransferService {
                                       peerDeviceId: request.senderDeviceId,
                                       token: token,
                                       files: files,
-                                      state: paired ? .transferring : .awaitingConfirm,
+                                      state: approved ? .transferring : .awaitingConfirm,
                                       createdAt: now,
                                       directory: configuration.receiveDirectory)
 
         return SessionContext(session: session,
                               peerIP: "",
                               peerPort: 0,
-                              pin: paired ? nil : PairingStore.generatePIN(),
-                              pinExpiresAt: paired ? nil : now.addingTimeInterval(configuration.confirmTimeout),
-                              decision: paired ? .approved : nil,
+                              pin: approved ? nil : PairingStore.generatePIN(),
+                              pinExpiresAt: approved ? nil : now.addingTimeInterval(configuration.confirmTimeout),
+                              decision: approved ? .approved : nil,
                               receiveFiles: receiveFiles,
                               sourceFiles: [:],
-                              peerDeviceId: request.senderDeviceId)
+                              peerDeviceId: request.senderDeviceId,
+                              peerAlias: request.senderAlias)
     }
 
     /// 已接受的续传偏移（`.part` 大小落在合法区间才 > 0）
