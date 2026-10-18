@@ -32,3 +32,9 @@ reasonix.toml
 
 # codebase-memory 知识图谱缓存（工具自动生成）
 .codebase-memory/
+
+# git worktree 工作目录（含构建产物，不入库）
+.worktrees/
+
+# Open Design 原型工作区：过程截图与落选稿不入库，只归档设计决策文档与定稿原型
+.open-design/
