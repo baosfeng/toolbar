@@ -159,8 +159,16 @@ public final class HttpServer: @unchecked Sendable {
             return
         }
 
-        let isUpload = head.method == "PUT" && head.path == TransferProtocol.uploadPath
-        if isUpload {
+        // 流式上传：`PUT /api/v1/upload`（会话续传）与 `POST /scan/upload`（扫码直传）
+        let isStreamingUpload = (head.method == "PUT" && head.path == TransferProtocol.uploadPath)
+            || (head.method == "POST" && head.path == ScanProtocol.uploadPath)
+        if isStreamingUpload {
+            // 扫码通道在进入业务层前先挡掉超大请求，避免为超限文件做磁盘预检或落盘
+            if head.path == ScanProtocol.uploadPath, head.contentLength > ScanProtocol.maxFileBytes {
+                respond(connection: connection,
+                        response: .failure(.payloadTooLarge(limit: ScanProtocol.maxFileBytes)))
+                return
+            }
             let reader = HttpBodyReader(connection: connection,
                                         remaining: head.contentLength,
                                         preloaded: preloaded)

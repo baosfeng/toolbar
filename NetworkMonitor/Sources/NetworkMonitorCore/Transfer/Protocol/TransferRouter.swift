@@ -32,9 +32,13 @@ public protocol TransferRouteHandling: AnyObject, Sendable {
 public final class TransferRouter: @unchecked Sendable {
 
     private let handler: any TransferRouteHandling
+    /// 扫码接收通道（未装配时 `/scan` 按路由不存在处理）
+    private let scanHandler: (any ScanRouteHandling)?
 
-    public init(handler: any TransferRouteHandling) {
+    public init(handler: any TransferRouteHandling,
+                scanHandler: (any ScanRouteHandling)? = nil) {
         self.handler = handler
+        self.scanHandler = scanHandler
     }
 
     /// 分发并返回响应（每连接一请求，调用方写完即关闭连接）
@@ -52,6 +56,9 @@ public final class TransferRouter: @unchecked Sendable {
     // MARK: - 内部
 
     private func dispatch(_ request: HttpRequest, body: HttpBodyReader?) async throws -> HttpResponse {
+        if request.path == ScanProtocol.pagePath || request.path == ScanProtocol.uploadPath {
+            return try await dispatchScan(request, body: body)
+        }
         switch (request.method, request.path) {
         case ("GET", TransferProtocol.infoPath):
             let info = await handler.deviceInfo()
@@ -108,6 +115,45 @@ public final class TransferRouter: @unchecked Sendable {
 
         default:
             // 路径存在但方法不对，也按「路由不存在」返回，避免暴露内部结构
+            throw TransferError.routeNotFound("\(request.method) \(request.path)")
+        }
+    }
+
+    /// 扫码接收分派（`/scan`、`/scan/upload`）
+    ///
+    /// token 校验统一交给 `ScanRouteHandling`：缺失与伪造、过期都返回 4001，
+    /// 避免通过状态码差异探测 token 是否存在。
+    private func dispatchScan(_ request: HttpRequest,
+                              body: HttpBodyReader?) async throws -> HttpResponse {
+        guard let scanHandler else {
+            throw TransferError.routeNotFound("\(request.method) \(request.path)")
+        }
+        switch (request.method, request.path) {
+        case ("GET", ScanProtocol.pagePath):
+            let token = request.queryValue("t") ?? ""
+            switch await scanHandler.scanPage(token: token) {
+            case .success(let html):
+                return HttpResponse(status: 200,
+                                    headers: ["Content-Type": ScanPageRenderer.contentType],
+                                    body: Data(html.utf8))
+            case .failure(let error):
+                return .failure(error)
+            }
+
+        case ("POST", ScanProtocol.uploadPath):
+            let token = request.queryValue("t") ?? ""
+            guard let name = request.queryValue("name"), !name.isEmpty else {
+                throw TransferError.invalidRequest("缺少 name 参数")
+            }
+            guard let body else {
+                throw TransferError.invalidRequest("缺少请求体读取器")
+            }
+            let contentLength = Int64(request.header("content-length") ?? "") ?? 0
+            let result = await scanHandler.scanUpload(token: token, name: name,
+                                                      contentLength: contentLength, body: body)
+            return respond(result)
+
+        default:
             throw TransferError.routeNotFound("\(request.method) \(request.path)")
         }
     }

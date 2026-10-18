@@ -93,6 +93,8 @@ public actor TransferService: TransferRouteHandling {
     let knownPeers: KnownPeerStore?
     let logger: LoggingService
     let configuration: Configuration
+    /// 扫码接收 token（纯逻辑，时钟/随机源可注入）
+    let scanTokens: ScanTokenStore
     private let server: HttpServer
     let httpClient: TransferHTTPClient
     private let observerQueue: DispatchQueue
@@ -119,6 +121,7 @@ public actor TransferService: TransferRouteHandling {
                 pairing: PairingStore = PairingStore(),
                 preferences: TransferPreferences = TransferPreferences(),
                 knownPeers: KnownPeerStore? = nil,
+                scanTokens: ScanTokenStore = ScanTokenStore(),
                 logger: LoggingService = AppContext.shared.logger,
                 observerQueue: DispatchQueue = .main) {
         self.localIdentity = identity
@@ -127,6 +130,7 @@ public actor TransferService: TransferRouteHandling {
         self.pairing = pairing
         self.preferences = preferences
         self.knownPeers = knownPeers
+        self.scanTokens = scanTokens
         self.logger = logger
         self.observerQueue = observerQueue
         self.server = HttpServer(logger: logger)
@@ -143,7 +147,7 @@ public actor TransferService: TransferRouteHandling {
                       startDiscovery: Bool = true) async throws -> UInt16 {
         if started, localIdentity.port > 0 { return UInt16(localIdentity.port) }
 
-        let router = TransferRouter(handler: self)
+        let router = TransferRouter(handler: self, scanHandler: self)
         let port = try await server.start(portCandidates: portCandidates) { request, body in
             await router.route(request, body: body)
         }
@@ -171,6 +175,7 @@ public actor TransferService: TransferRouteHandling {
         discovery?.stop()
         discovery = nil
         server.stop()
+        scanTokens.revokeAll()
         started = false
         logger.info("传输服务已停止")
     }

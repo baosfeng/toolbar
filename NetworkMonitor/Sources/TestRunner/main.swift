@@ -848,6 +848,10 @@ do {
 
 runTransferTests()
 
+// MARK: - 扫码接收（二维码 + 浏览器直传）
+
+runScanTests()
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")

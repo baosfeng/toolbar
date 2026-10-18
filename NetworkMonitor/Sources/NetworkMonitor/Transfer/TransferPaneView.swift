@@ -23,12 +23,15 @@ final class TransferPaneView: MenuPanelPaneView {
     var onDismissSession: ((String, Bool) -> Void)?
     /// 点击「选择文件…」
     var onPickFiles: (() -> Void)?
+    /// 点击「扫码接收」（打开二维码弹窗）
+    var onOpenScanReceive: (() -> Void)?
     /// 点击免配对状态行 / 齿轮（打开设置）
     var onOpenSettings: (() -> Void)?
 
     // MARK: 子视图
 
     private let autoAcceptRow: MenuPanelKeyValueRow
+    private let scanRow: MenuPanelKeyValueRow
     private let deviceHeader = MenuPanelHeaderRow(title: "附近设备", trailing: "未启动")
     private let deviceStack = NSStackView()
     private let emptyView = NSStackView()
@@ -58,6 +61,9 @@ final class TransferPaneView: MenuPanelPaneView {
                                           valueColor: MenuPanelStyle.accentColor,
                                           titleColor: .labelColor)
         autoAcceptRow = MenuPanelKeyValueRow(symbol: "lock.open", title: "免配对窗口", value: "")
+        scanRow = MenuPanelKeyValueRow(symbol: "qrcode", title: "扫码接收", value: "手机直传",
+                                       valueColor: MenuPanelStyle.accentColor,
+                                       titleColor: .labelColor)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         registerForDraggedTypes([.fileURL])
@@ -72,11 +78,12 @@ final class TransferPaneView: MenuPanelPaneView {
 
         deviceHeader.onClick = { [weak self] in self?.onRefresh?() }
         dropHintRow.onClick = { [weak self] in self?.onPickFiles?() }
+        scanRow.onClick = { [weak self] in self?.onOpenScanReceive?() }
         autoAcceptRow.onClick = { [weak self] in self?.onOpenSettings?() }
         autoAcceptRow.isHidden = true
 
-        let stack = NSStackView(views: [autoAcceptRow, deviceHeader, deviceStack, emptyView, hintLabel,
-                                        taskHeader, taskStack, dropHintRow])
+        let stack = NSStackView(views: [autoAcceptRow, scanRow, deviceHeader, deviceStack, emptyView,
+                                        hintLabel, taskHeader, taskStack, dropHintRow])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
@@ -98,7 +105,7 @@ final class TransferPaneView: MenuPanelPaneView {
 
     /// 键盘可达行：设备行 → 任务行 → 选择文件
     override var focusableRows: [MenuPanelRow] {
-        (autoAcceptRow.isHidden ? [] : [autoAcceptRow]) + deviceRows + taskRows + [dropHintRow]
+        (autoAcceptRow.isHidden ? [] : [autoAcceptRow]) + [scanRow] + deviceRows + taskRows + [dropHintRow]
     }
 
     // MARK: - 空态

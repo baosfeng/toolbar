@@ -23,6 +23,7 @@ final class TransferController {
     private var started = false
 
     private let pairingSheet = TransferPairingSheet()
+    private let scanSheet = TransferScanSheet()
     private let notification: TransferNotification
     private lazy var settingsWindow = TransferSettingsWindow(preferences: preferences,
                                                              service: service,
@@ -51,6 +52,7 @@ final class TransferController {
         panel.onSelectDevice = { [weak self] device in self?.select(device) }
         panel.onDropFiles = { [weak self] urls in self?.send(urls) }
         panel.onPickFiles = { [weak self] in self?.presentFilePicker() }
+        panel.onOpenScanReceive = { [weak self] in self?.showScanReceive() }
         panel.onCancelSession = { [weak self] sessionId in self?.cancel(sessionId: sessionId) }
         panel.onOpenSettings = { [weak self] in self?.showSettings() }
         panel.onDismissSession = { [weak self] sessionId, deleteFiles in
@@ -125,6 +127,7 @@ final class TransferController {
         pollTimer?.invalidate()
         pollTimer = nil
         pairingSheet.close()
+        scanSheet.close()
         settingsWindow.close()
         Task { await self.service.stop() }
     }
@@ -132,6 +135,28 @@ final class TransferController {
     /// 打开传送设置（标题栏齿轮 / 面板状态行）
     func showSettings() {
         settingsWindow.show()
+    }
+
+    /// 扫码接收：签发链接 → 生成二维码 → 弹窗展示
+    private func showScanReceive() {
+        Task { [weak self] in
+            guard let self else { return }
+            let result = await self.service.issueScanLink()
+            await MainActor.run {
+                switch result {
+                case .success(let info):
+                    guard let png = QRCodeGenerator.pngData(for: info.url) else {
+                        self.panel?.showHint("二维码生成失败")
+                        self.logger.error("扫码接收：二维码生成失败")
+                        return
+                    }
+                    self.scanSheet.show(info: info, qrPNG: png)
+                case .failure(let error):
+                    self.panel?.showHint(error.message)
+                    self.logger.warning("扫码接收入口不可用：\(error.message)")
+                }
+            }
+        }
     }
 
     // MARK: - 面板交互
