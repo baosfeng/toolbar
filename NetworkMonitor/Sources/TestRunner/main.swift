@@ -856,6 +856,10 @@ runScanTests()
 
 runBillingTests()
 
+// MARK: - 额度阈值提醒（5%/4%/3%/2%/1%）
+
+runBillingAlertTests()
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")

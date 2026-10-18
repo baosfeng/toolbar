@@ -64,6 +64,8 @@ final class BillingMonitor {
 
     private let registry: BillingProviderRegistry
     private let credentialStore: any BillingCredentialStore
+    /// 额度阈值提醒（可选；测试/未装配时为 nil）
+    private let alertService: (any BillingAlerting)?
     private let logger: LoggingService
 
     // MARK: - 状态
@@ -107,9 +109,11 @@ final class BillingMonitor {
 
     init(registry: BillingProviderRegistry,
          credentialStore: any BillingCredentialStore,
+         alertService: (any BillingAlerting)? = nil,
          logger: LoggingService = AppContext.shared.logger) {
         self.registry = registry
         self.credentialStore = credentialStore
+        self.alertService = alertService
         self.logger = logger
         self.providers = registry.all.map { provider in
             ProviderDescriptor(id: provider.id,
@@ -252,18 +256,23 @@ final class BillingMonitor {
             // 代次不一致说明期间切换了 provider / 范围，丢弃本次结果
             guard let self, self.generation == generation else { return }
             self.isLoading = false
-            self.apply(balanceResult: balanceResult, usageResult: usageResult)
+            self.apply(balanceResult: balanceResult, usageResult: usageResult, provider: provider)
             self.emit()
         }
     }
 
     /// 合并请求结果：成功项覆盖，失败项保留上次成功数据并记录错误文案
     private func apply(balanceResult: BillingOutcome<BillingBalance>,
-                       usageResult: BillingOutcome<BillingUsage>) {
+                       usageResult: BillingOutcome<BillingUsage>,
+                       provider: any BillingProvider) {
         var failure: BillingError?
         switch balanceResult {
         case .success(let value):
             balance = value
+            // 余额成功刷新后评估阈值提醒（同一周期同一档只提醒一次）
+            alertService?.handle(balance: value,
+                                 providerID: provider.id,
+                                 providerName: provider.displayName)
         case .failure(let error):
             failure = error
         }

@@ -81,8 +81,12 @@ public final class AppCoordinator {
         // 6. 额度页链路（provider 注册表 + 凭据存储 + 状态管理器）
         let billingRegistry = BillingProviderRegistry(providers: [OllamaBillingProvider(logger: logger)])
         let billingCredentials = PreferencesBillingCredentialStore()
+        // 额度阈值提醒（5%/4%/3%/2%/1%）：应用启动时请求通知权限
+        let billingAlerts = BillingAlertService(storage: AppContext.shared.storage, logger: logger)
+        billingAlerts.requestAuthorizationIfNeeded()
         let billingMonitor = BillingMonitor(registry: billingRegistry,
                                             credentialStore: billingCredentials,
+                                            alertService: billingAlerts,
                                             logger: logger)
 
         // 7. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
