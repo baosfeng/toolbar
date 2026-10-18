@@ -1,4 +1,5 @@
 import Foundation
+import SystemConfiguration
 
 // MARK: - 发现消息
 
@@ -197,10 +198,23 @@ public struct LocalIdentity: Equatable, Sendable {
             hash = (hash ^ UInt32(byte)) &* 16777619
         }
         let suffix = String(format: "%04x", hash & 0xFFFF)
-        let userName = NSUserName()
         return LocalIdentity(deviceId: "mac-\(suffix)",
-                             alias: "\(userName) 的 Mac",
+                             alias: preferredDisplayName(),
                              port: port,
                              appVersion: appVersion)
+    }
+
+    /// 对外展示的设备名：优先系统「通用 → 共享 → 电脑名称」里用户设置的名字，
+    /// 其次主机名，最后回落「用户名 + 的 Mac」。不使用设备型号或设备号。
+    static func preferredDisplayName() -> String {
+        if let computerName = SCDynamicStoreCopyComputerName(nil, nil) as String? {
+            let trimmed = computerName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        let host = ProcessInfo.processInfo.hostName
+            .replacingOccurrences(of: ".local", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !host.isEmpty { return host }
+        return "\(NSUserName()) 的 Mac"
     }
 }
