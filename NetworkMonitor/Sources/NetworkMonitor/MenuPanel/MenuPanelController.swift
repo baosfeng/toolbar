@@ -345,6 +345,10 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
         requestClipboardSettings()
     }
 
+    func menuPanelViewDidRequestTransferSettings(_ view: MenuPanelView) {
+        transferController?.showSettings()
+    }
+
     // MARK: - NSPopoverDelegate
 
     func popoverDidClose(_ notification: Notification) {

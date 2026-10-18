@@ -124,11 +124,14 @@ public final class AppCoordinator {
         let configuration = TransferService.Configuration(
             receiveDirectory: TransferService.Configuration.defaultReceiveDirectory(),
             appVersion: appVersion)
+        let preferences = TransferPreferences(storage: AppContext.shared.storage)
         let service = TransferService(identity: identity,
                                       registry: registry,
                                       configuration: configuration,
+                                      preferences: preferences,
                                       logger: logger)
-        let controller = TransferController(service: service, registry: registry, logger: logger)
+        let controller = TransferController(service: service, registry: registry,
+                                            preferences: preferences, logger: logger)
         transferController = controller
         // 服务常驻：面板未打开也要能收发，启动在后台完成
         controller.start()
