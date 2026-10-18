@@ -322,6 +322,7 @@ private extension MenuPanelTab {
         switch self {
         case .network: return "network"
         case .clipboard: return "clipboard"
+        case .transfer: return "transfer"
         case .system: return "system"
         }
     }

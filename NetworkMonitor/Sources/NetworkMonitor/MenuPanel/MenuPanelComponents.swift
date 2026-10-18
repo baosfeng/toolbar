@@ -199,8 +199,15 @@ class MenuPanelRow: NSView {
         NSCursor.arrow.set()
     }
 
+    /// 按下：整行缩放到 0.96（设计文档 §7.2「按钮按下」）
+    override func mouseDown(with event: NSEvent) {
+        guard isInteractive else { return super.mouseDown(with: event) }
+        TransferMotion.press(self)
+    }
+
     override func mouseUp(with event: NSEvent) {
         guard isInteractive else { return super.mouseUp(with: event) }
+        TransferMotion.release(self)
         guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
         activate()
     }

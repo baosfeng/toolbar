@@ -39,6 +39,8 @@ public final class AppCoordinator {
     private var clipboardSettings: ClipboardSettingsWindow!
     /// 全局热键
     private var globalHotKey: GlobalHotKeyCenter!
+    /// 局域网互传面板控制器
+    private var transferController: TransferController?
 
     // MARK: - 日志
 
@@ -73,18 +75,22 @@ public final class AppCoordinator {
         // 4. 剪贴板历史链路
         setupClipboard(database: database)
 
-        // 5. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
+        // 5. 局域网互传（发现层 + 传输服务 + 面板控制器）
+        let transfer = makeTransferController()
+
+        // 6. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
         let manager = MenuBarManager(
             networkMonitor: networkMonitor,
             processMonitor: processMonitor,
             trafficTracker: trafficTracker,
             clipboardRepository: databaseManager,
-            paster: clipboardPaster
+            paster: clipboardPaster,
+            transferController: transfer
         )
         manager.onOpenClipboardHistory = { [weak self] in self?.clipboardPanel.toggle() }
         manager.onOpenClipboardSettings = { [weak self] in self?.clipboardSettings.show() }
 
-        // 6. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
+        // 7. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
         logger.info("AppCoordinator 启动完成")
         return manager
     }
@@ -95,6 +101,9 @@ public final class AppCoordinator {
         AppContext.shared.storage.set(Int(networkMonitor?.totalRx ?? 0), forKey: "totalRx")
         AppContext.shared.storage.set(Int(networkMonitor?.totalTx ?? 0), forKey: "totalTx")
 
+        // 局域网互传
+        transferController?.stop()
+
         // 剪贴板链路
         clipboardWatcher?.stop()
         clipboardStack?.stop()
@@ -102,6 +111,28 @@ public final class AppCoordinator {
 
         database?.close()
         logger.info("AppCoordinator 已关闭")
+    }
+
+    // MARK: - 局域网互传装配
+
+    /// 装配传输服务：设备表 + 发现层 + HTTP 服务 + 面板控制器
+    private func makeTransferController() -> TransferController {
+        let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0.0"
+        let identity = LocalIdentity.makeDefault(port: Int(TransferProtocol.defaultPorts[0]),
+                                                 appVersion: appVersion)
+        let registry = DeviceRegistry()
+        let configuration = TransferService.Configuration(
+            receiveDirectory: TransferService.Configuration.defaultReceiveDirectory(),
+            appVersion: appVersion)
+        let service = TransferService(identity: identity,
+                                      registry: registry,
+                                      configuration: configuration,
+                                      logger: logger)
+        let controller = TransferController(service: service, registry: registry, logger: logger)
+        transferController = controller
+        // 服务常驻：面板未打开也要能收发，启动在后台完成
+        controller.start()
+        return controller
     }
 
     // MARK: - 剪贴板历史装配

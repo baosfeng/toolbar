@@ -35,6 +35,7 @@ final class MenuPanelView: NSView {
     let networkPane = NetworkPaneView()
     let clipboardPane = ClipboardPaneView()
     let systemPane = SystemPaneView()
+    let transferPane = TransferPaneView()
 
     /// 可滚动内容区（高度 clamp 后仍能容纳超高内容）
     private let scrollView = NSScrollView()
@@ -57,6 +58,7 @@ final class MenuPanelView: NSView {
         paneStack.addArrangedSubview(networkPane)
         paneStack.addArrangedSubview(clipboardPane)
         paneStack.addArrangedSubview(systemPane)
+        paneStack.addArrangedSubview(transferPane)
         paneStack.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.hasVerticalScroller = true
@@ -91,7 +93,7 @@ final class MenuPanelView: NSView {
         tabBar.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         scrollView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         // 三页都撑满面板内容宽度（NSStackView 的 leading 对齐不会自动拉伸子视图）
-        for pane in [networkPane, clipboardPane, systemPane] {
+        for pane in [networkPane, clipboardPane, systemPane, transferPane] {
             pane.widthAnchor.constraint(equalTo: paneStack.widthAnchor).isActive = true
         }
 
@@ -171,6 +173,7 @@ final class MenuPanelView: NSView {
         networkPane.isHidden = currentTab != .network
         clipboardPane.isHidden = currentTab != .clipboard
         systemPane.isHidden = currentTab != .system
+        transferPane.isHidden = currentTab != .transfer
         tabBar.selected = currentTab
     }
 
@@ -180,6 +183,7 @@ final class MenuPanelView: NSView {
         case .network: return networkPane
         case .clipboard: return clipboardPane
         case .system: return systemPane
+        case .transfer: return transferPane
         }
     }
 
