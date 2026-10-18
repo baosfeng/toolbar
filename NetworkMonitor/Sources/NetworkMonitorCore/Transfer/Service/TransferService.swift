@@ -89,6 +89,8 @@ public actor TransferService: TransferRouteHandling {
     let registry: DeviceRegistry
     let pairing: PairingStore
     let preferences: TransferPreferences
+    /// 已知设备地址记忆（冷启动快速探测）
+    let knownPeers: KnownPeerStore?
     let logger: LoggingService
     let configuration: Configuration
     private let server: HttpServer
@@ -116,6 +118,7 @@ public actor TransferService: TransferRouteHandling {
                 configuration: Configuration,
                 pairing: PairingStore = PairingStore(),
                 preferences: TransferPreferences = TransferPreferences(),
+                knownPeers: KnownPeerStore? = nil,
                 logger: LoggingService = AppContext.shared.logger,
                 observerQueue: DispatchQueue = .main) {
         self.localIdentity = identity
@@ -123,6 +126,7 @@ public actor TransferService: TransferRouteHandling {
         self.configuration = configuration
         self.pairing = pairing
         self.preferences = preferences
+        self.knownPeers = knownPeers
         self.logger = logger
         self.observerQueue = observerQueue
         self.server = HttpServer(logger: logger)
@@ -147,7 +151,8 @@ public actor TransferService: TransferRouteHandling {
         started = true
 
         if startDiscovery {
-            let discovery = UdpDiscoveryService(identity: localIdentity, registry: registry, logger: logger)
+            let discovery = UdpDiscoveryService(identity: localIdentity, registry: registry,
+                                                knownPeers: knownPeers, logger: logger)
             self.discovery = discovery
             discovery.start()
         }
