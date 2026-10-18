@@ -158,11 +158,10 @@ public final class UdpDiscoveryService: @unchecked Sendable {
         guard let message = DiscoveryMessage.decode(data) else { return }
         switch message.type {
         case .announce, .offer:
+            // 本机组播回环会收到自己的公告：既不进设备表，也不记为已知地址
+            guard message.deviceId != identity.deviceId else { return }
             registry.upsert(message: message, ip: ip)
-            // 不记录自己（本机回环也会收到自己的公告），否则冷启动会探测自身浪费一次往返
-            if message.deviceId != identity.deviceId {
-                knownPeers?.remember(deviceId: message.deviceId, ip: ip)
-            }
+            knownPeers?.remember(deviceId: message.deviceId, ip: ip)
         case .discover:
             replyOffer(to: ip)
         }
@@ -276,7 +275,7 @@ public final class UdpDiscoveryService: @unchecked Sendable {
         var membership = ip_mreq()
         membership.imr_multiaddr.s_addr = inet_addr(DiscoveryMessage.multicastHost)
         // 指定加入的主接口：多网卡时 INADDR_ANY 可能只加到第一个（往往是桥接）接口
-        if let primary = Self.primaryIPv4Address() {
+        if let primary = getLocalIPAddress() {
             membership.imr_interface.s_addr = inet_addr(primary)
         } else {
             membership.imr_interface.s_addr = INADDR_ANY
@@ -287,34 +286,6 @@ public final class UdpDiscoveryService: @unchecked Sendable {
             logger.warning("加入组播组 \(DiscoveryMessage.multicastHost) 失败（errno \(errno)），仅依赖广播与单播兜底")
         }
         return fd
-    }
-
-    /// 主 IPv4 地址：第一个非回环、UP、非 awdl/llw 的接口地址（典型即 en0）
-    static func primaryIPv4Address() -> String? {
-        var addrs: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&addrs) == 0, let first = addrs else { return nil }
-        defer { freeifaddrs(addrs) }
-        var pointer: UnsafeMutablePointer<ifaddrs>? = first
-        while let current = pointer {
-            let flags = Int32(current.pointee.ifa_flags)
-            if let sockaddr = current.pointee.ifa_addr,
-               sockaddr.pointee.sa_family == UInt8(AF_INET),
-               flags & IFF_LOOPBACK == 0,
-               flags & IFF_UP != 0 {
-                let name = String(cString: current.pointee.ifa_name)
-                if !name.hasPrefix("awdl"), !name.hasPrefix("llw"), !name.hasPrefix("utun") {
-                    var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                    let rc = getnameinfo(sockaddr, socklen_t(sockaddr.pointee.sa_len),
-                                         &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST)
-                    if rc == 0 {
-                        let ip = String(cString: host)
-                        if !ip.isEmpty { return ip }
-                    }
-                }
-            }
-            pointer = current.pointee.ifa_next
-        }
-        return nil
     }
 
     /// 打开发送 socket：组播 TTL 1 + 允许广播
@@ -328,7 +299,7 @@ public final class UdpDiscoveryService: @unchecked Sendable {
         setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &enable, socklen_t(MemoryLayout<Int32>.size))
         // 关键：多网卡（含桥接/PROMISC 接口）时内核可能选错组播出口，
         // 表现为 sendto 成功但包不出网卡、对端收不到。显式固定到主 IPv4 接口。
-        if let primary = Self.primaryIPv4Address() {
+        if let primary = getLocalIPAddress() {
             var iface = in_addr()
             inet_pton(AF_INET, primary, &iface)
             let rc = setsockopt(fd, IPPROTO_IP, IP_MULTICAST_IF, &iface,
