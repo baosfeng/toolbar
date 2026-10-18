@@ -844,6 +844,10 @@ do {
     print("✅ MenuPanelMetrics 面板取数口径 works")
 }
 
+// MARK: - 局域网文件互传
+
+runTransferTests()
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")

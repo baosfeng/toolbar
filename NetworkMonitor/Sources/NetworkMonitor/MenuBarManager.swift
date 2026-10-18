@@ -29,6 +29,7 @@ final class MenuBarManager: NSObject {
          trafficTracker: any TrafficTrackingService,
          clipboardRepository: any ClipboardRepository,
          paster: ClipboardPaster,
+         transferController: TransferController? = nil,
          logger: LoggingService = AppContext.shared.logger) {
         self.monitor = networkMonitor
         self.processMonitor = processMonitor
@@ -39,6 +40,7 @@ final class MenuBarManager: NSObject {
                                          trafficTracker: trafficTracker,
                                          repository: clipboardRepository,
                                          paster: paster,
+                                         transferController: transferController,
                                          logger: logger)
         super.init()
 

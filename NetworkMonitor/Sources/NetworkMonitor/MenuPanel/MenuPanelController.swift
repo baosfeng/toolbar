@@ -42,6 +42,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
     private let trafficTracker: any TrafficTrackingService
     private let repository: any ClipboardRepository
     private let paster: ClipboardPaster
+    private let transferController: TransferController?
     private let storage: any KeyValueStorage
     private let logger: LoggingService
 
@@ -76,6 +77,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
          trafficTracker: any TrafficTrackingService,
          repository: any ClipboardRepository,
          paster: ClipboardPaster,
+         transferController: TransferController? = nil,
          storage: any KeyValueStorage = AppContext.shared.storage,
          logger: LoggingService = AppContext.shared.logger) {
         self.monitor = networkMonitor
@@ -83,11 +85,13 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
         self.trafficTracker = trafficTracker
         self.repository = repository
         self.paster = paster
+        self.transferController = transferController
         self.storage = storage
         self.logger = logger
         super.init()
 
         configurePopover()
+        transferController?.attach(panel: content.transferPane)
         wireActions()
         observeClipboardChanges()
     }

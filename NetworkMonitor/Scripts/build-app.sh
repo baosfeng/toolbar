@@ -63,6 +63,8 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <true/>
     <key>NSInputMonitoringUsageDescription</key>
     <string>NetworkMonitor 需要输入监控权限来统计键盘敲击次数，不会记录按键内容。</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>NetworkMonitor 需要访问本地网络来发现同一 Wi-Fi 下的设备并互传文件，不会上传到任何服务器。</string>
 </dict>
 </plist>
 PLIST
