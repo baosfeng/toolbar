@@ -15,6 +15,10 @@ final class BillingBalanceSectionView: NSView {
     private let titleLabel = MenuPanelLabel.text("可用额度",
                                                  font: BillingPaneStyle.cardTitleFont,
                                                  color: BillingPaneStyle.secondaryText)
+    /// 遗留计划说明入口（悬停提示；正常额度卡隐藏）
+    private let metricHintButton = NSButton()
+    /// 可用额度 hero 行（遗留计划按百分比限额时整块隐藏）
+    private let heroRow = NSStackView()
     private let totalLabel = MenuPanelLabel.text("—", font: BillingPaneStyle.heroFont, color: .labelColor)
     private let heroNoteLabel = MenuPanelLabel.text("", font: BillingPaneStyle.subFont,
                                                     color: BillingPaneStyle.tertiaryText)
@@ -42,12 +46,34 @@ final class BillingBalanceSectionView: NSView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
-        let heroRow = NSStackView(views: [totalLabel, heroNoteLabel])
+        heroRow.addArrangedSubview(totalLabel)
+        heroRow.addArrangedSubview(heroNoteLabel)
         heroRow.orientation = .horizontal
         heroRow.alignment = .lastBaseline
         heroRow.spacing = 6
         heroNoteLabel.setContentHuggingPriority(.required, for: .horizontal)
         heroNoteLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        // 遗留计划：核心信息是会话/每周剩余百分比，金额与说明属于非核心，用「?」承载
+        metricHintButton.image = NSImage(systemSymbolName: "questionmark.circle",
+                                         accessibilityDescription: "额度说明")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 11, weight: .regular))
+        metricHintButton.isBordered = false
+        metricHintButton.bezelStyle = .inline
+        metricHintButton.contentTintColor = BillingPaneStyle.tertiaryText
+        metricHintButton.toolTip = "该计划按百分比限额计费，不提供内含额度与购买余额"
+        metricHintButton.setAccessibilityLabel("额度说明")
+        metricHintButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            metricHintButton.widthAnchor.constraint(equalToConstant: 14),
+            metricHintButton.heightAnchor.constraint(equalToConstant: 14),
+        ])
+        metricHintButton.isHidden = true
+
+        let headerRow = NSStackView(views: [titleLabel, MenuPanelLabel.spacer(), metricHintButton])
+        headerRow.orientation = .horizontal
+        headerRow.alignment = .centerY
+        headerRow.spacing = 6
 
         limitStack.orientation = .vertical
         limitStack.alignment = .leading
@@ -57,7 +83,7 @@ final class BillingBalanceSectionView: NSView {
         innerStack.alignment = .leading
         innerStack.spacing = 7
         innerStack.translatesAutoresizingMaskIntoConstraints = false
-        for view in [titleLabel, heroRow, includedRow, includedTrack, periodLabel, purchasedRow,
+        for view in [headerRow, heroRow, includedRow, includedTrack, periodLabel, purchasedRow,
                      limitStack, emptyLabel] {
             innerStack.addArrangedSubview(view)
         }
@@ -89,6 +115,9 @@ final class BillingBalanceSectionView: NSView {
     /// 更新余额卡（nil = 尚无成功数据）
     func update(balance: BillingBalance?) {
         guard let balance else {
+            titleLabel.stringValue = "可用额度"
+            metricHintButton.isHidden = true
+            heroRow.isHidden = false
             totalLabel.stringValue = "—"
             heroNoteLabel.stringValue = ""
             emptyLabel.isHidden = true
@@ -100,9 +129,15 @@ final class BillingBalanceSectionView: NSView {
             return
         }
 
+        // 遗留计划（无内含额度、只有百分比限额）：金额与计划说明属非核心信息，
+        // 隐藏 hero 整块，只保留会话/每周限额；说明由标题右侧「?」承载
+        let legacyPercentOnly = balance.included == nil && !balance.percentLimits.isEmpty
+        titleLabel.stringValue = legacyPercentOnly ? "剩余额度" : "可用额度"
+        metricHintButton.isHidden = !legacyPercentOnly
+        heroRow.isHidden = legacyPercentOnly
         totalLabel.stringValue = balance.totalAvailableUSD.map { formatUSD($0) } ?? "—"
         heroNoteLabel.stringValue = Self.heroNote(for: balance)
-        emptyLabel.isHidden = !balance.isEmpty
+        emptyLabel.isHidden = !balance.isEmpty || legacyPercentOnly
 
         if let included = balance.included {
             includedRow.isHidden = false
