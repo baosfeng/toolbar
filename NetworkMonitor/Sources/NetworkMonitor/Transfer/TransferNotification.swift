@@ -13,26 +13,19 @@ import UserNotifications
 @MainActor
 final class TransferNotification {
 
-    // MARK: - 配置键
-
-    static let receiveSoundKey = "transfer.sound.receive"
-    static let sendSoundKey = "transfer.sound.send"
-    static let failureSoundKey = "transfer.sound.failure"
-    static let deviceAppearedSoundKey = "transfer.sound.deviceAppeared"
-    static let pairingCodeSoundKey = "transfer.sound.pairingCode"
-
     // MARK: - 依赖
 
-    private let storage: any KeyValueStorage
+    /// 设置（提示音开关统一由 `TransferPreferences` 提供）
+    private let preferences: TransferPreferences
     private let logger: LoggingService
     private let center = UNUserNotificationCenter.current()
     private var lastPlayed: [String: Date] = [:]
     /// 去重窗口（秒）
     private static let dedupeWindow: TimeInterval = 0.5
 
-    init(storage: any KeyValueStorage = AppContext.shared.storage,
+    init(preferences: TransferPreferences = TransferPreferences(),
          logger: LoggingService = AppContext.shared.logger) {
-        self.storage = storage
+        self.preferences = preferences
         self.logger = logger
         requestAuthorization()
     }
@@ -64,14 +57,11 @@ final class TransferNotification {
         switch session.state {
         case .completed:
             post(title: "传输完成", body: message)
-            playIfEnabled(session.direction == .send ? "send" : "receive",
-                          key: session.direction == .send ? Self.sendSoundKey : Self.receiveSoundKey,
-                          soundName: session.direction == .send ? "Tink" : "Glass",
-                          defaultEnabled: true)
+            playIfEnabled(session.direction == .send ? .send : .receive,
+                          soundName: session.direction == .send ? "Tink" : "Glass")
         case .failed:
             post(title: "传输失败", body: message)
-            playIfEnabled("failure", key: Self.failureSoundKey,
-                          soundName: "Basso", defaultEnabled: false)
+            playIfEnabled(.failure, soundName: "Basso")
         case .cancelled:
             break
         default:
@@ -81,30 +71,24 @@ final class TransferNotification {
 
     /// 新设备出现（默认关闭）
     func deviceAppeared(_ device: RemoteDevice) {
-        playIfEnabled("deviceAppeared", key: Self.deviceAppearedSoundKey,
-                      soundName: "Pop", defaultEnabled: false)
+        playIfEnabled(.deviceAppeared, soundName: "Pop")
     }
 
     /// 配对码生成（默认关闭）
     func pairingCodeGenerated() {
-        playIfEnabled("pairingCode", key: Self.pairingCodeSoundKey,
-                      soundName: "Morse", defaultEnabled: false)
+        playIfEnabled(.pairingCode, soundName: "Morse")
     }
 
     // MARK: - 音效
 
     /// 按开关与去重窗口播放系统音
-    private func playIfEnabled(_ event: String, key: String, soundName: String,
-                               defaultEnabled: Bool) {
-        let enabled = storage.object(forKey: key) == nil
-            ? defaultEnabled
-            : storage.bool(forKey: key)
-        guard enabled else { return }
+    private func playIfEnabled(_ event: TransferPreferences.SoundEvent, soundName: String) {
+        guard preferences.soundEnabled(event) else { return }
         let now = Date()
-        if let last = lastPlayed[event], now.timeIntervalSince(last) < Self.dedupeWindow {
+        if let last = lastPlayed[event.rawValue], now.timeIntervalSince(last) < Self.dedupeWindow {
             return
         }
-        lastPlayed[event] = now
+        lastPlayed[event.rawValue] = now
         guard let sound = NSSound(named: soundName) else {
             logger.debug("系统音效缺失：\(soundName)")
             return
