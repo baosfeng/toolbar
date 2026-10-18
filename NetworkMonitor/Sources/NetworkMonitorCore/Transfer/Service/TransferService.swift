@@ -62,6 +62,8 @@ public actor TransferService: TransferRouteHandling {
         var sourceFiles: [String: URL]
         /// 发送端：对端设备
         var peerDeviceId: String
+        /// 对端别名（来源为 offer 的 senderAlias，用于接收弹窗直接展示，不依赖发现层）
+        var peerAlias: String
     }
 
     /// 接收端对 `offer` 的最终答复
@@ -77,6 +79,8 @@ public actor TransferService: TransferRouteHandling {
         public var peerDeviceId: String
         public var pin: String
         public var expiresAt: Date
+        /// 发送方别名（offer.senderAlias 透传，缺失时由 UI 回落「未知设备」）
+        public var senderAlias: String
     }
 
     // MARK: - 依赖
@@ -84,6 +88,7 @@ public actor TransferService: TransferRouteHandling {
     // 说明：以下成员放宽为 internal，供 `TransferService+Receive/Send` 扩展文件使用
     let registry: DeviceRegistry
     let pairing: PairingStore
+    let preferences: TransferPreferences
     let logger: LoggingService
     let configuration: Configuration
     private let server: HttpServer
@@ -99,8 +104,9 @@ public actor TransferService: TransferRouteHandling {
     var contexts: [String: SessionContext] = [:]
     /// 发送进度通知节流时间戳（扩展文件使用）
     var lastSendProgressNotify: Date = .distantPast
-    private var onSessionsChanged: (@Sendable ([TransferSession]) -> Void)?
-    private var onSessionFinished: (@Sendable (TransferSession) -> Void)?
+    // 放宽为 internal：观察者订阅方法在 `TransferService+Observer` 扩展中
+    var onSessionsChanged: (@Sendable ([TransferSession]) -> Void)?
+    var onSessionFinished: (@Sendable (TransferSession) -> Void)?
     private var started = false
 
     // MARK: - 初始化
@@ -109,12 +115,14 @@ public actor TransferService: TransferRouteHandling {
                 registry: DeviceRegistry,
                 configuration: Configuration,
                 pairing: PairingStore = PairingStore(),
+                preferences: TransferPreferences = TransferPreferences(),
                 logger: LoggingService = AppContext.shared.logger,
                 observerQueue: DispatchQueue = .main) {
         self.localIdentity = identity
         self.registry = registry
         self.configuration = configuration
         self.pairing = pairing
+        self.preferences = preferences
         self.logger = logger
         self.observerQueue = observerQueue
         self.server = HttpServer(logger: logger)
@@ -178,46 +186,6 @@ public actor TransferService: TransferRouteHandling {
     /// 实际 HTTP 端口
     public var listenPort: Int { localIdentity.port }
 
-    // MARK: - 观察者
-
-    /// 订阅会话列表变化（回调投递到 `observerQueue`）
-    public func observeSessions(_ handler: @escaping @Sendable ([TransferSession]) -> Void) {
-        onSessionsChanged = handler
-        notifySessions()
-    }
-
-    /// 订阅会话结束事件（完成 / 失败 / 取消，用于通知与音效）
-    public func observeSessionFinished(_ handler: @escaping @Sendable (TransferSession) -> Void) {
-        onSessionFinished = handler
-    }
-
-    /// 当前会话快照（按创建时间倒序）
-    public func sessionSnapshot() -> [TransferSession] {
-        contexts.values.map(\.session).sorted { $0.createdAt > $1.createdAt }
-    }
-
-    /// 取单个会话
-    public func session(id: String) -> TransferSession? {
-        contexts[id]?.session
-    }
-
-    /// 设备列表快照（UI 直接读）
-    public nonisolated func deviceSnapshot() -> [RemoteDevice] {
-        registry.snapshot()
-    }
-
-    /// 配对状态
-    public func isPaired(deviceId: String) -> Bool {
-        pairing.isPaired(deviceId)
-    }
-
-    /// 移除配对记忆（回到 PIN 流程）
-    public func removePairing(deviceId: String) {
-        pairing.remove(deviceId: deviceId)
-        registry.setPaired(false, deviceId: deviceId)
-        logger.info("已移除设备 \(deviceId) 的配对记忆")
-    }
-
     // MARK: - 路由：/info
 
     public func deviceInfo() async -> DeviceInfo {
@@ -251,19 +219,26 @@ public actor TransferService: TransferRouteHandling {
             return handleRepeatedOffer(existing, request: request, now: now)
         }
 
+        // 接收端本地策略（设计文档 §3.6）：已配对 / 免配对窗口 / 体积阈值，任一满足即免确认
         let paired = isPairingKeyValid(pairKey, deviceId: request.senderDeviceId)
-        let context = makeOfferContext(request: request, paired: paired, now: now)
+        let decision = AcceptancePolicy.decide(paired: paired,
+                                               windowActive: preferences.isWindowActive(now: now),
+                                               sizeThresholdMB: preferences.sizeThresholdMB,
+                                               totalBytes: totalSize)
+        let context = makeOfferContext(request: request, approved: decision.accepted, now: now)
         contexts[context.session.id] = context
 
-        if !paired, let pin = context.pin, let expiry = context.pinExpiresAt {
+        if decision.accepted {
+            logger.info("offer 免确认放行（\(decision.reason.rawValue)）：\(request.senderDeviceId)")
+        } else if let pin = context.pin, let expiry = context.pinExpiresAt {
             logger.info("收到未配对 offer（\(request.senderDeviceId)），PIN \(pin) 有效期至 \(expiry)")
         }
         notifySessions()
 
-        let accepted = paired ? acceptedOffsets(context) : []
+        let accepted = decision.accepted ? acceptedOffsets(context) : []
         let result = OfferResult(sessionId: context.session.id,
                                  token: context.session.token,
-                                 state: paired ? .approved : .pending,
+                                 state: decision.accepted ? .approved : .pending,
                                  accepted: accepted)
         return .success(OfferHandlingResult(result: result))
     }
@@ -358,7 +333,8 @@ public actor TransferService: TransferRouteHandling {
                 return PendingOffer(sessionId: context.session.id,
                                     peerDeviceId: context.session.peerDeviceId,
                                     pin: pin,
-                                    expiresAt: expiry)
+                                    expiresAt: expiry,
+                                    senderAlias: context.peerAlias)
             }
     }
 

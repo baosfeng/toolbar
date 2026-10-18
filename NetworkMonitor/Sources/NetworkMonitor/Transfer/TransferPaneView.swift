@@ -19,11 +19,16 @@ final class TransferPaneView: MenuPanelPaneView {
     var onDropFiles: (([URL]) -> Void)?
     /// 点击任务行（取消）
     var onCancelSession: ((String) -> Void)?
+    /// 移除任务：第二参数为 true 表示同时删除落盘文件
+    var onDismissSession: ((String, Bool) -> Void)?
     /// 点击「选择文件…」
     var onPickFiles: (() -> Void)?
+    /// 点击免配对状态行 / 齿轮（打开设置）
+    var onOpenSettings: (() -> Void)?
 
     // MARK: 子视图
 
+    private let autoAcceptRow: MenuPanelKeyValueRow
     private let deviceHeader = MenuPanelHeaderRow(title: "附近设备", trailing: "未启动")
     private let deviceStack = NSStackView()
     private let emptyView = NSStackView()
@@ -49,6 +54,7 @@ final class TransferPaneView: MenuPanelPaneView {
 
     init() {
         dropHintRow = MenuPanelKeyValueRow(symbol: "square.and.arrow.down", title: "选择文件…", value: "或拖入")
+        autoAcceptRow = MenuPanelKeyValueRow(symbol: "lock.open", title: "免配对窗口", value: "")
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         registerForDraggedTypes([.fileURL])
@@ -63,8 +69,10 @@ final class TransferPaneView: MenuPanelPaneView {
 
         deviceHeader.onClick = { [weak self] in self?.onRefresh?() }
         dropHintRow.onClick = { [weak self] in self?.onPickFiles?() }
+        autoAcceptRow.onClick = { [weak self] in self?.onOpenSettings?() }
+        autoAcceptRow.isHidden = true
 
-        let stack = NSStackView(views: [deviceHeader, deviceStack, emptyView, hintLabel,
+        let stack = NSStackView(views: [autoAcceptRow, deviceHeader, deviceStack, emptyView, hintLabel,
                                         taskHeader, taskStack, dropHintRow])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -86,7 +94,9 @@ final class TransferPaneView: MenuPanelPaneView {
     required init?(coder: NSCoder) { nil }
 
     /// 键盘可达行：设备行 → 任务行 → 选择文件
-    override var focusableRows: [MenuPanelRow] { deviceRows + taskRows + [dropHintRow] }
+    override var focusableRows: [MenuPanelRow] {
+        (autoAcceptRow.isHidden ? [] : [autoAcceptRow]) + deviceRows + taskRows + [dropHintRow]
+    }
 
     // MARK: - 空态
 
@@ -113,11 +123,21 @@ final class TransferPaneView: MenuPanelPaneView {
     // MARK: - 数据更新
 
     /// 刷新设备与任务列表
+    ///
+    /// - Parameters:
+    ///   - autoAcceptText: 免配对窗口剩余时间（空串 = 未开启，隐藏状态行）
+    ///   - autoAcceptActive: 是否处于免配对窗口内（决定高亮色）
     func update(devices newDevices: [RemoteDevice], sessions newSessions: [TransferSession],
-                selectedDeviceId newSelected: String?, statusText: String) {
+                selectedDeviceId newSelected: String?, statusText: String,
+                autoAcceptText: String, autoAcceptActive: Bool) {
         devices = newDevices
         sessions = newSessions
         selectedDeviceId = newSelected
+        autoAcceptRow.isHidden = autoAcceptText.isEmpty
+        if !autoAcceptText.isEmpty {
+            autoAcceptRow.updateValue("免配对 \(autoAcceptText)",
+                                      color: autoAcceptActive ? .systemOrange : MenuPanelStyle.secondaryText)
+        }
 
         deviceHeader.updateTrailing(newDevices.isEmpty ? statusText : "\(newDevices.count) 台 · 刷新")
 
@@ -178,6 +198,10 @@ final class TransferPaneView: MenuPanelPaneView {
             let row = MenuPanelTransferTaskRow(session: session)
             row.onClick = { [weak self] in self?.onCancelSession?(session.id) }
             row.onClickEnabled = session.state.isActive
+            row.allowsDismiss = session.state.isTerminal
+            row.onDismiss = { [weak self] deleteFiles in
+                self?.onDismissSession?(session.id, deleteFiles)
+            }
             return row
         }
         for (index, row) in taskRows.enumerated() {

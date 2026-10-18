@@ -85,19 +85,50 @@ final class MenuPanelTransferTaskRow: MenuPanelRow {
     }
     private var pendingAction: (() -> Void)?
 
+    /// 右键菜单回调：true = 同时删除已落盘文件
+    var onDismiss: ((_ deleteFiles: Bool) -> Void)?
+    /// 仅已终结任务允许移除
+    var allowsDismiss = false {
+        didSet { needsDisplay = true }
+    }
+
+    /// 已终结任务提供右键菜单（移除记录 / 连带删除文件）
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard allowsDismiss, onDismiss != nil else { return nil }
+        let menu = NSMenu()
+        let record = NSMenuItem(title: "移除记录", action: #selector(handleDismissRecord), keyEquivalent: "")
+        record.target = self
+        menu.addItem(record)
+        let withFiles = NSMenuItem(title: "移除记录并删除文件", action: #selector(handleDismissWithFiles), keyEquivalent: "")
+        withFiles.target = self
+        menu.addItem(withFiles)
+        return menu
+    }
+
+    @objc private func handleDismissRecord() { onDismiss?(false) }
+    @objc private func handleDismissWithFiles() { onDismiss?(true) }
+
     private let titleLabel: NSTextField
     private let stateLabel: NSTextField
+    private let detailLabel: NSTextField
     private let track = MenuPanelTrackView(fillColor: .systemBlue)
     private let checkIcon = NSImageView()
     private var currentState: TransferState
+    /// 速度采样（上次采样的已传字节与时间）
+    private var lastSample: (bytes: Int64, at: Date)?
+    private var lastSpeed: Double = 0
 
     init(session: TransferSession) {
         currentState = session.state
+        lastSample = (session.totalTransferred, Date())
         titleLabel = MenuPanelLabel.text(Self.titleText(session), font: MenuPanelStyle.bodyFont)
         stateLabel = MenuPanelLabel.text(Self.stateText(session),
                                          font: MenuPanelStyle.sectionFont,
                                          color: Self.stateColor(session))
-        super.init(height: 44, onClick: {})
+        detailLabel = MenuPanelLabel.text(Self.detailText(session, speed: 0),
+                                          font: MenuPanelStyle.smallValueFont,
+                                          color: MenuPanelStyle.secondaryText)
+        super.init(height: 56, onClick: {})
         pendingAction = onClick
 
         titleLabel.lineBreakMode = .byTruncatingMiddle
@@ -123,10 +154,10 @@ final class MenuPanelTransferTaskRow: MenuPanelRow {
         track.fillColor = Self.stateColor(session)
         track.heightAnchor.constraint(equalToConstant: 4).isActive = true
 
-        let vertical = NSStackView(views: [topRow, track])
+        let vertical = NSStackView(views: [topRow, detailLabel, track])
         vertical.orientation = .vertical
         vertical.alignment = .leading
-        vertical.spacing = 6
+        vertical.spacing = 4
         vertical.translatesAutoresizingMaskIntoConstraints = false
         contentStack.addArrangedSubview(vertical)
         vertical.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
@@ -139,6 +170,8 @@ final class MenuPanelTransferTaskRow: MenuPanelRow {
         stateLabel.stringValue = Self.stateText(session)
         stateLabel.textColor = Self.stateColor(session)
         track.fillColor = Self.stateColor(session)
+        let speed = measureSpeed(session: session)
+        detailLabel.stringValue = Self.detailText(session, speed: speed)
         TransferMotion.animateProgress(track, to: session.fraction)
 
         guard session.state != currentState else { return }
@@ -152,6 +185,30 @@ final class MenuPanelTransferTaskRow: MenuPanelRow {
         default:
             break
         }
+    }
+
+    /// 采样传输速度（0.2s 窗口；无新字节时保留上次值，避免数字跳 0）
+    private func measureSpeed(session: TransferSession) -> Double {
+        let now = Date()
+        guard let sample = lastSample else {
+            lastSample = (session.totalTransferred, now)
+            return 0
+        }
+        let elapsed = now.timeIntervalSince(sample.at)
+        guard elapsed >= 0.2 else { return lastSpeed }
+        let delta = session.totalTransferred - sample.bytes
+        lastSample = (session.totalTransferred, now)
+        lastSpeed = delta > 0 && elapsed > 0 ? Double(delta) / elapsed : 0
+        return lastSpeed
+    }
+
+    /// 详情行：传输中显示「已传 / 总量 · 速度」，其余显示总量
+    private static func detailText(_ session: TransferSession, speed: Double) -> String {
+        let total = formatBytesFull(UInt64(max(0, session.totalSize)))
+        guard session.state == .transferring else { return total }
+        let transferred = formatBytesFull(UInt64(max(0, session.totalTransferred)))
+        guard speed > 0 else { return "\(transferred) / \(total)" }
+        return "\(transferred) / \(total) · \(formatBytesFull(UInt64(speed)))/s"
     }
 
     private static func titleText(_ session: TransferSession) -> String {
