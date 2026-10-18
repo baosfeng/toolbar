@@ -32,6 +32,9 @@ public final class UdpDiscoveryService: @unchecked Sendable {
     private var fallbackTasks: [DispatchWorkItem] = []
     private var offerCooldowns: [String: Date] = [:]
     private var running = false
+    /// socket 计数（只在状态锁内读写，避免测试观测时与网络队列互相等待）
+    private let socketStateLock = NSLock()
+    private var openSocketTotal = 0
 
     // MARK: - 初始化
 
@@ -59,7 +62,9 @@ public final class UdpDiscoveryService: @unchecked Sendable {
             guard let self, !self.running else { return }
             do {
                 self.receiveFD = try self.openReceiveSocket()
+                self.noteSocketOpened()
                 self.sendFD = try self.openSendSocket()
+                self.noteSocketOpened()
             } catch {
                 self.logger.error((error as? TransferError)?.message ?? "发现层启动失败：\(error)")
                 self.closeSockets()
@@ -93,12 +98,20 @@ public final class UdpDiscoveryService: @unchecked Sendable {
             self.readSource = nil
             self.heartbeatTimer?.cancel()
             self.heartbeatTimer = nil
-            let receive = self.receiveFD
-            self.receiveFD = -1
-            if receive >= 0 { close(receive) }
+            // 接收 + 发送两个 fd 一并关闭；只关发送 fd 会让 53318 端口一直被占用
             self.closeSockets()
             self.logger.info("发现层已停止")
         }
+    }
+
+    /// 当前打开的 socket 数量 — 供测试观测 fd 泄漏
+    ///
+    /// 只走独立状态锁，不 `queue.sync`：网络队列可能被阻塞的收发调用占用，
+    /// 观测接口不能因此让测试卡死。
+    public var openSocketCount: Int {
+        socketStateLock.lock()
+        defer { socketStateLock.unlock() }
+        return openSocketTotal
     }
 
     /// 立即发布一次公告（心跳以外的主动通告）
@@ -285,6 +298,12 @@ public final class UdpDiscoveryService: @unchecked Sendable {
         if joinResult != 0 {
             logger.warning("加入组播组 \(DiscoveryMessage.multicastHost) 失败（errno \(errno)），仅依赖广播与单播兜底")
         }
+        // 收包路径是 DispatchSourceRead + 循环 recvfrom：必须非阻塞，
+        // 否则读到没有待处理报文时 recvfrom 会把整条网络队列挂住（stop/心跳排队等它）
+        let flags = fcntl(fd, F_GETFL, 0)
+        if flags >= 0 {
+            _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+        }
         return fd
     }
 
@@ -358,10 +377,31 @@ public final class UdpDiscoveryService: @unchecked Sendable {
         }
     }
 
+    /// 关闭收发 socket（幂等；`start()` 失败与 `stop()` 共用）
     private func closeSockets() {
+        if receiveFD >= 0 {
+            close(receiveFD)
+            receiveFD = -1
+            noteSocketClosed()
+        }
         if sendFD >= 0 {
             close(sendFD)
             sendFD = -1
+            noteSocketClosed()
         }
+    }
+
+    /// 计数 +1（socket 打开成功后调用）
+    private func noteSocketOpened() {
+        socketStateLock.lock()
+        openSocketTotal += 1
+        socketStateLock.unlock()
+    }
+
+    /// 计数 -1（socket 关闭后调用）
+    private func noteSocketClosed() {
+        socketStateLock.lock()
+        openSocketTotal = max(0, openSocketTotal - 1)
+        socketStateLock.unlock()
     }
 }
