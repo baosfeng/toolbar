@@ -12,6 +12,8 @@ protocol MenuPanelViewDelegate: AnyObject {
     func menuPanelViewDidRequestClose(_ view: MenuPanelView)
     /// 请求退出应用（⌘Q）
     func menuPanelViewDidRequestQuit(_ view: MenuPanelView)
+    /// 请求打开传送设置（标题栏齿轮）
+    func menuPanelViewDidRequestTransferSettings(_ view: MenuPanelView)
     /// 请求打开剪贴板设置（⌘,）
     func menuPanelViewDidRequestClipboardSettings(_ view: MenuPanelView)
 }
@@ -32,6 +34,8 @@ final class MenuPanelView: NSView {
     weak var delegate: MenuPanelViewDelegate?
 
     let tabBar = MenuTabBarView()
+    /// 传送设置入口（标题栏右侧齿轮）
+    let transferSettingsButton = NSButton()
     let networkPane = NetworkPaneView()
     let clipboardPane = ClipboardPaneView()
     let systemPane = SystemPaneView()
@@ -76,7 +80,30 @@ final class MenuPanelView: NSView {
             paneStack.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
         ])
 
-        let contentStack = NSStackView(views: [tabBar, scrollView])
+        // 标题栏：分段控件 + 右侧齿轮（传送设置）
+        transferSettingsButton.image = NSImage(systemSymbolName: "gearshape",
+                                               accessibilityDescription: "传送设置")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .medium))
+        transferSettingsButton.isBordered = false
+        transferSettingsButton.bezelStyle = .inline
+        transferSettingsButton.contentTintColor = NSColor.labelColor.withAlphaComponent(0.62)
+        transferSettingsButton.toolTip = "传送设置"
+        transferSettingsButton.setAccessibilityLabel("传送设置")
+        transferSettingsButton.target = self
+        transferSettingsButton.action = #selector(openTransferSettings)
+        transferSettingsButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            transferSettingsButton.widthAnchor.constraint(equalToConstant: 24),
+            transferSettingsButton.heightAnchor.constraint(equalToConstant: 24),
+        ])
+
+        let headerStack = NSStackView(views: [tabBar, transferSettingsButton])
+        headerStack.orientation = .horizontal
+        headerStack.alignment = .centerY
+        headerStack.spacing = 8
+        headerStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let contentStack = NSStackView(views: [headerStack, scrollView])
         contentStack.orientation = .vertical
         contentStack.alignment = .leading
         contentStack.spacing = 12
@@ -90,7 +117,9 @@ final class MenuPanelView: NSView {
             contentStack.topAnchor.constraint(equalTo: topAnchor, constant: 10),
             contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -MenuPanelStyle.inset),
         ])
-        tabBar.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+        headerStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+        // 齿轮 24 + 间距 8 之外宽度归分段控件
+        tabBar.widthAnchor.constraint(equalTo: headerStack.widthAnchor, constant: -32).isActive = true
         scrollView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         // 三页都撑满面板内容宽度（NSStackView 的 leading 对齐不会自动拉伸子视图）
         for pane in [networkPane, clipboardPane, systemPane, transferPane] {
@@ -105,6 +134,11 @@ final class MenuPanelView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
+
+    /// 齿轮点击：交给控制器打开传送设置
+    @objc private func openTransferSettings() {
+        delegate?.menuPanelViewDidRequestTransferSettings(self)
+    }
 
     // MARK: - 背景
 
