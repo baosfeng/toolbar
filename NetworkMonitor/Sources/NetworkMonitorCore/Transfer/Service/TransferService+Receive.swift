@@ -183,10 +183,14 @@ extension TransferService {
 
         let allCompleted = context.session.files.allSatisfy { $0.transferred >= $0.size }
         if allCompleted {
+            // 校验（sha256）已在写入阶段完成，这里先广播一次 verifying 供 UI 过渡，
+            // 再立即转 completed —— 两次都必须写回会话表，否则 UI 会永远停在「校验中」。
             context.session.state = .verifying
             contexts[sessionId] = context
             notifySessions()
+
             context.session.state = .completed
+            contexts[sessionId] = context
         } else {
             contexts[sessionId] = context
         }
