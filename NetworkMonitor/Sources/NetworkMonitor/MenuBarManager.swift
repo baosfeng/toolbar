@@ -30,6 +30,7 @@ final class MenuBarManager: NSObject {
          clipboardRepository: any ClipboardRepository,
          paster: ClipboardPaster,
          transferController: TransferController? = nil,
+         billingMonitor: BillingMonitor? = nil,
          logger: LoggingService = AppContext.shared.logger) {
         self.monitor = networkMonitor
         self.processMonitor = processMonitor
@@ -41,6 +42,7 @@ final class MenuBarManager: NSObject {
                                          repository: clipboardRepository,
                                          paster: paster,
                                          transferController: transferController,
+                                         billingMonitor: billingMonitor,
                                          logger: logger)
         super.init()
 

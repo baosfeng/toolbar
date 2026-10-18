@@ -22,6 +22,8 @@ enum MenuPanelSnapshot {
     static let directoryEnvKey = "NM_SNAPSHOT_DIR"
     /// 超高内容自证开关（进程 12 个，验证滚动兜底）
     static let stressEnvKey = "NM_SNAPSHOT_STRESS"
+    /// 额度页示意数据开关（快照模式默认注入，显式设置时只用于日志标记）
+    static let billingMockEnvKey = "NM_BILLING_MOCK"
     /// 启动后延迟（等 Dock / 菜单栏 / 剪贴板采集初始化完成）
     private static let delayNanoseconds: UInt64 = 700_000_000
     /// 剪贴板面板画布尺寸（与 07-contract 的 640×260 画布口径一致）
@@ -45,7 +47,8 @@ enum MenuPanelSnapshot {
     private static func captureAll(directory: URL, repository: (any ClipboardRepository)?) {
         let items = repository?.fetchClipboardItems(kind: nil, limit: 5) ?? []
         let stress = (ProcessInfo.processInfo.environment[stressEnvKey]?.isEmpty == false)
-        logger.info("快照模式启动：目录=\(directory.path)，剪贴板条目 \(items.count) 条，超高自证=\(stress)")
+        let billingMock = (ProcessInfo.processInfo.environment[billingMockEnvKey]?.isEmpty == false)
+        logger.info("快照模式启动：目录=\(directory.path)，剪贴板条目 \(items.count) 条，超高自证=\(stress)，额度模拟=\(billingMock)")
 
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -67,12 +70,15 @@ enum MenuPanelSnapshot {
             }
         }
 
-        // 2. 超高内容自证：进程 12 个 → 内容高度 > 520pt，验证不裁切且可滚动
+        // 2. 额度页补充状态：未配置凭据 / 查询失败 + 遗留计划限额（浅色 + 深色）
+        captureCreditsStates(directory: directory)
+
+        // 3. 超高内容自证：进程 12 个 → 内容高度 > 520pt，验证不裁切且可滚动
         if stress {
             captureStress(directory: directory, items: items)
         }
 
-        // 3. 剪贴板面板：一个视图 × 深浅色
+        // 4. 剪贴板面板：一个视图 × 深浅色
         let clipboardBackdrop = makeClipboardPanel(items: items)
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let suffix = appearance == .aqua ? "light" : "dark"
@@ -82,6 +88,25 @@ enum MenuPanelSnapshot {
         }
 
         logger.info("快照完成：目录=\(directory.path)")
+    }
+
+    /// 额度页补充状态 — 未配置凭据 / 查询失败（含遗留计划限额），各出浅色、深色两张
+    private static func captureCreditsStates(directory: URL) {
+        let states: [(String, Bool, String?)] = [("unconfigured", false, nil),
+                                                 ("error", true, "API Key 无效或已过期")]
+        for (suffix, configured, error) in states {
+            let panel = MenuPanelView()
+            panel.billingPane.injectPreview(configured: configured, errorMessage: error,
+                                            legacyLimits: error != nil)
+            panel.select(tab: .credits)
+            let height = min(max(panel.desiredContentHeight, 180), MenuPanelStyle.maxHeight)
+            let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
+            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+                let name = appearance == .aqua ? "light" : "dark"
+                let url = directory.appendingPathComponent("menu-credits-\(suffix)-\(name).png")
+                render(view: panel, size: size, appearanceName: appearance, to: url)
+            }
+        }
     }
 
     /// 超高内容自证：把进程数拉到 12（内容 > 520pt），截「视口顶部」与「滚到底部」两张图，
@@ -127,22 +152,26 @@ enum MenuPanelSnapshot {
                                       processCount: Int = 5) -> MenuPanelView {
         let panel = MenuPanelView()
         panel.updateSpeeds(down: 1_200_000, up: 340_000,
-                           downHistory: sampleHistory(base: 900_000, amplitude: 700_000),
-                           upHistory: sampleHistory(base: 180_000, amplitude: 260_000))
+                           downHistory: SnapshotFixtures.history(base: 900_000, amplitude: 700_000),
+                           upHistory: SnapshotFixtures.history(base: 180_000, amplitude: 260_000))
         panel.updateTraffic(todayRx: 12_500_000_000, todayTx: 3_200_000_000,
-                            dailyBars: sampleDailyBars())
+                            dailyBars: SnapshotFixtures.dailyBars())
 #if DEBUG
         if processCount > 5 {
             // 产品路径固定 Top5；快照自证需要把上限临时抬高才能构造超高内容
             panel.networkPane.processRowLimitOverride = processCount
         }
 #endif
-        panel.updateProcesses(sampleProcesses(count: processCount))
+        panel.updateProcesses(SnapshotFixtures.processes(count: processCount))
         panel.updateClipboardItems(items)
         panel.updateSystem(ip: getLocalIPAddress() ?? "",
                            wifi: SystemInfoProvider.wifiDisplayName(),
                            launchAtStartup: AppContext.shared.storage
                                .bool(forKey: ClipboardPreferences.launchAtStartupKey))
+        // 额度页：快照用原型同款示意数据（余额 72.50/100、已购 25、24h 用量、2 个模型）
+        if tab == .credits {
+            panel.billingPane.injectPreview()
+        }
         panel.select(tab: tab)
         return panel
     }
@@ -150,44 +179,6 @@ enum MenuPanelSnapshot {
     /// 构建剪贴板面板画布：背景 + 真实面板同款材质底 + ClipboardPanelView
     private static func makeClipboardPanel(items: [ClipboardItem]) -> SnapshotClipboardPanel {
         SnapshotClipboardPanel(size: clipboardPanelSize, items: items)
-    }
-
-    // MARK: - 示意数据（仅快照使用）
-
-    /// 折线示意数据：正弦抖动，便于看出折线形状
-    private static func sampleHistory(base: Double, amplitude: Double) -> [Double] {
-        (0..<60).map { index in
-            base + amplitude * (0.5 + 0.5 * sin(Double(index) / 4.0))
-        }
-    }
-
-    /// 近 6 日柱状图示意数据（时间正序：最左最早、最右今天）
-    private static func sampleDailyBars() -> [MenuPanelMetrics.DailyTrafficBar] {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "M/d"
-        let values: [UInt64] = [3_100_000_000, 1_800_000_000, 4_200_000_000,
-                                2_400_000_000, 5_600_000_000, 2_000_000_000]
-        let calendar = Calendar.current
-        return values.enumerated().map { offset, value in
-            let day = calendar.date(byAdding: .day, value: offset - 5, to: Date()) ?? Date()
-            return MenuPanelMetrics.DailyTrafficBar(label: formatter.string(from: day),
-                                                    rx: value, tx: value / 5,
-                                                    isToday: offset == values.count - 1)
-        }
-    }
-
-    /// 活跃进程示意数据（进程名真实 → 可验证 NSWorkspace 真实图标解析）
-    ///
-    /// - Parameter count: 条数；超过 5 条时用于「内容高于 520pt」的可滚动自证
-    private static func sampleProcesses(count: Int = 5) -> [ProcessNetUsage] {
-        let names = ["Safari", "Google Chrome", "Terminal", "WeChat", "Spotify",
-                     "Xcode", "Slack", "Notes", "Mail", "Finder", "Firefox", "Discord"]
-        return (0..<max(0, count)).map { index in
-            let name = names[index % names.count] + (index < names.count ? "" : " \(index + 1)")
-            return ProcessNetUsage(name: name, pid: Int32(1200 + index),
-                                   bytesIn: UInt64(1_200_000 / (index + 1)),
-                                   bytesOut: UInt64(90_000 / (index + 1)))
-        }
     }
 
     // MARK: - 离屏渲染
@@ -270,50 +261,6 @@ enum MenuPanelSnapshot {
     }
 }
 
-// MARK: - 纯色背景容器
-
-/// 快照背景 — 用系统窗口背景色填充，让半透明材质下的深浅色差异可判读
-private final class SnapshotBackdropView: NSView {
-    override var isFlipped: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.windowBackgroundColor.setFill()
-        bounds.fill()
-        super.draw(dirtyRect)
-    }
-}
-
-// MARK: - 剪贴板面板画布
-
-/// 剪贴板面板画布 — 复刻 ClipboardPanelController 的真实层次：材质底（14pt 圆角）+ 面板视图
-@MainActor
-private final class SnapshotClipboardPanel {
-    private let size: NSSize
-    private let items: [ClipboardItem]
-
-    init(size: NSSize, items: [ClipboardItem]) {
-        self.size = size
-        self.items = items
-    }
-
-    /// 每次渲染生成一份新视图，避免上一次渲染遗留的选中态/布局残留
-    func makeView() -> NSView {
-        let effect = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
-        effect.material = .windowBackground
-        effect.blendingMode = .behindWindow
-        effect.state = .active
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = 14
-        effect.layer?.masksToBounds = true
-
-        let panelView = ClipboardPanelView(frame: NSRect(origin: .zero, size: size))
-        panelView.autoresizingMask = [.width, .height]
-        panelView.render(items: items, selectedIndex: items.isEmpty ? -1 : 0)
-        effect.addSubview(panelView)
-        return effect
-    }
-}
-
 // MARK: - 文件命名
 
 private extension MenuPanelTab {
@@ -324,6 +271,7 @@ private extension MenuPanelTab {
         case .clipboard: return "clipboard"
         case .transfer: return "transfer"
         case .system: return "system"
+        case .credits: return "credits"
         }
     }
 }

@@ -852,6 +852,10 @@ runTransferTests()
 
 runScanTests()
 
+// MARK: - 计费额度（provider 抽象 + Ollama 响应解码）
+
+runBillingTests()
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")
