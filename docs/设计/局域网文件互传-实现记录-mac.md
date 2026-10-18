@@ -21,6 +21,8 @@
 7. **超时**：确认超时 30s（`offerStatus` 到点返回 `expired` 并转 failed）；单文件上传失败重试 3 次（1s/2s/4s）。
 8. **动效**：状态 0.12s、展开 0.34s、弹层 0.22s / 关闭 0.15s、逐项 24ms，跟随系统「减弱动态效果」直接落终态。
 9. **音效**：`NSSound(named:)` 系统音，默认只开完成（接收 `Glass` / 发送 `Tink`），失败 `Basso`、新设备 `Pop`、配对码 `Morse` 默认关；同事件 500ms 去重。
+10. **接收端本地策略（2026-10-18 追加，设计文档 §3.6）**：已配对 / 免配对窗口（5·10·30 分钟，从开启时刻计时） / 体积阈值（≤ N MB，0 = 关闭）三条 **OR**；任一命中直接 `approved`、不生成 PIN、**不签发 `pairingKey`**。都不满足才 `pending` + PIN，确认超时 **60s**（`4007`）。窗口到期自动回到 `pending` 流程，面板状态行显示剩余时间。
+11. **设置持久化**：全部键收敛在 `TransferPreferences`（`KeyValueStorage` 包装，可注入测试）；目录占用/清理走 `ReceiveDirectoryStats` 纯函数 + `TransferService.clearReceivedFiles()`。
 
 ## 3. 改动清单
 
@@ -50,7 +52,11 @@
 | `Service/TransferService+Resume.swift` | 58 | 断网重试前向接收端确认已收字节（`refreshResumeOffset(s)`） |
 | `Service/TransferHTTPClient.swift` | 239 | `URLSession` 五路由封装、上传进度、续传切片 |
 | `Service/PairingStore.swift` | 114 | 按 `deviceId` 持久化 `pairingKey`、PIN 生成与校验 |
-| `Service/FileNameResolver.swift` | 88 | 文件名清洗与 ` (1)`/` (2)` 去重、offset 校验（`UploadPlanner`） |
+| `Service/FileNameResolver.swift` | ~100 | 文件名清洗与 ` (1)`/` (2)` 去重、offset 校验（`UploadPlanner`） |
+| `Service/TransferPreferences.swift` | 169 | 免配对窗口、体积阈值、提示音开关（可注入存储） |
+| `Service/AcceptancePolicy.swift` | 108 | 放行决策纯函数 + `ReceiveDirectoryStats` 目录统计 |
+| `Service/TransferService+Observer.swift` | 64 | 会话订阅、配对查询与移除、任务移除（lead 新增） |
+| `Service/TransferService+Storage.swift` | 35 | 接收目录统计与清理 |
 
 ### App 新增（`Sources/NetworkMonitor/Transfer/`）
 
@@ -62,10 +68,12 @@
 | `TransferPairingSheet.swift` | ~230 | PIN 展示 / 输入弹窗（独立 NSPanel） |
 | `TransferNotification.swift` | ~145 | 系统通知 + 系统音效 + 去重 |
 | `TransferMotion.swift` | ~175 | 动效常量与动画实现、减弱动效兜底 |
+| `TransferSettingsWindow.swift` | 308 | 传送设置窗：提示音、免配对窗口、体积阈值、目录占用与清理 |
 
 ### 既有文件改动
 
 - `MenuPanel/MenuTabBarView.swift`：`MenuPanelTab` 加 `.transfer`（「传送」/ `paperplane`）。
+- `MenuPanel/MenuPanelView.swift`：标题栏右侧加齿轮（传送设置入口）。
 - `MenuPanel/MenuPanelView.swift`：接入 `transferPane`，四页互斥显示与键盘切换。
 - `MenuPanel/MenuPanelController.swift`：构造注入 `TransferController` 并 `attach`。
 - `MenuBarManager.swift`：透传 `transferController`。
@@ -114,6 +122,33 @@ cd NetworkMonitor && swift run --disable-sandbox --build-system native TestRunne
 # EXIT=0，全量 536 条断言通过
 ```
 
+**接收端本地策略（服务层 + 真机 curl）**：
+
+```bash
+swift run --disable-sandbox --build-system native TestRunner
+🧪 Testing AcceptancePolicy 放行策略...
+✅ true  — 窗口生效放行
+✅ true  — 恰好 1 MB 命中阈值
+✅ false  — 超阈值 1 字节不命中
+🧪 Testing ReceiveDirectoryStats 目录统计...
+✅ 3072  — 总字节汇总
+🧪 Testing TransferPreferences 窗口与阈值...
+✅ 04:00  — 剩余时间文案
+🧪 Testing 接收端放行策略（服务层）...
+✅ approved  — 窗口内 offer 直接 approved
+✅ true  — 免确认不签发 pairingKey
+✅ pending  — 窗口过期回到 pending
+✅ approved  — 阈值内 offer 直接 approved
+✅ pending  — 超阈值 offer 仍需 PIN
+✅ 0  — 清理后目录为空
+# 全量 584 条断言通过
+
+# 真机（启动 .app 后用 defaults 注入设置）
+# 窗口内（windowStart=now）→ POST /offer 未配对：{"state":"approved","accepted":[{"fileId":"f1","offset":0}]}
+# 窗口过期（windowStart=1 小时前）→ {"state":"pending","accepted":[]}
+# 阈值 1 MB：512 KB → approved，2 MB → pending
+```
+
 **3）打包**
 
 ```bash
@@ -151,11 +186,13 @@ curl -s -X POST http://127.0.0.1:53319/api/v1/offer -H 'Content-Type: applicatio
 - **PIN 无错误次数限制**：错误 PIN 只返回 4000 并保留会话，未做爆破限制（局域网场景可接受，后续可加）。
 - **通知授权**：未签名 `.app` 上 `UNUserNotificationCenter` 授权可能失败，已降级为日志，不影响音效。
 - **动效未逐帧取证**：按系统时长与曲线实现并遵循「减弱动态效果」，未做像素级截图比对。
+- **清理接收目录会连带删除进行中任务的 `.part`**：用户主动清理时对应传输会失败（预期行为，设置窗有二次确认）。
 
 ## 6. 修订记录
 
 | 日期 | 问题 | 修复 |
 |---|---|---|
+| 2026-10-18 | 真机联调反馈：接收端缺少免确认策略、设置入口、目录清理、任务行缺传输量/速度 | 新增 `TransferPreferences` + `AcceptancePolicy`（窗口 / 阈值 / 配对 OR 放行）、`TransferSettingsWindow` + 标题栏齿轮、`ReceiveDirectoryStats` 统计与 `clearReceivedFiles()` 清理、任务行显示「已传 / 总量 · 速度」；确认超时改 60s（lead 改常量）；修复 `URLSession` delegate 析构竞态（独立 delegate 对象） |
 | 2026-10-18 | lead 验收发现：发送端重试写死 `offset = 0`，接收端严格校验会连续 4003 → 任务失败，违反协议 §6 | 重试前带 `sessionId` 重新 `POST /offer` 取 `accepted[].offset` 续传（`TransferService+Resume.swift`）；接收端允许已批准 / 传输中会话按 `sessionId` 复用并返回续传偏移；补纯函数 `UploadPlanner.retryOffset` 与集成测试（中断→4003→确认 5 字节→续传→sha256 一致） |
 
 ## 7. 后续建议
