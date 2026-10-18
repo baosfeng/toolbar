@@ -53,7 +53,10 @@ final class TransferPaneView: MenuPanelPaneView {
     // MARK: - 初始化
 
     init() {
-        dropHintRow = MenuPanelKeyValueRow(symbol: "square.and.arrow.down", title: "选择文件…", value: "或拖入")
+        dropHintRow = MenuPanelKeyValueRow(symbol: "square.and.arrow.down", title: "选择文件…",
+                                          value: "或拖入",
+                                          valueColor: MenuPanelStyle.accentColor,
+                                          titleColor: .labelColor)
         autoAcceptRow = MenuPanelKeyValueRow(symbol: "lock.open", title: "免配对窗口", value: "")
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false

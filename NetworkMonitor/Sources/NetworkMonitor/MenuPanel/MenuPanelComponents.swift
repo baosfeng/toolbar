@@ -47,7 +47,7 @@ enum MenuPanelStyle {
 
     /// 次要文字 — 替代 secondaryLabelColor：后者在小字号（10-12pt）+
     /// windowBackgroundColor 上实测只有 ~3.9:1，达不到 4.5:1，故用 75% labelColor
-    static var secondaryText: NSColor { NSColor.labelColor.withAlphaComponent(0.75) }
+    static var secondaryText: NSColor { NSColor.labelColor.withAlphaComponent(0.88) }
     /// 三级文字（9pt 图表坐标等）— 60% labelColor
     static var tertiaryText: NSColor { NSColor.labelColor.withAlphaComponent(0.62) }
 
@@ -249,14 +249,16 @@ final class MenuPanelKeyValueRow: MenuPanelRow {
     private let valueLabel: NSTextField
 
     init(symbol: String?, title: String, value: String,
-         valueColor: NSColor = .labelColor, onClick: (() -> Void)? = nil) {
+         valueColor: NSColor = .labelColor,
+         titleColor: NSColor = MenuPanelStyle.secondaryText,
+         onClick: (() -> Void)? = nil) {
         valueLabel = MenuPanelLabel.value(value, color: valueColor)
         super.init(height: MenuPanelStyle.rowHeight, onClick: onClick)
 
         if let symbol, let icon = MenuPanelLabel.symbol(symbol) {
             contentStack.addArrangedSubview(icon)
         }
-        let titleLabel = MenuPanelLabel.text(title, font: MenuPanelStyle.bodyFont, color: MenuPanelStyle.secondaryText)
+        let titleLabel = MenuPanelLabel.text(title, font: MenuPanelStyle.bodyFont, color: titleColor)
         contentStack.addArrangedSubview(titleLabel)
         contentStack.addArrangedSubview(MenuPanelLabel.spacer())
         valueLabel.setContentHuggingPriority(.required, for: .horizontal)
