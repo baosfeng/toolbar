@@ -88,6 +88,16 @@ public final class AppCoordinator {
                                             credentialStore: billingCredentials,
                                             alertService: billingAlerts,
                                             logger: logger)
+        // 锁屏 / 休眠期间暂停额度后台轮询，解锁后立即刷新一次
+        let screenActivity = ScreenActivityMonitor()
+        screenActivity.onChange = { [weak billingMonitor] active in
+            if active {
+                billingMonitor?.resume()
+            } else {
+                billingMonitor?.pause()
+            }
+        }
+        screenActivity.start()
 
         // 7. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
         let manager = MenuBarManager(
