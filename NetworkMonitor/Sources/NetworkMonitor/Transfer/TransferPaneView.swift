@@ -201,6 +201,12 @@ final class TransferPaneView: MenuPanelPaneView {
             let row = MenuPanelTransferTaskRow(session: session)
             row.onClick = { [weak self] in self?.onCancelSession?(session.id) }
             row.onClickEnabled = session.state.isActive
+            // 接收已完成的任务可拖出为真实文件
+            if session.state == .completed, session.direction == .recv, let directory = session.directory {
+                row.draggableFileURLs = session.files
+                    .map { directory.appendingPathComponent($0.name) }
+                    .filter { FileManager.default.fileExists(atPath: $0.path) }
+            }
             row.allowsDismiss = session.state.isTerminal
             row.onDismiss = { [weak self] deleteFiles in
                 self?.onDismissSession?(session.id, deleteFiles)
