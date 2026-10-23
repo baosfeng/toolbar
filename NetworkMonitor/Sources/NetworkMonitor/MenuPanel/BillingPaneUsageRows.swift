@@ -59,7 +59,7 @@ final class BillingDividerView: NSView {
 
 // MARK: - 模型明细行
 
-/// 模型明细行 — 模型名（等宽截断）+ 请求次数 + 金额（右对齐，最小 52pt）
+/// 模型明细行 — 模型名（等宽截断）+ 请求次数 + 金额或 token 合计（右对齐，最小 52pt）
 final class BillingModelRow: MenuPanelRow {
 
     private let nameLabel: NSTextField
@@ -89,15 +89,36 @@ final class BillingModelRow: MenuPanelRow {
     required init?(coder: NSCoder) { nil }
 
     /// 更新一行模型明细
-    func update(name: String, requests: Int, usd: Double?) {
+    ///
+    /// 右侧数值列按 provider 能力自适应：有金额显示金额；无金额但有 token 明细时
+    /// 显示 token 合计（编码计划类 provider 按 credits 计量、不返回花费）；两者都缺才整列隐藏。
+    func update(name: String, metrics: BillingMetrics) {
         nameLabel.stringValue = name
         nameLabel.toolTip = name
-        requestLabel.stringValue = "\(requests) 次"
-        // 金额缺失（遗留计划不返回 usage_usd）：整列隐藏，不显示「—」
-        amountLabel.isHidden = usd == nil
-        if let usd {
-            amountLabel.stringValue = formatUSD(usd)
+        requestLabel.stringValue = "\(metrics.requestCount) 次"
+        let tokenTotal = (metrics.inputTokens ?? 0)
+            + (metrics.cachedInputTokens ?? 0)
+            + (metrics.outputTokens ?? 0)
+        let hasTokenDetail = metrics.inputTokens != nil
+            || metrics.cachedInputTokens != nil
+            || metrics.outputTokens != nil
+        let valueText: String?
+        if let usd = metrics.usageUSD {
+            valueText = formatUSD(usd)
+        } else if hasTokenDetail {
+            valueText = formatTokenCount(tokenTotal) + " tok"
+        } else {
+            valueText = nil
         }
-        setAccessibilityLabel(usd == nil ? "\(name) \(requests) 次" : "\(name) \(requests) 次 \(amountLabel.stringValue)")
+        amountLabel.isHidden = valueText == nil
+        amountLabel.stringValue = valueText ?? ""
+        // 悬停给出 token 三项明细，避免只有合计时无法核对
+        amountLabel.toolTip = hasTokenDetail
+            ? "输入 \(formatTokenCount(metrics.inputTokens ?? 0))"
+                + " · 缓存 \(formatTokenCount(metrics.cachedInputTokens ?? 0))"
+                + " · 输出 \(formatTokenCount(metrics.outputTokens ?? 0))"
+            : nil
+        setAccessibilityLabel(valueText.map { "\(name) \(metrics.requestCount) 次 \($0)" }
+            ?? "\(name) \(metrics.requestCount) 次")
     }
 }

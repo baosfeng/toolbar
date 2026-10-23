@@ -131,8 +131,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
         content.billingPane.onSaveCredential = { [weak self] key in
             self?.billingMonitor?.saveCredential(key)
         }
-        content.billingPane.onOpenProviderSite = {
-            NSWorkspace.shared.open(BillingPaneView.credentialPageURL)
+        content.billingPane.onOpenProviderSite = { url in
+            NSWorkspace.shared.open(url)
         }
         content.billingPane.onProviderChange = { [weak self] id in
             self?.billingMonitor?.selectProvider(id: id)

@@ -3,24 +3,25 @@ import NetworkMonitorCore
 
 // MARK: - 未配置态
 
-/// 未配置态 — 图标 + 标题 + 说明 + API Key 输入行 + 官方链接
+/// 未配置态 — 图标 + 标题 + 说明 + 凭据输入行 + 官方链接
 ///
 /// 凭据只写偏好存储（`PreferencesBillingCredentialStore`），界面用 `NSSecureTextField` 掩码输入，
-/// 保存后不保留明文，输入框立即清空。
+/// 保存后不保留明文，输入框立即清空。标题、说明与链接文案均 provider 无关，
+/// 具体 provider 的占位文案与链接由 `update(placeholder:linkText:showsLink:)` 注入。
 final class BillingCredentialSetupView: NSView {
 
     /// 「保存并查询」提交 API Key
     var onSave: ((String) -> Void)?
-    /// 「在 ollama.com 获取 API Key」
+    /// 「前往 provider 网站获取凭据」
     var onOpenSite: (() -> Void)?
 
     private let secureField = NSSecureTextField()
     private let fieldBox = BillingFieldBoxView()
     private let saveRow = BillingPrimaryButtonRow(title: "保存并查询")
-    private let linkRow = BillingLinkRow(text: "在 ollama.com 获取 API Key",
+    private let linkRow = BillingLinkRow(text: "前往 provider 网站获取凭据",
                                          symbolName: "arrow.up.right.square")
     private let noteLabel = BillingCredentialSetupView.makeNoteLabel()
-    private let titleLabel = MenuPanelLabel.text("配置 API Key 后查看额度",
+    private let titleLabel = MenuPanelLabel.text("配置凭据后查看额度",
                                                  font: NSFont.systemFont(ofSize: 12, weight: .semibold),
                                                  color: .labelColor)
     private let iconTile = BillingIconTileView(symbolName: "key")
@@ -36,12 +37,12 @@ final class BillingCredentialSetupView: NSView {
         secureField.focusRingType = .none
         secureField.font = BillingPaneStyle.monoFont
         secureField.textColor = .labelColor
-        secureField.placeholderString = "API Key"
+        secureField.placeholderString = "凭据"
         secureField.translatesAutoresizingMaskIntoConstraints = false
         secureField.delegate = self
         secureField.target = self
         secureField.action = #selector(submitFromField)
-        secureField.setAccessibilityLabel("API Key")
+        secureField.setAccessibilityLabel("凭据")
 
         fieldBox.translatesAutoresizingMaskIntoConstraints = false
         fieldBox.addSubview(secureField)
@@ -81,13 +82,21 @@ final class BillingCredentialSetupView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    /// 键盘可达行：保存按钮 → 官方链接
-    var focusableRows: [MenuPanelRow] { [saveRow, linkRow] }
+    /// 键盘可达行：保存按钮 → 官方链接（无在线入口时链接行不参与键盘遍历）
+    var focusableRows: [MenuPanelRow] { linkRow.isHidden ? [saveRow] : [saveRow, linkRow] }
 
-    /// 同步凭据输入框占位文案（provider.credentialHint）
-    func update(placeholder: String) {
+    /// 同步配置态文案
+    ///
+    /// - Parameters:
+    ///   - placeholder: 凭据输入框占位文案（provider.credentialHint）
+    ///   - linkText: 官方链接文案（按 provider 生成）
+    ///   - showsLink: 是否显示链接行（provider 无 `credentialPageURL` 时为 false）
+    func update(placeholder: String, linkText: String, showsLink: Bool) {
         secureField.placeholderString = placeholder
         secureField.setAccessibilityLabel(placeholder)
+        linkRow.isHidden = !showsLink
+        guard showsLink else { return }
+        linkRow.update(text: linkText)
     }
 
     // MARK: - 提交
@@ -105,11 +114,13 @@ final class BillingCredentialSetupView: NSView {
     }
 
     /// 说明段落（10.5pt，行高 1.5，最大宽 230）
+    ///
+    /// 文案与 provider 无关：凭据形态可能是 API Key 也可能是浏览器 Cookie，界面不预设。
     private static func makeNoteLabel() -> NSTextField {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineHeightMultiple = 1.5
         paragraph.alignment = .center
-        let text = "余额与用量来自 Ollama 云端接口，Key 只保存在本机偏好设置中。"
+        let text = "凭据只保存在本机偏好设置中，用于查询官方额度接口。"
         let label = NSTextField(labelWithAttributedString: NSAttributedString(
             string: text,
             attributes: [.font: BillingPaneStyle.noteFont,
@@ -247,15 +258,17 @@ final class BillingPrimaryButtonRow: MenuPanelRow {
 /// 强调色链接行 — 文字 + 可选外链图标，可点击、可键盘聚焦
 final class BillingLinkRow: MenuPanelRow {
 
+    private let textLabel: NSTextField
+
     init(text: String, symbolName: String? = nil,
          font: NSFont = BillingPaneStyle.noteFont) {
         let iconView = symbolName.flatMap {
             MenuPanelLabel.symbol($0, pointSize: 10, color: MenuPanelStyle.accentColor)
         }
+        textLabel = MenuPanelLabel.text(text, font: font, color: MenuPanelStyle.accentColor)
         super.init(height: 20, onClick: nil)
         contentStack.spacing = 4
-        contentStack.addArrangedSubview(MenuPanelLabel.text(text, font: font,
-                                                            color: MenuPanelStyle.accentColor))
+        contentStack.addArrangedSubview(textLabel)
         if let iconView { contentStack.addArrangedSubview(iconView) }
         setAccessibilityLabel(text)
     }
@@ -266,6 +279,17 @@ final class BillingLinkRow: MenuPanelRow {
     override var intrinsicContentSize: NSSize {
         let fitting = contentStack.fittingSize
         return NSSize(width: fitting.width + 8, height: 20)
+    }
+
+    /// 改文案（切换 provider 时复用同一行，不重建视图）
+    ///
+    /// `intrinsicContentSize` 由 `contentStack.fittingSize` 推导，文案变化后必须让其失效，
+    /// 否则行宽仍按旧文案计算，新文案会被截断。
+    func update(text: String) {
+        guard textLabel.stringValue != text else { return }
+        textLabel.stringValue = text
+        setAccessibilityLabel(text)
+        invalidateIntrinsicContentSize()
     }
 }
 

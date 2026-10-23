@@ -28,6 +28,23 @@ final class BillingMonitor {
         let credentialHint: String
         /// 是否提供按模型分组的明细
         let supportsModelBreakdown: Bool
+        /// 是否支持时间序列（false 时 UI 隐藏用时柱状图）
+        let supportsTimeSeries: Bool
+        /// 凭据获取页面（配置态链接跳转目标；nil = 无在线入口）
+        let credentialPageURL: URL?
+
+        /// 兼容默认值（快照示意数据 / 测试构造用）
+        init(id: String, displayName: String, symbolName: String, credentialHint: String,
+             supportsModelBreakdown: Bool, supportsTimeSeries: Bool = true,
+             credentialPageURL: URL? = nil) {
+            self.id = id
+            self.displayName = displayName
+            self.symbolName = symbolName
+            self.credentialHint = credentialHint
+            self.supportsModelBreakdown = supportsModelBreakdown
+            self.supportsTimeSeries = supportsTimeSeries
+            self.credentialPageURL = credentialPageURL
+        }
     }
 
     /// 对外快照 — 面板据此渲染状态行 / 余额卡 / 用量区 / 配置态 / 错误态
@@ -122,7 +139,9 @@ final class BillingMonitor {
                                displayName: provider.displayName,
                                symbolName: provider.symbolName,
                                credentialHint: provider.credentialHint,
-                               supportsModelBreakdown: provider.supportsModelBreakdown)
+                               supportsModelBreakdown: provider.supportsModelBreakdown,
+                               supportsTimeSeries: provider.supportsTimeSeries,
+                               credentialPageURL: provider.credentialPageURL)
         }
         self.selectedProviderID = providers.first?.id
         if providers.isEmpty {
@@ -366,42 +385,5 @@ final class BillingMonitor {
     /// 回调最新快照
     private func emit() {
         onUpdate?(snapshot)
-    }
-
-    // MARK: - 请求封装（nonisolated，避免占用主线程）
-
-    /// 单次请求结果 — 自定义 Sendable 容器，跨 actor 传递无并发检查歧义
-    private enum BillingOutcome<Value: Sendable>: Sendable {
-        case success(Value)
-        case failure(BillingError)
-    }
-
-    /// 拉取余额，错误统一收敛为 `BillingError`
-    private nonisolated static func fetchBalance(
-        provider: any BillingProvider,
-        credential: String
-    ) async -> BillingOutcome<BillingBalance> {
-        do {
-            return .success(try await provider.fetchBalance(credential: credential))
-        } catch let error as BillingError {
-            return .failure(error)
-        } catch {
-            return .failure(.transport(error.localizedDescription))
-        }
-    }
-
-    /// 拉取指定范围用量，错误统一收敛为 `BillingError`
-    private nonisolated static func fetchUsage(
-        provider: any BillingProvider,
-        range: BillingRange,
-        credential: String
-    ) async -> BillingOutcome<BillingUsage> {
-        do {
-            return .success(try await provider.fetchUsage(range: range, credential: credential))
-        } catch let error as BillingError {
-            return .failure(error)
-        } catch {
-            return .failure(.transport(error.localizedDescription))
-        }
     }
 }

@@ -241,14 +241,19 @@ final class BillingBalanceSectionView: NSView {
 
 // MARK: - 遗留计划限额行
 
-/// 遗留计划限额行 — 标题 + 剩余百分比 + 分级进度条 + 重置时间
+/// 遗留计划限额行 — 标题 + 剩余百分比 + 绝对值明细 + 分级进度条 + 重置时间
 ///
 /// 进度条颜色分级：≥50% 强调色、≥25% 橙色、<25% 红色（与原型一致）。
+/// 绝对值明细行（如「已用 76,412 / 150,000 credits」）仅在 provider 给出
+/// `usedAmount` 与 `limitAmount` 时显示；只给百分比的计划该行隐藏。
 final class BillingLimitRow: NSView {
 
     private let titleLabel = MenuPanelLabel.text("", font: BillingPaneStyle.labelFont,
                                                  color: BillingPaneStyle.secondaryText)
     private let valueLabel = MenuPanelLabel.text("", font: BillingPaneStyle.monoFont, color: .labelColor)
+    /// 绝对值明细（credits 等非金额计量；无明细时隐藏）
+    private let usageLabel = MenuPanelLabel.text("", font: BillingPaneStyle.subFont,
+                                                 color: BillingPaneStyle.tertiaryText)
     private let track = MenuPanelTrackView(fillColor: MenuPanelStyle.accentColor)
     private let resetLabel = MenuPanelLabel.text("", font: BillingPaneStyle.subFont,
                                                  color: BillingPaneStyle.tertiaryText)
@@ -265,7 +270,8 @@ final class BillingLimitRow: NSView {
         titleRow.alignment = .firstBaseline
         titleRow.spacing = 8
 
-        let stack = NSStackView(views: [titleRow, track, resetLabel])
+        // 明细行紧贴标题行、位于进度条之上；重置时间仍在最下
+        let stack = NSStackView(views: [titleRow, usageLabel, track, resetLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 4
@@ -280,6 +286,7 @@ final class BillingLimitRow: NSView {
         for view in stack.arrangedSubviews {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
+        usageLabel.isHidden = true
         resetLabel.isHidden = true
     }
 
@@ -289,16 +296,20 @@ final class BillingLimitRow: NSView {
     /// 更新单条限额
     func update(limit: BillingPercentLimit) {
         titleLabel.stringValue = limit.title
-        valueLabel.stringValue = "剩余 " + formatPercent(limit.remainingFraction)
+        let percent = formatPercent(limit.remainingFraction)
+        valueLabel.stringValue = "剩余 " + percent
         track.fraction = limit.remainingFraction
         track.fillColor = Self.fillColor(for: limit.remainingFraction)
-        if let resetsAt = limit.resetsAt {
-            resetLabel.stringValue = formatShortDateTime(resetsAt) + " 重置"
-            resetLabel.isHidden = false
-        } else {
-            resetLabel.stringValue = ""
-            resetLabel.isHidden = true
-        }
+        // 绝对值明细：两端都有值才渲染（Ollama 遗留计划只给百分比，该行保持隐藏）
+        let usage = limit.hasAmountDetail
+            ? formatLimitUsage(used: limit.usedAmount, limit: limit.limitAmount, unit: limit.unitLabel)
+            : nil
+        usageLabel.stringValue = usage ?? ""
+        usageLabel.isHidden = usage == nil
+        resetLabel.stringValue = limit.resetsAt.map { formatShortDateTime($0) + " 重置" } ?? ""
+        resetLabel.isHidden = limit.resetsAt == nil
+        setAccessibilityLabel(usage.map { "\(limit.title) 剩余 \(percent)，\($0)" }
+            ?? "\(limit.title) 剩余 \(percent)")
     }
 
     /// 剩余比例 → 进度条颜色（分级阈值与原型一致）
