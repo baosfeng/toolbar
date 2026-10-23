@@ -79,7 +79,10 @@ public final class AppCoordinator {
         let transfer = makeTransferController()
 
         // 6. 额度页链路（provider 注册表 + 凭据存储 + 状态管理器）
-        let billingRegistry = BillingProviderRegistry(providers: [OllamaBillingProvider(logger: logger)])
+        let billingRegistry = BillingProviderRegistry(providers: [
+            OllamaBillingProvider(logger: logger),
+            OpenDesignBillingProvider(logger: logger),
+        ])
         let billingCredentials = PreferencesBillingCredentialStore()
         // 额度阈值提醒（5%/4%/3%/2%/1%）：应用启动时请求通知权限
         let billingAlerts = BillingAlertService(storage: AppContext.shared.storage, logger: logger)

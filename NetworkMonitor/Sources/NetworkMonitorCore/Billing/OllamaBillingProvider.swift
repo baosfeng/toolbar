@@ -16,6 +16,8 @@ public final class OllamaBillingProvider: BillingProvider {
     public let symbolName = "cloud"
     public let supportsModelBreakdown = true
     public let credentialHint = "Ollama API Key"
+    /// API Key 管理页（额度页配置态链接跳转目标）
+    public var credentialPageURL: URL? { URL(string: "https://ollama.com/settings/keys") }
     /// Ollama 官方环境变量名（命令行调试时可直接 `export OLLAMA_API_KEY=...`）
     public var environmentCredentialKey: String { "OLLAMA_API_KEY" }
 

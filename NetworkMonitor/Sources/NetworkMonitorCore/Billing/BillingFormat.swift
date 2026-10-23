@@ -20,6 +20,28 @@ public func formatUSD(_ value: Double) -> String {
     return "$" + number
 }
 
+/// 非货币额度数量格式化（如 credits：76412 → "76,412"、157.4 → "157"）
+///
+/// 编码计划按 credits 计量而非美元，整数部分千分位分组，小数按需保留 1 位。
+public func formatCreditAmount(_ value: Double) -> String {
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .decimal
+    formatter.locale = Locale(identifier: "en_US")
+    formatter.groupingSeparator = ","
+    formatter.usesGroupingSeparator = true
+    formatter.minimumFractionDigits = 0
+    formatter.maximumFractionDigits = 1
+    return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.0f", value)
+}
+
+/// 额度绝对值明细（如 "已用 76,412 / 150,000"；缺任一端时返回 nil）
+public func formatLimitUsage(used: Double?, limit: Double?, unit: String?) -> String? {
+    guard let used, let limit else { return nil }
+    let text = "已用 \(formatCreditAmount(used)) / \(formatCreditAmount(limit))"
+    guard let unit, !unit.isEmpty else { return text }
+    return text + " " + unit
+}
+
 /// token 数量缩写（如 "10.6万" / "1360" / "1.2亿"）
 ///
 /// 与菜单面板既有风格一致：≥1 万用「万」，≥1 亿用「亿」，保留 1 位小数。
