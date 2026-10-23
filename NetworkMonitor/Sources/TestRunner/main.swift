@@ -860,6 +860,10 @@ runBillingTests()
 
 runBillingAlertTests()
 
+// MARK: - Open Design 额度（归一化 / 工作区发现 / 窗口映射 / 用量聚合）
+
+runOpenDesignBillingTests()
+
 // MARK: - Done
 
 print("\n🎉 所有测试通过！")
