@@ -49,7 +49,7 @@ final class BillingUsageSectionView: NSView {
         metricHintButton.isBordered = false
         metricHintButton.bezelStyle = .inline
         metricHintButton.contentTintColor = BillingPaneStyle.secondaryText
-        metricHintButton.toolTip = "该计划仅返回请求数，Ollama 不提供金额与 token 明细"
+        metricHintButton.toolTip = "该计划仅返回请求数，不提供金额与 token 明细"
         metricHintButton.setAccessibilityLabel("用量明细说明")
         metricHintButton.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -116,8 +116,14 @@ final class BillingUsageSectionView: NSView {
     ///   - usage: 用量数据（nil = 尚无成功数据）
     ///   - range: 当前范围（同步分段选中态）
     ///   - showsModelBreakdown: provider 是否提供按模型明细
-    func update(usage: BillingUsage?, range: BillingRange, showsModelBreakdown: Bool) {
+    ///   - showsTimeSeries: provider 是否支持时间序列；false 时整块隐藏柱状图与时间轴
+    ///     （服务端不提供分桶的 provider 不用「明细首 100 条」拼一张严重低估的图）
+    func update(usage: BillingUsage?, range: BillingRange, showsModelBreakdown: Bool,
+                showsTimeSeries: Bool) {
         rangeSelector.update(selected: range)
+        // 时间轴/柱状图显隐与数据无关，先按 provider 能力定，后面只填数据
+        barsView.isHidden = !showsTimeSeries
+        axisRow.isHidden = !showsTimeSeries
 
         guard let usage else {
             metricsLine1.attributedStringValue = Self.metricsLine(totals: nil)
@@ -138,17 +144,25 @@ final class BillingUsageSectionView: NSView {
         }
         // 金额与 token 都缺（遗留计划只返回 request_count）：正文不占位，改由「?」悬停说明
         metricHintButton.isHidden = usage.totals.usageUSD != nil || hasTokens
-        barsView.bars = Self.makeBars(usage)
-        axisRow.update(left: Self.axisLeft(usage), right: usage.granularity == .hour ? "现在" : "今天")
+        if showsTimeSeries {
+            barsView.bars = Self.makeBars(usage)
+            axisRow.update(left: Self.axisLeft(usage),
+                           right: usage.granularity == .hour ? "现在" : "今天")
+        } else {
+            barsView.bars = []
+        }
         updateModels(groups: usage.groups, shows: showsModelBreakdown)
     }
 
     // MARK: - 模型明细
 
-    /// 重建模型 Top3（按花费降序）；provider 不支持或分组为空时整块隐藏
+    /// 重建模型 Top3；provider 不支持或分组为空时整块隐藏
+    ///
+    /// 排序键：有金额按金额降序（Ollama），无金额按 token 合计降序（编码计划类 provider）。
     private func updateModels(groups: [BillingGroup], shows: Bool) {
         let top = shows
-            ? Array(groups.sorted { ($0.metrics.usageUSD ?? 0) > ($1.metrics.usageUSD ?? 0) }.prefix(3))
+            ? Array(groups.sorted { Self.modelWeight($0.metrics) > Self.modelWeight($1.metrics) }
+                .prefix(3))
             : []
         let isHidden = top.isEmpty
         modelsHeader.isHidden = isHidden
@@ -161,20 +175,28 @@ final class BillingUsageSectionView: NSView {
         }
 
         modelsTrailing.stringValue = "Top \(top.count)"
-        let signature = top.map { "\($0.name):\($0.metrics.requestCount):\($0.metrics.usageUSD ?? 0)" }
-            .joined(separator: "|")
+        let signature = top.map {
+            "\($0.name):\($0.metrics.requestCount):\(Self.modelWeight($0.metrics))"
+        }.joined(separator: "|")
         guard signature != modelsSignature else { return }
         modelsSignature = signature
         clearModelRows()
         modelRows = top.map { group in
             let row = BillingModelRow()
-            row.update(name: group.name, requests: group.metrics.requestCount, usd: group.metrics.usageUSD)
+            row.update(name: group.name, metrics: group.metrics)
             return row
         }
         for row in modelRows {
             modelStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: modelStack.widthAnchor).isActive = true
         }
+    }
+
+    /// 模型排序权重：金额优先，无金额时用 token 合计（输入 + 缓存 + 输出）
+    private static func modelWeight(_ metrics: BillingMetrics) -> Double {
+        if let usd = metrics.usageUSD { return usd }
+        return Double((metrics.inputTokens ?? 0) + (metrics.cachedInputTokens ?? 0)
+                      + (metrics.outputTokens ?? 0))
     }
 
     private func clearModelRows() {
