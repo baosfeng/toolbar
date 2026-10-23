@@ -78,9 +78,9 @@ public struct BillingIncludedBalance: Sendable, Equatable {
     }
 }
 
-/// 按百分比计量的限额（如 Ollama 遗留计划的 session / weekly）
+/// 按百分比计量的限额（如 Ollama 遗留计划的 session / weekly、Open Design 编码计划窗口）
 public struct BillingPercentLimit: Sendable, Equatable {
-    /// 稳定标识（session / weekly 等，用于 UI 排序与键）
+    /// 稳定标识（session / weekly / policyId 等，用于 UI 排序与提醒状态键）
     public let id: String
     /// 展示名称
     public let title: String
@@ -88,13 +88,26 @@ public struct BillingPercentLimit: Sendable, Equatable {
     public let remainingFraction: Double
     /// 下次重置时间
     public let resetsAt: Date?
+    /// 已用量绝对值（nil = provider 只给百分比）
+    public let usedAmount: Double?
+    /// 限额绝对值（nil = provider 只给百分比）
+    public let limitAmount: Double?
+    /// 绝对值单位文案（如 "credits"；nil = 无绝对值明细）
+    public let unitLabel: String?
 
-    public init(id: String, title: String, remainingFraction: Double, resetsAt: Date?) {
+    public init(id: String, title: String, remainingFraction: Double, resetsAt: Date?,
+                usedAmount: Double? = nil, limitAmount: Double? = nil, unitLabel: String? = nil) {
         self.id = id
         self.title = title
         self.remainingFraction = min(max(remainingFraction, 0), 1)
         self.resetsAt = resetsAt
+        self.usedAmount = usedAmount
+        self.limitAmount = limitAmount
+        self.unitLabel = unitLabel
     }
+
+    /// 是否可展示绝对值明细（已用与限额都有值）
+    public var hasAmountDetail: Bool { usedAmount != nil && limitAmount != nil }
 }
 
 /// 账户余额（各 provider 通用）

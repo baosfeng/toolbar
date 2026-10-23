@@ -15,8 +15,12 @@ public protocol BillingProvider: Sendable {
     var symbolName: String { get }
     /// 是否返回按模型分组的明细（UI 据此决定是否显示模型 Top 列表）
     var supportsModelBreakdown: Bool { get }
+    /// 是否支持时间序列（UI 据此决定是否画用时柱状图；服务端不分桶时应为 false）
+    var supportsTimeSeries: Bool { get }
     /// 凭据说明（配置输入框占位文案，如「Ollama API Key」）
     var credentialHint: String { get }
+    /// 凭据获取页面（配置态链接跳转目标；nil = 该 provider 无在线获取入口）
+    var credentialPageURL: URL? { get }
     /// 环境变量键名（只读回退凭据；默认 `BILLING_<ID>_API_KEY`）
     var environmentCredentialKey: String { get }
 
@@ -50,9 +54,9 @@ public enum BillingError: Error, Sendable, Equatable {
     public var userMessage: String {
         switch self {
         case .missingCredential:
-            return "未配置 API Key"
+            return "未配置凭据"
         case .unauthorized:
-            return "API Key 无效或已过期"
+            return "凭据无效或已过期，请重新填写"
         case .forbidden(let message):
             return message ?? "无权访问该账户数据"
         case .rateLimited:
@@ -113,6 +117,12 @@ public final class BillingProviderRegistry: @unchecked Sendable {
 // MARK: - 协议默认实现
 
 extension BillingProvider {
+    /// 默认提供时间序列（provider 未声明时按支持处理）
+    public var supportsTimeSeries: Bool { true }
+
+    /// 默认无凭据获取页面
+    public var credentialPageURL: URL? { nil }
+
     /// 默认环境变量键名
     public var environmentCredentialKey: String {
         "BILLING_\(id.uppercased())_API_KEY"
