@@ -1,7 +1,7 @@
 # NetworkMonitor / macMonitor — macOS 菜单栏监控
 
 ## 项目简介
-- **版本:** 1.1.0
+- **版本:** 1.2.0
 - **语言:** Swift 6.3
 - **类型:** 业务应用
 - **技术栈:** Swift 6.3, Swift PM, AppKit, macOS 14+, ARM64
@@ -26,7 +26,7 @@
 |------|------|
 | 网络速度监控 | 实时网速监控（getifaddrs 差分）+ 进程网速（nettop）+ 每日流量追踪（TrafficTracker） |
 | Reasonix Hook 事件监听与 Token 监控 | UDS 接收 AI 助手事件 → HookEventDispatcher 分发 → SQLite 落库；stats JSONL 导入 + Token 统计 + AI 分析 + 系统通知 |
-| 计费额度查询 | 菜单面板「额度」tab：Ollama /api/balance + /api/usage 余额与用量；BillingProvider 协议 + 注册表，新增 provider 仅需实现协议并注册 |
+| 计费额度查询 | 菜单面板「额度」tab：Ollama（/api/balance + /api/usage）、Open Design（编码计划 credits 窗口 + 工作区用量）；BillingProvider 协议 + 注册表，新增 provider 仅需实现协议并注册 |
 
 ## 开发指南
 → [编码规范 skill](.reasonix/skills/toolbar-coding-standards/SKILL.md)（规范权威来源，**规范更新一律写入 skill，不另建独立规范文档**）
