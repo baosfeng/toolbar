@@ -305,7 +305,7 @@ final class MenuPanelProcessRow: MenuPanelRow {
 
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.imageScaling = .scaleProportionallyDown
-        iconView.image = AppIconProvider.icon(forProcess: process.name, size: 20)
+        iconView.image = AppIconProvider.icon(forProcess: process.name, pid: process.pid, size: 20)
             ?? AppIconProvider.placeholderIcon(size: 20)
         iconView.contentTintColor = MenuPanelStyle.tertiaryText
         NSLayoutConstraint.activate([
