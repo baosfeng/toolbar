@@ -5,7 +5,7 @@ description: 本项目（toolbar/NetworkMonitor）专属编码规范：架构原
 
 # 项目编码规范（NetworkMonitor / macMonitor）
 
-本项目（`<repo>`）专属编码规范 playbook。**在编写或修改本项目任何 Swift 代码之前，必须先加载本 skill 并遵循全部原则。** 本规范由架构审查（2026-08）固化，违反任一强制原则的代码应被拒绝。
+本项目（仓库根目录）专属编码规范 playbook。**在编写或修改本项目任何 Swift 代码之前，必须先加载本 skill 并遵循全部原则。** 本规范由架构审查（2026-08）固化，违反任一强制原则的代码应被拒绝。
 
 ## 项目速览
 

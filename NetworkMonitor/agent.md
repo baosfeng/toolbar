@@ -2,12 +2,12 @@
 
 ## 工作流程
 
-每次完成功能修改后，按以下顺序执行：
+每次完成功能修改后，在仓库根目录按以下顺序执行：
 
 ### 第 1 步：运行测试
 
 ```bash
-cd <repo>/NetworkMonitor && swift run --disable-sandbox TestRunner
+cd NetworkMonitor && swift run --disable-sandbox TestRunner
 ```
 
 所有测试通过（显示 `🎉 所有测试通过！`）后才能继续。有失败则先修复代码。
@@ -15,7 +15,7 @@ cd <repo>/NetworkMonitor && swift run --disable-sandbox TestRunner
 ### 第 2 步：编译验证
 
 ```bash
-cd <repo>/NetworkMonitor && swift build --disable-sandbox
+cd NetworkMonitor && swift build --disable-sandbox
 ```
 
 确保无 error。
@@ -23,7 +23,7 @@ cd <repo>/NetworkMonitor && swift build --disable-sandbox
 ### 第 3 步：打包为 .app
 
 ```bash
-cd <repo>/NetworkMonitor
+cd NetworkMonitor
 
 APP_PATH="./dist/NetworkMonitor.app"
 

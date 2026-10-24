@@ -1,4 +1,4 @@
 编译好的 app 文件在这里：
-<repo>/NetworkMonitor/dist/NetworkMonitor.app
+NetworkMonitor/dist/NetworkMonitor.app（相对仓库根目录）
 
 直接双击就能运行。
