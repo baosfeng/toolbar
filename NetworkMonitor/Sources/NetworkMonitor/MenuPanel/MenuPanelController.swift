@@ -1,6 +1,5 @@
 import AppKit
 import NetworkMonitorCore
-import ServiceManagement
 
 // MARK: - 面板内容控制器
 
@@ -31,22 +30,26 @@ private final class MenuPanelContentViewController: NSViewController {
 /// - 事件驱动：剪贴板条目（`AppEvents.clipboardChanged`）
 /// - 面板打开时：强制全量刷新一次
 @MainActor
-final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDelegate {
+final class MenuPanelController: NSObject, NSPopoverDelegate {
 
     // MARK: 依赖
 
+    // `content` / `paster` / `transferController` / `billingMonitor` / `storage` / `logger`
+    // 由 `private` 放宽为 `internal`：拆出的 `MenuPanelController+Actions.swift` 跨文件访问，
+    // 同模块内无其他调用方；`popover` 与监控服务仍仅本文件使用，保持 private。
+
     private let popover = NSPopover()
-    private let content = MenuPanelView()
+    let content = MenuPanelView()
     private let monitor: any NetworkMonitoringService
     private let processMonitor: any ProcessNetworkMonitoringService
     private let trafficTracker: any TrafficTrackingService
     private let repository: any ClipboardRepository
-    private let paster: ClipboardPaster
-    private let transferController: TransferController?
+    let paster: ClipboardPaster
+    let transferController: TransferController?
     /// 额度页状态管理器（nil = 未装配计费链路）
-    private let billingMonitor: BillingMonitor?
-    private let storage: any KeyValueStorage
-    private let logger: LoggingService
+    let billingMonitor: BillingMonitor?
+    let storage: any KeyValueStorage
+    let logger: LoggingService
 
     // MARK: 回调（组合根注入）
 
@@ -294,96 +297,14 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
     ///
     /// 内容高于 520pt 时不做硬截断：面板内部 NSScrollView 转为垂直滚动（隐式滚动条），
     /// 因此进程数变多 / 字体放大 / 多语言换行时仍能看到全部内容。
-    private func updateContentSize(force: Bool = false) {
+    ///
+    /// 非 private：动作扩展（`MenuPanelController+Actions.swift`）切换分页、自启动后需重算高度。
+    func updateContentSize(force: Bool = false) {
         content.layoutSubtreeIfNeeded()
         let needed = content.desiredContentHeight
         let height = min(max(needed, 180), MenuPanelStyle.maxHeight)
         guard force || abs(popover.contentSize.height - height) > 0.5 else { return }
         popover.contentSize = NSSize(width: MenuPanelStyle.panelWidth, height: height)
-    }
-
-    // MARK: - 动作
-
-    /// 点击条目：收起面板后走与剪贴板面板一致的粘贴路径
-    private func paste(_ item: ClipboardItem) {
-        close()
-        // 面板展开时本 App 会被激活；收起后先把目标 App 拉回前台，
-        // 否则合成的 ⌘V 会落回自己（只写剪贴板却不粘贴）。
-        if let bundleID = paster.targetBundleID,
-           let target = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
-            target.activate(options: [])
-        }
-        paster.paste(item, asPlainText: false) { [weak self] outcome in
-            let message = outcome.message
-            guard let self, !message.isEmpty else { return }
-            self.logger.info("菜单面板粘贴：\(message)")
-        }
-    }
-
-    private func requestClipboardSettings() {
-        close()
-        onOpenClipboardSettings?()
-    }
-
-    private func requestClipboardHistory() {
-        close()
-        onOpenClipboardHistory?()
-    }
-
-    private var isLaunchAtStartupSaved: Bool {
-        storage.bool(forKey: ClipboardPreferences.launchAtStartupKey)
-    }
-
-    /// 开机自启动切换（SMAppService 注册 / 注销，失败时在剪贴板页给提示）
-    private func toggleLaunchAtStartup() {
-        let wasEnabled = isLaunchAtStartupSaved
-        let target = !wasEnabled
-        storage.set(target, forKey: ClipboardPreferences.launchAtStartupKey)
-
-        do {
-            if target {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
-            content.launchAtStartupEnabled = target
-            updateContentSize()
-        } catch {
-            // 回滚偏好，避免界面状态与系统真实注册状态不一致
-            storage.set(wasEnabled, forKey: ClipboardPreferences.launchAtStartupKey)
-            content.launchAtStartupEnabled = wasEnabled
-            logger.error("开机自启动切换失败: \(error)")
-        }
-    }
-
-    // MARK: - MenuPanelViewDelegate
-
-    func menuPanelViewDidChangeContent(_ view: MenuPanelView) {
-        updateContentSize()
-        // 切到额度页时才触发刷新（monitor 内部 60 秒节流）
-        if view.currentTab == .credits {
-            billingMonitor?.refresh()
-        }
-    }
-
-    func menuPanelViewDidRequestClose(_ view: MenuPanelView) {
-        close()
-    }
-
-    func menuPanelViewDidRequestQuit(_ view: MenuPanelView) {
-        NSApplication.shared.terminate(nil)
-    }
-
-    func menuPanelViewDidRequestClipboardSettings(_ view: MenuPanelView) {
-        requestClipboardSettings()
-    }
-
-    func menuPanelViewDidRequestToggleLaunchAtStartup(_ view: MenuPanelView) {
-        toggleLaunchAtStartup()
-    }
-
-    func menuPanelViewDidRequestTransferSettings(_ view: MenuPanelView) {
-        transferController?.showSettings()
     }
 
     // MARK: - NSPopoverDelegate
