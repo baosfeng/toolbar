@@ -49,7 +49,7 @@ bash NetworkMonitor/Scripts/check-file-size.sh
 1. 更新版本号：`NetworkMonitor/Scripts/build-app.sh` 里的 `CFBundleShortVersionString`，以及 `AGENTS.md` 的版本行
 2. 提交并推送 `main`，等 CI 绿
 3. 打 tag 并推送：`git tag -a v1.3.2 -m "NetworkMonitor 1.3.2" && git push origin v1.3.2`
-4. Release 工作流自动构建、ad-hoc 签名并上传 `NetworkMonitor.app.zip`
+4. Release 工作流自动构建、签名并上传 `NetworkMonitor.app.zip`
 
 ## 报告问题
 

@@ -41,7 +41,7 @@
 
 ### 下载 Release
 
-到 [Releases](https://github.com/baosfeng/toolbar/releases) 下载 `NetworkMonitor.app.zip`，解压后拖入「应用程序」。首次启动若提示「无法验证开发者」，右键 → 打开即可（ad-hoc 签名）。
+到 [Releases](https://github.com/baosfeng/toolbar/releases) 下载 `NetworkMonitor.app.zip`，解压后拖入「应用程序」。首次启动若提示「无法验证开发者」，右键 → 打开即可（未经过 Apple 公证）。
 
 ### 从源码构建
 
