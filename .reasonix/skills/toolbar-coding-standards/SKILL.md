@@ -49,6 +49,7 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 ### 3. 单一职责（SRP）
 - 单文件 >500 行 / 15 KiB（15360 字节）必须拆分；存量超标文件不追溯整改，仅在改动该文件时顺带治理
 - 拆分范式：主类文件（连接/迁移/建表）+ `类名+协议名.swift` 扩展文件（`extension DatabaseManager: HookEventRepository`）
+  - 门禁：`bash NetworkMonitor/Scripts/check-file-size.sh`
 - conformance 声明在扩展文件；跨文件访问成员时 private 放宽为 internal 并注释原因
 
 ### 4. SPI 扩展（可插拔）
