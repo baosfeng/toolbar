@@ -62,6 +62,32 @@ func runCoreFormattingTests() {
     let header = parseNettopLine("time                                                                            interface   type        bytes_in       bytes_out   rcvsize  tc_class arch")
     assertEqual(header, nil, "header should return nil")
 
+    // -J bytes_in,bytes_out 布局：无时间戳列，这是修复 TCP 流量漏记后实际使用的格式
+    let lineJ = "Google Chrome H.51129                                   16218            4096"
+    let rJ = parseNettopLine(lineJ)
+    assertNotNil(rJ, "-J 布局应能解析")
+    if let r = rJ {
+        assertEqual(r.name, "Google Chrome H", "-J 布局进程名")
+        assertEqual(r.pid, Int32(51129), "-J 布局 pid")
+        assertEqual(r.bytesIn, UInt64(16218), "-J 布局 bytesIn")
+        assertEqual(r.bytesOut, UInt64(4096), "-J 布局 bytesOut")
+    }
+
+    let lineJSimple = "apsd.609                                                                                        6631           38164"
+    let rJSimple = parseNettopLine(lineJSimple)
+    assertNotNil(rJSimple, "-J 单段进程名应能解析")
+    if let r = rJSimple {
+        assertEqual(r.name, "apsd", "-J 单段进程名")
+        assertEqual(r.pid, Int32(609), "-J 单段 pid")
+    }
+
+    let headerJ = parseNettopLine("                                                                                            bytes_in       bytes_out")
+    assertEqual(headerJ, nil, "-J 表头应返回 nil")
+
+    // 参数护栏：重复传 -m 只会保留最后一个（-m udp），导致 TCP 流量全部漏记
+    assertEqual(nettopSnapshotArguments.contains("-m"), false, "nettop 参数不应传 -m")
+    assertEqual(nettopSnapshotArguments.contains("-J"), true, "nettop 参数应固定列")
+
     let empty = parseNettopLine("")
     assertEqual(empty, nil, "empty should return nil")
 
