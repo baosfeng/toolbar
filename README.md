@@ -137,7 +137,7 @@ cd toolbar/NetworkMonitor
 
 ```bash
 cd NetworkMonitor
-swift run --disable-sandbox TestRunner
+swift run --disable-sandbox --build-system native TestRunner
 ```
 
 > 只安装 Command Line Tools 的机器，默认构建后端会在会话初始化阶段失败，给 `swift build` / `swift run` 追加 `--build-system native` 即可；详见[踩坑记录](docs/踩坑/构建/swift-build-会话初始化失败.md)。

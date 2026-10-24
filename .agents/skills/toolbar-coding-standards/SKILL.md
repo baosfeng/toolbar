@@ -13,8 +13,8 @@ description: 本项目（toolbar/NetworkMonitor）专属编码规范：架构原
   - `NetworkMonitorCore`（库，**禁止 import AppKit**）— 领域协议、数据库、统计、模型、事件分发、格式化
   - `NetworkMonitor`（可执行）— UI、Hook 监听器、事件处理器、监控实现（AppKit 仅限此目标）
   - `TestRunner`（可执行）— 手写断言测试（本机无 Xcode SDK，不用 XCTest）
-- 构建：`cd NetworkMonitor && swift build --disable-sandbox`
-- 测试：`cd NetworkMonitor && swift run --disable-sandbox TestRunner`（须显示「🎉 所有测试通过！」）
+- 构建：`cd NetworkMonitor && swift build --disable-sandbox --build-system native`（本机只有 Command Line Tools，默认后端初始化即失败，统一追加该参数）
+- 测试：`cd NetworkMonitor && swift run --disable-sandbox --build-system native TestRunner`（须显示「🎉 所有测试通过！」）
 - 打包：`cd NetworkMonitor && ./Scripts/build-app.sh`（部署到 /Applications 并自动启动）
 
 ## 必读文档（操作前）
@@ -100,7 +100,7 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 
 - **新增代码必须配测试**：每新增类/方法在 `Sources/TestRunner/main.swift` 添加断言（`assertEqual`/`assertNotNil`），覆盖正常/边界/异常
 - 数据库测试用 `db.initializeInMemory()`；协议可 mock（如 `RecordingHandler` 测 dispatcher）
-- 提交前必须 `swift run --disable-sandbox TestRunner` 全绿
+- 提交前必须 `swift run --disable-sandbox --build-system native TestRunner` 全绿
 
 ## 提交纪律
 
