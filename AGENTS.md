@@ -1,7 +1,7 @@
 # NetworkMonitor / macMonitor — macOS 菜单栏监控
 
 ## 项目简介
-- **版本:** 1.2.1
+- **版本:** 1.3.0
 - **语言:** Swift 6.3
 - **类型:** 业务应用
 - **技术栈:** Swift 6.3, Swift PM, AppKit, macOS 14+, ARM64

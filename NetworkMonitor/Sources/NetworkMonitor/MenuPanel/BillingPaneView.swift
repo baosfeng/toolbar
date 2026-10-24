@@ -1,13 +1,12 @@
 import AppKit
 import NetworkMonitorCore
 
-// MARK: - 额度页
+// MARK: - 额度页（聚合视图）
 
-/// 额度页 — 页头（provider / 刷新）、余额卡、用量区、凭据配置态、错误条与空态
+/// 额度页 — 一次展示全部 provider 的额度块，点块标题就地展开用量明细
 ///
 /// 数据由 `BillingMonitor` 通过 `update(_:)` 注入；本视图不直接访问网络或凭据存储。
-/// 键盘可达行顺序：provider 切换（多 provider 时）→ 刷新 → 范围按钮 → 重试 / 保存 → 官网链接。
-/// 快照示意数据构造见 `BillingPanePreview.swift`（仅 DEBUG）。
+/// 键盘可达行顺序：刷新 → 块 1 标题 → 块 1 范围按钮 / 配置输入 → …（与视觉顺序一致）。
 final class BillingPaneView: MenuPanelPaneView {
 
     // MARK: - 回调
@@ -16,23 +15,33 @@ final class BillingPaneView: MenuPanelPaneView {
     var onRefresh: (() -> Void)?
     /// 点错误条「重试」
     var onRetry: (() -> Void)?
-    /// 切换用量范围
-    var onRangeChange: ((BillingRange) -> Void)?
-    /// 「保存并查询」提交凭据
-    var onSaveCredential: ((String) -> Void)?
-    /// 「前往 provider 网站获取凭据」（参数为快照里当前 provider 的页面地址）
+    /// 切换某个 provider 的用量范围（参数：范围、provider id）
+    var onRangeChange: ((BillingRange, String) -> Void)?
+    /// 提交某个 provider 的凭据（参数：凭据、provider id）
+    var onSaveCredential: ((String, String) -> Void)?
+    /// 打开 provider 凭据页面
     var onOpenProviderSite: ((URL) -> Void)?
-    /// 多 provider 时切换 provider
-    var onProviderChange: ((String) -> Void)?
+    /// 展开 / 收起导致内容高度变化
+    var onContentChanged: (() -> Void)?
 
     // MARK: - 子视图
 
     private let emptyView = BillingEmptyView()
-    private let headerView = BillingPageHeaderView()
-    private let errorBanner = BillingErrorBannerView()
-    private let balanceSection = BillingBalanceSectionView()
-    private let usageSection = BillingUsageSectionView()
-    private let setupView = BillingCredentialSetupView()
+    private let headerStack = NSStackView()
+    private let titleLabel = MenuPanelLabel.text("额度", font: BillingPaneStyle.cardTitleFont,
+                                                 color: BillingPaneStyle.secondaryText)
+    private let timeLabel = MenuPanelLabel.text("—", font: BillingPaneStyle.stampFont,
+                                                color: BillingPaneStyle.tertiaryText)
+    private let refreshRow = BillingIconButtonRow(symbolName: "arrow.clockwise")
+    private let blockStack = NSStackView()
+
+    /// 按 provider id 缓存的块视图
+    private var blocks: [String: BillingProviderBlockView] = [:]
+    /// 块的排列顺序（用于判断是否需要重建）
+    private var blockOrder: [String] = []
+    /// 当前展开的 provider（nil = 全部收起）
+    private var expandedProviderID: String?
+    /// 最近一次快照（切换展开态时按它重渲染）
     private var snapshot: BillingMonitor.Snapshot?
 
     // MARK: - 初始化
@@ -41,37 +50,40 @@ final class BillingPaneView: MenuPanelPaneView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
-        headerView.onRefresh = { [weak self] in self?.onRefresh?() }
-        headerView.onProviderTap = { [weak self] in self?.showProviderMenu() }
-        errorBanner.onRetry = { [weak self] in self?.onRetry?() }
-        usageSection.onRangeChange = { [weak self] range in self?.onRangeChange?(range) }
-        setupView.onSave = { [weak self] key in self?.onSaveCredential?(key) }
-        setupView.onOpenSite = { [weak self] in
-            guard let url = self?.currentProviderPageURL else { return }
-            self?.onOpenProviderSite?(url)
-        }
+        timeLabel.alignment = .right
+        refreshRow.onClick = { [weak self] in self?.onRefresh?() }
+        titleLabel.setContentHuggingPriority(.required, for: .horizontal)
+        timeLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+        headerStack.orientation = .horizontal
+        headerStack.alignment = .centerY
+        headerStack.spacing = 6
+        headerStack.addArrangedSubview(titleLabel)
+        headerStack.addArrangedSubview(MenuPanelLabel.spacer())
+        headerStack.addArrangedSubview(timeLabel)
+        headerStack.addArrangedSubview(refreshRow)
+
+        blockStack.orientation = .vertical
+        blockStack.alignment = .leading
+        blockStack.spacing = 7
 
         emptyView.isHidden = true
-        errorBanner.isHidden = true
-        setupView.isHidden = true
-        balanceSection.isHidden = true
-        usageSection.isHidden = true
 
-        let stack = NSStackView(views: [emptyView, headerView, errorBanner, balanceSection,
-                                        usageSection, setupView])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 12
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
+        let root = NSStackView(views: [emptyView, headerStack, blockStack])
+        root.orientation = .vertical
+        root.alignment = .leading
+        root.spacing = 8
+        root.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(root)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            root.leadingAnchor.constraint(equalTo: leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: trailingAnchor),
+            root.topAnchor.constraint(equalTo: topAnchor),
+            root.bottomAnchor.constraint(equalTo: bottomAnchor),
+            headerStack.heightAnchor.constraint(greaterThanOrEqualToConstant: 20),
         ])
-        for view in stack.arrangedSubviews {
-            view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        for view in root.arrangedSubviews {
+            view.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
         }
     }
 
@@ -79,28 +91,35 @@ final class BillingPaneView: MenuPanelPaneView {
     required init?(coder: NSCoder) { nil }
 
 #if DEBUG
-    /// 快照自证专用（仅 DEBUG）：强制悬停用量柱状图的某根柱
+    /// 快照自证专用（仅 DEBUG）：强制展开指定 provider 的用量区
+    func expandForPreview(_ providerID: String?) {
+        expandedProviderID = providerID
+        guard let snapshot else { return }
+        for state in snapshot.states {
+            blocks[state.descriptor.id]?.update(state: state,
+                                                isExpanded: expandedProviderID == state.descriptor.id)
+        }
+    }
+
+    /// 快照自证专用（仅 DEBUG）：强制悬停某个 provider 用量柱状图的第 index 根柱
     func forceChartHoverForSnapshot(_ index: Int?) {
-        usageSection.forceHoverForSnapshot(index)
+        guard let snapshot else { return }
+        for state in snapshot.states where expandedProviderID == state.descriptor.id {
+            blocks[state.descriptor.id]?.usageSection.forceHoverForSnapshot(index)
+        }
     }
 #endif
 
     // MARK: - 键盘可达
 
     override var focusableRows: [MenuPanelRow] {
-        guard let snapshot, !snapshot.providers.isEmpty else { return [] }
-        let showsProviderMenu = snapshot.providers.count > 1
-        if !snapshot.isConfigured {
-            var rows: [MenuPanelRow] = []
-            if showsProviderMenu { rows.append(headerView.providerButtonRow) }
-            rows.append(contentsOf: setupView.focusableRows)
-            return rows
+        guard let snapshot, !snapshot.states.isEmpty else { return [] }
+        var rows: [MenuPanelRow] = [refreshRow]
+        for state in snapshot.states {
+            if let block = blocks[state.descriptor.id] {
+                rows.append(contentsOf: block.focusableRows)
+            }
         }
-        var rows: [MenuPanelRow] = []
-        if showsProviderMenu { rows.append(headerView.providerButtonRow) }
-        rows.append(headerView.refreshButtonRow)
-        rows.append(contentsOf: usageSection.focusableRows)
-        if !errorBanner.isHidden { rows.append(errorBanner.retryButtonRow) }
         return rows
     }
 
@@ -109,75 +128,73 @@ final class BillingPaneView: MenuPanelPaneView {
     /// 应用最新快照（由控制器转发）
     func update(_ snapshot: BillingMonitor.Snapshot) {
         self.snapshot = snapshot
-        let hasProvider = !snapshot.providers.isEmpty
+        let hasProvider = !snapshot.states.isEmpty
         emptyView.isHidden = hasProvider
-        headerView.isHidden = !hasProvider
-        setupView.isHidden = !hasProvider || snapshot.isConfigured
-        balanceSection.isHidden = !hasProvider || !snapshot.isConfigured
-        usageSection.isHidden = !hasProvider || !snapshot.isConfigured
-
-        let showsError = hasProvider && snapshot.isConfigured && snapshot.errorMessage != nil
-        errorBanner.isHidden = !showsError
-        if showsError, let message = snapshot.errorMessage {
-            errorBanner.update(message: message)
+        headerStack.isHidden = !hasProvider
+        blockStack.isHidden = !hasProvider
+        // 展开的 provider 被移除（注册表变化）时复位，避免指向不存在的块
+        if let expanded = expandedProviderID,
+           !snapshot.states.contains(where: { $0.descriptor.id == expanded }) {
+            expandedProviderID = nil
         }
-
-        headerView.update(provider: snapshot.currentProvider,
-                          lastUpdated: snapshot.lastUpdated,
-                          isLoading: snapshot.isLoading,
-                          showsProviderMenu: snapshot.providers.count > 1)
-        setupView.update(placeholder: snapshot.currentProvider?.credentialHint ?? "凭据",
-                         linkText: Self.credentialLinkText(for: snapshot.currentProvider),
-                         showsLink: currentProviderPageURL != nil)
-
-        guard snapshot.isConfigured else { return }
-        balanceSection.update(balance: snapshot.balance)
-        usageSection.update(usage: snapshot.usage,
-                            range: snapshot.range,
-                            showsModelBreakdown: snapshot.currentProvider?.supportsModelBreakdown ?? false,
-                            showsTimeSeries: snapshot.currentProvider?.supportsTimeSeries ?? true)
-    }
-
-    // MARK: - provider 文案
-
-    /// 当前 provider 的凭据获取页面（nil = 该 provider 无在线入口，配置态不显示链接行）
-    private var currentProviderPageURL: URL? {
-        snapshot?.currentProvider?.credentialPageURL
-    }
-
-    /// 配置态链接文案 — 有官方 Key 页面的 provider 点明域名，其余用通用文案
-    ///
-    /// 纯函数便于单测直接断言；域名取自 provider 快照，不为具体 provider 加分支。
-    static func credentialLinkText(for provider: BillingMonitor.ProviderDescriptor?) -> String {
-        let name = provider?.displayName ?? "provider"
-        if name == "Ollama", let host = provider?.credentialPageURL?.host {
-            return "在 \(host) 获取 API Key"
+        guard hasProvider else { return }
+        syncBlocks(snapshot.states)
+        timeLabel.stringValue = Self.latestStamp(snapshot.states)
+        for state in snapshot.states {
+            blocks[state.descriptor.id]?.update(state: state,
+                                                isExpanded: expandedProviderID == state.descriptor.id)
         }
-        return "前往 \(name) 网站获取凭据"
     }
 
-    // MARK: - provider 切换菜单
-
-    /// 多 provider 时点击页头名称弹出切换菜单（单 provider 时不显示入口）
-    private func showProviderMenu() {
-        guard let snapshot, snapshot.providers.count > 1 else { return }
-        let menu = NSMenu()
-        for provider in snapshot.providers {
-            let item = NSMenuItem(title: provider.displayName,
-                                  action: #selector(selectProviderFromMenu(_:)),
-                                  keyEquivalent: "")
-            item.target = self
-            item.representedObject = provider.id
-            item.state = provider.id == snapshot.selectedProviderID ? .on : .off
-            menu.addItem(item)
+    /// 按 provider 顺序重建块视图（仅在注册集合变化时）
+    private func syncBlocks(_ states: [BillingMonitor.ProviderState]) {
+        let ids = states.map { $0.descriptor.id }
+        guard blockOrder != ids else { return }
+        for view in blockStack.arrangedSubviews {
+            blockStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
         }
-        menu.popUp(positioning: nil,
-                   at: NSPoint(x: 8, y: bounds.maxY - headerView.frame.height),
-                   in: self)
+        blocks.removeAll()
+        for state in states {
+            let id = state.descriptor.id
+            let block = BillingProviderBlockView()
+            block.onToggleExpand = { [weak self] in self?.toggleExpand(id) }
+            block.onRangeChange = { [weak self] range in self?.onRangeChange?(range, id) }
+            block.onSaveCredential = { [weak self] key in self?.onSaveCredential?(key, id) }
+            block.onOpenSite = { [weak self] in
+                guard let url = self?.snapshot?.state(for: id)?.descriptor.credentialPageURL else { return }
+                self?.onOpenProviderSite?(url)
+            }
+            block.onRetry = { [weak self] in self?.onRetry?() }
+            blockStack.addArrangedSubview(block)
+            block.widthAnchor.constraint(equalTo: blockStack.widthAnchor).isActive = true
+            blocks[id] = block
+        }
+        blockOrder = ids
     }
 
-    @objc private func selectProviderFromMenu(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
-        onProviderChange?(id)
+    /// 展开 / 收起某个 provider 的用量区（同一时刻只允许一个展开）
+    private func toggleExpand(_ providerID: String) {
+        guard let snapshot, let state = snapshot.state(for: providerID) else { return }
+        guard state.isConfigured else {
+            // 未配置块：点击就地展开凭据表单
+            blocks[providerID]?.toggleSetup()
+            onContentChanged?()
+            return
+        }
+        expandedProviderID = (expandedProviderID == providerID) ? nil : providerID
+        for item in snapshot.states {
+            blocks[item.descriptor.id]?.update(state: item,
+                                               isExpanded: expandedProviderID == item.descriptor.id)
+        }
+        onContentChanged?()
+    }
+
+    // MARK: - 文案
+
+    /// 页头时间戳：取全部 provider 里最近一次成功刷新
+    private static func latestStamp(_ states: [BillingMonitor.ProviderState]) -> String {
+        guard let latest = states.compactMap(\.lastUpdated).max() else { return "—" }
+        return BillingProviderBlockView.stamp(latest)
     }
 }
