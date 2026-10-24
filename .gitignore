@@ -39,3 +39,15 @@ reasonix.toml
 
 # Open Design 原型工作区：过程截图与落选稿不入库，只归档设计决策文档与定稿原型
 .open-design/
+
+# >>> open-design 原型白名单（odops keep 生成，勿手改）
+# 本地工作区全部保留；入库只放定稿原型 + 决策链 + 设计体系 + 关键截图
+.open-design/*
+!.open-design/08-prototype.html
+!.open-design/00-brief.md
+!.open-design/02-style.md
+!.open-design/04-rounds.md
+!.open-design/05-checklist.md
+!.open-design/design-system/
+!.open-design/shots/
+# <<< open-design 原型白名单
