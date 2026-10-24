@@ -121,8 +121,6 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
         content.clipboardPane.onSelectItem = { [weak self] item in self?.paste(item) }
         content.clipboardPane.onRequestSettings = { [weak self] in self?.requestClipboardSettings() }
         content.clipboardPane.onRequestHistory = { [weak self] in self?.requestClipboardHistory() }
-        content.systemPane.onToggleLaunchAtStartup = { [weak self] in self?.toggleLaunchAtStartup() }
-        content.systemPane.onQuit = { NSApplication.shared.terminate(nil) }
         content.billingPane.onRefresh = { [weak self] in self?.billingMonitor?.refresh(force: true) }
         content.billingPane.onRetry = { [weak self] in self?.billingMonitor?.refresh(force: true) }
         content.billingPane.onRangeChange = { [weak self] range, providerID in
@@ -245,9 +243,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
 #else
         content.updateProcesses(processMonitor.processSpeeds)
 #endif
-        content.updateSystem(ip: getLocalIPAddress() ?? "",
-                             wifi: SystemInfoProvider.wifiDisplayName(),
-                             launchAtStartup: isLaunchAtStartupSaved)
+        content.launchAtStartupEnabled = isLaunchAtStartupSaved
         // 额度：中频分支 5 秒调用一次，monitor 内部 60 秒节流，不会打满 provider 限流
         billingMonitor?.refresh()
     }
@@ -350,16 +346,12 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
             } else {
                 try SMAppService.mainApp.unregister()
             }
-            content.updateSystem(ip: getLocalIPAddress() ?? "",
-                                 wifi: SystemInfoProvider.wifiDisplayName(),
-                                 launchAtStartup: target)
+            content.launchAtStartupEnabled = target
             updateContentSize()
         } catch {
             // 回滚偏好，避免界面状态与系统真实注册状态不一致
             storage.set(wasEnabled, forKey: ClipboardPreferences.launchAtStartupKey)
-            content.updateSystem(ip: getLocalIPAddress() ?? "",
-                                 wifi: SystemInfoProvider.wifiDisplayName(),
-                                 launchAtStartup: wasEnabled)
+            content.launchAtStartupEnabled = wasEnabled
             logger.error("开机自启动切换失败: \(error)")
         }
     }
@@ -384,6 +376,10 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
 
     func menuPanelViewDidRequestClipboardSettings(_ view: MenuPanelView) {
         requestClipboardSettings()
+    }
+
+    func menuPanelViewDidRequestToggleLaunchAtStartup(_ view: MenuPanelView) {
+        toggleLaunchAtStartup()
     }
 
     func menuPanelViewDidRequestTransferSettings(_ view: MenuPanelView) {
