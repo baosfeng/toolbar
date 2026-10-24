@@ -1,6 +1,6 @@
 # NetworkMonitor
 
-> macOS 菜单栏的网速、Token 用量与额度监控，外加剪贴板历史和局域网文件互传。
+> macOS 菜单栏的网速与额度监控，外加剪贴板历史和局域网文件互传。
 
 [![CI](https://github.com/baosfeng/toolbar/actions/workflows/ci.yml/badge.svg)](https://github.com/baosfeng/toolbar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -11,7 +11,7 @@
 
 ![额度页](docs/设计/额度页-聚合视图-预览/展开态-浅色.png)
 
-纯 Swift / SwiftPM 实现的菜单栏常驻应用：实时网速、进程流量、Reasonix Token 用量、Ollama 与 Open Design 额度、剪贴板历史、局域网文件互传。所有数据落在本地 SQLite，没有遥测与后台上报。
+纯 Swift / SwiftPM 实现的菜单栏常驻应用：实时网速、进程流量、Ollama 与 Open Design 额度、剪贴板历史、局域网文件互传。所有数据落在本地 SQLite，没有遥测与后台上报。
 
 ## 功能
 
@@ -19,7 +19,6 @@
 |---|---|
 | 网络速度 | 菜单栏实时显示上下行速度；今日流量与近 7 日汇总（getifaddrs 差分 + TrafficTracker） |
 | 进程流量 | nettop 后台采样，进程级 Top 10 |
-| Token 用量 | 读取 Reasonix 官方 stats JSONL，24 小时柱状图、按模型明细与近 7 日历史 |
 | 额度查询 | Ollama（余额 + 用量）、Open Design（credits 窗口 + 工作区用量）；`BillingProvider` 协议 + 注册表，新增 provider 只需实现协议并注册 |
 | 剪贴板历史 | 全局快捷键唤起面板、模糊搜索、Paste Stack 顺序粘贴、图片原图落盘 |
 | 局域网互传 | UDP 发现 + HTTP 传输 + 扫码接收 + PIN 配对，支持断点续传 |

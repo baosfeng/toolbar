@@ -25,8 +25,9 @@
 | 模块 | 说明 |
 |------|------|
 | 网络速度监控 | 实时网速监控（getifaddrs 差分）+ 进程网速（nettop）+ 每日流量追踪（TrafficTracker） |
-| Reasonix Hook 事件监听与 Token 监控 | UDS 接收 AI 助手事件 → HookEventDispatcher 分发 → SQLite 落库；stats JSONL 导入 + Token 统计 + AI 分析 + 系统通知 |
 | 计费额度查询 | 菜单面板「额度」tab：Ollama（/api/balance + /api/usage）、Open Design（编码计划 credits 窗口 + 工作区用量）；BillingProvider 协议 + 注册表，新增 provider 仅需实现协议并注册 |
+| 剪贴板历史 | 全局快捷键面板、模糊搜索、Paste Stack 顺序粘贴、图片原图落盘 |
+| 局域网文件互传 | UDP 发现 + HTTP 传输 + 扫码接收 + PIN 配对，支持断点续传 |
 
 ## 开发指南
 → [编码规范 skill](.agents/skills/toolbar-coding-standards/SKILL.md)（规范权威来源，**规范更新一律写入 skill，不另建独立规范文档**）

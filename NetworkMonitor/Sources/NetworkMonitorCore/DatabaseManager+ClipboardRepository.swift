@@ -5,7 +5,7 @@ import SQLite3
 
 /// DatabaseManager 的剪贴板仓储实现（接口隔离：见 ClipboardRepository）
 ///
-/// 线程模型：所有方法经 DatabaseManager 的 serialQueue 同步执行，与 Hook / Token 写入共享同一队列；
+/// 线程模型：所有方法经 DatabaseManager 的 serialQueue 同步执行；
 /// 行映射与绑定辅助见 DatabaseManager+ClipboardSchema.swift。
 /// - Warning: 不得在 query(sql:handler:) 的回调内或串行队列上下文内调用本扩展的方法，否则死锁。
 extension DatabaseManager: ClipboardRepository {
