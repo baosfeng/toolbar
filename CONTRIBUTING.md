@@ -44,6 +44,13 @@ bash NetworkMonitor/Scripts/check-file-size.sh
 3. 提交 PR，描述清楚「改了什么 / 为什么 / 怎么验证」
 4. 等 CI 变绿后再合并
 
+## 发布流程
+
+1. 更新版本号：`NetworkMonitor/Scripts/build-app.sh` 里的 `CFBundleShortVersionString`，以及 `AGENTS.md` 的版本行
+2. 提交并推送 `main`，等 CI 绿
+3. 打 tag 并推送：`git tag -a v1.3.2 -m "NetworkMonitor 1.3.2" && git push origin v1.3.2`
+4. Release 工作流自动构建、ad-hoc 签名并上传 `NetworkMonitor.app.zip`
+
 ## 报告问题
 
 - Bug 与功能建议走 [Issues](https://github.com/baosfeng/toolbar/issues)
