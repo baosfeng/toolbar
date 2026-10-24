@@ -5,6 +5,8 @@
 - 时间受限说明：TestRunner 独立复跑**未成功**（见「未覆盖」），测试绿旗沿用 lead 报数
 - 结论：**可交用户实测（是）**；P0=0 · P1=3 · P2=4
 
+> **注（2026-10-24）**：本报告为 r1 取证快照，其中引用的 `MenuPanelComponents.swift` 已在大文件拆分轮次中拆为 `MenuPanel/{MenuPanelStyle,MenuPanelLabel,MenuPanelRows}.swift`；文中行号均对应拆分前的原文件。
+
 ## 1. 编码规范硬门槛
 
 | 规范条 | 命令 | 结果 |
