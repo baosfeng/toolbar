@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package .app
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and package
+        working-directory: NetworkMonitor
+        env:
+          BUILD_SYSTEM: default
+          SKIP_INSTALL: "1"
+        run: ./Scripts/build-app.sh release
+
+      - name: Zip app bundle
+        working-directory: NetworkMonitor/dist
+        run: ditto -c -k --keepParent NetworkMonitor.app NetworkMonitor.app.zip
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: NetworkMonitor/dist/NetworkMonitor.app.zip
+          generate_release_notes: true

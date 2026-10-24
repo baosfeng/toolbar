@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version || true
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@v4
+        with:
+          path: NetworkMonitor/.build
+          key: ${{ runner.os }}-${{ hashFiles('NetworkMonitor/Package.swift', 'NetworkMonitor/.swiftpm/**') }}
+          restore-keys: |
+            ${{ runner.os }}-
+
+      - name: File size gate
+        run: bash NetworkMonitor/Scripts/check-file-size.sh
+
+      - name: Build
+        working-directory: NetworkMonitor
+        run: swift build --disable-sandbox
+
+      - name: Test
+        working-directory: NetworkMonitor
+        run: swift run --disable-sandbox TestRunner

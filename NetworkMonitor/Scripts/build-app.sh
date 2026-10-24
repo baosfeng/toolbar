@@ -19,11 +19,20 @@ APP_DIR="dist/${APP_NAME}.app"
 echo "🔨 正在构建 ${APP_NAME}（${BUILD_MODE}）..."
 
 # 1. 使用 Swift PM 构建（完整构建，保证链接出可执行文件；--target 在 SwiftPM 6.3 下不产出二进制）
+# 构建后端：默认 native（本机仅有 Command Line Tools 时的绕行方案）；
+# 完整 Xcode 环境（含 CI）可传 BUILD_SYSTEM=default 使用系统默认后端。
+BUILD_SYSTEM_ARG="--build-system native"
+if [ "${BUILD_SYSTEM:-native}" != "native" ]; then
+    BUILD_SYSTEM_ARG=""
+fi
+
 if [ "$BUILD_MODE" = "release" ]; then
-    swift build -c release --disable-sandbox --build-system native
+    # shellcheck disable=SC2086  # 允许为空，从而不追加任何构建后端参数
+    swift build -c release --disable-sandbox $BUILD_SYSTEM_ARG
     BINARY_PATH=".build/arm64-apple-macosx/release/${APP_NAME}"
 else
-    swift build --disable-sandbox --build-system native
+    # shellcheck disable=SC2086
+    swift build --disable-sandbox $BUILD_SYSTEM_ARG
     BINARY_PATH=".build/arm64-apple-macosx/debug/${APP_NAME}"
 fi
 
@@ -70,6 +79,12 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
 PLIST
 
 # 6. 部署到 /Applications
+if [ "${SKIP_INSTALL:-0}" = "1" ]; then
+    echo ""
+    echo "📦 已生成 ${APP_DIR}（SKIP_INSTALL=1，跳过部署到 /Applications）"
+    exit 0
+fi
+
 echo ""
 echo "📦 正在部署到 /Applications..."
 
