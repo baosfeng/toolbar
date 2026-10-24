@@ -1,0 +1,16 @@
+#!/bin/bash
+# pre-commit 钩子 —— 提交前跑大文件门禁
+#
+# 安装（在仓库根执行一次）：
+#   git config core.hooksPath NetworkMonitor/Scripts/git-hooks
+# 关闭：
+#   git config --unset core.hooksPath
+#
+# 门禁不通过即中断提交（exit 非 0），不会写文件。
+
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+exec bash "NetworkMonitor/Scripts/check-file-size.sh"
