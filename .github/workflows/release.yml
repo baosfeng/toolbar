@@ -18,6 +18,9 @@ jobs:
     name: Package .app
     runs-on: macos-latest
     timeout-minutes: 30
+    env:
+      # 配置了签名证书则走证书签名，否则由脚本回退 ad-hoc
+      HAS_SIGNING_CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
 
     steps:
       - name: Checkout
@@ -30,16 +33,35 @@ jobs:
           swift --version
           xcodebuild -version || true
 
-      - name: Build and package
+      - name: Import signing certificate
+        if: env.HAS_SIGNING_CERT == 'true'
+        env:
+          CERT_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
+          echo -n "$CERT_BASE64" | base64 --decode -o "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Build, sign and package
         working-directory: NetworkMonitor
         env:
           BUILD_SYSTEM: default
           SKIP_INSTALL: "1"
+          SIGN_IDENTITY: ${{ secrets.SIGNING_IDENTITY || 'NetworkMonitor Local Signing' }}
         run: ./Scripts/build-app.sh release
 
-      - name: Ad-hoc sign
+      - name: Show signature
         working-directory: NetworkMonitor/dist
-        run: codesign --force --deep --sign - NetworkMonitor.app
+        run: codesign -dv --verbose=2 NetworkMonitor.app 2>&1 | head -8
 
       - name: Zip app bundle
         working-directory: NetworkMonitor/dist

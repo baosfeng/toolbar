@@ -78,9 +78,32 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
-# 6. 部署到 /Applications
+# 6. 签名
+# 证书名可通过 SIGN_IDENTITY 覆盖（CI 用 Secrets 传入同一张自签名证书）；
+# 未找到证书时回落 ad-hoc（身份随 cdhash 变化，权限需重新授权）。
+SIGN_IDENTITY="${SIGN_IDENTITY:-NetworkMonitor Local Signing}"
+SIGN_ENTITLEMENTS="${SIGN_ENTITLEMENTS:-}"
+
+sign_app() {
+    local target="$1"
+    local args=(--force --deep --identifier com.example.NetworkMonitor)
+    if [ -n "$SIGN_ENTITLEMENTS" ] && [ -f "$SIGN_ENTITLEMENTS" ]; then
+        args+=(--entitlements "$SIGN_ENTITLEMENTS")
+    fi
+    if security find-identity -v -p codesigning 2>/dev/null | grep -q "${SIGN_IDENTITY}"; then
+        codesign "${args[@]}" --sign "${SIGN_IDENTITY}" "$target" 2>&1 | tail -2 || true
+        echo "      使用证书：${SIGN_IDENTITY}"
+    else
+        codesign "${args[@]}" --sign - "$target" 2>&1 | tail -2 || true
+        echo "      未找到证书 ${SIGN_IDENTITY}，回落 ad-hoc（每次构建权限会重新询问）"
+    fi
+}
+
+# 7. 部署到 /Applications
 if [ "${SKIP_INSTALL:-0}" = "1" ]; then
     echo ""
+    echo "🔏 签署 ${APP_DIR} ..."
+    sign_app "$APP_DIR"
     echo "📦 已生成 ${APP_DIR}（SKIP_INSTALL=1，跳过部署到 /Applications）"
     exit 0
 fi
@@ -113,21 +136,11 @@ fi
 cp -R "$APP_DIR" "$INSTALL_PATH"
 echo "   ✅ 已复制到 ${INSTALL_PATH}"
 
-# 显式 ad-hoc 签名并固定标识符（com.example.NetworkMonitor）。
+# 显式签名并固定标识符（com.example.NetworkMonitor）。
 # 不指定 --identifier 时系统会生成「NetworkMonitor-<hash>」临时标识，每次构建都变，
 # 导致 macOS 把 App 当成新应用，本地网络权限每次重新部署都失效（表现为 UDP errno 65）。
 echo "   🔏 签名（固定标识符 + 固定证书）..."
-# 优先用本机自签名证书：签名身份 = 证书 + identifier，不随代码变化，
-# macOS 的本地网络授权才能「记住」，不会每次重新部署都弹窗。
-# 证书不存在时回落 ad-hoc（身份随 cdhash 变化，权限需重新授权）。
-SIGN_IDENTITY="NetworkMonitor Local Signing"
-if security find-identity -v -p codesigning 2>/dev/null | grep -q "${SIGN_IDENTITY}"; then
-    codesign --force --deep --sign "${SIGN_IDENTITY}" --identifier com.example.NetworkMonitor "${INSTALL_PATH}" 2>&1 | tail -2 || true
-    echo "      使用证书：${SIGN_IDENTITY}"
-else
-    codesign --force --deep --sign - --identifier com.example.NetworkMonitor "${INSTALL_PATH}" 2>&1 | tail -2 || true
-    echo "      未找到证书，回落 ad-hoc（每次构建权限会重新询问）"
-fi
+sign_app "$INSTALL_PATH"
 
 # 打开应用
 echo "   🚀 正在启动 ${APP_NAME}..."
