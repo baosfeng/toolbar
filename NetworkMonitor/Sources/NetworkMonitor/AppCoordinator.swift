@@ -43,6 +43,12 @@ public final class AppCoordinator {
     private var clipboardSettings: ClipboardSettingsWindow!
     /// 全局热键
     private var globalHotKey: GlobalHotKeyCenter!
+    /// 截图 / 贴图链路
+    /// 放宽为 internal：截图装配扩展文件要写
+    var snipController: SnipController!
+    /// 截图与贴图设置窗
+    /// 放宽为 internal：截图装配扩展文件要写
+    var snipSettings: SnipSettingsWindow!
     /// 局域网互传面板控制器
     private var transferController: TransferController?
 
@@ -80,6 +86,8 @@ public final class AppCoordinator {
 
         // 4. 剪贴板历史链路
         setupClipboard(database: database)
+
+        setupSnip()
 
         // 5. 局域网互传（发现层 + 传输服务 + 面板控制器）
         let transfer = makeTransferController()
@@ -230,6 +238,10 @@ public final class AppCoordinator {
                                                   // ⌘, 复用设置窗既有打开路径
                                                   onRequestSettings: { [weak self] in self?.clipboardSettings.show() },
                                                   preferences: preferences)
+        // 历史卡片右键「贴到屏幕」接到截图链路
+        clipboardPanel.onRequestPin = { [weak self] item in
+            self?.snipController.pinClipboardItem(item)
+        }
         clipboardSettings = ClipboardSettingsWindow(preferences: preferences, delegate: self)
 
         globalHotKey = GlobalHotKeyCenter()

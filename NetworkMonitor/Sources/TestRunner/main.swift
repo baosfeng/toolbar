@@ -63,5 +63,44 @@ runHarnessTokenHourlyTests()
 // MARK: - Token tab 展示口径（范围窗口 / 缺省小时 / 环比 / 空态）
 runTokenPaneTests()
 
+// MARK: - 截图选区几何（多屏 / Retina / 归一化）
+runSnipGeometryTests()
+
+// MARK: - 截图选区交互状态机
+runSnipSelectionStateTests()
+
+// MARK: - 窗口检测命中判定
+runSnipWindowTests()
+
+// MARK: - 截图文件命名与上次选区编码
+runSnipFileTests()
+
+// MARK: - 选区历史（逗号 / 句号循环）
+runSnipHistoryTests()
+
+// MARK: - 像素采样与取色格式
+runSnipPixelTests()
+
+// MARK: - 尺寸输入与长宽比锁定
+runSnipSizeTests()
+
+// MARK: - 标注模型、撤销栈与渲染
+runSnipAnnotationTests()
+
+// MARK: - 标注合成导出
+runSnipComposerTests()
+
+// MARK: - 马赛克与模糊
+runSnipMosaicTests()
+
+// MARK: - 文字标注
+runSnipTextTests()
+
+// MARK: - 贴图旋转与镜像
+runSnipTransformTests()
+
+// MARK: - 剪贴板内容分类
+runSnipClipboardTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")
