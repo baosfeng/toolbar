@@ -12,8 +12,10 @@ protocol MenuPanelViewDelegate: AnyObject {
     func menuPanelViewDidRequestClose(_ view: MenuPanelView)
     /// 请求退出应用（⌘Q）
     func menuPanelViewDidRequestQuit(_ view: MenuPanelView)
-    /// 请求打开传送设置（标题栏齿轮）
+    /// 请求打开传送设置（标题栏齿轮菜单）
     func menuPanelViewDidRequestTransferSettings(_ view: MenuPanelView)
+    /// 请求切换开机自启动（标题栏齿轮菜单）
+    func menuPanelViewDidRequestToggleLaunchAtStartup(_ view: MenuPanelView)
     /// 请求打开剪贴板设置（⌘,）
     func menuPanelViewDidRequestClipboardSettings(_ view: MenuPanelView)
 }
@@ -34,13 +36,15 @@ final class MenuPanelView: NSView {
     weak var delegate: MenuPanelViewDelegate?
 
     let tabBar = MenuTabBarView()
-    /// 传送设置入口（标题栏右侧齿轮）
-    let transferSettingsButton = NSButton()
+    /// 设置菜单入口（标题栏右侧齿轮：传送设置 / 开机自启动 / 退出）
+    let settingsButton = NSPopUpButton(frame: .zero, pullsDown: true)
     let networkPane = NetworkPaneView()
     let clipboardPane = ClipboardPaneView()
-    let systemPane = SystemPaneView()
     let transferPane = TransferPaneView()
     let billingPane = BillingPaneView()
+
+    /// 开机自启动当前状态（设置菜单勾选态，由控制器同步）
+    var launchAtStartupEnabled = false
 
     /// 可滚动内容区（高度 clamp 后仍能容纳超高内容）
     private let scrollView = NSScrollView()
@@ -62,7 +66,6 @@ final class MenuPanelView: NSView {
         paneStack.spacing = 0
         paneStack.addArrangedSubview(networkPane)
         paneStack.addArrangedSubview(clipboardPane)
-        paneStack.addArrangedSubview(systemPane)
         paneStack.addArrangedSubview(transferPane)
         paneStack.addArrangedSubview(billingPane)
         paneStack.translatesAutoresizingMaskIntoConstraints = false
@@ -82,24 +85,10 @@ final class MenuPanelView: NSView {
             paneStack.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
         ])
 
-        // 标题栏：分段控件 + 右侧齿轮（传送设置）
-        transferSettingsButton.image = NSImage(systemSymbolName: "gearshape",
-                                               accessibilityDescription: "传送设置")?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .medium))
-        transferSettingsButton.isBordered = false
-        transferSettingsButton.bezelStyle = .inline
-        transferSettingsButton.contentTintColor = MenuPanelStyle.tertiaryText
-        transferSettingsButton.toolTip = "传送设置"
-        transferSettingsButton.setAccessibilityLabel("传送设置")
-        transferSettingsButton.target = self
-        transferSettingsButton.action = #selector(openTransferSettings)
-        transferSettingsButton.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            transferSettingsButton.widthAnchor.constraint(equalToConstant: 24),
-            transferSettingsButton.heightAnchor.constraint(equalToConstant: 24),
-        ])
+        // 标题栏：分段控件 + 右侧齿轮（设置菜单）
+        configureSettingsButton()
 
-        let headerStack = NSStackView(views: [tabBar, transferSettingsButton])
+        let headerStack = NSStackView(views: [tabBar, settingsButton])
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.spacing = 8
@@ -124,7 +113,7 @@ final class MenuPanelView: NSView {
         tabBar.widthAnchor.constraint(equalTo: headerStack.widthAnchor, constant: -32).isActive = true
         scrollView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         // 各页都撑满面板内容宽度（NSStackView 的 leading 对齐不会自动拉伸子视图）
-        for pane in [networkPane, clipboardPane, systemPane, transferPane, billingPane] {
+        for pane in [networkPane, clipboardPane, transferPane, billingPane] {
             pane.widthAnchor.constraint(equalTo: paneStack.widthAnchor).isActive = true
         }
 
@@ -136,11 +125,6 @@ final class MenuPanelView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
-
-    /// 齿轮点击：交给控制器打开传送设置
-    @objc private func openTransferSettings() {
-        delegate?.menuPanelViewDidRequestTransferSettings(self)
-    }
 
     // MARK: - 背景
 
@@ -208,7 +192,6 @@ final class MenuPanelView: NSView {
     private func applyTab() {
         networkPane.isHidden = currentTab != .network
         clipboardPane.isHidden = currentTab != .clipboard
-        systemPane.isHidden = currentTab != .system
         transferPane.isHidden = currentTab != .transfer
         billingPane.isHidden = currentTab != .credits
         tabBar.selected = currentTab
@@ -219,7 +202,6 @@ final class MenuPanelView: NSView {
         switch currentTab {
         case .network: return networkPane
         case .clipboard: return clipboardPane
-        case .system: return systemPane
         case .transfer: return transferPane
         case .credits: return billingPane
         }
@@ -250,11 +232,6 @@ final class MenuPanelView: NSView {
         clipboardPane.update(items: items)
         setFocus(index: nil)
         delegate?.menuPanelViewDidChangeContent(self)
-    }
-
-    /// 系统页信息（5 秒）
-    func updateSystem(ip: String, wifi: String, launchAtStartup: Bool) {
-        systemPane.update(ip: ip, wifi: wifi, launchAtStartup: launchAtStartup)
     }
 
     /// 额度页快照（状态管理器回调）

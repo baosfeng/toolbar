@@ -179,10 +179,8 @@ enum MenuPanelSnapshot {
 #endif
         panel.updateProcesses(SnapshotFixtures.processes(count: processCount))
         panel.updateClipboardItems(items)
-        panel.updateSystem(ip: getLocalIPAddress() ?? "",
-                           wifi: SystemInfoProvider.wifiDisplayName(),
-                           launchAtStartup: AppContext.shared.storage
-                               .bool(forKey: ClipboardPreferences.launchAtStartupKey))
+        panel.launchAtStartupEnabled = AppContext.shared.storage
+            .bool(forKey: ClipboardPreferences.launchAtStartupKey)
         // 额度页：快照用原型同款示意数据（余额 72.50/100、已购 25、24h 用量、2 个模型）
         if tab == .credits {
             panel.billingPane.injectPreview()
@@ -285,7 +283,6 @@ private extension MenuPanelTab {
         case .network: return "network"
         case .clipboard: return "clipboard"
         case .transfer: return "transfer"
-        case .system: return "system"
         case .credits: return "credits"
         }
     }

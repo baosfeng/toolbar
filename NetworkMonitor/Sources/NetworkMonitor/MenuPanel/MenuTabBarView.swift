@@ -2,11 +2,10 @@ import AppKit
 
 // MARK: - 面板分页枚举
 
-/// 面板五个分页
+/// 面板四个分页
 enum MenuPanelTab: Int, CaseIterable {
     case network
     case clipboard
-    case system
     case transfer
     case credits
 
@@ -15,7 +14,6 @@ enum MenuPanelTab: Int, CaseIterable {
         switch self {
         case .network: return "网络"
         case .clipboard: return "剪贴板"
-        case .system: return "系统"
         case .transfer: return "传送"
         case .credits: return "额度"
         }
@@ -26,7 +24,6 @@ enum MenuPanelTab: Int, CaseIterable {
         switch self {
         case .network: return "network"
         case .clipboard: return "doc.on.clipboard"
-        case .system: return "gearshape"
         case .transfer: return "paperplane"
         case .credits: return "creditcard"
         }
