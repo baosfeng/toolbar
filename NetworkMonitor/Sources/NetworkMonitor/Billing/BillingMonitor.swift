@@ -113,6 +113,8 @@ final class BillingMonitor {
     private var generation = 0
     /// 屏幕锁定 / 休眠时暂停后台刷新（不调接口，也不发提醒）
     private var isPaused = false
+    /// 暂停期间是否已回报过快照（避免每秒重复 emit 触发布局）
+    private var didReportWhilePaused = false
 
     /// 自动刷新最小间隔（Ollama 限流 10 次/分钟，留出余量）
     static let refreshInterval: TimeInterval = 60
@@ -156,7 +158,15 @@ final class BillingMonitor {
     /// - Parameter force: 跳过 60 秒节流与限流退避（打开面板、保存凭据、切换 provider 时使用）
     func refresh(force: Bool = false) {
         // 锁屏 / 休眠期间不调接口（解锁后 resume() 会强制刷新一次）
-        guard !isPaused else { return }
+        guard !isPaused else {
+            // 暂停期间仍回报一次快照：否则重启后若长期处于暂停态，额度页会整页空白
+            // （只剩页头图标与占位符），用户会误判为「所有监控都查不了」。
+            guard !didReportWhilePaused else { return }
+            didReportWhilePaused = true
+            emit()
+            return
+        }
+        didReportWhilePaused = false
         guard let provider = currentProvider else {
             // 注册表为空：只回报空态，不发请求
             emit()

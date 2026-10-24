@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 
 // MARK: - 屏幕活动监听
 
@@ -18,6 +19,8 @@ final class ScreenActivityMonitor {
     var onChange: ((Bool) -> Void)?
 
     private var observers: [NSObjectProtocol] = []
+    /// 定时自检（通知可能丢失，靠轮询兜底恢复）
+    private var watchdog: Timer?
 
     // MARK: - 生命周期
 
@@ -44,11 +47,14 @@ final class ScreenActivityMonitor {
         observe(distributed, Notification.Name("com.apple.screenIsUnlocked"), active: true)
 
         // 启动时可能已经锁屏（例如开机自启后仍在登录界面）
-        update(active: !Self.isScreenLocked())
+        update(active: Self.isScreenAvailable())
+        startWatchdog()
     }
 
     /// 停止监听
     func stop() {
+        watchdog?.invalidate()
+        watchdog = nil
         let workspace = NSWorkspace.shared.notificationCenter
         let distributed = DistributedNotificationCenter.default()
         for token in observers {
@@ -60,10 +66,30 @@ final class ScreenActivityMonitor {
 
     // MARK: - 状态
 
+    /// 30 秒一次的系统状态自检
+    ///
+    /// 锁屏 / 唤醒通知在休眠唤醒、外接显示器等场景下可能缺失；只靠通知会在「收到休眠、
+    /// 却收不到唤醒」时永久停留在暂停态，额度页再也不刷新。自检与事件互为兜底。
+    private func startWatchdog() {
+        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.update(active: Self.isScreenAvailable())
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        watchdog = timer
+    }
+
     private func update(active: Bool) {
         guard active != isActive else { return }
         isActive = active
         onChange?(active)
+    }
+
+    /// 屏幕当前是否可用（未锁屏且主显示器未休眠）
+    private static func isScreenAvailable() -> Bool {
+        !isScreenLocked() && CGDisplayIsAsleep(CGMainDisplayID()) == 0
     }
 
     /// 通过 CGSession 字典判断当前是否锁屏
