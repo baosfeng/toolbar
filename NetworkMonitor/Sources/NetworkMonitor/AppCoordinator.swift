@@ -24,6 +24,8 @@ public final class AppCoordinator {
     private var trafficTracker: (any TrafficTrackingService)!
     /// 累计流量定期落盘定时器（崩溃丢失窗口压到 1 分钟）
     private var trafficPersistenceTimer: Timer?
+    /// DSH Token 统计服务（会话扫描 + SQLite 索引 + 快照）
+    private var harnessUsageService: (any HarnessUsageServicing)?
 
     // MARK: - 剪贴板历史
 
@@ -57,6 +59,8 @@ public final class AppCoordinator {
 #if DEBUG
     /// 快照钩子专用（仅 DEBUG）：暴露数据库以便渲染真实剪贴板条目
     var snapshotClipboardRepository: (any ClipboardRepository)? { database }
+    /// 快照钩子专用（仅 DEBUG）：暴露 Token 服务以便用真实索引结果渲染快照
+    var snapshotHarnessService: (any HarnessUsageServicing)? { harnessUsageService }
 #endif
 
     /// 启动所有服务
@@ -104,6 +108,11 @@ public final class AppCoordinator {
         }
         screenActivity.start()
 
+        // 6b. DSH Token 统计链路（会话扫描 → SQLite 索引 → 快照；索引在后台队列串行执行）
+        let harnessScanner = HarnessSessionScanner(streamer: HarnessZstdLineStreamer(logger: logger))
+        let harnessUsage = HarnessUsageService(scanner: harnessScanner, store: databaseManager, logger: logger)
+        harnessUsageService = harnessUsage
+
         // 7. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
         let manager = MenuBarManager(
             networkMonitor: networkMonitor,
@@ -112,7 +121,8 @@ public final class AppCoordinator {
             clipboardRepository: databaseManager,
             paster: clipboardPaster,
             transferController: transfer,
-            billingMonitor: billingMonitor
+            billingMonitor: billingMonitor,
+            harnessUsage: harnessUsage
         )
         manager.onOpenClipboardHistory = { [weak self] in self?.clipboardPanel.toggle() }
         manager.onOpenClipboardSettings = { [weak self] in self?.clipboardSettings.show() }

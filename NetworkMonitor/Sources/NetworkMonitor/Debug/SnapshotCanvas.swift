@@ -48,4 +48,19 @@ final class SnapshotClipboardPanel {
         return effect
     }
 }
+
+    /// 写自证指标文本（仅快照目录内，便于 review 时不依赖肉眼）
+    func writeSnapshotMetrics(directory: URL, needed: CGFloat, size: NSSize,
+                                     metrics: (document: CGFloat, viewport: CGFloat)) {
+        let text = """
+        content_needed_pt = \(Int(needed.rounded()))
+        popover_height_pt = \(Int(size.height))
+        scroll_document_pt = \(Int(metrics.document.rounded()))
+        scroll_viewport_pt = \(Int(metrics.viewport.rounded()))
+        scrollable = \(metrics.document > metrics.viewport + 1)
+        """ + "\n"
+        let url = directory.appendingPathComponent("menu-network-stress-metrics.txt")
+        try? text.write(to: url, atomically: true, encoding: .utf8)
+        AppContext.shared.logger.info("超高自证：需要 \(Int(needed))pt，视口 \(Int(metrics.viewport))pt，文档 \(Int(metrics.document))pt")
+    }
 #endif

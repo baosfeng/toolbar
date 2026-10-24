@@ -48,6 +48,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     let transferController: TransferController?
     /// 额度页状态管理器（nil = 未装配计费链路）
     let billingMonitor: BillingMonitor?
+    /// Token 页数据服务（nil = 未装配 DSH 索引链路）
+    let harnessUsage: (any HarnessUsageServicing)?
     let storage: any KeyValueStorage
     let logger: LoggingService
 
@@ -74,6 +76,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     /// 最近一次收起时间 — 用于吞掉「点击状态栏按钮先触发 transient 收起、再触发按钮动作」的重复开合
     private var lastCloseDate: Date = .distantPast
     nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var harnessObserver: NSObjectProtocol?
 
     // MARK: - 初始化
 
@@ -84,6 +87,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
          paster: ClipboardPaster,
          transferController: TransferController? = nil,
          billingMonitor: BillingMonitor? = nil,
+         harnessUsage: (any HarnessUsageServicing)? = nil,
          storage: any KeyValueStorage = AppContext.shared.storage,
          logger: LoggingService = AppContext.shared.logger) {
         self.monitor = networkMonitor
@@ -93,6 +97,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         self.paster = paster
         self.transferController = transferController
         self.billingMonitor = billingMonitor
+        self.harnessUsage = harnessUsage
         self.storage = storage
         self.logger = logger
         super.init()
@@ -102,11 +107,15 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         wireActions()
         observeClipboardChanges()
         bindBilling()
+        bindHarnessUsage()
     }
 
     nonisolated deinit {
         if let clipboardObserver {
             NotificationCenter.default.removeObserver(clipboardObserver)
+        }
+        if let harnessObserver {
+            NotificationCenter.default.removeObserver(harnessObserver)
         }
     }
 
@@ -135,6 +144,11 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         content.billingPane.onOpenProviderSite = { url in
             NSWorkspace.shared.open(url)
         }
+        content.tokenPane.onRefresh = { [weak self] in self?.rebuildTokenIndex() }
+        content.tokenPane.onContentChanged = { [weak self] in
+            guard let self else { return }
+            self.content.delegate?.menuPanelViewDidChangeContent(self.content)
+        }
         // 展开 / 收起改变内容高度：通知面板重算 popover 尺寸
         content.billingPane.onContentChanged = { [weak self] in
             guard let self else { return }
@@ -149,6 +163,31 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
             // 收起时仍更新视图数据（下次打开即最新），但不触发布局与 popover 尺寸调整
             self.content.updateBilling(snapshot, notifySize: self.popover.isShown)
         }
+    }
+
+    /// Token 页事件回调：索引完成后立即重读快照（收起时只更新视图数据，不调整尺寸）
+    private func bindHarnessUsage() {
+        guard harnessUsage != nil else { return }
+        harnessObserver = NotificationCenter.default.addObserver(
+            forName: AppEvents.harnessUsageChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let harnessUsage = self.harnessUsage else { return }
+                self.content.updateToken(harnessUsage.snapshot(), notifySize: self.popover.isShown)
+            }
+        }
+    }
+
+    /// Token 页刷新：先渲染已有快照，再后台按需索引（首轮索引不阻塞面板）
+    func refreshToken() {
+        guard let harnessUsage else { return }
+        content.updateToken(harnessUsage.snapshot(), notifySize: popover.isShown)
+        harnessUsage.refreshIfNeeded()
+    }
+
+    /// 强制重建 Token 索引（点刷新按钮）
+    func rebuildTokenIndex() {
+        harnessUsage?.rebuildIndex()
     }
 
     private func observeClipboardChanges() {
@@ -231,6 +270,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         refreshClipboard()
         // 额度页：打开面板强制刷新一次（monitor 内部处理未配置/退避）
         billingMonitor?.refresh(force: true)
+        // Token 页：先用库里已有快照渲染，再触发后台增量索引（不阻塞面板）
+        refreshToken()
         updateContentSize(force: true)
     }
 

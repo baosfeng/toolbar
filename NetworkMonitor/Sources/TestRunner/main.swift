@@ -5,6 +5,12 @@ import Foundation
 // 本文件只保留可执行入口与各测试套件的调度顺序；具体用例位于各 *Tests.swift，
 // 断言辅助位于 AssertionHelpers.swift。顶层语句仅允许留在本文件（SPM 可执行入口约束）。
 
+// MARK: - 人工触发的真实索引基准（不参与默认测试流程）
+if CommandLine.arguments.contains("--harness-index") {
+    runHarnessIndexBenchmark()
+    exit(0)
+}
+
 // MARK: - Core 纯函数：格式化与解析
 runCoreFormattingTests()
 
@@ -48,6 +54,14 @@ runBillingAlertTests()
 
 // MARK: - Open Design 额度（归一化 / 工作区发现 / 窗口映射 / 用量聚合）
 runOpenDesignBillingTests()
+
+// MARK: - DSH token 数据层（会话扫描 / 增量索引 / 聚合快照）
+runHarnessTokenTests()
+runHarnessTokenIndexTests()
+runHarnessTokenHourlyTests()
+
+// MARK: - Token tab 展示口径（范围窗口 / 缺省小时 / 环比 / 空态）
+runTokenPaneTests()
 
 // MARK: - Done
 print("\n🎉 所有测试通过！")

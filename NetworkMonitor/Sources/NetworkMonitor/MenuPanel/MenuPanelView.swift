@@ -8,6 +8,8 @@ import NetworkMonitorCore
 protocol MenuPanelViewDelegate: AnyObject {
     /// 内容尺寸可能变化（切页 / 数据条数变化）— 控制器据此调整 popover 高度
     func menuPanelViewDidChangeContent(_ view: MenuPanelView)
+    /// 选中分页变化 — 控制器据此做按页刷新（如 Token 页按需索引）
+    func menuPanelViewDidSelectTab(_ view: MenuPanelView)
     /// 请求收起面板（Esc）
     func menuPanelViewDidRequestClose(_ view: MenuPanelView)
     /// 请求退出应用（⌘Q）
@@ -42,6 +44,7 @@ final class MenuPanelView: NSView {
     let clipboardPane = ClipboardPaneView()
     let transferPane = TransferPaneView()
     let billingPane = BillingPaneView()
+    let tokenPane = TokenPaneView()
 
     /// 开机自启动当前状态（设置菜单勾选态，由控制器同步）
     var launchAtStartupEnabled = false
@@ -68,6 +71,7 @@ final class MenuPanelView: NSView {
         paneStack.addArrangedSubview(clipboardPane)
         paneStack.addArrangedSubview(transferPane)
         paneStack.addArrangedSubview(billingPane)
+        paneStack.addArrangedSubview(tokenPane)
         paneStack.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.hasVerticalScroller = true
@@ -113,7 +117,7 @@ final class MenuPanelView: NSView {
         tabBar.widthAnchor.constraint(equalTo: headerStack.widthAnchor, constant: -32).isActive = true
         scrollView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         // 各页都撑满面板内容宽度（NSStackView 的 leading 对齐不会自动拉伸子视图）
-        for pane in [networkPane, clipboardPane, transferPane, billingPane] {
+        for pane in [networkPane, clipboardPane, transferPane, billingPane, tokenPane] {
             pane.widthAnchor.constraint(equalTo: paneStack.widthAnchor).isActive = true
         }
 
@@ -158,6 +162,14 @@ final class MenuPanelView: NSView {
         return (paneStack.frame.height, scrollView.contentView.bounds.height)
     }
 
+    /// 快照自证专用：把内容滚到指定比例（0 = 顶部，1 = 底部）
+    func scrollForSnapshot(fraction: CGFloat) {
+        layoutSubtreeIfNeeded()
+        let maxY = max(0, paneStack.frame.height - scrollView.contentView.bounds.height)
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: maxY * min(max(fraction, 0), 1)))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
     /// 快照自证专用：滚到内容底部
     func scrollToBottomForSnapshot() {
         layoutSubtreeIfNeeded()
@@ -177,6 +189,7 @@ final class MenuPanelView: NSView {
         applyTab()
         setFocus(index: nil)
         delegate?.menuPanelViewDidChangeContent(self)
+        delegate?.menuPanelViewDidSelectTab(self)
     }
 
     /// 相邻分页切换（←/→ 时使用，循环）
@@ -194,6 +207,7 @@ final class MenuPanelView: NSView {
         clipboardPane.isHidden = currentTab != .clipboard
         transferPane.isHidden = currentTab != .transfer
         billingPane.isHidden = currentTab != .credits
+        tokenPane.isHidden = currentTab != .token
         tabBar.selected = currentTab
     }
 
@@ -204,6 +218,7 @@ final class MenuPanelView: NSView {
         case .clipboard: return clipboardPane
         case .transfer: return transferPane
         case .credits: return billingPane
+        case .token: return tokenPane
         }
     }
 
@@ -237,6 +252,14 @@ final class MenuPanelView: NSView {
     /// 额度页快照（状态管理器回调）
     func updateBilling(_ snapshot: BillingMonitor.Snapshot, notifySize: Bool = true) {
         billingPane.update(snapshot)
+        if notifySize {
+            delegate?.menuPanelViewDidChangeContent(self)
+        }
+    }
+
+    /// Token 页快照（索引事件回调）
+    func updateToken(_ snapshot: HarnessUsageSnapshot, notifySize: Bool = true) {
+        tokenPane.update(snapshot)
         if notifySize {
             delegate?.menuPanelViewDidChangeContent(self)
         }

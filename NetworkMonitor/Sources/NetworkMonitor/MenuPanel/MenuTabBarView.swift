@@ -8,6 +8,7 @@ enum MenuPanelTab: Int, CaseIterable {
     case clipboard
     case transfer
     case credits
+    case token
 
     /// 分段标签标题
     var title: String {
@@ -16,6 +17,7 @@ enum MenuPanelTab: Int, CaseIterable {
         case .clipboard: return "剪贴板"
         case .transfer: return "传送"
         case .credits: return "额度"
+        case .token: return "Token"
         }
     }
 
@@ -26,13 +28,14 @@ enum MenuPanelTab: Int, CaseIterable {
         case .clipboard: return "doc.on.clipboard"
         case .transfer: return "paperplane"
         case .credits: return "creditcard"
+        case .token: return "chart.bar.xaxis"
         }
     }
 }
 
 // MARK: - 顶部细分段
 
-/// 顶部三段细分段控件 — 自绘 NSView（非 NSSegmentedControl 默认样式）
+/// 顶部细分段控件 — 自绘 NSView（非 NSSegmentedControl 默认样式）
 ///
 /// 交互：点击切换、`←/→` 由面板根视图统一转发（见 `MenuPanelView.keyDown`）、
 /// 选中态用强调色文字 + 略深的滑块背景，非选中态用次要文字色，深浅色自适应。
@@ -99,38 +102,76 @@ final class MenuTabBarView: NSView {
         }
     }
 
+    /// 分段内容布局：字体、图标尺寸、间距、标题宽度
+    ///
+    /// 五段后每段约 52.8pt（264 / 5），12pt 字 + 12pt 图标的「剪贴板」会越界：
+    /// 统一降到 11pt 字 / 10pt 图标 / 3pt 间距，再按可用宽度把图标与间距压到 0，
+    /// 仍不够时退一级字号。返回的 titleSize 为最终字体下的测量值。
+    private func layout(tab: MenuPanelTab,
+                        isSelected: Bool,
+                        availableWidth: CGFloat) -> (font: NSFont, iconSize: CGFloat, gap: CGFloat, titleSize: NSSize) {
+        var font = isSelected
+            ? NSFont.systemFont(ofSize: 11, weight: .semibold)
+            : NSFont.systemFont(ofSize: 11, weight: .regular)
+        let title = tab.title as NSString
+        var titleSize = title.size(withAttributes: [.font: font])
+        var iconSize: CGFloat = 10
+        var gap: CGFloat = 3
+        var contentWidth = iconSize + gap + titleSize.width
+        if contentWidth > availableWidth {
+            iconSize = max(0, availableWidth - titleSize.width - 2)
+            gap = iconSize > 0 ? 2 : 0
+            contentWidth = iconSize + gap + titleSize.width
+        }
+        if contentWidth > availableWidth {
+            font = isSelected
+                ? NSFont.systemFont(ofSize: 10, weight: .semibold)
+                : NSFont.systemFont(ofSize: 10, weight: .regular)
+            titleSize = title.size(withAttributes: [.font: font])
+        }
+        return (font, iconSize, gap, titleSize)
+    }
+
     /// 绘制单个分段：图标 + 文字整体居中
     private func drawContent(tab: MenuPanelTab, in rect: NSRect, isSelected: Bool) {
         // 未选中态用 62% labelColor：secondaryLabelColor 在不透明底色上实测 ~4.5:1 临界，
         // 62% 混合灰在浅/深色下都能稳定 ≥4.5:1
         let color = isSelected ? MenuPanelStyle.accentColor : MenuPanelStyle.tertiaryText
-        let font = isSelected
-            ? NSFont.systemFont(ofSize: 12, weight: .semibold)
-            : NSFont.systemFont(ofSize: 12, weight: .regular)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        let metrics = layout(tab: tab, isSelected: isSelected, availableWidth: max(0, rect.width - 3))
+        let attributes: [NSAttributedString.Key: Any] = [.font: metrics.font, .foregroundColor: color]
+        let startX = rect.midX - (metrics.iconSize + metrics.gap + metrics.titleSize.width) / 2
 
-        let title = tab.title as NSString
-        let titleSize = title.size(withAttributes: attributes)
-        let iconSize: CGFloat = 12
-        let gap: CGFloat = 5
-        let contentWidth = iconSize + gap + titleSize.width
-        let startX = rect.midX - contentWidth / 2
-
-        if let icon = tabIcon(tab, color: color) {
-            let iconRect = NSRect(x: startX, y: rect.midY - iconSize / 2, width: iconSize, height: iconSize)
+        if metrics.iconSize > 0, let icon = tabIcon(tab, color: color) {
+            let iconRect = NSRect(x: startX, y: rect.midY - metrics.iconSize / 2,
+                                  width: metrics.iconSize, height: metrics.iconSize)
             icon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1,
                       respectFlipped: true, hints: nil)
         }
-        let textY = rect.midY - titleSize.height / 2
-        title.draw(at: NSPoint(x: startX + iconSize + gap, y: textY), withAttributes: attributes)
+        let textY = rect.midY - metrics.titleSize.height / 2
+        (tab.title as NSString).draw(at: NSPoint(x: startX + metrics.iconSize + metrics.gap, y: textY),
+                                     withAttributes: attributes)
     }
+
+#if DEBUG
+    /// 快照自证专用：五段标题在各自可用宽度下的实测内容宽度（pt）
+    static func segmentMetrics() -> [(title: String, content: CGFloat, available: CGFloat)] {
+        let barWidth = MenuPanelStyle.contentWidth - 32
+        let segmentWidth = barWidth / CGFloat(MenuPanelTab.allCases.count)
+        let available = segmentWidth - 3
+        let probe = MenuTabBarView()
+        return MenuPanelTab.allCases.map { tab in
+            let metrics = probe.layout(tab: tab, isSelected: true, availableWidth: available)
+            return (tab.title, metrics.iconSize + metrics.gap + metrics.titleSize.width, available)
+        }
+    }
+#endif
 
     /// 生成着色后的 SF Symbol（palette 配置直接决定颜色，避免模板色歧义）
     private func tabIcon(_ tab: MenuPanelTab, color: NSColor) -> NSImage? {
         guard let base = NSImage(systemSymbolName: tab.symbolName, accessibilityDescription: tab.title) else {
             return nil
         }
-        let sizeConfig = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
+        let sizeConfig = NSImage.SymbolConfiguration(pointSize: 10, weight: .medium)
         let colorConfig = NSImage.SymbolConfiguration(paletteColors: [color])
         return base.withSymbolConfiguration(sizeConfig.applying(colorConfig)) ?? base
     }

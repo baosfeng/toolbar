@@ -32,19 +32,24 @@ enum MenuPanelSnapshot {
     private static var logger: LoggingService { AppContext.shared.logger }
 
     /// 入口：环境变量存在时延时执行快照并退出进程；未设置时立即返回
-    static func runIfRequested(repository: (any ClipboardRepository)?) {
+    static func runIfRequested(repository: (any ClipboardRepository)?,
+                                harness: (any HarnessUsageServicing)? = nil) {
         guard let path = ProcessInfo.processInfo.environment[directoryEnvKey], !path.isEmpty else { return }
         let directory = URL(fileURLWithPath: path, isDirectory: true)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: delayNanoseconds)
-            captureAll(directory: directory, repository: repository)
+            // Token 页：先等一次索引（已有落库数据时是快速增量），再用真实快照渲染
+            let tokenSnapshot = await TokenPaneSnapshot.waitForSnapshot(harness: harness)
+            captureAll(directory: directory, repository: repository, tokenSnapshot: tokenSnapshot)
+            TokenPaneSnapshot.capture(directory: directory, tokenSnapshot: tokenSnapshot)
             NSApp.terminate(nil)
         }
     }
 
     // MARK: - 快照主流程
 
-    private static func captureAll(directory: URL, repository: (any ClipboardRepository)?) {
+    private static func captureAll(directory: URL, repository: (any ClipboardRepository)?,
+                                   tokenSnapshot: HarnessUsageSnapshot?) {
         let items = repository?.fetchClipboardItems(kind: nil, limit: 5) ?? []
         let stress = (ProcessInfo.processInfo.environment[stressEnvKey]?.isEmpty == false)
         let billingMock = (ProcessInfo.processInfo.environment[billingMockEnvKey]?.isEmpty == false)
@@ -59,7 +64,7 @@ enum MenuPanelSnapshot {
 
         // 1. 菜单面板：三个 tab × 深浅色
         for tab in MenuPanelTab.allCases {
-            let panel = makeMenuPanel(tab: tab, items: items)
+            let panel = makeMenuPanel(tab: tab, items: items, tokenSnapshot: tokenSnapshot)
             let needed = panel.desiredContentHeight
             let height = min(max(needed, 180), MenuPanelStyle.maxHeight)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
@@ -142,29 +147,15 @@ enum MenuPanelSnapshot {
                 guard let panel = view as? MenuPanelView else { return }
                 let metrics = panel.snapshotScrollMetrics()
                 panel.scrollToBottomForSnapshot()
-                writeMetrics(directory: directory, needed: needed, size: size, metrics: metrics)
+                writeSnapshotMetrics(directory: directory, needed: needed, size: size, metrics: metrics)
             }
         }
     }
 
-    /// 写自证指标文本（仅快照目录内，便于 review 时不依赖肉眼）
-    private static func writeMetrics(directory: URL, needed: CGFloat, size: NSSize,
-                                     metrics: (document: CGFloat, viewport: CGFloat)) {
-        let text = """
-        content_needed_pt = \(Int(needed.rounded()))
-        popover_height_pt = \(Int(size.height))
-        scroll_document_pt = \(Int(metrics.document.rounded()))
-        scroll_viewport_pt = \(Int(metrics.viewport.rounded()))
-        scrollable = \(metrics.document > metrics.viewport + 1)
-        """ + "\n"
-        let url = directory.appendingPathComponent("menu-network-stress-metrics.txt")
-        try? text.write(to: url, atomically: true, encoding: .utf8)
-        logger.info("超高自证：需要 \(Int(needed))pt，视口 \(Int(metrics.viewport))pt，文档 \(Int(metrics.document))pt")
-    }
-
     /// 构建菜单面板并填入快照数据（速率/流量/进程为固定示意值，剪贴板/系统取真实数据）
     private static func makeMenuPanel(tab: MenuPanelTab, items: [ClipboardItem],
-                                      processCount: Int = 5) -> MenuPanelView {
+                                      processCount: Int = 5,
+                                      tokenSnapshot: HarnessUsageSnapshot? = nil) -> MenuPanelView {
         let panel = MenuPanelView()
         panel.updateSpeeds(down: 1_200_000, up: 340_000,
                            downHistory: SnapshotFixtures.history(base: 900_000, amplitude: 700_000),
@@ -185,6 +176,10 @@ enum MenuPanelSnapshot {
         if tab == .credits {
             panel.billingPane.injectPreview()
         }
+        if tab == .token, let tokenSnapshot {
+            // Token 页：真实索引快照（来自 HarnessUsageService.snapshot()）
+            panel.updateToken(tokenSnapshot, notifySize: false)
+        }
         panel.select(tab: tab)
         return panel
     }
@@ -200,7 +195,7 @@ enum MenuPanelSnapshot {
     ///
     /// 步骤：套一层纯色背景容器 → 放进离屏 borderless 窗口 → 布局 → `cacheDisplay` 抓位图 → 写 PNG。
     /// 面板本身已是不透明背景，这里不改材质，保证离屏结果与真实窗口一致。任何一步失败只记日志。
-    private static func render(view: NSView, size: NSSize,
+    static func render(view: NSView, size: NSSize,
                                appearanceName: NSAppearance.Name, to url: URL,
                                postLayout: ((NSView) -> Void)? = nil) {
         guard let appearance = NSAppearance(named: appearanceName) else {
@@ -284,6 +279,7 @@ private extension MenuPanelTab {
         case .clipboard: return "clipboard"
         case .transfer: return "transfer"
         case .credits: return "credits"
+        case .token: return "token"
         }
     }
 }

@@ -16,4 +16,12 @@ public enum AppEvents {
     public static func postClipboardChanged() {
         NotificationCenter.default.post(name: clipboardChanged, object: nil)
     }
+
+    /// DSH token 用量数据已变化（索引完成、重建完成、降级状态变更）— 订阅方应重新读取快照
+    public static let harnessUsageChanged = Notification.Name("AppEvents.harnessUsageChanged")
+
+    /// 发布 DSH token 用量变更通知（线程安全，通常在后台索引队列调用）
+    public static func postHarnessUsageChanged() {
+        NotificationCenter.default.post(name: harnessUsageChanged, object: nil)
+    }
 }

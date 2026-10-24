@@ -79,6 +79,13 @@ extension MenuPanelController: MenuPanelViewDelegate {
         }
     }
 
+    func menuPanelViewDidSelectTab(_ view: MenuPanelView) {
+        // 切到 Token 页时按需增量刷新（服务内部串行、不重入；数据未变则快速返回）
+        if view.currentTab == .token {
+            harnessUsage?.refreshIfNeeded()
+        }
+    }
+
     func menuPanelViewDidRequestClose(_ view: MenuPanelView) {
         close()
     }

@@ -60,6 +60,7 @@ enum MenuPanelEvidence {
         switch value {
         case "network": return .network
         case "clipboard": return .clipboard
+        case "token": return .token
         default: return nil
         }
     }
