@@ -72,6 +72,8 @@ final class ClipboardCardFlowView: NSView {
 
     /// 卡片被点选（参数为条目在 items 中的下标）
     var onSelect: ((Int) -> Void)?
+    /// 卡片右键「贴到屏幕」回调（索引为全量列表下标）
+    var onPin: ((Int) -> Void)?
     /// 卡片被双击（参数同上）
     var onActivate: ((Int) -> Void)?
 
@@ -187,6 +189,10 @@ final class ClipboardCardFlowView: NSView {
     /// 新建一张卡片视图；回调按视图在池中的槽位换算当前下标（视图复用后下标随之变化）
     private func makeCardView() -> ClipboardCardView {
         let card = ClipboardCardView(frame: NSRect(origin: .zero, size: ClipboardCardView.cardSize))
+        card.onPin = { [weak self] card in
+            guard let self, let index = self.cardViews.firstIndex(where: { $0 === card }) else { return }
+            self.onPin?(self.windowStart + index)
+        }
         card.onClick = { [weak self] card in
             guard let self, let index = self.cardViews.firstIndex(of: card) else { return }
             self.onSelect?(self.windowStart + index)

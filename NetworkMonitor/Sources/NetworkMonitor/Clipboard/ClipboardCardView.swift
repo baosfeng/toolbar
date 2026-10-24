@@ -51,6 +51,8 @@ final class ClipboardCardView: NSView {
     var onClick: ((ClipboardCardView) -> Void)?
     /// 双击（粘贴）回调
     var onDoubleClick: ((ClipboardCardView) -> Void)?
+    /// 右键「贴到屏幕」回调
+    var onPin: ((ClipboardCardView) -> Void)?
 
     private(set) var item: ClipboardItem?
     private(set) var isSelected = false
@@ -82,6 +84,18 @@ final class ClipboardCardView: NSView {
     override func mouseDown(with event: NSEvent) {
         onClick?(self)
         if event.clickCount >= 2 { onDoubleClick?(self) }
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+        let pinItem = NSMenuItem(title: "贴到屏幕", action: #selector(menuPinToScreen), keyEquivalent: "")
+        pinItem.target = self
+        menu.addItem(pinItem)
+        return menu
+    }
+
+    @objc private func menuPinToScreen() {
+        onPin?(self)
     }
 
     // MARK: 绘制

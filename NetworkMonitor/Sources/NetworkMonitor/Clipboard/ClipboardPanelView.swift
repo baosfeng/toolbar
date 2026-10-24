@@ -46,6 +46,8 @@ protocol ClipboardPanelViewDelegate: AnyObject {
     func panelView(_ view: ClipboardPanelView, didSelect index: Int)
     /// 卡片被双击（直接粘贴）
     func panelView(_ view: ClipboardPanelView, didActivate index: Int)
+    /// 卡片右键「贴到屏幕」
+    func panelView(_ view: ClipboardPanelView, didRequestPinAt index: Int)
     /// 请求跳转辅助功能权限设置
     func panelViewDidRequestOpenAccessibilitySettings(_ view: ClipboardPanelView)
 }
@@ -332,6 +334,10 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         cardFlow.onActivate = { [weak self] index in
             guard let self else { return }
             self.delegate?.panelView(self, didActivate: index)
+        }
+        cardFlow.onPin = { [weak self] index in
+            guard let self else { return }
+            self.delegate?.panelView(self, didRequestPinAt: index)
         }
         addSubview(cardFlow)
     }

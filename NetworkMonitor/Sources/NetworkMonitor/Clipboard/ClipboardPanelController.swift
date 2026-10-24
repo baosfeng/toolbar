@@ -15,16 +15,18 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     private let paster: ClipboardPaster
     private let stack: PasteStackController
     private let preferences: ClipboardPreferences
-    private let logger: LoggingService
+    /// 放宽为 internal：贴图扩展文件要写日志
+    let logger: LoggingService
     /// ⌘, 打开剪贴板设置（组合根注入，复用既有设置窗打开路径）
     private let onRequestSettings: (() -> Void)?
+    /// 把某条历史贴到屏幕（组合根注入到截图链路）
+    var onRequestPin: ((ClipboardItem) -> Void)?
 
     private var items: [ClipboardItem] = []
-    private var filteredItems: [ClipboardItem] = []
+    /// 放宽为 internal：贴图扩展文件要按索引取条目
+    var filteredItems: [ClipboardItem] = []
     private var selectedIndex = -1
-    /// 面板已收起时的降级提示
     private var pendingHint: String?
-    /// 面板收起期间有剪贴板变更，下次打开时重读
     private var pendingReload = false
     nonisolated(unsafe) private var localKeyMonitor: Any?
     nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
@@ -311,6 +313,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         selectedIndex = index
         content.updateSelection(index)
     }
+
 
     func panelView(_ view: ClipboardPanelView, didActivate index: Int) {
         panelView(view, didSelect: index)
