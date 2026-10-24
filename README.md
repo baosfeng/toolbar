@@ -6,7 +6,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey.svg)](#系统要求)
 [![Swift](https://img.shields.io/badge/Swift-6.3-orange.svg)](https://swift.org)
-[![Version](https://img.shields.io/badge/version-1.3.1-blue.svg)](https://github.com/baosfeng/toolbar/releases)
+[![Release](https://img.shields.io/github/v/release/baosfeng/toolbar?display_name=tag&sort=semver)](https://github.com/baosfeng/toolbar/releases)
+[![Downloads](https://img.shields.io/github/downloads/baosfeng/toolbar/total)](https://github.com/baosfeng/toolbar/releases)
 
 ![额度页](docs/设计/额度页-聚合视图-预览/展开态-浅色.png)
 
