@@ -3,79 +3,17 @@ import NetworkMonitorCore
 
 // MARK: - 计费状态管理器
 
-/// 额度页状态管理器 — 拉取余额与用量、节流、限流退避与错误保留
+/// 额度页状态管理器 — 为每个已注册 provider 维护独立状态并并发拉取
 ///
 /// 设计要点：
+/// - 一次展示全部 provider：`states` 与注册表同序，UI 不再需要切换 provider
 /// - 只依赖 Core 的计费契约（provider 注册表 / provider 协议 / 凭据存储协议），不触碰任何 UI
 /// - `onUpdate` 在主线程回调最新快照，面板只负责渲染
-/// - 并发防重入 + generation 计数：旧请求结果不会覆盖新状态
-/// - 自动刷新 60 秒节流（`force` 跳过）；429 按 `Retry-After` 退避
-/// - 未配置凭据时不发网络请求，快照标记为未配置态
+/// - 每 provider 独立代次：切换某块的范围不会作废其它 provider 的在途请求
+/// - 自动刷新 60 秒节流（`force` 跳过）；429 按 `Retry-After` 全局退避
+/// - 未配置凭据的 provider 不发网络请求，快照标记为未配置态
 @MainActor
 final class BillingMonitor {
-
-    // MARK: - 快照
-
-    /// provider 展示信息 — UI 只读，避免直接持有 provider 协议实例
-    struct ProviderDescriptor: Equatable {
-        /// 稳定标识（凭据键 / 选择器 key）
-        let id: String
-        /// 展示名称
-        let displayName: String
-        /// SF Symbol 图标名（禁止 emoji）
-        let symbolName: String
-        /// 凭据输入框占位文案
-        let credentialHint: String
-        /// 是否提供按模型分组的明细
-        let supportsModelBreakdown: Bool
-        /// 是否支持时间序列（false 时 UI 隐藏用时柱状图）
-        let supportsTimeSeries: Bool
-        /// 凭据获取页面（配置态链接跳转目标；nil = 无在线入口）
-        let credentialPageURL: URL?
-
-        /// 兼容默认值（快照示意数据 / 测试构造用）
-        init(id: String, displayName: String, symbolName: String, credentialHint: String,
-             supportsModelBreakdown: Bool, supportsTimeSeries: Bool = true,
-             credentialPageURL: URL? = nil) {
-            self.id = id
-            self.displayName = displayName
-            self.symbolName = symbolName
-            self.credentialHint = credentialHint
-            self.supportsModelBreakdown = supportsModelBreakdown
-            self.supportsTimeSeries = supportsTimeSeries
-            self.credentialPageURL = credentialPageURL
-        }
-    }
-
-    /// 对外快照 — 面板据此渲染状态行 / 余额卡 / 用量区 / 配置态 / 错误态
-    struct Snapshot {
-        /// 已注册 provider（注册顺序）
-        let providers: [ProviderDescriptor]
-        /// 当前选中的 provider（注册表为空时 nil）
-        var selectedProviderID: String?
-        /// 当前 provider 是否已配置凭据
-        var isConfigured: Bool
-        /// 余额（nil = 尚无成功数据）
-        var balance: BillingBalance?
-        /// 用量（nil = 尚无成功数据）
-        var usage: BillingUsage?
-        /// 当前用量范围
-        var range: BillingRange
-        /// 最近一次成功刷新时间
-        var lastUpdated: Date?
-        /// 是否正在请求
-        var isLoading: Bool
-        /// 错误文案（`BillingError.userMessage`），失败时保留上次成功数据
-        var errorMessage: String?
-
-        /// 当前 provider 的展示信息
-        var currentProvider: ProviderDescriptor? {
-            providers.first { $0.id == selectedProviderID }
-        }
-
-        /// 注册表为空（面板整页空态）
-        var hasNoProvider: Bool { providers.isEmpty }
-    }
 
     // MARK: - 依赖
 
@@ -87,30 +25,14 @@ final class BillingMonitor {
 
     // MARK: - 状态
 
-    /// provider 展示信息（启动后注册表只读，构造时一次性拍平）
-    private let providers: [ProviderDescriptor]
-    /// 当前选中的 provider id
-    private var selectedProviderID: String?
-
-    /// 当前用量范围
-    private var range: BillingRange = .last24Hours
-    /// 最近一次成功拉取到的余额
-    private var balance: BillingBalance?
-    /// 最近一次成功拉取到的用量
-    private var usage: BillingUsage?
-    /// 最近一次成功刷新时间
-    private var lastUpdated: Date?
-    /// 是否正在请求
-    private var isLoading = false
-    /// 最近一次失败文案
-    private var errorMessage: String?
-
-    /// 上次发起刷新的时间（60 秒节流基准）
+    /// 全部 provider 的展示状态（与注册顺序一致）
+    private var states: [ProviderState]
+    /// 每 provider 的请求代次 — 只作废旧 provider 的在途结果，互不干扰
+    private var generations: [String: Int] = [:]
+    /// 上次发起整体刷新的时间（60 秒节流基准）
     private var lastRefreshStarted: Date = .distantPast
-    /// 限流退避截止时间（429 后按 Retry-After 设置）
+    /// 限流退避截止时间（429 后按 Retry-After 设置，全局生效）
     private var retryNotBefore: Date?
-    /// 请求代次 — 切换 provider / 范围后自增，旧任务结果直接丢弃
-    private var generation = 0
     /// 屏幕锁定 / 休眠时暂停后台刷新（不调接口，也不发提醒）
     private var isPaused = false
     /// 暂停期间是否已回报过快照（避免每秒重复 emit 触发布局）
@@ -136,71 +58,70 @@ final class BillingMonitor {
         self.credentialStore = credentialStore
         self.alertService = alertService
         self.logger = logger
-        self.providers = registry.all.map { provider in
-            ProviderDescriptor(id: provider.id,
-                               displayName: provider.displayName,
-                               symbolName: provider.symbolName,
-                               credentialHint: provider.credentialHint,
-                               supportsModelBreakdown: provider.supportsModelBreakdown,
-                               supportsTimeSeries: provider.supportsTimeSeries,
-                               credentialPageURL: provider.credentialPageURL)
+        self.states = registry.all.map { provider in
+            let descriptor = ProviderDescriptor(id: provider.id,
+                                                displayName: provider.displayName,
+                                                symbolName: provider.symbolName,
+                                                credentialHint: provider.credentialHint,
+                                                supportsModelBreakdown: provider.supportsModelBreakdown,
+                                                supportsTimeSeries: provider.supportsTimeSeries,
+                                                credentialPageURL: provider.credentialPageURL)
+            return ProviderState(descriptor: descriptor,
+                                 range: .last24Hours,
+                                 isConfigured: credentialStore.credential(for: provider.id) != nil,
+                                 balance: nil,
+                                 usage: nil,
+                                 lastUpdated: nil,
+                                 isLoading: false,
+                                 errorMessage: nil)
         }
-        self.selectedProviderID = providers.first?.id
-        if providers.isEmpty {
+        if states.isEmpty {
             logger.warning("计费注册表为空：额度页将显示空态")
         }
     }
 
     // MARK: - 刷新
 
-    /// 全量刷新余额 + 用量
+    /// 全量刷新：所有已配置 provider 的余额 + 用量并发拉取
     ///
-    /// - Parameter force: 跳过 60 秒节流与限流退避（打开面板、保存凭据、切换 provider 时使用）
+    /// - Parameter force: 跳过 60 秒节流与限流退避（打开面板、保存凭据时使用）
     func refresh(force: Bool = false) {
         // 锁屏 / 休眠期间不调接口（解锁后 resume() 会强制刷新一次）
         guard !isPaused else {
             // 暂停期间仍回报一次快照：否则重启后若长期处于暂停态，额度页会整页空白
-            // （只剩页头图标与占位符），用户会误判为「所有监控都查不了」。
             guard !didReportWhilePaused else { return }
             didReportWhilePaused = true
             emit()
             return
         }
         didReportWhilePaused = false
-        guard let provider = currentProvider else {
-            // 注册表为空：只回报空态，不发请求
+        guard !states.isEmpty else {
             emit()
             return
         }
         let now = Date()
-        if isLoading {
-            logger.debug("计费刷新跳过：已有请求进行中")
-            return
-        }
-        if !force, let retryNotBefore, now < retryNotBefore {
-            logger.debug("计费刷新跳过：限流退避中")
-            return
-        }
-        if !force, now.timeIntervalSince(lastRefreshStarted) < Self.refreshInterval {
-            return
-        }
-        guard let credential = credentialStore.credential(for: provider.id) else {
-            // 未配置凭据：只更新未配置态，不发起网络请求
+        if !force, let retryNotBefore, now < retryNotBefore { return }
+        if !force, now.timeIntervalSince(lastRefreshStarted) < Self.refreshInterval { return }
+        guard states.contains(where: { $0.isConfigured }) else {
+            // 全部未配置：只回报未配置态，不发请求
             lastRefreshStarted = now
-            applyUnconfigured()
+            emit()
             return
         }
+        if states.contains(where: { $0.isLoading }) { return }
         lastRefreshStarted = now
-        startFullLoad(provider: provider, credential: credential)
+        startFullLoad()
     }
 
-    /// 切换用量范围 — 只重拉用量（余额沿用，避免打满 10 次/分钟限流）
-    func selectRange(_ newRange: BillingRange) {
-        guard newRange != range else { return }
-        range = newRange
+    /// 切换某个 provider 的用量范围 — 只重拉该 provider 的用量，余额沿用
+    func selectRange(_ range: BillingRange, providerID: String) {
+        guard let index = states.firstIndex(where: { $0.descriptor.id == providerID }),
+              states[index].range != range else { return }
+        states[index].range = range
 
-        guard let provider = currentProvider,
-              let credential = credentialStore.credential(for: provider.id) else {
+        guard states[index].isConfigured,
+              let provider = registry.provider(id: providerID),
+              let credential = credentialStore.credential(for: providerID) else {
             emit()
             return
         }
@@ -210,45 +131,27 @@ final class BillingMonitor {
             emit()
             return
         }
-        generation &+= 1
-        let generation = self.generation
-        isLoading = true
-        errorMessage = nil
+        let generation = nextGeneration(for: providerID)
+        states[index].isLoading = true
+        states[index].errorMessage = nil
         lastRefreshStarted = now
         emit()
 
         Task { @MainActor [weak self] in
-            let outcome = await Self.fetchUsage(provider: provider, range: newRange, credential: credential)
-            guard let self, self.generation == generation else { return }
-            self.isLoading = false
+            let outcome = await Self.fetchUsage(provider: provider, range: range, credential: credential)
+            guard let self, self.currentGeneration(for: providerID) == generation,
+                  let index = self.states.firstIndex(where: { $0.descriptor.id == providerID }) else { return }
+            self.states[index].isLoading = false
             switch outcome {
             case .success(let value):
-                self.usage = value
-                self.lastUpdated = Date()
-                self.errorMessage = nil
-                self.retryNotBefore = nil
+                self.states[index].usage = value
+                self.states[index].lastUpdated = Date()
+                self.states[index].errorMessage = nil
             case .failure(let error):
-                self.handleFailure(error)
+                self.handle(failure: error, providerID: providerID)
             }
             self.emit()
         }
-    }
-
-    /// 切换 provider — 清空旧数据后全量刷新
-    func selectProvider(id: String) {
-        guard id != selectedProviderID, registry.provider(id: id) != nil else { return }
-        selectedProviderID = id
-        balance = nil
-        usage = nil
-        lastUpdated = nil
-        errorMessage = nil
-        retryNotBefore = nil
-        lastRefreshStarted = .distantPast
-        generation &+= 1
-        isLoading = false
-        logger.info("切换计费 provider：\(id)")
-        emit()
-        refresh(force: true)
     }
 
     // MARK: - 屏幕活动
@@ -270,130 +173,156 @@ final class BillingMonitor {
 
     // MARK: - 凭据
 
-    /// 保存凭据并立即全量刷新（空串等同于清除）
-    func saveCredential(_ key: String) {
-        guard let provider = currentProvider else { return }
-        credentialStore.setCredential(key, for: provider.id)
+    /// 保存指定 provider 的凭据并立即刷新（空串等同于清除）
+    func saveCredential(_ key: String, providerID: String) {
+        guard let index = states.firstIndex(where: { $0.descriptor.id == providerID }) else { return }
+        credentialStore.setCredential(key, for: providerID)
+        let configured = credentialStore.credential(for: providerID) != nil
+        states[index].isConfigured = configured
+        states[index].errorMessage = nil
+        if !configured {
+            states[index].balance = nil
+            states[index].usage = nil
+            states[index].lastUpdated = nil
+        }
         lastRefreshStarted = .distantPast
         retryNotBefore = nil
+        emit()
         refresh(force: true)
     }
 
-    /// 清除当前 provider 的凭据（回到未配置态，不发请求）
-    func clearCredential() {
-        guard let provider = currentProvider else { return }
-        credentialStore.setCredential(nil, for: provider.id)
-        logger.info("已清除计费凭据：\(provider.id)")
-        applyUnconfigured()
+    /// 清除指定 provider 的凭据（回到未配置态，不发请求）
+    func clearCredential(providerID: String) {
+        guard let index = states.firstIndex(where: { $0.descriptor.id == providerID }) else { return }
+        credentialStore.setCredential(nil, for: providerID)
+        states[index].isConfigured = false
+        states[index].balance = nil
+        states[index].usage = nil
+        states[index].lastUpdated = nil
+        states[index].errorMessage = nil
+        states[index].isLoading = false
+        _ = nextGeneration(for: providerID)
+        logger.info("已清除计费凭据：\(providerID)")
+        emit()
     }
 
     // MARK: - 请求
 
-    /// 发起一次全量请求（余额 + 用量并行）
-    private func startFullLoad(provider: any BillingProvider, credential: String) {
-        generation &+= 1
-        let generation = self.generation
-        let range = self.range
-        isLoading = true
-        errorMessage = nil
+    /// 对所有已配置 provider 并发发起「余额 + 用量」请求
+    private func startFullLoad() {
+        var targets: [(provider: any BillingProvider, credential: String, range: BillingRange, id: String, generation: Int)] = []
+        for index in states.indices where states[index].isConfigured {
+            let id = states[index].descriptor.id
+            guard let provider = registry.provider(id: id),
+                  let credential = credentialStore.credential(for: id) else { continue }
+            let generation = nextGeneration(for: id)
+            states[index].isLoading = true
+            states[index].errorMessage = nil
+            targets.append((provider, credential, states[index].range, id, generation))
+        }
         emit()
+        guard !targets.isEmpty else { return }
 
         Task { @MainActor [weak self] in
-            async let balanceOutcome = Self.fetchBalance(provider: provider, credential: credential)
-            async let usageOutcome = Self.fetchUsage(provider: provider, range: range, credential: credential)
-            let balanceResult = await balanceOutcome
-            let usageResult = await usageOutcome
-            // 代次不一致说明期间切换了 provider / 范围，丢弃本次结果
-            guard let self, self.generation == generation else { return }
-            self.isLoading = false
-            self.apply(balanceResult: balanceResult, usageResult: usageResult, provider: provider)
+            let results = await withTaskGroup(of: ProviderFetchResult.self,
+                                              returning: [ProviderFetchResult].self) { group in
+                for target in targets {
+                    group.addTask {
+                        async let balance = BillingMonitor.fetchBalance(provider: target.provider,
+                                                                        credential: target.credential)
+                        async let usage = BillingMonitor.fetchUsage(provider: target.provider,
+                                                                    range: target.range,
+                                                                    credential: target.credential)
+                        return ProviderFetchResult(id: target.id, balance: await balance, usage: await usage)
+                    }
+                }
+                var collected: [ProviderFetchResult] = []
+                for await result in group { collected.append(result) }
+                return collected
+            }
+            guard let self else { return }
+            self.apply(results: results, targets: targets)
             self.emit()
         }
     }
 
-    /// 合并请求结果：成功项覆盖，失败项保留上次成功数据并记录错误文案
-    private func apply(balanceResult: BillingOutcome<BillingBalance>,
-                       usageResult: BillingOutcome<BillingUsage>,
-                       provider: any BillingProvider) {
-        var failure: BillingError?
-        switch balanceResult {
-        case .success(let value):
-            balance = value
-            // 余额成功刷新后评估阈值提醒（同一周期同一档只提醒一次）
-            alertService?.handle(balance: value,
-                                 providerID: provider.id,
-                                 providerName: provider.displayName)
-        case .failure(let error):
-            failure = error
-        }
-        switch usageResult {
-        case .success(let value):
-            usage = value
-        case .failure(let error):
-            if failure == nil { failure = error }
-        }
+    /// 合并并发结果：成功项覆盖，失败项保留上次成功数据并记录错误文案
+    private func apply(results: [ProviderFetchResult],
+                       targets: [(provider: any BillingProvider, credential: String, range: BillingRange, id: String, generation: Int)]) {
+        var rateLimited: TimeInterval?
+        for result in results {
+            guard let index = states.firstIndex(where: { $0.descriptor.id == result.id }) else { continue }
+            // 期间切换了范围 / 清除了凭据：丢弃本次结果，由更新的请求接管
+            guard let target = targets.first(where: { $0.id == result.id }),
+                  generations[result.id] == target.generation else { continue }
+            states[index].isLoading = false
 
-        if let failure {
-            handleFailure(failure)
+            var failure: BillingError?
+            switch result.balance {
+            case .success(let value):
+                states[index].balance = value
+                alertService?.handle(balance: value,
+                                     providerID: result.id,
+                                     providerName: states[index].descriptor.displayName)
+            case .failure(let error):
+                failure = error
+            }
+            switch result.usage {
+            case .success(let value):
+                states[index].usage = value
+            case .failure(let error):
+                if failure == nil { failure = error }
+            }
+
+            if let failure {
+                handle(failure: failure, providerID: result.id)
+                if case .rateLimited(let retryAfter) = failure {
+                    rateLimited = max(rateLimited ?? 0, retryAfter ?? Self.defaultRetryDelay)
+                }
+            } else {
+                states[index].lastUpdated = Date()
+                states[index].errorMessage = nil
+            }
+        }
+        if let rateLimited {
+            retryNotBefore = Date().addingTimeInterval(rateLimited)
+            logger.warning("计费查询触发限流，退避 \(Int(rateLimited)) 秒")
         } else {
-            lastUpdated = Date()
-            errorMessage = nil
             retryNotBefore = nil
         }
     }
 
-    /// 统一失败处理：429 记录退避截止时间，其余只记日志（UI 展示 errorMessage）
-    private func handleFailure(_ error: BillingError) {
-        errorMessage = error.userMessage
-        if case .rateLimited(let retryAfter) = error {
-            let delay = retryAfter ?? Self.defaultRetryDelay
-            retryNotBefore = Date().addingTimeInterval(delay)
-            logger.warning("计费查询触发限流，退避 \(Int(delay)) 秒")
+    /// 单 provider 失败处理：429 记录退避，其余记日志（UI 展示 errorMessage）
+    private func handle(failure: BillingError, providerID: String) {
+        if let index = states.firstIndex(where: { $0.descriptor.id == providerID }) {
+            states[index].errorMessage = failure.userMessage
+        }
+        if case .rateLimited(let retryAfter) = failure {
+            retryNotBefore = Date().addingTimeInterval(retryAfter ?? Self.defaultRetryDelay)
+            logger.warning("计费查询触发限流，退避 \(Int(retryAfter ?? Self.defaultRetryDelay)) 秒")
         } else {
-            logger.error("计费查询失败：\(error.userMessage)")
+            logger.error("计费查询失败（\(providerID)）：\(failure.userMessage)")
         }
     }
 
-    // MARK: - 状态
+    // MARK: - 代次
 
-    /// 当前 provider 协议实例
-    private var currentProvider: (any BillingProvider)? {
-        guard let selectedProviderID else { return nil }
-        return registry.provider(id: selectedProviderID)
+    /// 递增并返回指定 provider 的请求代次
+    private func nextGeneration(for providerID: String) -> Int {
+        let next = (generations[providerID] ?? 0) + 1
+        generations[providerID] = next
+        return next
     }
 
-    /// 当前 provider 是否已配置凭据
-    private var isConfigured: Bool {
-        guard let selectedProviderID else { return false }
-        return credentialStore.credential(for: selectedProviderID) != nil
+    /// 当前代次（回调时校验结果是否过期）
+    private func currentGeneration(for providerID: String) -> Int {
+        generations[providerID] ?? 0
     }
 
-    /// 回到未配置态：清空余额与用量，作废在途请求
-    private func applyUnconfigured() {
-        generation &+= 1
-        isLoading = false
-        balance = nil
-        usage = nil
-        lastUpdated = nil
-        errorMessage = nil
-        emit()
-    }
-
-    /// 当前状态快照
-    private var snapshot: Snapshot {
-        Snapshot(providers: providers,
-                 selectedProviderID: selectedProviderID,
-                 isConfigured: isConfigured,
-                 balance: balance,
-                 usage: usage,
-                 range: range,
-                 lastUpdated: lastUpdated,
-                 isLoading: isLoading,
-                 errorMessage: errorMessage)
-    }
+    // MARK: - 回调
 
     /// 回调最新快照
     private func emit() {
-        onUpdate?(snapshot)
+        onUpdate?(Snapshot(states: states))
     }
 }

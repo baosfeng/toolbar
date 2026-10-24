@@ -20,6 +20,14 @@ enum BillingPaneStyle {
     static let monoFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
     /// 指标数值（12pt 等宽半粗）
     static let metricValueFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    /// 聚合块：额度百分比（16pt 等宽半粗）
+    static let cellValueFont = NSFont.monospacedDigitSystemFont(ofSize: 16, weight: .semibold)
+    /// 聚合块：额度名称（9.5pt）
+    static let cellTitleFont = NSFont.systemFont(ofSize: 9.5)
+    /// 聚合块：重置时间（8.5pt 等宽）
+    static let resetFont = NSFont.monospacedDigitSystemFont(ofSize: 8.5, weight: .regular)
+    /// 聚合块：provider 名称（11.5pt 半粗）
+    static let blockNameFont = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
     /// 说明与时间戳（10pt）
     static let subFont = NSFont.systemFont(ofSize: 10)
     /// 页头时间戳（10pt 等宽）

@@ -21,27 +21,33 @@ extension BillingPaneView {
     func injectPreview(configured: Bool = true, errorMessage: String? = nil,
                        legacyLimits: Bool = false, legacyUsage: Bool = false,
                        openDesign: Bool = false) {
-        let provider = Self.previewProvider(openDesign: openDesign)
         let now = Date()
-        // 三种形态共用一次快照构造，避免重复堆叠参数
-        var balance: BillingBalance?
-        var usage: BillingUsage?
-        if configured {
-            if openDesign {
-                // Open Design：无金额维度、额度是两条 credits 窗口、服务端不分桶
-                balance = Self.previewOpenDesignBalance(now: now)
-                usage = Self.previewOpenDesignUsage(endingAt: now)
-            } else {
-                balance = Self.previewOllamaBalance(now: now, legacy: legacyLimits)
-                usage = Self.previewOllamaUsage(endingAt: now, legacyOnly: legacyUsage)
-            }
-        }
-        update(BillingMonitor.Snapshot(providers: [provider],
-                                       selectedProviderID: provider.id,
-                                       isConfigured: configured,
-                                       balance: balance, usage: usage,
-                                       range: .last24Hours, lastUpdated: now,
-                                       isLoading: false, errorMessage: errorMessage))
+        // 聚合视图固定两块：Ollama + Open Design（后者未配置态也是真实常见形态）
+        let ollama = Self.previewProvider(openDesign: false)
+        let states = [
+            BillingMonitor.ProviderState(
+                descriptor: ollama,
+                range: .last24Hours,
+                isConfigured: configured,
+                balance: configured ? Self.previewOllamaBalance(now: now, legacy: legacyLimits) : nil,
+                usage: configured ? Self.previewOllamaUsage(endingAt: now, legacyOnly: legacyUsage) : nil,
+                lastUpdated: configured ? now : nil,
+                isLoading: false,
+                errorMessage: configured ? errorMessage : nil),
+            // Open Design：无金额维度、额度是两条 credits 窗口、服务端不分桶
+            BillingMonitor.ProviderState(
+                descriptor: Self.previewProvider(openDesign: true),
+                range: .last24Hours,
+                isConfigured: openDesign,
+                balance: openDesign ? Self.previewOpenDesignBalance(now: now) : nil,
+                usage: openDesign ? Self.previewOpenDesignUsage(endingAt: now) : nil,
+                lastUpdated: openDesign ? now : nil,
+                isLoading: false,
+                errorMessage: nil),
+        ]
+        update(BillingMonitor.Snapshot(states: states))
+        // 快照默认展开第一块，用于核对用量区（柱状图 / 模型行 / 范围按钮）
+        expandForPreview(configured ? ollama.id : nil)
     }
 
     /// 示意 provider 描述符（字段与真实注册表一致，保证页头与文案走同一路径）
@@ -68,9 +74,17 @@ extension BillingPaneView {
         }
         let period = BillingPeriod(start: now.addingTimeInterval(-12 * 86_400),
                                    end: now.addingTimeInterval(18 * 86_400))
+        // 真实 Ollama 同时返回金额与两条百分比限额，聚合块只取后者做双列
         return BillingBalance(included: BillingIncludedBalance(remainingUSD: 72.50,
                                                               allowanceUSD: 100, period: period),
-                              purchasedUSD: 25)
+                              purchasedUSD: 25,
+                              percentLimits: [
+                                BillingPercentLimit(id: "session", title: "会话",
+                                                    remainingFraction: 0.95,
+                                                    resetsAt: now.addingTimeInterval(2 * 3_600)),
+                                BillingPercentLimit(id: "weekly", title: "每周",
+                                                    remainingFraction: 0.42,
+                                                    resetsAt: now.addingTimeInterval(3 * 86_400))])
     }
 
     /// Open Design 示意余额：5 小时与每周两个 credits 窗口（字段与真实接口一致）

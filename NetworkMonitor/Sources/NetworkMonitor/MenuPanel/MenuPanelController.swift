@@ -125,17 +125,19 @@ final class MenuPanelController: NSObject, NSPopoverDelegate, MenuPanelViewDeleg
         content.systemPane.onQuit = { NSApplication.shared.terminate(nil) }
         content.billingPane.onRefresh = { [weak self] in self?.billingMonitor?.refresh(force: true) }
         content.billingPane.onRetry = { [weak self] in self?.billingMonitor?.refresh(force: true) }
-        content.billingPane.onRangeChange = { [weak self] range in
-            self?.billingMonitor?.selectRange(range)
+        content.billingPane.onRangeChange = { [weak self] range, providerID in
+            self?.billingMonitor?.selectRange(range, providerID: providerID)
         }
-        content.billingPane.onSaveCredential = { [weak self] key in
-            self?.billingMonitor?.saveCredential(key)
+        content.billingPane.onSaveCredential = { [weak self] key, providerID in
+            self?.billingMonitor?.saveCredential(key, providerID: providerID)
         }
         content.billingPane.onOpenProviderSite = { url in
             NSWorkspace.shared.open(url)
         }
-        content.billingPane.onProviderChange = { [weak self] id in
-            self?.billingMonitor?.selectProvider(id: id)
+        // 展开 / 收起改变内容高度：通知面板重算 popover 尺寸
+        content.billingPane.onContentChanged = { [weak self] in
+            guard let self else { return }
+            self.content.delegate?.menuPanelViewDidChangeContent(self.content)
         }
     }
 
