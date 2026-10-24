@@ -5,6 +5,10 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布或重发的 tag（如 v1.3.1）"
+        required: true
 
 permissions:
   contents: write
@@ -18,6 +22,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version || true
 
       - name: Build and package
         working-directory: NetworkMonitor
@@ -26,6 +37,10 @@ jobs:
           SKIP_INSTALL: "1"
         run: ./Scripts/build-app.sh release
 
+      - name: Ad-hoc sign
+        working-directory: NetworkMonitor/dist
+        run: codesign --force --deep --sign - NetworkMonitor.app
+
       - name: Zip app bundle
         working-directory: NetworkMonitor/dist
         run: ditto -c -k --keepParent NetworkMonitor.app NetworkMonitor.app.zip
@@ -33,5 +48,7 @@ jobs:
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: NetworkMonitor ${{ inputs.tag || github.ref_name }}
           files: NetworkMonitor/dist/NetworkMonitor.app.zip
           generate_release_notes: true
