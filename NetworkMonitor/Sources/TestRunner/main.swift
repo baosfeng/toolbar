@@ -157,6 +157,31 @@ do {
     tracker.update()
     assertEqual(tracker.todayRx, 2_500_000, "update keeps today rx")
 
+    // 基准解析：累计回退（崩溃重启读到更旧值）时以当前累计重建，正常增长时沿用
+    assertEqual(TrafficTracker.resolveBaseline(currentRx: 100, currentTx: 50,
+                                               storedRx: 1_000, storedTx: 500).rx, 100,
+                "baseline resets on rx regression")
+    assertEqual(TrafficTracker.resolveBaseline(currentRx: 1_000, currentTx: 50,
+                                               storedRx: 1_000, storedTx: 500).tx, 50,
+                "baseline resets on tx regression")
+    let kept = TrafficTracker.resolveBaseline(currentRx: 2_000, currentTx: 900,
+                                              storedRx: 1_000, storedTx: 500)
+    assertEqual(kept.rx, 1_000, "baseline kept on rx growth")
+    assertEqual(kept.tx, 500, "baseline kept on tx growth")
+
+    // 端到端：存储基准大于当前累计 → 重建基准并落盘，之后增量恢复可见
+    let suiteRegress = UserDefaults(suiteName: "test.traffic-regress-\(UUID().uuidString)")!
+    let storageRegress = UserDefaultsStorage(defaults: suiteRegress)
+    storageRegress.set(5_000, forKey: "dayStartRx")
+    storageRegress.set(3_000, forKey: "dayStartTx")
+    let monitorRegress = MockMonitor(totalRx: 1_000, totalTx: 500)
+    let trackerRegress = TrafficTracker(monitor: monitorRegress, storage: storageRegress)
+    assertEqual(trackerRegress.todayRx, 0, "regressed baseline shows zero today")
+    assertEqual(storageRegress.integer(forKey: "dayStartRx"), 1_000,
+                "regressed baseline persisted")
+    monitorRegress.totalRx = 1_500
+    assertEqual(trackerRegress.todayRx, 500, "today rx counts after regression reset")
+
     print("✅ TrafficTracker 每日流量 works")
 }
 

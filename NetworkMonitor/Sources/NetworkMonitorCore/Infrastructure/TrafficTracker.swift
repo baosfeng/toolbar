@@ -74,21 +74,52 @@ public final class TrafficTracker: TrafficTrackingService {
         load()
     }
 
+    /// 解析当日流量基准
+    ///
+    /// 累计值回退时（崩溃 / 强杀后重启读到更旧的持久化值）以当前累计重建基准：
+    /// 否则今日流量会因当前累计小于基准而恒为 0，界面「今日下行/上行」长期显示 0 KB。
+    ///
+    /// - Parameters:
+    ///   - currentRx: 当前累计下行字节
+    ///   - currentTx: 当前累计上行字节
+    ///   - storedRx: 存储的基准下行字节
+    ///   - storedTx: 存储的基准上行字节
+    /// - Returns: 应采用的下行 / 上行基准
+    public static func resolveBaseline(currentRx: UInt64,
+                                       currentTx: UInt64,
+                                       storedRx: UInt64,
+                                       storedTx: UInt64) -> (rx: UInt64, tx: UInt64) {
+        guard currentRx < storedRx || currentTx < storedTx else { return (storedRx, storedTx) }
+        return (currentRx, currentTx)
+    }
+
     /// 加载或初始化每日流量起点
     public func load() {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
+        let storedRx = UInt64(storage.integer(forKey: Self.dayStartRxKey))
+        let storedTx = UInt64(storage.integer(forKey: Self.dayStartTxKey))
 
-        dayStartRx = UInt64(storage.integer(forKey: Self.dayStartRxKey))
-        dayStartTx = UInt64(storage.integer(forKey: Self.dayStartTxKey))
-
-        if dayStartRx == 0, dayStartTx == 0 {
+        // 首次运行：以当前累计值为基准
+        guard storedRx != 0 || storedTx != 0 else {
             dayStartRx = monitor.totalRx
             dayStartTx = monitor.totalTx
-            storage.set(today, forKey: Self.dayStartDateKey)
-            storage.set(Int(dayStartRx), forKey: Self.dayStartRxKey)
-            storage.set(Int(dayStartTx), forKey: Self.dayStartTxKey)
+            persistBaseline()
+            return
         }
+
+        let baseline = Self.resolveBaseline(currentRx: monitor.totalRx,
+                                            currentTx: monitor.totalTx,
+                                            storedRx: storedRx,
+                                            storedTx: storedTx)
+        dayStartRx = baseline.rx
+        dayStartTx = baseline.tx
+        guard baseline.rx != storedRx || baseline.tx != storedTx else { return }
+        persistBaseline()
+    }
+
+    /// 写入基准（日期交由 update() 的日切逻辑维护，避免跨天回退时误吞昨日日志）
+    private func persistBaseline() {
+        storage.set(Int(dayStartRx), forKey: Self.dayStartRxKey)
+        storage.set(Int(dayStartTx), forKey: Self.dayStartTxKey)
     }
 
     /// 检查日期变更，切换并保存每日日志
