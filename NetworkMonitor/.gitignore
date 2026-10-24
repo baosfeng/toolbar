@@ -9,7 +9,7 @@ DerivedData/
 .DS_Store
 dist/
 .DS_Store
-.reasonix/
+.agents/
 # Superpowers tooling
 .superpowers/
 docs/superpowers/

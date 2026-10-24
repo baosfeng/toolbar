@@ -2,7 +2,7 @@
 # 大文件门禁 —— 单文件超过 500 行 / 15360 字节即视为违反「单一职责」原则
 #
 # 检查范围：Sources/ 下全部 *.swift（含 NetworkMonitor、NetworkMonitorCore、TestRunner）
-# 判据来源：.reasonix/skills/toolbar-coding-standards/SKILL.md「3. 单一职责（SRP）」
+# 判据来源：.agents/skills/toolbar-coding-standards/SKILL.md「3. 单一职责（SRP）」
 #
 # 用法：
 #   bash NetworkMonitor/Scripts/check-file-size.sh            # 全绿 exit 0
@@ -49,7 +49,7 @@ echo "❌ 大文件门禁未通过：${failed}/${checked} 个文件超限（阈�
 echo ""
 printf '%s' "$report"
 echo ""
-echo "拆分指引（见 .reasonix/skills/toolbar-coding-standards/SKILL.md「3. 单一职责」）："
+echo "拆分指引（见 .agents/skills/toolbar-coding-standards/SKILL.md「3. 单一职责」）："
 echo "  · 主类文件只保留核心职责，其余按 <类名>+<职责>.swift 拆成扩展文件"
 echo "  · 例：DatabaseManager.swift + DatabaseManager+HookEventRepository.swift"
 echo "  · conformance 声明写在扩展文件；跨文件访问成员时 private 放宽为 internal 并注释原因"

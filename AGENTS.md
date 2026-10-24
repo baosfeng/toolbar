@@ -15,7 +15,7 @@
 >
 > | 当你需要... | 必须先阅读 |
 > |------------|-----------|
-> | 修改/新增代码文件 | → **[编码规范 skill](.reasonix/skills/toolbar-coding-standards/SKILL.md)**（架构原则、命名、异常、版本号、代码查询、测试/提交纪律）+ **[UI 规范 skill](.reasonix/skills/toolbar-ui-standards/SKILL.md)**（改 UI 时） |
+> | 修改/新增代码文件 | → **[编码规范 skill](.agents/skills/toolbar-coding-standards/SKILL.md)**（架构原则、命名、异常、版本号、代码查询、测试/提交纪律）；UI 类需求先用 `open-design` 原型 skill 出原型再实现 |
 > | 创建/修改/删除文档 | → **[文档规范](docs/开发指南/文档规范.md)** |
 > | 提交代码到 Git | → **[提交规范](docs/开发指南/提交规范.md)** |
 > | 构建项目、运行测试或打包 .app | → **[构建与测试](docs/开发指南/构建与测试.md)** |
@@ -29,8 +29,8 @@
 | 计费额度查询 | 菜单面板「额度」tab：Ollama（/api/balance + /api/usage）、Open Design（编码计划 credits 窗口 + 工作区用量）；BillingProvider 协议 + 注册表，新增 provider 仅需实现协议并注册 |
 
 ## 开发指南
-→ [编码规范 skill](.reasonix/skills/toolbar-coding-standards/SKILL.md)（规范权威来源，**规范更新一律写入 skill，不另建独立规范文档**）
-→ [UI 规范 skill](.reasonix/skills/toolbar-ui-standards/SKILL.md)
+→ [编码规范 skill](.agents/skills/toolbar-coding-standards/SKILL.md)（规范权威来源，**规范更新一律写入 skill，不另建独立规范文档**）
+→ UI/原型类工作用 `open-design` 原型 skill 产出原型，定稿后再实现
 → [构建与测试](docs/开发指南/构建与测试.md)
 → [提交规范](docs/开发指南/提交规范.md)
 → [文档规范](docs/开发指南/文档规范.md)
