@@ -63,9 +63,9 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <key>CFBundleName</key>
     <string>NetworkMonitor</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.4.0</string>
+    <string>1.5.0</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSUIElement</key>
@@ -84,21 +84,43 @@ PLIST
 SIGN_IDENTITY="${SIGN_IDENTITY:-NetworkMonitor Local Signing}"
 SIGN_ENTITLEMENTS="${SIGN_ENTITLEMENTS:-}"
 
+# 校验签名是否落在稳定身份上：ad-hoc 签名的 designated requirement 是 cdhash，
+# 每次构建都变，TCC 授权（屏幕录制 / 辅助功能 / 本地网络）会被当成另一个应用。
+assert_stable_signature() {
+    local target="$1"
+    local requirement
+    requirement=$(codesign -d -r- "$target" 2>&1 || true)
+    if printf '%s' "$requirement" | grep -q "cdhash"; then
+        echo "      ❌ 签名是 ad-hoc（designated requirement 依赖 cdhash），重建后权限会失效" >&2
+        return 1
+    fi
+    echo "      签名要求：$(printf '%s' "$requirement" | tail -1 | sed "s/^designated => //")"
+}
+
 sign_app() {
     local target="$1"
     local args=(--force --deep --identifier com.example.NetworkMonitor)
-    if [ -n "$SIGN_ENTITLEMENTS" ] && [ -f "$SIGN_ENTITLEMENTS" ]; then
-        args+=(--entitlements "$SIGN_ENTITLEMENTS")
+    local output
+    if [ -n "${SIGN_ENTITLEMENTS}" ] && [ -f "${SIGN_ENTITLEMENTS}" ]; then
+        args+=(--entitlements "${SIGN_ENTITLEMENTS}")
     fi
     if security find-identity -v -p codesigning 2>/dev/null | grep -q "${SIGN_IDENTITY}"; then
-        codesign "${args[@]}" --sign "${SIGN_IDENTITY}" "$target" 2>&1 | tail -2 || true
+        if ! output=$(codesign "${args[@]}" --sign "${SIGN_IDENTITY}" "$target" 2>&1); then
+            echo "      ❌ 证书签名失败：${output}" >&2
+            echo "      可用身份：$(security find-identity -v -p codesigning 2>/dev/null | tail -5)" >&2
+            return 1
+        fi
+        if [ -n "$output" ]; then printf '%s\n' "$output" | tail -2; fi
         echo "      使用证书：${SIGN_IDENTITY}"
+        assert_stable_signature "$target"
     else
-        codesign "${args[@]}" --sign - "$target" 2>&1 | tail -2 || true
-        echo "      未找到证书 ${SIGN_IDENTITY}，回落 ad-hoc（每次构建权限会重新询问）"
+        if ! output=$(codesign "${args[@]}" --sign - "$target" 2>&1); then
+            echo "      ❌ ad-hoc 签名失败：${output}" >&2
+            return 1
+        fi
+        echo "      ⚠️  未找到证书 ${SIGN_IDENTITY}，回落 ad-hoc（每次构建权限会重新询问）"
     fi
 }
-
 # 7. 部署到 /Applications
 if [ "${SKIP_INSTALL:-0}" = "1" ]; then
     echo ""
