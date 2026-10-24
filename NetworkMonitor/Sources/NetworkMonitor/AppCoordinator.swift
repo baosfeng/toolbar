@@ -22,6 +22,8 @@ public final class AppCoordinator {
     private var database: (any AppDatabase)!
     /// 每日流量追踪
     private var trafficTracker: (any TrafficTrackingService)!
+    /// 累计流量定期落盘定时器（崩溃丢失窗口压到 1 分钟）
+    private var trafficPersistenceTimer: Timer?
 
     // MARK: - 剪贴板历史
 
@@ -115,7 +117,10 @@ public final class AppCoordinator {
         manager.onOpenClipboardHistory = { [weak self] in self?.clipboardPanel.toggle() }
         manager.onOpenClipboardSettings = { [weak self] in self?.clipboardSettings.show() }
 
-        // 8. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
+        // 8. 累计流量定期落盘（崩溃 / 强杀时也能保住当日基准）
+        startTrafficPersistence()
+
+        // 9. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
         logger.info("AppCoordinator 启动完成")
         return manager
     }
@@ -123,8 +128,9 @@ public final class AppCoordinator {
     /// 应用退出前清理
     public func stop() {
         // 保存累计流量
-        AppContext.shared.storage.set(Int(networkMonitor?.totalRx ?? 0), forKey: "totalRx")
-        AppContext.shared.storage.set(Int(networkMonitor?.totalTx ?? 0), forKey: "totalTx")
+        trafficPersistenceTimer?.invalidate()
+        trafficPersistenceTimer = nil
+        persistTrafficTotals()
 
         // 局域网互传
         transferController?.stop()
@@ -136,6 +142,26 @@ public final class AppCoordinator {
 
         database?.close()
         logger.info("AppCoordinator 已关闭")
+    }
+
+    // MARK: - 累计流量持久化
+
+    /// 累计流量每隔 60 秒落盘
+    ///
+    /// 只在正常退出时保存会被崩溃 / 强杀绕过：重启后累计值回退成更旧的值，
+    /// 当日流量基准随之失配（今日流量恒为 0）。定期落盘把丢失窗口压到 1 分钟。
+    private func startTrafficPersistence() {
+        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.persistTrafficTotals() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        trafficPersistenceTimer = timer
+    }
+
+    /// 立即写入累计上下行字节
+    private func persistTrafficTotals() {
+        AppContext.shared.storage.set(Int(networkMonitor?.totalRx ?? 0), forKey: "totalRx")
+        AppContext.shared.storage.set(Int(networkMonitor?.totalTx ?? 0), forKey: "totalTx")
     }
 
     // MARK: - 局域网互传装配
