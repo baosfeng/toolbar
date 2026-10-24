@@ -78,7 +78,7 @@
 - `MenuPanel/MenuPanelController.swift`：构造注入 `TransferController` 并 `attach`。
 - `MenuBarManager.swift`：透传 `transferController`。
 - `AppCoordinator.swift`：`makeTransferController()` 组合根装配（设备表 + 身份 + 收件目录 + 启动）。
-- `MenuPanelComponents.swift`：`MenuPanelRow` 按下 0.96 缩放。
+- `MenuPanel/MenuPanelRows.swift`：`MenuPanelRow` 按下 0.96 缩放。
 - `Debug/MenuPanelSnapshot.swift`：快照枚举补 `.transfer`。
 - `Scripts/build-app.sh`：Info.plist 增加 `NSLocalNetworkUsageDescription`。
 - `Sources/TestRunner/main.swift` + `TransferTests.swift`：新增互传测试组（约 200 行断言）。
