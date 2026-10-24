@@ -97,7 +97,8 @@ public actor TransferService: TransferRouteHandling {
     let scanTokens: ScanTokenStore
     private let server: HttpServer
     let httpClient: TransferHTTPClient
-    private let observerQueue: DispatchQueue
+    // 放宽为 internal：观察者回调投递在 `TransferService+Observer` 扩展文件中
+    let observerQueue: DispatchQueue
     private var discovery: UdpDiscoveryService?
 
     /// 本机身份（HTTP 端口在服务启动后回填）
@@ -346,33 +347,5 @@ public actor TransferService: TransferRouteHandling {
                                     expiresAt: expiry,
                                     senderAlias: context.peerAlias)
             }
-    }
-
-    // MARK: - 辅助
-
-    /// 删除会话相关的所有 `.part`
-    func cleanupParts(_ context: inout SessionContext) {
-        for (_, receive) in context.receiveFiles {
-            receive.writer?.discard()
-            try? FileManager.default.removeItem(at: UploadPlanner.partURL(for: receive.finalURL))
-        }
-        context.receiveFiles = context.receiveFiles.mapValues { value in
-            var updated = value
-            updated.writer = nil
-            return updated
-        }
-    }
-
-    /// 会话进入终结态时触发一次完成回调
-    func finishIfNeeded(_ session: TransferSession) {
-        guard session.state.isTerminal, let onSessionFinished else { return }
-        observerQueue.async { onSessionFinished(session) }
-    }
-
-    /// 推送会话快照到观察者
-    func notifySessions() {
-        guard let onSessionsChanged else { return }
-        let snapshot = sessionSnapshot()
-        observerQueue.async { onSessionsChanged(snapshot) }
     }
 }
