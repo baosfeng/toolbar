@@ -95,40 +95,6 @@ enum MenuPanelSnapshot {
         logger.info("快照完成：目录=\(directory.path)")
     }
 
-    /// 额度页补充状态 — 未配置 / 查询失败（含遗留计划限额）/ 遗留计划用量 / Open Design，
-    /// 各出浅色、深色两张
-    private static func captureCreditsStates(directory: URL) {
-        let states: [(suffix: String, configured: Bool, error: String?, legacyUsage: Bool,
-                      openDesign: Bool)] = [
-            ("unconfigured", false, nil, false, false),
-            ("error", true, "API Key 无效或已过期", false, false),
-            ("legacy", true, nil, true, false),
-            // Open Design：credits 限额明细、无柱状图、模型行显示 token 合计
-            ("open-design", true, nil, false, true),
-        ]
-        for state in states {
-            let panel = MenuPanelView()
-            panel.billingPane.injectPreview(configured: state.configured,
-                                            errorMessage: state.error,
-                                            legacyLimits: state.error != nil || state.legacyUsage,
-                                            legacyUsage: state.legacyUsage,
-                                            openDesign: state.openDesign)
-            panel.select(tab: .credits)
-            let height = min(max(panel.desiredContentHeight, 180), MenuPanelStyle.maxHeight)
-            let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
-            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
-                let name = appearance == .aqua ? "light" : "dark"
-                let url = directory.appendingPathComponent("menu-credits-\(state.suffix)-\(name).png")
-                // 遗留计划快照额外强制悬停一根有数据的柱，用于 tooltip 取证
-                let hover: ((NSView) -> Void)? = state.legacyUsage ? { view in
-                    (view as? MenuPanelView)?.billingPane.forceChartHoverForSnapshot(23)
-                } : nil
-                render(view: panel, size: size, appearanceName: appearance, to: url,
-                       postLayout: hover)
-            }
-        }
-    }
-
     /// 超高内容自证：把进程数拉到 12（内容 > 520pt），截「视口顶部」与「滚到底部」两张图，
     /// 并把文档高度 / 视口高度写进 metrics 文本，证明内容没有被裁切、而是变成可滚动。
     private static func captureStress(directory: URL, items: [ClipboardItem]) {

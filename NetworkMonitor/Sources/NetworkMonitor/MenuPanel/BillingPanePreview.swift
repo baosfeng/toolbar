@@ -7,7 +7,7 @@ import NetworkMonitorCore
 /// 额度页示意数据 — 供快照自证使用，release 构建完全不包含本文件
 ///
 /// 从 `BillingPaneView.swift` 拆出（原文件因 DEBUG 快照数据超 15 KiB 规范上限）。
-/// 四种形态：未配置 / 查询失败 / 遗留计划 / Open Design，字段与真实 provider 返回一致。
+/// 五种形态：未配置 / 查询失败 / 遗留计划 / Open Design / OpenCode Go，字段与真实 provider 返回一致。
 extension BillingPaneView {
 
     /// 快照自证专用（仅 DEBUG）：注入示意数据，不影响真实运行
@@ -18,13 +18,15 @@ extension BillingPaneView {
     ///   - legacyLimits: 注入遗留计划百分比限额（原型 D 状态）
     ///   - legacyUsage: 注入「只有请求数、无金额/token」的用量（遗留计划真实返回形态）
     ///   - openDesign: 改用 Open Design 形态（credits 限额明细、无时间序列）
+    ///   - opencodeGo: 追加 OpenCode Go 形态（三窗口、只查额度、其中一个窗口已限流）
     func injectPreview(configured: Bool = true, errorMessage: String? = nil,
                        legacyLimits: Bool = false, legacyUsage: Bool = false,
-                       openDesign: Bool = false) {
+                       openDesign: Bool = false, opencodeGo: Bool = false) {
         let now = Date()
-        // 聚合视图固定两块：Ollama + Open Design（后者未配置态也是真实常见形态）
+        // 聚合视图固定两块：Ollama + Open Design（后者未配置态也是真实常见形态）；
+        // OpenCode Go 只在对应取证档追加，避免默认快照被第三块撑高
         let ollama = Self.previewProvider(openDesign: false)
-        let states = [
+        var states = [
             BillingMonitor.ProviderState(
                 descriptor: ollama,
                 range: .last24Hours,
@@ -45,9 +47,14 @@ extension BillingPaneView {
                 isLoading: false,
                 errorMessage: nil),
         ]
+        if opencodeGo {
+            states.append(Self.previewOpencodeGoState(now: now, isConfigured: configured))
+        }
         update(BillingMonitor.Snapshot(states: states))
-        // 快照默认展开第一块，用于核对用量区（柱状图 / 模型行 / 范围按钮）
-        expandForPreview(configured ? ollama.id : nil)
+        // 快照默认展开第一块，用于核对用量区（柱状图 / 模型行 / 范围按钮）；
+        // OpenCode Go 档没有用量区可展开，三块平铺以核对 1–3 列额度格
+        let expandedID: String? = opencodeGo ? nil : (configured ? ollama.id : nil)
+        expandForPreview(expandedID)
     }
 
     /// 示意 provider 描述符（字段与真实注册表一致，保证页头与文案走同一路径）
@@ -98,6 +105,38 @@ extension BillingPaneView {
                                 remainingFraction: 1 - 76_412 / 150_000,
                                 resetsAt: now.addingTimeInterval(4 * 86_400),
                                 usedAmount: 76_412, limitAmount: 150_000, unitLabel: "credits")])
+    }
+
+    /// OpenCode Go 示意状态：5 小时 / 每周 / 每月三窗口，只查额度（没有用量接口）
+    private static func previewOpencodeGoState(now: Date,
+                                               isConfigured: Bool) -> BillingMonitor.ProviderState {
+        BillingMonitor.ProviderState(
+            descriptor: BillingMonitor.ProviderDescriptor(
+                id: "opencode-go", displayName: "OpenCode Go", symbolName: "terminal",
+                credentialHint: "OpenCode Go API Key", supportsModelBreakdown: false,
+                supportsUsage: false, supportsTimeSeries: false,
+                credentialPageURL: URL(string: "https://opencode.ai/")),
+            range: .last24Hours,
+            isConfigured: isConfigured,
+            balance: isConfigured ? Self.previewOpencodeGoBalance(now: now) : nil,
+            // 没有用量接口：快照里也没有 usage，块内不出现摘要行与展开箭头
+            usage: nil,
+            lastUpdated: isConfigured ? now : nil,
+            isLoading: false,
+            errorMessage: nil)
+    }
+
+    /// OpenCode Go 示意余额：三个窗口，每月窗口取「已限流」角标样本（重置时间跨天）
+    private static func previewOpencodeGoBalance(now: Date) -> BillingBalance {
+        BillingBalance(percentLimits: [
+            BillingPercentLimit(id: "window:rolling", title: "5 小时", remainingFraction: 0.62,
+                                resetsAt: now.addingTimeInterval(2 * 3_600)),
+            BillingPercentLimit(id: "window:weekly", title: "每周", remainingFraction: 0.48,
+                                resetsAt: now.addingTimeInterval(4 * 86_400)),
+            // 已限流：剩余按 0 处理（让阈值预警生效），角标在三列窄格里独占一行
+            BillingPercentLimit(id: "window:monthly", title: "每月", remainingFraction: 0,
+                                resetsAt: now.addingTimeInterval(18 * 86_400), badge: "已限流"),
+        ])
     }
 
     /// Open Design 示意用量：有指标与按模型 token，但没有分桶（服务端不分桶）

@@ -14,6 +14,12 @@ func runBillingTests() {
     print("\n🧪 Testing BillingModels...")
     testBillingModels()
 
+    print("\n🧪 Testing BillingRefreshScheduler...")
+    testBillingRefreshScheduler()
+
+    print("\n🧪 Testing BillingLimitLayout...")
+    testBillingLimitLayout()
+
     print("\n🧪 Testing BillingDecoding...")
     runBillingDecodingTests()
 
@@ -78,4 +84,52 @@ private func testBillingModels() {
 
     let clampedLimit = BillingPercentLimit(id: "weekly", title: "每周", remainingFraction: 1.8, resetsAt: nil)
     assertEqual(clampedLimit.remainingFraction, 1, "比例上限钳制")
+    assertEqual(clampedLimit.badge == nil, true, "未设置角标时为空")
+
+    let rateLimited = BillingPercentLimit(id: "window:rolling", title: "5 小时",
+                                          remainingFraction: 0, resetsAt: nil, badge: "已限流")
+    assertEqual(rateLimited.badge, "已限流", "角标原样保留")
+}
+
+// MARK: - 刷新节流
+
+/// 每 provider 独立节流：全局下限 60 秒，provider 可要求更长（OpenCode Go 5 分钟）
+private func testBillingRefreshScheduler() {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+
+    assertEqual(BillingRefreshScheduler.interval(providerMinimum: 0), 60, "未声明时用全局下限")
+    assertEqual(BillingRefreshScheduler.interval(providerMinimum: 300), 300, "provider 可要求更长")
+    assertEqual(BillingRefreshScheduler.interval(providerMinimum: 10), 60, "短于全局下限时被抬高")
+
+    assertEqual(BillingRefreshScheduler.isDue(now: now, lastAttempt: nil,
+                                              providerMinimum: 0, force: false), true,
+                "从未刷新过时立即到期")
+    assertEqual(BillingRefreshScheduler.isDue(now: now, lastAttempt: now.addingTimeInterval(-59),
+                                              providerMinimum: 0, force: false), false,
+                "59 秒未到期")
+    assertEqual(BillingRefreshScheduler.isDue(now: now, lastAttempt: now.addingTimeInterval(-60),
+                                              providerMinimum: 0, force: false), true,
+                "满 60 秒到期")
+    assertEqual(BillingRefreshScheduler.isDue(now: now, lastAttempt: now.addingTimeInterval(-299),
+                                              providerMinimum: 300, force: false), false,
+                "provider 长间隔内未到期")
+    assertEqual(BillingRefreshScheduler.isDue(now: now, lastAttempt: now.addingTimeInterval(-300),
+                                              providerMinimum: 300, force: false), true,
+                "provider 间隔到期")
+    assertEqual(BillingRefreshScheduler.isDue(now: now, lastAttempt: now,
+                                              providerMinimum: 300, force: true), true,
+                "强制刷新跳过所有节流")
+}
+
+// MARK: - 额度格排版规则
+
+/// 三列窄格必须让角标分行（86pt 放不下「已限流 · 10/26 08:00 重置」）
+private func testBillingLimitLayout() {
+    assertEqual(BillingLimitLayout.maxColumns, 3, "额度格最多三列")
+    assertEqual(BillingLimitLayout.isCompact(columnCount: 1), false, "单列不窄")
+    assertEqual(BillingLimitLayout.isCompact(columnCount: 2), false, "双列不窄")
+    assertEqual(BillingLimitLayout.isCompact(columnCount: 3), true, "三列窄格")
+    assertEqual(BillingLimitLayout.isCompact(columnCount: 4), true, "超过上限仍按窄格处理")
+    assertEqual(BillingLimitLayout.inlineBadge("已限流"), "已限流 ·", "同行角标带间隔点")
+    assertEqual(BillingLimitLayout.inlineBadge(""), " ·", "空角标只留间隔点（不会出现，防御）")
 }

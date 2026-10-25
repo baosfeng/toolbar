@@ -17,8 +17,9 @@ final class BillingMonitor {
 
     // MARK: - 依赖
 
-    private let registry: BillingProviderRegistry
-    private let credentialStore: any BillingCredentialStore
+    let registry: BillingProviderRegistry
+    // 放宽为 internal：`BillingMonitor+Fetching` 的刷新调度扩展需要读取凭据
+    let credentialStore: any BillingCredentialStore
     /// 额度阈值提醒（可选；测试/未装配时为 nil）
     private let alertService: (any BillingAlerting)?
     private let logger: LoggingService
@@ -26,11 +27,12 @@ final class BillingMonitor {
     // MARK: - 状态
 
     /// 全部 provider 的展示状态（与注册顺序一致）
-    private var states: [ProviderState]
+    // 以下状态放宽为 internal：供 `BillingMonitor+Fetching` 的调度扩展读写
+    var states: [ProviderState]
     /// 每 provider 的请求代次 — 只作废旧 provider 的在途结果，互不干扰
-    private var generations: [String: Int] = [:]
-    /// 上次发起整体刷新的时间（60 秒节流基准）
-    private var lastRefreshStarted: Date = .distantPast
+    var generations: [String: Int] = [:]
+    /// 每 provider 上次发起刷新的时刻（各自节流基准，provider 间隔不同）
+    var lastAttempts: [String: Date] = [:]
     /// 限流退避截止时间（429 后按 Retry-After 设置，全局生效）
     private var retryNotBefore: Date?
     /// 屏幕锁定 / 休眠时暂停后台刷新（不调接口，也不发提醒）
@@ -38,8 +40,8 @@ final class BillingMonitor {
     /// 暂停期间是否已回报过快照（避免每秒重复 emit 触发布局）
     private var didReportWhilePaused = false
 
-    /// 自动刷新最小间隔（Ollama 限流 10 次/分钟，留出余量）
-    static let refreshInterval: TimeInterval = 60
+    /// 自动刷新最小间隔（全局下限；provider 可要求更长，见 BillingRefreshScheduler）
+    static let refreshInterval: TimeInterval = BillingRefreshScheduler.minimumInterval
     /// provider 未返回 Retry-After 时的默认退避时长
     static let defaultRetryDelay: TimeInterval = 60
 
@@ -64,6 +66,7 @@ final class BillingMonitor {
                                                 symbolName: provider.symbolName,
                                                 credentialHint: provider.credentialHint,
                                                 supportsModelBreakdown: provider.supportsModelBreakdown,
+                                                supportsUsage: provider.supportsUsage,
                                                 supportsTimeSeries: provider.supportsTimeSeries,
                                                 credentialPageURL: provider.credentialPageURL)
             return ProviderState(descriptor: descriptor,
@@ -101,16 +104,14 @@ final class BillingMonitor {
         }
         let now = Date()
         if !force, let retryNotBefore, now < retryNotBefore { return }
-        if !force, now.timeIntervalSince(lastRefreshStarted) < Self.refreshInterval { return }
         guard states.contains(where: { $0.isConfigured }) else {
             // 全部未配置：只回报未配置态，不发请求
-            lastRefreshStarted = now
             emit()
             return
         }
-        if states.contains(where: { $0.isLoading }) { return }
-        lastRefreshStarted = now
-        startFullLoad()
+        let targets = collectFetchTargets(now: now, force: force)
+        guard !targets.isEmpty else { return }
+        startLoad(targets)
     }
 
     /// 切换某个 provider 的用量范围 — 只重拉该 provider 的用量，余额沿用
@@ -121,7 +122,9 @@ final class BillingMonitor {
 
         guard states[index].isConfigured,
               let provider = registry.provider(id: providerID),
+              provider.supportsUsage,
               let credential = credentialStore.credential(for: providerID) else {
+            // 该 provider 只查额度、不提供用量明细：只更新选中范围，不发请求
             emit()
             return
         }
@@ -134,7 +137,7 @@ final class BillingMonitor {
         let generation = nextGeneration(for: providerID)
         states[index].isLoading = true
         states[index].errorMessage = nil
-        lastRefreshStarted = now
+        lastAttempts[providerID] = now
         emit()
 
         Task { @MainActor [weak self] in
@@ -185,7 +188,7 @@ final class BillingMonitor {
             states[index].usage = nil
             states[index].lastUpdated = nil
         }
-        lastRefreshStarted = .distantPast
+        lastAttempts[providerID] = nil
         retryNotBefore = nil
         emit()
         refresh(force: true)
@@ -201,6 +204,7 @@ final class BillingMonitor {
         states[index].lastUpdated = nil
         states[index].errorMessage = nil
         states[index].isLoading = false
+        lastAttempts[providerID] = nil
         _ = nextGeneration(for: providerID)
         logger.info("已清除计费凭据：\(providerID)")
         emit()
@@ -208,21 +212,12 @@ final class BillingMonitor {
 
     // MARK: - 请求
 
-    /// 对所有已配置 provider 并发发起「余额 + 用量」请求
-    private func startFullLoad() {
-        var targets: [(provider: any BillingProvider, credential: String, range: BillingRange, id: String, generation: Int)] = []
-        for index in states.indices where states[index].isConfigured {
-            let id = states[index].descriptor.id
-            guard let provider = registry.provider(id: id),
-                  let credential = credentialStore.credential(for: id) else { continue }
-            let generation = nextGeneration(for: id)
-            states[index].isLoading = true
-            states[index].errorMessage = nil
-            targets.append((provider, credential, states[index].range, id, generation))
-        }
+    /// 对到期 provider 并发发起「余额 +（可选）用量」请求
+    ///
+    /// 用量只在 `supportsUsage` 为真时发起：只查额度的 provider（如 OpenCode Go）没有用量接口，
+    /// 发出去只会拿到 4xx 并被记成错误文案，UI 也会误显示「暂无用量」。
+    private func startLoad(_ targets: [FetchTarget]) {
         emit()
-        guard !targets.isEmpty else { return }
-
         Task { @MainActor [weak self] in
             let results = await withTaskGroup(of: ProviderFetchResult.self,
                                               returning: [ProviderFetchResult].self) { group in
@@ -230,6 +225,9 @@ final class BillingMonitor {
                     group.addTask {
                         async let balance = BillingMonitor.fetchBalance(provider: target.provider,
                                                                         credential: target.credential)
+                        guard target.provider.supportsUsage else {
+                            return ProviderFetchResult(id: target.id, balance: await balance, usage: nil)
+                        }
                         async let usage = BillingMonitor.fetchUsage(provider: target.provider,
                                                                     range: target.range,
                                                                     credential: target.credential)
@@ -247,8 +245,7 @@ final class BillingMonitor {
     }
 
     /// 合并并发结果：成功项覆盖，失败项保留上次成功数据并记录错误文案
-    private func apply(results: [ProviderFetchResult],
-                       targets: [(provider: any BillingProvider, credential: String, range: BillingRange, id: String, generation: Int)]) {
+    private func apply(results: [ProviderFetchResult], targets: [FetchTarget]) {
         var rateLimited: TimeInterval?
         for result in results {
             guard let index = states.firstIndex(where: { $0.descriptor.id == result.id }) else { continue }
@@ -268,10 +265,13 @@ final class BillingMonitor {
                 failure = error
             }
             switch result.usage {
-            case .success(let value):
+            case .some(.success(let value)):
                 states[index].usage = value
-            case .failure(let error):
+            case .some(.failure(let error)):
                 if failure == nil { failure = error }
+            case .none:
+                // provider 不支持用量明细：不发起请求，也不把它当失败
+                states[index].usage = nil
             }
 
             if let failure {
@@ -308,7 +308,8 @@ final class BillingMonitor {
     // MARK: - 代次
 
     /// 递增并返回指定 provider 的请求代次
-    private func nextGeneration(for providerID: String) -> Int {
+    // 放宽为 internal：调度扩展组装 FetchTarget 时也要递增代次
+    func nextGeneration(for providerID: String) -> Int {
         let next = (generations[providerID] ?? 0) + 1
         generations[providerID] = next
         return next

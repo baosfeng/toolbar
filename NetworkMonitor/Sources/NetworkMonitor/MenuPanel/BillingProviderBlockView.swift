@@ -3,10 +3,12 @@ import NetworkMonitorCore
 
 // MARK: - provider 聚合块
 
-/// provider 聚合块 — 标题行 + 双列额度 + 迷你趋势/摘要 + 可展开用量区
+/// provider 聚合块 — 标题行 + 1–3 列额度 + 迷你趋势/摘要 + 可展开用量区
 ///
-/// 收起态只占约 100pt：标题行、两条额度（并排）、一行趋势与摘要；
+/// 收起态只占约 100pt：标题行、额度格（并排）、一行趋势与摘要；
 /// 点标题行就地展开该 provider 的完整柱状图与模型明细（同一时刻只允许一个展开）。
+/// 只查额度、没有用量接口的 provider（`supportsUsage == false`）整块更紧凑：
+/// 不显示摘要行、不显示展开箭头、标题行不响应点击。
 final class BillingProviderBlockView: NSView {
 
     // MARK: - 回调
@@ -24,6 +26,9 @@ final class BillingProviderBlockView: NSView {
 
     // MARK: - 子视图
 
+    /// 额度格最多列数（5 小时 / 每周 / 每月）
+    static let maxLimitColumns = BillingLimitLayout.maxColumns
+
     private let card = MenuPanelCardView()
     private let headerRow = MenuPanelRow(height: 16, onClick: nil)
     private let iconView: NSImageView?
@@ -34,14 +39,14 @@ final class BillingProviderBlockView: NSView {
                                                 color: BillingPaneStyle.tertiaryText)
     private let chevronView: NSImageView?
 
-    private let leftCell = BillingLimitCellView()
-    private let rightCell = BillingLimitCellView()
+    /// 额度格（预建 3 个复用，按 provider 实际窗口数显示前 N 个）
+    var limitCells: [BillingLimitCellView] = []
     private let limitsRow = NSStackView()
 
-    private let trendView = BillingMiniTrendView()
-    private let summaryLabel = MenuPanelLabel.text("", font: BillingPaneStyle.cellTitleFont,
-                                                   color: BillingPaneStyle.tertiaryText)
-    private let summaryRow = NSStackView()
+    let trendView = BillingMiniTrendView()
+    let summaryLabel = MenuPanelLabel.text("", font: BillingPaneStyle.cellTitleFont,
+                                           color: BillingPaneStyle.tertiaryText)
+    let summaryRow = NSStackView()
 
     let usageSection = BillingUsageSectionView()
     let setupView = BillingCredentialSetupView()
@@ -54,6 +59,8 @@ final class BillingProviderBlockView: NSView {
     private let setupRow = NSStackView()
     /// 未配置块是否已展开完整凭据表单
     private var isSetupExpanded = false
+    /// 该 provider 没有可展开的用量内容（只查额度的 provider）
+    private var suppressesExpansion = false
 
     /// 当前 provider id（回调时带上，避免控制器再维护一份映射）
     private(set) var providerID: String = ""
@@ -77,11 +84,16 @@ final class BillingProviderBlockView: NSView {
         if let chevronView { headerRow.contentStack.addArrangedSubview(chevronView) }
         headerRow.onClick = { [weak self] in self?.onToggleExpand?() }
 
+        limitCells = (0..<Self.maxLimitColumns).map { _ in BillingLimitCellView() }
         limitsRow.orientation = .horizontal
         limitsRow.distribution = .fillEqually
+        // 三列窄格可能出现「角标独占一行」，顶部对齐避免百分比基线随角标有无而漂移
+        limitsRow.alignment = .top
         limitsRow.spacing = 10
-        limitsRow.addArrangedSubview(leftCell)
-        limitsRow.addArrangedSubview(rightCell)
+        for (index, cell) in limitCells.enumerated() {
+            limitsRow.addArrangedSubview(cell)
+            cell.isHidden = index > 0
+        }
 
         summaryRow.orientation = .horizontal
         summaryRow.alignment = .bottom
@@ -138,7 +150,9 @@ final class BillingProviderBlockView: NSView {
 
     /// 键盘可达行：标题行 → 配置入口 / 配置输入 → 展开区范围按钮 → 重试
     var focusableRows: [MenuPanelRow] {
-        var rows: [MenuPanelRow] = [headerRow]
+        var rows: [MenuPanelRow] = []
+        // 只查额度的 provider 标题行不可点，不进入焦点遍历（未配置态仍需点开凭据表单）
+        if headerRow.isInteractive { rows.append(headerRow) }
         if !setupRow.isHidden { rows.append(setupButtonRow) }
         if !setupView.isHidden { rows.append(contentsOf: setupView.focusableRows) }
         if !usageSection.isHidden { rows.append(contentsOf: usageSection.focusableRows) }
@@ -156,6 +170,7 @@ final class BillingProviderBlockView: NSView {
     func update(state: BillingMonitor.ProviderState, isExpanded: Bool) {
         providerID = state.descriptor.id
         let descriptor = state.descriptor
+        let supportsUsage = descriptor.supportsUsage
         nameLabel.stringValue = descriptor.displayName
         if let iconView {
             let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
@@ -173,7 +188,7 @@ final class BillingProviderBlockView: NSView {
         }
 
         limitsRow.isHidden = !state.isConfigured
-        summaryRow.isHidden = !state.isConfigured
+        summaryRow.isHidden = !state.isConfigured || !supportsUsage
         if state.isConfigured { isSetupExpanded = false }
         // 未配置块默认只占一行；点「配置」或标题行才展开完整表单
         setupRow.isHidden = state.isConfigured || isSetupExpanded
@@ -181,7 +196,7 @@ final class BillingProviderBlockView: NSView {
 
         if state.isConfigured {
             applyLimits(state.balance)
-            applySummary(state)
+            if supportsUsage { applySummary(state) }
         } else {
             promptLabel.stringValue = Self.prompt(for: descriptor)
             setupView.update(placeholder: descriptor.credentialHint,
@@ -189,10 +204,11 @@ final class BillingProviderBlockView: NSView {
                              showsLink: descriptor.credentialPageURL != nil)
         }
 
-        let expanded = isExpanded && state.isConfigured
+        // 能力位压住传入的展开态：没有用量接口就没有可展开内容
+        let expanded = isExpanded && state.isConfigured && supportsUsage
         usageSection.isHidden = !expanded
         // 展开后用完整柱状图承载趋势，收起态的迷你趋势与摘要行随之隐藏，避免同一指标画两遍
-        summaryRow.isHidden = !state.isConfigured || expanded
+        summaryRow.isHidden = !state.isConfigured || expanded || !supportsUsage
         if expanded {
             usageSection.update(usage: state.usage,
                                 range: state.range,
@@ -202,7 +218,15 @@ final class BillingProviderBlockView: NSView {
         chevronView?.image = NSImage(systemSymbolName: expanded ? "chevron.up" : "chevron.down",
                                      accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 8, weight: .regular))
-        chevronView?.isHidden = !state.isConfigured
+        chevronView?.isHidden = !state.isConfigured || !supportsUsage
+
+        // 只查额度的 provider 标题行不再响应点击（未配置态点击仍需展开凭据表单）
+        suppressesExpansion = state.isConfigured && !supportsUsage
+        if suppressesExpansion {
+            headerRow.onClick = nil
+        } else {
+            headerRow.onClick = { [weak self] in self?.onToggleExpand?() }
+        }
 
         let showsError = state.isConfigured && state.errorMessage != nil
         errorBanner.isHidden = !showsError
@@ -210,60 +234,6 @@ final class BillingProviderBlockView: NSView {
 
         setAccessibilityLabel("\(descriptor.displayName) 额度")
         invalidateIntrinsicContentSize()
-    }
-
-    // MARK: - 额度格
-
-    /// 最多展示两条百分比限额（会话 / 每周）；只有金额型余额时左格显示可用金额
-    private func applyLimits(_ balance: BillingBalance?) {
-        let limits = balance?.percentLimits ?? []
-        if let first = limits.first {
-            leftCell.update(limit: first)
-            leftCell.isHidden = false
-        } else if let total = balance?.totalAvailableUSD {
-            leftCell.update(amount: formatUSD(total), title: "可用")
-            leftCell.isHidden = false
-        } else {
-            leftCell.clear()
-            leftCell.isHidden = false
-        }
-        if limits.count > 1 {
-            rightCell.update(limit: limits[1])
-            rightCell.isHidden = false
-        } else {
-            rightCell.isHidden = true
-        }
-    }
-
-    // MARK: - 摘要与趋势
-
-    /// 摘要行：有分桶能力时画迷你趋势，右侧给请求数与 token 汇总
-    private func applySummary(_ state: BillingMonitor.ProviderState) {
-        let descriptor = state.descriptor
-        let usage = state.usage
-        let values: [Double]
-        if descriptor.supportsTimeSeries, let usage {
-            values = usage.buckets.map { Double($0.metrics.requestCount) }
-        } else {
-            values = []
-        }
-        if values.count >= 2 {
-            trendView.update(values: values)
-            trendView.isHidden = false
-        } else {
-            trendView.isHidden = true
-        }
-
-        var parts: [String] = []
-        if let totals = usage?.totals {
-            parts.append("\(totals.requestCount) 次")
-            if let input = totals.inputTokens {
-                parts.append("入 \(formatTokenCount(input))")
-            }
-        } else {
-            parts.append(state.isLoading ? "查询中…" : "暂无用量")
-        }
-        summaryLabel.stringValue = parts.joined(separator: " · ")
     }
 
     // MARK: - 文案

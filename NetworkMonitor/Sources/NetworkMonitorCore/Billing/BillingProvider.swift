@@ -17,6 +17,13 @@ public protocol BillingProvider: Sendable {
     var supportsModelBreakdown: Bool { get }
     /// 是否支持时间序列（UI 据此决定是否画用时柱状图；服务端不分桶时应为 false）
     var supportsTimeSeries: Bool { get }
+    /// 是否提供用量明细（false = 只查额度；状态管理器跳过用量请求，UI 隐藏用量区）
+    var supportsUsage: Bool { get }
+    /// provider 建议的最小刷新间隔（秒；0 = 只受全局下限约束）
+    ///
+    /// 限流口径写在文档里的 provider（如 Ollama 10 次/分钟）可跟随全局 60 秒；
+    /// 官方未公布限流的 provider 给较长间隔，少打接口以降低撞限流风险。
+    var minimumRefreshInterval: TimeInterval { get }
     /// 凭据说明（配置输入框占位文案，如「Ollama API Key」）
     var credentialHint: String { get }
     /// 凭据获取页面（配置态链接跳转目标；nil = 该 provider 无在线获取入口）
@@ -120,11 +127,17 @@ extension BillingProvider {
     /// 默认提供时间序列（provider 未声明时按支持处理）
     public var supportsTimeSeries: Bool { true }
 
+    /// 默认提供用量明细（provider 未声明时按支持处理）
+    public var supportsUsage: Bool { true }
+
+    /// 默认只受全局节流约束（provider 未声明时按 0 处理）
+    public var minimumRefreshInterval: TimeInterval { 0 }
+
     /// 默认无凭据获取页面
     public var credentialPageURL: URL? { nil }
 
-    /// 默认环境变量键名
+    /// 默认环境变量键名（连字符转下划线，保证可 export：opencode-go → BILLING_OPENCODE_GO_API_KEY）
     public var environmentCredentialKey: String {
-        "BILLING_\(id.uppercased())_API_KEY"
+        "BILLING_\(id.uppercased().replacingOccurrences(of: "-", with: "_"))_API_KEY"
     }
 }

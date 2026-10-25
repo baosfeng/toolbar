@@ -23,18 +23,21 @@ extension BillingMonitor {
         let supportsModelBreakdown: Bool
         /// 是否支持时间序列（false 时 UI 隐藏趋势图）
         let supportsTimeSeries: Bool
+        /// 是否提供用量明细（false 时 UI 隐藏用量区与摘要行）
+        let supportsUsage: Bool
         /// 凭据获取页面（配置态链接跳转目标；nil = 无在线入口）
         let credentialPageURL: URL?
 
         /// 兼容默认值（快照示意数据 / 测试构造用）
         init(id: String, displayName: String, symbolName: String, credentialHint: String,
-             supportsModelBreakdown: Bool, supportsTimeSeries: Bool = true,
+             supportsModelBreakdown: Bool, supportsUsage: Bool = true, supportsTimeSeries: Bool = true,
              credentialPageURL: URL? = nil) {
             self.id = id
             self.displayName = displayName
             self.symbolName = symbolName
             self.credentialHint = credentialHint
             self.supportsModelBreakdown = supportsModelBreakdown
+            self.supportsUsage = supportsUsage
             self.supportsTimeSeries = supportsTimeSeries
             self.credentialPageURL = credentialPageURL
         }
@@ -76,6 +79,7 @@ extension BillingMonitor {
     struct ProviderFetchResult: Sendable {
         let id: String
         let balance: BillingOutcome<BillingBalance>
-        let usage: BillingOutcome<BillingUsage>
+        /// 用量结果（nil = provider 不支持用量明细，未发起请求）
+        let usage: BillingOutcome<BillingUsage>?
     }
 }

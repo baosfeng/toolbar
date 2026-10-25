@@ -50,7 +50,8 @@ public final class AppCoordinator {
     /// 放宽为 internal：截图装配扩展文件要写
     var snipSettings: SnipSettingsWindow!
     /// 局域网互传面板控制器
-    private var transferController: TransferController?
+    // 放宽为 internal：AppCoordinator+Transfer 装配扩展要写
+    var transferController: TransferController?
 
     // MARK: - 日志
 
@@ -96,8 +97,14 @@ public final class AppCoordinator {
         let billingRegistry = BillingProviderRegistry(providers: [
             OllamaBillingProvider(logger: logger),
             OpenDesignBillingProvider(logger: logger),
+            OpencodeGoBillingProvider(logger: logger),
         ])
-        let billingCredentials = PreferencesBillingCredentialStore()
+        // 环境变量回退键按 provider 自定义解析（Ollama 用 OLLAMA_API_KEY，其余用 BILLING_<ID>_API_KEY）
+        let billingCredentials = PreferencesBillingCredentialStore(
+            environmentKeyResolver: { providerID in
+                billingRegistry.provider(id: providerID)?.environmentCredentialKey
+                    ?? PreferencesBillingCredentialStore.defaultEnvironmentKey(for: providerID)
+            })
         // 额度阈值提醒（5%/4%/3%/2%/1%）：应用启动时请求通知权限
         let billingAlerts = BillingAlertService(storage: AppContext.shared.storage, logger: logger)
         billingAlerts.requestAuthorizationIfNeeded()
@@ -180,33 +187,6 @@ public final class AppCoordinator {
     private func persistTrafficTotals() {
         AppContext.shared.storage.set(Int(networkMonitor?.totalRx ?? 0), forKey: "totalRx")
         AppContext.shared.storage.set(Int(networkMonitor?.totalTx ?? 0), forKey: "totalTx")
-    }
-
-    // MARK: - 局域网互传装配
-
-    /// 装配传输服务：设备表 + 发现层 + HTTP 服务 + 面板控制器
-    private func makeTransferController() -> TransferController {
-        let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0.0"
-        let identity = LocalIdentity.makeDefault(port: Int(TransferProtocol.defaultPorts[0]),
-                                                 appVersion: appVersion)
-        let registry = DeviceRegistry()
-        let configuration = TransferService.Configuration(
-            receiveDirectory: TransferService.Configuration.defaultReceiveDirectory(),
-            appVersion: appVersion)
-        let preferences = TransferPreferences(storage: AppContext.shared.storage)
-        let knownPeers = KnownPeerStore(storage: AppContext.shared.storage, logger: logger)
-        let service = TransferService(identity: identity,
-                                      registry: registry,
-                                      configuration: configuration,
-                                      preferences: preferences,
-                                      knownPeers: knownPeers,
-                                      logger: logger)
-        let controller = TransferController(service: service, registry: registry,
-                                            preferences: preferences, logger: logger)
-        transferController = controller
-        // 服务常驻：面板未打开也要能收发，启动在后台完成
-        controller.start()
-        return controller
     }
 
     // MARK: - 剪贴板历史装配

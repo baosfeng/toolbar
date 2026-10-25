@@ -1,7 +1,7 @@
 # NetworkMonitor / macMonitor — macOS 菜单栏监控
 
 ## 项目简介
-- **版本:** 1.5.1
+- **版本:** 1.6.0
 - **语言:** Swift 6.3
 - **类型:** 业务应用
 - **技术栈:** Swift 6.3, Swift PM, AppKit, macOS 14+, ARM64
@@ -25,7 +25,7 @@
 | 模块 | 说明 |
 |------|------|
 | 网络速度监控 | 实时网速监控（getifaddrs 差分）+ 进程网速（nettop）+ 每日流量追踪（TrafficTracker） |
-| 计费额度查询 | 菜单面板「额度」tab：Ollama（/api/balance + /api/usage）、Open Design（编码计划 credits 窗口 + 工作区用量）；BillingProvider 协议 + 注册表，新增 provider 仅需实现协议并注册 |
+| 计费额度查询 | 菜单面板「额度」tab：Ollama（/api/balance + /api/usage）、Open Design（编码计划 credits 窗口 + 工作区用量）、OpenCode Go（5 小时/每周/每月三窗口已用→剩余，只查额度）；BillingProvider 协议 + 注册表，新增 provider 仅需实现协议并注册 |
 | 剪贴板历史 | 全局快捷键面板、模糊搜索、Paste Stack 顺序粘贴、图片原图落盘 |
 | 局域网文件互传 | UDP 发现 + HTTP 传输 + 扫码接收 + PIN 配对，支持断点续传 |
 | Token 用量监控 | 菜单面板「Token」tab：DSH 会话事件流（zstd）增量索引，今日/本周/累计、按小时与按天趋势、项目与模型分布、缓存复用率；同会话多版本文件按内容键去重，折叠区给摘要 |
