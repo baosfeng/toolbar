@@ -2,36 +2,40 @@ import Foundation
 
 // MARK: - 计费文案格式化
 
-/// 美元金额格式化（如 "$72.50" / "$0.017"）
+/// 原值数字格式化（不四舍五入、不补零）
 ///
-/// 小额按 3 位小数展示（Ollama 单次调用常见 0.00x 美元），大额保留 2 位。
-/// 不用 `.currency` 样式：`en_US_POSIX` 下会输出 "$ 72.50"（带空格），
-/// 面板等宽数字排版会因此抖动。
-public func formatUSD(_ value: Double) -> String {
-    let formatter = NumberFormatter()
-    formatter.numberStyle = .decimal
-    formatter.locale = Locale(identifier: "en_US")
-    formatter.groupingSeparator = ","
-    formatter.usesGroupingSeparator = true
-    let digits = abs(value) >= 1 ? 2 : 3
-    formatter.minimumFractionDigits = digits
-    formatter.maximumFractionDigits = digits
-    let number = formatter.string(from: NSNumber(value: value)) ?? String(format: "%.2f", value)
-    return "$" + number
-}
-
-/// 非货币额度数量格式化（如 credits：76412 → "76,412"、157.4 → "157"）
-///
-/// 编码计划按 credits 计量而非美元，整数部分千分位分组，小数按需保留 1 位。
-public func formatCreditAmount(_ value: Double) -> String {
+/// 「服务端返回什么就显示什么」：不按固定小数位取整、不补尾零
+/// （3.9 → "3.9"、0.22861 → "0.22861"、72.5 → "72.5"），整数部分按千分位分组
+/// （76412 → "76,412"）。最多保留 6 位小数，仅用于消掉浮点运算噪声
+/// （如 3.74 / 100 * 100 → 3.7399999…，比值换算后显示仍应是 3.74）。
+public func formatExactNumber(_ value: Double) -> String {
     let formatter = NumberFormatter()
     formatter.numberStyle = .decimal
     formatter.locale = Locale(identifier: "en_US")
     formatter.groupingSeparator = ","
     formatter.usesGroupingSeparator = true
     formatter.minimumFractionDigits = 0
-    formatter.maximumFractionDigits = 1
-    return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.0f", value)
+    formatter.maximumFractionDigits = maxExactFractionDigits
+    return formatter.string(from: NSNumber(value: value)) ?? String(value)
+}
+
+/// 原值小数位上限 — 只用于消除浮点噪声，不改变服务端返回值本身的有效位数
+private let maxExactFractionDigits = 6
+
+/// 美元金额格式化（如 "$72.5" / "$0.22861"）
+///
+/// 直接展示服务端返回的原值，不做四舍五入、不补零。
+/// 不用 `.currency` 样式：`en_US_POSIX` 下会输出 "$ 72.5"（带空格），
+/// 面板等宽数字排版会因此抖动。
+public func formatUSD(_ value: Double) -> String {
+    "$" + formatExactNumber(value)
+}
+
+/// 非货币额度数量格式化（如 credits：76412 → "76,412"、3.9 → "3.9"）
+///
+/// 编码计划按 credits 计量而非美元，同样原值展示、不做四舍五入。
+public func formatCreditAmount(_ value: Double) -> String {
+    formatExactNumber(value)
 }
 
 /// 额度绝对值明细（如 "已用 76,412 / 150,000"；缺任一端时返回 nil）
@@ -57,10 +61,13 @@ public func formatTokenCount(_ value: Int) -> String {
     }
 }
 
-/// 剩余比例格式化（0...1 → "72%"）
+/// 剩余比例格式化（0...1 → "72.5%"）
+///
+/// 百分比按服务端返回值原样展示：3.74% 就是 "3.74%"，不取整成 "4%"。
+/// 只做 0...1 钳制（超界数据按满额 / 空额处理）。
 public func formatPercent(_ fraction: Double) -> String {
     let clamped = min(max(fraction, 0), 1)
-    return "\(Int((clamped * 100).rounded()))%"
+    return formatExactNumber(clamped * 100) + "%"
 }
 
 /// 分桶时间标签

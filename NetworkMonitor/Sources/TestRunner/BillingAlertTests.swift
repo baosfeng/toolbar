@@ -53,7 +53,7 @@ private func testAlertEvaluator() {
     assertEqual(first.alerts.count, 2, "首次命中两条提醒")
     let sessionAlert = first.alerts.first { $0.resourceTitle == "会话" }
     assertEqual(sessionAlert?.threshold ?? -1, 4, "会话命中阈值 4")
-    assertEqual(sessionAlert?.remainingPercent ?? -1, 4, "会话剩余 4%")
+    assertEqual(sessionAlert?.bodyText.contains("剩余 4%") ?? false, true, "正文按原值展示 4%")
     assertEqual(sessionAlert?.title(providerName: "Ollama") ?? "", "Ollama · 会话额度偏低", "分级标题")
     assertEqual(sessionAlert?.bodyText.contains("重置") ?? false, true, "正文带重置时间")
     assertEqual(first.state["ollama.session"]?.notifiedThreshold ?? -1, 4, "会话状态已记录")

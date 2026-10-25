@@ -325,10 +325,210 @@
   };
 
   // ── 金额 / token 格式（与 Core 的 formatUSD / formatTokenCount 口径一致） ──
-  function usd(v){
-    var digits = Math.abs(v) >= 1 ? 2 : 3;
-    return '$' + v.toLocaleString('en-US',{minimumFractionDigits:digits, maximumFractionDigits:digits});
+  // 金额原值展示：不补尾零、不按固定小数位取整，最多 6 位小数消浮点噪声
+  function exact(v){
+    return v.toLocaleString('en-US',{minimumFractionDigits:0, maximumFractionDigits:6});
   }
+  function usd(v){ return '
+  function tokens(v){
+    if (v >= 1e8) return (v/1e8).toFixed(1)+'亿';
+    if (v >= 1e4) return (v/1e4).toFixed(1)+'万';
+    return String(v);
+  }
+  function pct(f){ return exact(Math.min(Math.max(f,0),1)*100)+'%'; }
+
+  // ── 顶部分段（5 个 tab，额度为选中态） ──
+  function segHTML(active){
+    var tabs = [
+      ['net','网络','net'],['clip','剪贴板','clip'],['sys','系统','sys'],
+      ['send','传送','send'],['credits','额度','card']
+    ];
+    return tabs.map(function(t){
+      var on = t[0] === active;
+      return '<button role="tab" data-tab="'+t[0]+'" aria-selected="'+on+'" tabindex="'+(on?'0':'-1')+'" aria-controls="pane-'+t[0]+'">'+
+        svg(t[2],12)+t[1]+'</button>';
+    }).join('');
+  }
+
+  // ── 额度页 ──
+  function creditsHTML(panel){
+    var state = panel.getAttribute('data-case');
+    var range = panel.getAttribute('data-range') || '24h';
+    var d = DATA[range];
+    var head = '<div class="pagehead">'+
+      '<span class="pname">'+svg('cloud',13)+'Ollama</span><span class="sp"></span>'+
+      '<span class="stamp" data-stamp>22:14</span>'+
+      '<button class="iconbtn" data-refresh type="button" aria-label="刷新额度">'+svg('refresh',12)+'</button>'+
+      '</div>';
+
+    // 未配置：只显示配置态
+    if (state === 'unconfigured') {
+      return '<div class="pane" data-pane="credits">'+head+
+        '<div class="setup">'+
+          '<div class="ico">'+svg('key',17)+'</div>'+
+          '<h3>配置 API Key 后查看额度</h3>'+
+          '<p>余额与用量来自 Ollama 云端接口，Key 只保存在本机偏好设置中。</p>'+
+          '<div class="field"><input type="password" placeholder="Ollama API Key" aria-label="Ollama API Key" value=""><button class="btn" type="button" data-save>保存并查询</button></div>'+
+          '<button class="link" type="button" data-open-site>在 ollama.com 获取 API Key '+svg('ext',10)+'</button>'+
+        '</div>'+
+        '<div class="toast" data-toast></div></div>';
+    }
+
+    // 余额卡：错误态保留旧数据
+    var errBanner = state === 'error'
+      ? '<div class="err">'+svg('warn',13)+'<span class="txt">API Key 无效或已过期</span><button class="retry" type="button" data-retry>重试</button></div>'
+      : '';
+
+    var legacy = state === 'error'
+      ? BALANCE.legacy.map(function(l){
+          var cls = l.fraction >= .5 ? '' : (l.fraction >= .25 ? ' warn' : ' danger');
+          return '<div class="kv"><span class="k">'+l.title+'</span><span class="v">剩余 '+pct(l.fraction)+'</span></div>'+
+            '<div class="track'+cls+'"><i style="width:'+pct(l.fraction)+'"></i></div>'+
+            '<div class="sub">'+l.reset+' 重置</div>';
+        }).join('')
+      : '';
+
+    var card = '<div class="card">'+
+      '<span class="lbl">'+(state === 'error' ? '已购额度' : '可用额度')+'</span>'+
+      '<div class="hero"><b>'+(state === 'error' ? usd(BALANCE.purchased) : usd(BALANCE.total))+'</b>'+
+      '<span>'+(state === 'error' ? '遗留计划 · 按百分比限额' : '内含 + 已购')+'</span></div>'+
+      (state === 'error' ? legacy : [
+        '<div class="kv"><span class="k">内含额度</span><span class="v">'+usd(BALANCE.remaining)+' / '+usd(BALANCE.allowance)+'</span></div>',
+        '<div class="track"><i style="width:'+pct(BALANCE.remaining/BALANCE.allowance)+'"></i></div>',
+        '<div class="sub">本周期剩余 '+BALANCE.remainingDays+' 天<span class="dot">·</span>'+BALANCE.resetLabel+' 重置</div>',
+        '<div class="kv"><span class="k">已购额度</span><span class="v">'+usd(BALANCE.purchased)+'</span></div>'
+      ].join(''))+
+      '</div>';
+
+    var maxUsd = Math.max.apply(null, d.buckets.map(function(b){ return b.usd; }));
+    var bars = d.buckets.map(function(b, i){
+      var h = maxUsd > 0 ? Math.max(b.usd/maxUsd*100, 3) : 3;
+      var isLast = i === d.buckets.length - 1;
+      return '<div class="bar'+(isLast?' last':'')+'" data-zero="'+(b.usd>0?0:1)+'" style="--h:'+h.toFixed(1)+'%">'+
+        '<i></i><span class="tip">'+(b.label||'')+' '+usd(b.usd)+'</span></div>';
+    }).join('');
+
+    var models = d.models.map(function(m){
+      return '<div class="mrow"><span class="nm">'+m.name+'</span><span class="req">'+m.req+' 次</span><span class="amt">'+usd(m.usd)+'</span></div>';
+    }).join('');
+
+    var usage = '<div class="ghead"><span class="t">用量</span><span class="sp"></span>'+
+      '<div class="ranges" role="group" aria-label="时间范围">'+
+        ['24h','7d','30d'].map(function(r){
+          return '<button type="button" data-range-btn="'+r+'" aria-pressed="'+(r===range)+'">'+
+            (r==='24h'?'24小时':r==='7d'?'7天':'30天')+'</button>';
+        }).join('')+
+      '</div></div>'+
+      '<div class="metrics">'+
+        '<div class="line"><span class="k">请求</span><b>'+d.requests+'</b><span class="k">次</span><span class="sep">·</span><span class="k">花费</span><b>'+usd(d.usd)+'</b></div>'+
+        '<div class="line"><span class="k">输入</span><span class="m">'+tokens(d.input)+'</span><span class="sep">·</span><span class="k">缓存</span><span class="m">'+tokens(d.cached)+'</span><span class="sep">·</span><span class="k">输出</span><span class="m">'+tokens(d.output)+'</span></div>'+
+      '</div>'+
+      '<div class="chart" data-chart>'+bars+'</div>'+
+      '<div class="xaxis"><span>'+d.from+'</span><span>'+d.to+'</span></div>'+
+      '<div class="divider"></div>'+
+      '<div class="ghead"><span class="t">按模型</span><span class="sp"></span><span class="sub">Top '+d.models.length+'</span></div>'+
+      '<div class="models">'+models+'</div>';
+
+    return '<div class="pane" data-pane="credits">'+head+errBanner+card+usage+'<div class="toast" data-toast></div></div>';
+  }
+
+  // ── 其他 tab 占位（仅演示：实际产品里是现有四页） ──
+  function placeholderHTML(tab){
+    var map = {
+      net:['网络页（现有）','实时速率 / 今日流量 / 活跃进程'],
+      clip:['剪贴板页（现有）','最近复制 / 粘贴栈'],
+      sys:['系统页（现有）','IP / Wi-Fi / 开机自启动'],
+      send:['传送页（现有）','局域网互传 / 扫码接收']
+    };
+    var m = map[tab] || ['占位',''];
+    return '<div class="pane" data-pane="'+tab+'" hidden><div class="placeholder">'+svg('net',26)+'<p>'+m[0]+'</p><span>'+m[1]+'</span></div></div>';
+  }
+
+  // ── 装配每个画布 ──
+  document.querySelectorAll('.panel').forEach(function(panel){
+    var seg = panel.querySelector('.seg');
+    var content = panel.querySelector('.content');
+    seg.innerHTML = segHTML('credits');
+
+    // 其他 tab 先占位，credits 用状态渲染
+    content.innerHTML = ['net','clip','sys','send'].map(placeholderHTML).join('') + creditsHTML(panel);
+
+    // tab 切换
+    seg.addEventListener('click', function(e){
+      var btn = e.target.closest('button[data-tab]');
+      if (!btn) return;
+      var id = btn.getAttribute('data-tab');
+      seg.querySelectorAll('button[data-tab]').forEach(function(b){
+        var on = b === btn;
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+        b.setAttribute('tabindex', on ? '0' : '-1');
+      });
+      content.querySelectorAll('.pane').forEach(function(p){
+        p.hidden = p.getAttribute('data-pane') !== id;
+      });
+    });
+
+    // 范围切换：改 data-range 后重渲染额度页
+    content.addEventListener('click', function(e){
+      var rb = e.target.closest('[data-range-btn]');
+      if (rb){
+        panel.setAttribute('data-range', rb.getAttribute('data-range-btn'));
+        rerender();
+        return;
+      }
+      // 刷新：转圈 600ms 后更新时间
+      var rf = e.target.closest('[data-refresh]');
+      if (rf){
+        rf.classList.add('spin');
+        rf.disabled = true;
+        setTimeout(function(){
+          rf.classList.remove('spin');
+          rf.disabled = false;
+          var stamp = panel.querySelector('[data-stamp]');
+          if (stamp) stamp.textContent = nowStamp();
+          toast(panel, '已刷新');
+        }, 600);
+        return;
+      }
+      // 未配置：保存后切到已配置
+      var save = e.target.closest('[data-save]');
+      if (save){
+        panel.setAttribute('data-case','configured');
+        panel.setAttribute('data-range','24h');
+        rerender();
+        toast(panel, '已保存并查询');
+        return;
+      }
+      var openSite = e.target.closest('[data-open-site]');
+      if (openSite){ toast(panel, '将打开 ollama.com/settings/keys'); return; }
+      // 错误态重试
+      var retry = e.target.closest('[data-retry]');
+      if (retry){ panel.setAttribute('data-case','configured'); rerender(); toast(panel, '已重试'); return; }
+    });
+
+    function rerender(){
+      var credits = content.querySelector('.pane[data-pane="credits"]');
+      if (credits) credits.outerHTML = creditsHTML(panel);
+    }
+    function toast(p, msg){
+      var t = p.querySelector('[data-toast]');
+      if (!t) return;
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(t._t);
+      t._t = setTimeout(function(){ t.classList.remove('show'); }, 1600);
+    }
+  });
+
+  function nowStamp(){
+    var d = new Date();
+    return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  }
+})();
+</script>
+</body>
+</html>
+ + exact(v); }
   function tokens(v){
     if (v >= 1e8) return (v/1e8).toFixed(1)+'亿';
     if (v >= 1e4) return (v/1e4).toFixed(1)+'万';

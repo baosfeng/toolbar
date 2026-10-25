@@ -40,13 +40,13 @@ public struct BillingAlert: Sendable, Equatable {
     public let resourceTitle: String
     /// 命中的阈值（5...1）
     public let threshold: Int
-    /// 实际剩余百分比（向下取整）
-    public let remainingPercent: Int
+    /// 实际剩余百分比（服务端原值，不取整）
+    public let remainingPercent: Double
     /// 下次重置时间
     public let resetAt: Date?
 
     public init(key: String, providerID: String, resourceTitle: String,
-                threshold: Int, remainingPercent: Int, resetAt: Date?) {
+                threshold: Int, remainingPercent: Double, resetAt: Date?) {
         self.key = key
         self.providerID = providerID
         self.resourceTitle = resourceTitle
@@ -63,9 +63,11 @@ public struct BillingAlert: Sendable, Equatable {
         "\(providerName) · \(resourceTitle)额度\(isCritical ? "即将用尽" : "偏低")"
     }
 
-    /// 通知正文：`剩余 3%，10/19 08:00 重置`（无周期时省略后半句）
+    /// 通知正文：`剩余 3.74%，10/19 08:00 重置`（无周期时省略后半句）
+    ///
+    /// 百分比按服务端原值展示，与额度页一致，不取整成整数。
     public var bodyText: String {
-        let percent = max(0, remainingPercent)
+        let percent = formatExactNumber(max(0, remainingPercent))
         if let resetAt {
             return "剩余 \(percent)%，\(formatShortDateTime(resetAt)) 重置"
         }
@@ -115,7 +117,7 @@ public enum BillingAlertEvaluator {
                                            providerID: providerID,
                                            resourceTitle: title,
                                            threshold: threshold,
-                                           remainingPercent: Int((fraction * 100).rounded(.down)),
+                                           remainingPercent: fraction * 100,
                                            resetAt: resetAt))
                 current.notifiedThreshold = threshold
             }
