@@ -16,10 +16,12 @@ extension AppCoordinator {
         let identity = LocalIdentity.makeDefault(port: Int(TransferProtocol.defaultPorts[0]),
                                                  appVersion: appVersion)
         let registry = DeviceRegistry()
-        let configuration = TransferService.Configuration(
-            receiveDirectory: TransferService.Configuration.defaultReceiveDirectory(),
-            appVersion: appVersion)
         let preferences = TransferPreferences(storage: AppContext.shared.storage)
+        // 接收目录：设置页写过自定义路径就用它，否则回落到默认的 ~/Downloads/局域网互传
+        let configuration = TransferService.Configuration(
+            receiveDirectory: preferences.resolvedReceiveDirectory(
+                fallback: TransferService.Configuration.defaultReceiveDirectory()),
+            appVersion: appVersion)
         let knownPeers = KnownPeerStore(storage: AppContext.shared.storage, logger: logger)
         let service = TransferService(identity: identity,
                                       registry: registry,

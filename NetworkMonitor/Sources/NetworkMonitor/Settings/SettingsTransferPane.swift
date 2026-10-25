@@ -10,10 +10,13 @@ import NetworkMonitorCore
 final class SettingsTransferPane: SettingsPaneView {
 
     private let preferences: TransferPreferences
-    private let service: TransferService
-    private let logger: LoggingService
+    /// 放宽为 internal：接收目录扩展文件（`SettingsTransferPane+ReceiveDirectory`）要用
+    let service: TransferService
+    /// 放宽为 internal：接收目录扩展文件要写日志
+    let logger: LoggingService
 
-    private let directoryRow = SettingsRowView(title: "接收目录")
+    /// 放宽为 internal：接收目录扩展文件要刷新副标题
+    let directoryRow = SettingsRowView(title: "接收目录")
     private let autoAcceptSwitch = NSSwitch()
     private let thresholdSwitch = NSSwitch()
     private let thresholdField = NSTextField()
@@ -22,10 +25,14 @@ final class SettingsTransferPane: SettingsPaneView {
                                                       color: .secondaryLabelColor)
     private var durationControl: NSSegmentedControl?
     private var restartButton: NSButton?
-    private var clearButton: NSButton?
+    /// 放宽为 internal：接收目录扩展文件要在切换目录时禁用
+    var chooseButton: NSButton?
+    /// 放宽为 internal：接收目录扩展文件要在清理时禁用
+    var clearButton: NSButton?
     private var soundSwitches: [TransferPreferences.SoundEvent: NSSwitch] = [:]
     private var countdownTimer: Timer?
-    private var usageText = "统计中…"
+    /// 放宽为 internal：接收目录扩展文件要拼副标题
+    var usageText = "统计中…"
 
     init(preferences: TransferPreferences = TransferPreferences(),
          service: TransferService,
@@ -43,14 +50,17 @@ final class SettingsTransferPane: SettingsPaneView {
         buildAutoAcceptSection()
         buildTransferSection()
         buildSoundSection()
-        page.addNote("接收目录固定在 ~/Downloads/局域网互传，暂不支持改到其他位置；"
-                     + "清理会删除该目录下全部文件。免配对窗口到期后回到 PIN 确认。")
+        page.addNote("「选择…」切换接收目录后只影响之后的接收，已接收的文件留在原目录；"
+                     + "清理会删除当前目录下全部文件。免配对窗口到期后回到 PIN 确认。")
     }
 
     private func buildReceiveSection() {
         clearButton = SettingsLinkButton.make("清理", target: self,
                                               action: #selector(clearReceivedFiles),
                                               color: .systemRed)
+        chooseButton = SettingsLinkButton.make("选择…", target: self,
+                                               action: #selector(chooseReceiveDirectory))
+        if let chooseButton { directoryRow.trailingStack.addArrangedSubview(chooseButton) }
         directoryRow.trailingStack.addArrangedSubview(
             SettingsLinkButton.make("打开", target: self, action: #selector(openReceiveDirectory)))
         if let clearButton { directoryRow.trailingStack.addArrangedSubview(clearButton) }
@@ -180,24 +190,22 @@ final class SettingsTransferPane: SettingsPaneView {
     }
 
     /// 刷新目录占用（后台扫描，避免大目录阻塞主线程）
-    private func refreshUsage() {
+    ///
+    /// 放宽为 internal：接收目录扩展文件切换目录后要重算占用。
+    func refreshUsage() {
+        // 目录可能在扫描途中被切换：先记下扫描目标，回来时目录变了就丢弃这次结果
+        let scanned = service.receiveDirectory
         usageText = "统计中…"
         directoryRow.update(subtitle: directorySubtitle())
         Task.detached(priority: .utility) { [weak self, service] in
             let summary = service.receiveDirectorySummary()
             let bytes = formatBytesFull(UInt64(max(0, summary.totalBytes)))
             await MainActor.run { [weak self] in
-                guard let self else { return }
+                guard let self, self.service.receiveDirectory == scanned else { return }
                 self.usageText = "已接收 \(bytes) / \(summary.fileCount) 个文件"
                 self.directoryRow.update(subtitle: self.directorySubtitle())
             }
         }
-    }
-
-    private func directorySubtitle() -> String {
-        let path = service.receiveDirectory.path.replacingOccurrences(
-            of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~")
-        return "\(path) · \(usageText)"
     }
 
     // MARK: - 倒计时
@@ -232,7 +240,8 @@ final class SettingsTransferPane: SettingsPaneView {
     @objc private func clearReceivedFiles() {
         let alert = NSAlert()
         alert.messageText = "清理接收目录？"
-        alert.informativeText = "将删除「局域网互传」目录下的全部文件，并清空对应的已完成记录。此操作不可撤销。"
+        alert.informativeText = "将删除 \(Self.displayPath(service.receiveDirectory)) 下的全部文件，"
+            + "并清空对应的已完成记录。此操作不可撤销。"
         alert.addButton(withTitle: "清理")
         alert.addButton(withTitle: "取消")
         alert.alertStyle = .warning
@@ -295,6 +304,13 @@ final class SettingsTransferPane: SettingsPaneView {
         let value = max(1, Int(thresholdField.stringValue) ?? 10)
         thresholdField.stringValue = String(value)
         preferences.sizeThresholdMB = value
+    }
+
+    /// 路径展示统一缩成 ~ 开头
+    ///
+    /// 放宽为 internal：接收目录扩展文件拼副标题也要用。
+    static func displayPath(_ url: URL) -> String {
+        url.path.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~")
     }
 
     @objc private func soundToggled(_ sender: NSSwitch) {

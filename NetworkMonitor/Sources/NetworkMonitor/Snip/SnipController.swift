@@ -17,7 +17,8 @@ final class SnipController: SnipOverlayViewDelegate {
     let pinWindows: PinWindowController
     /// 放宽为 internal：热键扩展文件要用
     let hotKeys: HotKeyRegistry
-    private let storage: KeyValueStorage
+    /// 放宽为 internal：导出扩展要解析快速保存目录
+    let storage: KeyValueStorage
     /// 放宽为 internal：导出扩展文件要写日志
     let logger: LoggingService
 

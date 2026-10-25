@@ -42,7 +42,8 @@ extension SnipController {
     }
 
     func saveQuickly(_ image: CGImage, annotations: [SnipAnnotation] = []) {
-        let directory = SnipFileNaming.quickSaveDirectory()
+        // 跟随设置页的快速保存目录（未自定义时为默认目录）
+        let directory = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let url = directory.appendingPathComponent(SnipFileNaming.fileName(for: Date()))
@@ -58,7 +59,7 @@ extension SnipController {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = SnipFileNaming.fileName(for: Date())
-        panel.directoryURL = SnipFileNaming.quickSaveDirectory()
+        panel.directoryURL = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {

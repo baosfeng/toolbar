@@ -61,14 +61,14 @@ extension TransferService {
                                   now: Date) -> SessionContext {
         let sessionId = Self.randomHex(bytes: 16)
         let token = Self.randomHex(bytes: 16)
-        var existingNames = FileNameResolver.existingNames(in: configuration.receiveDirectory)
+        var existingNames = FileNameResolver.existingNames(in: receiveDirectory)
         var receiveFiles: [String: ReceiveFileContext] = [:]
         var files: [TransferFile] = []
 
         for offerFile in request.files {
             let finalName = FileNameResolver.uniqueName(for: offerFile.name, in: existingNames)
             existingNames.insert(finalName)
-            let finalURL = configuration.receiveDirectory.appendingPathComponent(finalName)
+            let finalURL = receiveDirectory.appendingPathComponent(finalName)
             receiveFiles[offerFile.fileId] = ReceiveFileContext(finalURL: finalURL,
                                                                finalName: finalName,
                                                                writer: nil)
@@ -86,7 +86,7 @@ extension TransferService {
                                       files: files,
                                       state: approved ? .transferring : .awaitingConfirm,
                                       createdAt: now,
-                                      directory: configuration.receiveDirectory)
+                                      directory: receiveDirectory)
 
         return SessionContext(session: session,
                               peerIP: "",

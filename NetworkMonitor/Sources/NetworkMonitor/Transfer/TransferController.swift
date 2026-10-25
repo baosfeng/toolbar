@@ -152,6 +152,17 @@ final class TransferController {
         }
     }
 
+    // MARK: - 接收目录
+
+    /// 切换接收目录（设置页「选择…」入口的转发）
+    ///
+    /// 建目录、切换与偏好落库都在 `TransferService` 内完成，这里只转一道，
+    /// 保证面板与设置页读到同一份目录。
+    @discardableResult
+    func setReceiveDirectory(_ url: URL) async -> Result<URL, TransferError> {
+        await service.setReceiveDirectory(url)
+    }
+
     // MARK: - 面板交互
 
     private func render() {

@@ -12,7 +12,9 @@ public actor TransferService: TransferRouteHandling {
 
     /// 服务配置
     public struct Configuration: Sendable {
-        /// 收件目录（默认 `~/Downloads/局域网互传/`）
+        /// 初始收件目录（默认 `~/Downloads/局域网互传/`）
+        ///
+        /// 只作为服务启动时的初值；运行期以 `receiveDirectory`（可切换）为准。
         public var receiveDirectory: URL
         /// 应用版本（`/info` 与发现公告使用）
         public var appVersion: String
@@ -93,6 +95,8 @@ public actor TransferService: TransferRouteHandling {
     let knownPeers: KnownPeerStore?
     let logger: LoggingService
     let configuration: Configuration
+    /// 接收目录（运行期可在设置页切换；放在线程安全的容器里供 actor 外同步读取）
+    let receiveDirectories: ReceiveDirectoryStore
     /// 扫码接收 token（纯逻辑，时钟/随机源可注入）
     let scanTokens: ScanTokenStore
     private let server: HttpServer
@@ -128,6 +132,7 @@ public actor TransferService: TransferRouteHandling {
         self.localIdentity = identity
         self.registry = registry
         self.configuration = configuration
+        self.receiveDirectories = ReceiveDirectoryStore(configuration.receiveDirectory)
         self.pairing = pairing
         self.preferences = preferences
         self.knownPeers = knownPeers
@@ -136,7 +141,7 @@ public actor TransferService: TransferRouteHandling {
         self.observerQueue = observerQueue
         self.server = HttpServer(logger: logger)
         self.httpClient = TransferHTTPClient(logger: logger)
-        try? FileManager.default.createDirectory(at: configuration.receiveDirectory,
+        try? FileManager.default.createDirectory(at: receiveDirectories.current,
                                                  withIntermediateDirectories: true)
     }
 
@@ -166,7 +171,7 @@ public actor TransferService: TransferRouteHandling {
         for deviceId in pairing.pairedDeviceIds() {
             registry.setPaired(true, deviceId: deviceId)
         }
-        logger.info("传输服务已启动：HTTP \(port)，收件目录 \(configuration.receiveDirectory.path)")
+        logger.info("传输服务已启动：HTTP \(port)，收件目录 \(receiveDirectory.path)")
         notifySessions()
         return port
     }
@@ -210,7 +215,7 @@ public actor TransferService: TransferRouteHandling {
         let now = Date()
         let totalSize = request.files.reduce(Int64(0)) { $0 + $1.size }
         do {
-            try DiskSpaceProbe.require(bytes: totalSize, at: configuration.receiveDirectory)
+            try DiskSpaceProbe.require(bytes: totalSize, at: receiveDirectory)
         } catch let error as TransferError {
             return .failure(error)
         } catch {

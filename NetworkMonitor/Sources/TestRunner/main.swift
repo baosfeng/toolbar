@@ -23,6 +23,12 @@ runDatabaseConfigTests()
 // MARK: - AppEvents 事件总线
 runAppEventsTests()
 
+// MARK: - 设置页目录偏好（截图快速保存 / 互传接收）
+runSettingsDirectoryTests()
+
+// MARK: - 剪贴板访问权限状态（文案 / 色调 / 跳转）
+runClipboardAccessTests()
+
 // MARK: - 剪贴板：哈希 / 忽略判定 / 模糊搜索
 runClipboardHashTests()
 runClipboardFuzzySearchTests()

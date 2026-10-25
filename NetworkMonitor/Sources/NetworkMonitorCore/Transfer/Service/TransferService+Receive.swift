@@ -145,9 +145,9 @@ extension TransferService {
                 logger.warning("改名失败，尝试重新去重：\(error.localizedDescription)")
             }
         }
-        let existing = FileNameResolver.existingNames(in: configuration.receiveDirectory)
+        let existing = FileNameResolver.existingNames(in: receiveDirectory)
         let fallbackName = FileNameResolver.uniqueName(for: receive.finalName, in: existing)
-        let fallbackURL = configuration.receiveDirectory.appendingPathComponent(fallbackName)
+        let fallbackURL = receiveDirectory.appendingPathComponent(fallbackName)
         do {
             try manager.moveItem(at: partURL, to: fallbackURL)
             return fallbackURL

@@ -11,6 +11,8 @@ final class PinWindowController {
     static let maximumRecoverable = 3
 
     private let logger: LoggingService
+    /// 偏好存储（解析快速保存目录用，禁止直读 UserDefaults）
+    private let storage: any KeyValueStorage
     private var windows: [PinWindow] = []
     private var recentlyClosed: [ClosedPin] = []
     private(set) var isHidden = false
@@ -27,8 +29,10 @@ final class PinWindowController {
     /// 屏幕参数变化监听
     private var screenObserver: NSObjectProtocol?
 
-    init(logger: LoggingService = AppContext.shared.logger) {
+    init(logger: LoggingService = AppContext.shared.logger,
+         storage: any KeyValueStorage = AppContext.shared.storage) {
         self.logger = logger
+        self.storage = storage
         // 自己监听屏幕变化，省得编排层再转一道
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -201,7 +205,8 @@ final class PinWindowController {
     }
 
     private func saveImage(from window: PinWindow) {
-        let directory = SnipFileNaming.quickSaveDirectory()
+        // 跟随设置页的快速保存目录（未自定义时为默认目录）
+        let directory = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = SnipFileNaming.fileName(for: Date())

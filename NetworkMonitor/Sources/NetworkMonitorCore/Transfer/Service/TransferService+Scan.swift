@@ -65,7 +65,7 @@ extension TransferService: ScanRouteHandling {
 
         // 写入前预检磁盘空间（Content-Length 未知时跳过，落盘阶段仍有大小上限兜底）
         do {
-            try DiskSpaceProbe.require(bytes: contentLength, at: configuration.receiveDirectory)
+            try DiskSpaceProbe.require(bytes: contentLength, at: receiveDirectory)
         } catch let error as TransferError {
             return .failure(error)
         } catch {
@@ -73,9 +73,9 @@ extension TransferService: ScanRouteHandling {
         }
 
         let resolvedName = ScanFileNaming.resolve(name)
-        let existing = FileNameResolver.existingNames(in: configuration.receiveDirectory)
+        let existing = FileNameResolver.existingNames(in: receiveDirectory)
         let uniqueName = FileNameResolver.uniqueName(for: resolvedName, in: existing)
-        let finalURL = configuration.receiveDirectory.appendingPathComponent(uniqueName)
+        let finalURL = receiveDirectory.appendingPathComponent(uniqueName)
 
         let writer: FileStreamWriter
         do {
@@ -144,11 +144,11 @@ extension TransferService: ScanRouteHandling {
                 logger.warning("扫码落盘改名失败，尝试重新去重：\(error.localizedDescription)")
             }
         }
-        let existing = FileNameResolver.existingNames(in: configuration.receiveDirectory)
+        let existing = FileNameResolver.existingNames(in: receiveDirectory)
         let fallbackName = FileNameResolver.uniqueName(for: finalURL.lastPathComponent, in: existing)
         do {
             try manager.moveItem(at: partURL,
-                                 to: configuration.receiveDirectory.appendingPathComponent(fallbackName))
+                                 to: receiveDirectory.appendingPathComponent(fallbackName))
             return true
         } catch {
             logger.error("扫码落盘最终改名失败：\(error.localizedDescription)")

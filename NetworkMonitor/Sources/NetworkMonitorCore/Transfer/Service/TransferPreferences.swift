@@ -15,6 +15,7 @@ public final class TransferPreferences: @unchecked Sendable {
         public static let autoAcceptMinutes = "transfer.autoAccept.minutes"
         public static let autoAcceptWindowStart = "transfer.autoAccept.windowStart"
         public static let sizeThresholdMB = "transfer.autoAccept.sizeThresholdMB"
+        public static let receiveDirectoryPath = "transfer.receiveDirectoryPath"
         public static let soundReceive = "transfer.sound.receive"
         public static let soundSend = "transfer.sound.send"
         public static let soundFailure = "transfer.sound.failure"
@@ -153,6 +154,33 @@ public final class TransferPreferences: @unchecked Sendable {
 
     /// 阈值是否开启
     public var sizeThresholdEnabled: Bool { sizeThresholdMB > 0 }
+
+    // MARK: - 接收目录
+
+    /// 自定义接收目录的绝对路径（nil 表示使用默认目录）
+    public var receiveDirectoryPath: String? {
+        get {
+            guard let stored = storage.string(forKey: Key.receiveDirectoryPath) else { return nil }
+            let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        set {
+            guard let path = newValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !path.isEmpty else {
+                storage.removeObject(forKey: Key.receiveDirectoryPath)
+                return
+            }
+            storage.set(path, forKey: Key.receiveDirectoryPath)
+        }
+    }
+
+    /// 解析实际使用的接收目录：自定义优先，否则回落到传入的默认目录
+    ///
+    /// 只影响之后的接收；切换目录不迁移既有文件。
+    public func resolvedReceiveDirectory(fallback: URL) -> URL {
+        guard let path = receiveDirectoryPath else { return fallback }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
 
     // MARK: - 提示音
 

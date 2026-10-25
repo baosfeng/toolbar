@@ -5,8 +5,8 @@ import NetworkMonitorCore
 
 /// 截图与贴图设置 — 标注默认值、贴图不透明度与保存行为
 ///
-/// 迁移自 `SnipSettingsWindow`：存储键沿用 `SnipPreferenceKey`，旧窗口保留不删。
-/// 快速保存目录由 `SnipFileNaming.quickSaveDirectory()` 固定，暂不支持自定义（见页尾说明）。
+/// 迁移自已下线的 `SnipSettingsWindow`：存储键沿用 `SnipPreferenceKey`，老设置继续生效。
+/// 快速保存目录可自定义（偏好 `snip.quickSaveDirectoryPath`），未自定义时回落到默认目录。
 final class SettingsCapturePane: SettingsPaneView {
 
     private let storage: any KeyValueStorage
@@ -15,6 +15,8 @@ final class SettingsCapturePane: SettingsPaneView {
     private let hotKeySummary: (() -> String)?
     private var hotKeyRow: SettingsRowView?
 
+    /// 快速保存目录行（副标题随偏好变化，需要刷新）
+    private let directoryRow = SettingsRowView(title: "快速保存目录")
     private var autoSaveSwitch: NSSwitch?
     private var alphaSlider: NSSlider?
     private var alphaValueLabel: NSTextField?
@@ -50,7 +52,7 @@ final class SettingsCapturePane: SettingsPaneView {
         buildPinSection()
         buildSaveSection()
         buildHotKeySection()
-        page.addNote("快速保存目录当前固定为 ~/Pictures/NetworkMonitor Snips，暂不支持自定义；"
+        page.addNote("「选择…」切换快速保存目录后只影响之后的截图落盘，已保存的文件不会迁移；"
                      + "标注默认颜色与线宽对新截图生效。")
     }
 
@@ -116,8 +118,9 @@ final class SettingsCapturePane: SettingsPaneView {
                                           subtitle: "截图复制到剪贴板时同时落盘为 PNG")
         autoSaveRow.trailingStack.addArrangedSubview(autoSave)
 
-        let directoryRow = SettingsRowView(title: "快速保存目录",
-                                           subtitle: Self.displayPath(SnipFileNaming.quickSaveDirectory()))
+        directoryRow.update(subtitle: quickSaveDirectorySubtitle())
+        directoryRow.trailingStack.addArrangedSubview(
+            SettingsLinkButton.make("选择…", target: self, action: #selector(chooseQuickSaveDirectory)))
         directoryRow.trailingStack.addArrangedSubview(
             SettingsLinkButton.make("打开", target: self, action: #selector(openQuickSaveFolder)))
 
@@ -168,6 +171,7 @@ final class SettingsCapturePane: SettingsPaneView {
         let lineWidth = storage.object(forKey: SnipPreferenceKey.annotationLineWidth) as? Double ?? 3
         widthControl?.selectedSegment = lineWidth <= 2 ? 0 : (lineWidth >= 8 ? 2 : 1)
 
+        refreshQuickSaveDirectory()
         updateColorSelection()
         if let text = hotKeySummary?() { hotKeyRow?.update(subtitle: text) }
     }
@@ -214,13 +218,43 @@ final class SettingsCapturePane: SettingsPaneView {
         storage.set(Double(widths[index]), forKey: SnipPreferenceKey.annotationLineWidth)
     }
 
+    /// 选择快速保存目录 — 只写偏好，落盘时再解析
+    @objc private func chooseQuickSaveDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.title = "选择快速保存目录"
+        panel.prompt = "选择"
+        panel.directoryURL = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        // 选中的就是默认目录时清掉自定义，免得副标题误标「自定义」
+        let isDefault = url.standardizedFileURL
+            == SnipFileNaming.quickSaveDirectory().standardizedFileURL
+        SnipSaveDirectory.setCustomDirectory(isDefault ? nil : url, storage: storage)
+        refreshQuickSaveDirectory()
+        logger.info("快速保存目录已切换：\(url.path)")
+    }
+
     @objc private func openQuickSaveFolder() {
-        let directory = SnipFileNaming.quickSaveDirectory()
+        let directory = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         NSWorkspace.shared.open(directory)
     }
 
     // MARK: - 工具
+
+    /// 目录副标题：路径 + 来源（自定义 / 默认）
+    private func quickSaveDirectorySubtitle() -> String {
+        let directory = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
+        let source = SnipSaveDirectory.customPath(storage: storage) == nil ? "默认" : "自定义"
+        return "\(Self.displayPath(directory)) · \(source)"
+    }
+
+    private func refreshQuickSaveDirectory() {
+        directoryRow.update(subtitle: quickSaveDirectorySubtitle())
+    }
 
     private static func displayPath(_ url: URL) -> String {
         url.path.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path,

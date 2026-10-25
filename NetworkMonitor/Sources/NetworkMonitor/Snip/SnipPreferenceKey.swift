@@ -11,4 +11,6 @@ public enum SnipPreferenceKey {
     public static let pinDefaultAlpha = "snip.pinDefaultAlpha"
     public static let annotationColor = "snip.annotationColor"
     public static let annotationLineWidth = "snip.annotationLineWidth"
+
+    /// 快速保存目录键不在这里：`SnipSaveDirectory.key`（Core，解析时要和落盘规则共用默认目录）
 }
