@@ -8,10 +8,10 @@ extension AppCoordinator {
     func setupSnip() {
         // 4b. 截图 / 贴图链路（热键注册 → 覆盖层选区 → 复制 / 贴到屏幕）
         snipController = SnipController(logger: logger)
-        snipSettings = SnipSettingsWindow(logger: logger) { [weak self] in
-            self?.snipController.hotKeySummary ?? "热键尚未注册"
+        // 截图页的「控制」信息来自 SnipController 的热键摘要；设置入口统一走设置窗口
+        snipController.onOpenSettings = { [weak self] in
+            self?.settingsWindow?.show(section: .capture)
         }
-        snipController.onOpenSettings = { [weak self] in self?.snipSettings.show() }
         snipController.start()
     }
 }

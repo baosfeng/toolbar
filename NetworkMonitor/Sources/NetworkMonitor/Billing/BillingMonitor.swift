@@ -20,6 +20,8 @@ final class BillingMonitor {
     let registry: BillingProviderRegistry
     // 放宽为 internal：`BillingMonitor+Fetching` 的刷新调度扩展需要读取凭据
     let credentialStore: any BillingCredentialStore
+    /// provider 启用偏好（停用者不查询、不出现在额度页，凭据保留）
+    let preferences: BillingProviderPreferences
     /// 额度阈值提醒（可选；测试/未装配时为 nil）
     private let alertService: (any BillingAlerting)?
     private let logger: LoggingService
@@ -55,31 +57,18 @@ final class BillingMonitor {
     init(registry: BillingProviderRegistry,
          credentialStore: any BillingCredentialStore,
          alertService: (any BillingAlerting)? = nil,
+         preferences: BillingProviderPreferences = BillingProviderPreferences(),
          logger: LoggingService = AppContext.shared.logger) {
         self.registry = registry
         self.credentialStore = credentialStore
         self.alertService = alertService
+        self.preferences = preferences
         self.logger = logger
-        self.states = registry.all.map { provider in
-            let descriptor = ProviderDescriptor(id: provider.id,
-                                                displayName: provider.displayName,
-                                                symbolName: provider.symbolName,
-                                                credentialHint: provider.credentialHint,
-                                                supportsModelBreakdown: provider.supportsModelBreakdown,
-                                                supportsUsage: provider.supportsUsage,
-                                                supportsTimeSeries: provider.supportsTimeSeries,
-                                                credentialPageURL: provider.credentialPageURL)
-            return ProviderState(descriptor: descriptor,
-                                 range: .last24Hours,
-                                 isConfigured: credentialStore.credential(for: provider.id) != nil,
-                                 balance: nil,
-                                 usage: nil,
-                                 lastUpdated: nil,
-                                 isLoading: false,
-                                 errorMessage: nil)
-        }
+        self.states = registry.all
+            .filter { preferences.isEnabled($0.id) }
+            .map { Self.makeState(for: $0, credentialStore: credentialStore) }
         if states.isEmpty {
-            logger.warning("计费注册表为空：额度页将显示空态")
+            logger.warning("计费 provider 全部停用或注册表为空：额度页将显示空态")
         }
     }
 
@@ -327,7 +316,8 @@ final class BillingMonitor {
     // MARK: - 回调
 
     /// 回调最新快照
-    private func emit() {
+    // 放宽为 internal：BillingMonitor+Providers 的启用开关扩展要发快照
+    func emit() {
         onUpdate?(Snapshot(states: states))
     }
 }

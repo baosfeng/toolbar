@@ -19,8 +19,8 @@ final class MenuBarManager: NSObject {
 
     /// 剪贴板历史面板入口（由组合根装配）
     var onOpenClipboardHistory: (() -> Void)?
-    /// 剪贴板设置窗入口（由组合根装配）
-    var onOpenClipboardSettings: (() -> Void)?
+    /// 统一设置窗口入口（由组合根装配；参数 nil = 默认页）
+    var onOpenSettings: ((SettingsSection?) -> Void)?
 
     // MARK: - 初始化
 
@@ -50,7 +50,7 @@ final class MenuBarManager: NSObject {
 
         configureStatusItem()
         panel.onOpenClipboardHistory = { [weak self] in self?.onOpenClipboardHistory?() }
-        panel.onOpenClipboardSettings = { [weak self] in self?.onOpenClipboardSettings?() }
+        panel.onOpenSettings = { [weak self] section in self?.onOpenSettings?(section) }
         setupTimer()
     }
 

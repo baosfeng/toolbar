@@ -17,10 +17,8 @@ final class BillingPaneView: MenuPanelPaneView {
     var onRetry: (() -> Void)?
     /// 切换某个 provider 的用量范围（参数：范围、provider id）
     var onRangeChange: ((BillingRange, String) -> Void)?
-    /// 提交某个 provider 的凭据（参数：凭据、provider id）
-    var onSaveCredential: ((String, String) -> Void)?
-    /// 打开 provider 凭据页面
-    var onOpenProviderSite: ((URL) -> Void)?
+    /// 未配置块点「去设置配置」：打开设置窗口并选中额度 Provider 页
+    var onOpenSettings: (() -> Void)?
     /// 展开 / 收起导致内容高度变化
     var onContentChanged: (() -> Void)?
 
@@ -160,11 +158,7 @@ final class BillingPaneView: MenuPanelPaneView {
             let block = BillingProviderBlockView()
             block.onToggleExpand = { [weak self] in self?.toggleExpand(id) }
             block.onRangeChange = { [weak self] range in self?.onRangeChange?(range, id) }
-            block.onSaveCredential = { [weak self] key in self?.onSaveCredential?(key, id) }
-            block.onOpenSite = { [weak self] in
-                guard let url = self?.snapshot?.state(for: id)?.descriptor.credentialPageURL else { return }
-                self?.onOpenProviderSite?(url)
-            }
+            block.onOpenSettings = { [weak self] in self?.onOpenSettings?() }
             block.onRetry = { [weak self] in self?.onRetry?() }
             blockStack.addArrangedSubview(block)
             block.widthAnchor.constraint(equalTo: blockStack.widthAnchor).isActive = true
@@ -176,12 +170,8 @@ final class BillingPaneView: MenuPanelPaneView {
     /// 展开 / 收起某个 provider 的用量区（同一时刻只允许一个展开）
     private func toggleExpand(_ providerID: String) {
         guard let snapshot, let state = snapshot.state(for: providerID) else { return }
-        guard state.isConfigured else {
-            // 未配置块：点击就地展开凭据表单
-            blocks[providerID]?.toggleSetup()
-            onContentChanged?()
-            return
-        }
+        // 未配置块没有可展开内容：配置入口是块内的「去设置配置」
+        guard state.isConfigured else { return }
         expandedProviderID = (expandedProviderID == providerID) ? nil : providerID
         for item in snapshot.states {
             blocks[item.descriptor.id]?.update(state: item,

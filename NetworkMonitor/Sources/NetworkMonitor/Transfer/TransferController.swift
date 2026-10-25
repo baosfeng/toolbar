@@ -15,6 +15,8 @@ final class TransferController {
     private let preferences: TransferPreferences
     private let logger: LoggingService
     private weak var panel: TransferPaneView?
+    /// 打开统一设置窗口的传输页（组合根注入：设置窗口由组合根统一持有）
+    var onOpenSettings: (() -> Void)?
 
     private var devices: [RemoteDevice] = []
     private var sessions: [TransferSession] = []
@@ -25,9 +27,6 @@ final class TransferController {
     private let pairingSheet = TransferPairingSheet()
     private let scanSheet = TransferScanSheet()
     private let notification: TransferNotification
-    private lazy var settingsWindow = TransferSettingsWindow(preferences: preferences,
-                                                             service: service,
-                                                             logger: logger)
     private var currentPendingOfferId: String?
     private var pollTimer: Timer?
     private var appearedDeviceIds: Set<String> = []
@@ -54,7 +53,7 @@ final class TransferController {
         panel.onPickFiles = { [weak self] in self?.presentFilePicker() }
         panel.onOpenScanReceive = { [weak self] in self?.showScanReceive() }
         panel.onCancelSession = { [weak self] sessionId in self?.cancel(sessionId: sessionId) }
-        panel.onOpenSettings = { [weak self] in self?.showSettings() }
+        panel.onOpenSettings = { [weak self] in self?.onOpenSettings?() }
         panel.onDismissSession = { [weak self] sessionId, deleteFiles in
             guard let self else { return }
             Task { @MainActor in
@@ -128,13 +127,7 @@ final class TransferController {
         pollTimer = nil
         pairingSheet.close()
         scanSheet.close()
-        settingsWindow.close()
         Task { await self.service.stop() }
-    }
-
-    /// 打开传送设置（标题栏齿轮 / 面板状态行）
-    func showSettings() {
-        settingsWindow.show()
     }
 
     /// 扫码接收：签发链接 → 生成二维码 → 弹窗展示

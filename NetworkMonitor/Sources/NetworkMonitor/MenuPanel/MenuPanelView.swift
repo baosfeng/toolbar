@@ -14,12 +14,12 @@ protocol MenuPanelViewDelegate: AnyObject {
     func menuPanelViewDidRequestClose(_ view: MenuPanelView)
     /// 请求退出应用（⌘Q）
     func menuPanelViewDidRequestQuit(_ view: MenuPanelView)
-    /// 请求打开传送设置（标题栏齿轮菜单）
-    func menuPanelViewDidRequestTransferSettings(_ view: MenuPanelView)
     /// 请求切换开机自启动（标题栏齿轮菜单）
     func menuPanelViewDidRequestToggleLaunchAtStartup(_ view: MenuPanelView)
-    /// 请求打开剪贴板设置（⌘,）
-    func menuPanelViewDidRequestClipboardSettings(_ view: MenuPanelView)
+    /// 请求打开统一设置窗口（标题栏「设置…」与 ⌘,）
+    ///
+    /// - Parameter section: 要直接落到的分类（nil = 上次/默认页）
+    func menuPanelViewDidRequestSettings(_ view: MenuPanelView, section: SettingsSection?)
 }
 
 // MARK: - 面板根视图
@@ -32,7 +32,7 @@ protocol MenuPanelViewDelegate: AnyObject {
 /// 内容区包在 `NSScrollView` 里：高度仍 clamp ≤520pt，但内容超出（进程变多 / 字体放大 / 多语言）
 /// 时改为垂直滚动而不是被裁掉；隐式滚动条（overlay + autohides）。
 /// 键盘：`←/→` 切页、`Tab`/`↑`/`↓` 在可点击行间移动、`Return`/`Space` 触发、
-/// `1/2/3` 直接切页、`Esc` 收起、`⌘Q` 退出、`⌘,` 打开剪贴板设置。
+/// `1/2/3` 直接切页、`Esc` 收起、`⌘Q` 退出、`⌘,` 打开统一设置窗口。
 final class MenuPanelView: NSView {
 
     weak var delegate: MenuPanelViewDelegate?
@@ -286,7 +286,7 @@ final class MenuPanelView: NSView {
         if flags.contains(.command) {
             switch characters {
             case "q": delegate?.menuPanelViewDidRequestQuit(self)
-            case ",": delegate?.menuPanelViewDidRequestClipboardSettings(self)
+            case ",": delegate?.menuPanelViewDidRequestSettings(self, section: nil)
             default: super.keyDown(with: event)
             }
             return

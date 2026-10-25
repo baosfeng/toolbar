@@ -13,7 +13,7 @@ extension MenuPanelController: MenuPanelViewDelegate {
 
     // MARK: - 动作
     //
-    // 以下成员（`paste` / `requestClipboardSettings` / `requestClipboardHistory` /
+    // 以下成员（`paste` / `requestSettings` / `requestClipboardHistory` /
     // `toggleLaunchAtStartup` / `isLaunchAtStartupSaved`）由主文件 `wireActions()` 装配
     // 与中频刷新读取，故由 private 放宽为 internal。
 
@@ -33,9 +33,10 @@ extension MenuPanelController: MenuPanelViewDelegate {
         }
     }
 
-    func requestClipboardSettings() {
+    /// 打开统一设置窗口（可指定分类）
+    func requestSettings(section: SettingsSection?) {
         close()
-        onOpenClipboardSettings?()
+        onOpenSettings?(section)
     }
 
     func requestClipboardHistory() {
@@ -47,26 +48,17 @@ extension MenuPanelController: MenuPanelViewDelegate {
         storage.bool(forKey: ClipboardPreferences.launchAtStartupKey)
     }
 
-    /// 开机自启动切换（SMAppService 注册 / 注销，失败时在剪贴板页给提示）
+    /// 开机自启动切换 — 与设置页共用 `LaunchAtStartupService`，避免两套注册 / 回滚逻辑
     func toggleLaunchAtStartup() {
-        let wasEnabled = isLaunchAtStartupSaved
-        let target = !wasEnabled
-        storage.set(target, forKey: ClipboardPreferences.launchAtStartupKey)
-
-        do {
-            if target {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
-            content.launchAtStartupEnabled = target
+        let target = !isLaunchAtStartupSaved
+        guard launchAtStartupService.setEnabled(target) else {
+            // 失败时服务已回滚偏好，这里只需把界面拨回真实状态
+            content.launchAtStartupEnabled = isLaunchAtStartupSaved
             updateContentSize()
-        } catch {
-            // 回滚偏好，避免界面状态与系统真实注册状态不一致
-            storage.set(wasEnabled, forKey: ClipboardPreferences.launchAtStartupKey)
-            content.launchAtStartupEnabled = wasEnabled
-            logger.error("开机自启动切换失败: \(error)")
+            return
         }
+        content.launchAtStartupEnabled = target
+        updateContentSize()
     }
 
     // MARK: - MenuPanelViewDelegate
@@ -94,15 +86,12 @@ extension MenuPanelController: MenuPanelViewDelegate {
         NSApplication.shared.terminate(nil)
     }
 
-    func menuPanelViewDidRequestClipboardSettings(_ view: MenuPanelView) {
-        requestClipboardSettings()
+    func menuPanelViewDidRequestSettings(_ view: MenuPanelView, section: SettingsSection?) {
+        requestSettings(section: section)
     }
 
     func menuPanelViewDidRequestToggleLaunchAtStartup(_ view: MenuPanelView) {
         toggleLaunchAtStartup()
     }
 
-    func menuPanelViewDidRequestTransferSettings(_ view: MenuPanelView) {
-        transferController?.showSettings()
-    }
 }

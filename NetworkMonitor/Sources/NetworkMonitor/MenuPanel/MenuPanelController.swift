@@ -38,7 +38,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     // 由 `private` 放宽为 `internal`：拆出的 `MenuPanelController+Actions.swift` 跨文件访问，
     // 同模块内无其他调用方；`popover` 与监控服务仍仅本文件使用，保持 private。
 
-    private let popover = NSPopover()
+    // popover 放宽为 internal：数据绑定扩展（MenuPanelController+DataSources）要读 isShown
+    let popover = NSPopover()
     let content = MenuPanelView()
     private let monitor: any NetworkMonitoringService
     private let processMonitor: any ProcessNetworkMonitoringService
@@ -52,13 +53,15 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     let harnessUsage: (any HarnessUsageServicing)?
     let storage: any KeyValueStorage
     let logger: LoggingService
+    /// 开机自启动开关（与设置页共用同一份 SMAppService 逻辑）
+    let launchAtStartupService = LaunchAtStartupService()
 
     // MARK: 回调（组合根注入）
 
     /// 打开完整剪贴板历史面板
     var onOpenClipboardHistory: (() -> Void)?
-    /// 打开剪贴板设置窗
-    var onOpenClipboardSettings: (() -> Void)?
+    /// 打开统一设置窗口（参数 nil = 默认页）
+    var onOpenSettings: ((SettingsSection?) -> Void)?
 
     // MARK: 状态
 
@@ -76,7 +79,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     /// 最近一次收起时间 — 用于吞掉「点击状态栏按钮先触发 transient 收起、再触发按钮动作」的重复开合
     private var lastCloseDate: Date = .distantPast
     nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
-    nonisolated(unsafe) private var harnessObserver: NSObjectProtocol?
+    // 放宽为 internal：数据绑定扩展要注册 / 移除
+    nonisolated(unsafe) var harnessObserver: NSObjectProtocol?
 
     // MARK: - 初始化
 
@@ -131,18 +135,16 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     /// 面板内动作装配（点击条目粘贴、设置入口、自启动切换、退出）
     private func wireActions() {
         content.clipboardPane.onSelectItem = { [weak self] item in self?.paste(item) }
-        content.clipboardPane.onRequestSettings = { [weak self] in self?.requestClipboardSettings() }
+        content.clipboardPane.onRequestSettings = { [weak self] in self?.requestSettings(section: .clipboard) }
         content.clipboardPane.onRequestHistory = { [weak self] in self?.requestClipboardHistory() }
         content.billingPane.onRefresh = { [weak self] in self?.billingMonitor?.refresh(force: true) }
         content.billingPane.onRetry = { [weak self] in self?.billingMonitor?.refresh(force: true) }
         content.billingPane.onRangeChange = { [weak self] range, providerID in
             self?.billingMonitor?.selectRange(range, providerID: providerID)
         }
-        content.billingPane.onSaveCredential = { [weak self] key, providerID in
-            self?.billingMonitor?.saveCredential(key, providerID: providerID)
-        }
-        content.billingPane.onOpenProviderSite = { url in
-            NSWorkspace.shared.open(url)
+        // 未配置块「去设置配置」：打开统一设置窗口并落到额度 Provider 页
+        content.billingPane.onOpenSettings = { [weak self] in
+            self?.requestSettings(section: .providers)
         }
         content.tokenPane.onRefresh = { [weak self] in self?.rebuildTokenIndex() }
         content.tokenPane.onContentChanged = { [weak self] in
@@ -153,28 +155,6 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         content.billingPane.onContentChanged = { [weak self] in
             guard let self else { return }
             self.content.delegate?.menuPanelViewDidChangeContent(self.content)
-        }
-    }
-
-    /// 额度页数据回调（状态管理器 → 面板 → 高度自适应）
-    private func bindBilling() {
-        billingMonitor?.onUpdate = { [weak self] snapshot in
-            guard let self else { return }
-            // 收起时仍更新视图数据（下次打开即最新），但不触发布局与 popover 尺寸调整
-            self.content.updateBilling(snapshot, notifySize: self.popover.isShown)
-        }
-    }
-
-    /// Token 页事件回调：索引完成后立即重读快照（收起时只更新视图数据，不调整尺寸）
-    private func bindHarnessUsage() {
-        guard harnessUsage != nil else { return }
-        harnessObserver = NotificationCenter.default.addObserver(
-            forName: AppEvents.harnessUsageChanged, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, let harnessUsage = self.harnessUsage else { return }
-                self.content.updateToken(harnessUsage.snapshot(), notifySize: self.popover.isShown)
-            }
         }
     }
 

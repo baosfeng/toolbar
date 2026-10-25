@@ -17,10 +17,8 @@ final class BillingProviderBlockView: NSView {
     var onToggleExpand: (() -> Void)?
     /// 展开区内切换用量范围
     var onRangeChange: ((BillingRange) -> Void)?
-    /// 未配置态提交凭据
-    var onSaveCredential: ((String) -> Void)?
-    /// 未配置态跳转 provider 站点
-    var onOpenSite: (() -> Void)?
+    /// 未配置态跳转到设置页配置凭据
+    var onOpenSettings: (() -> Void)?
     /// 错误条重试
     var onRetry: (() -> Void)?
 
@@ -49,16 +47,13 @@ final class BillingProviderBlockView: NSView {
     let summaryRow = NSStackView()
 
     let usageSection = BillingUsageSectionView()
-    let setupView = BillingCredentialSetupView()
     private let errorBanner = BillingErrorBannerView()
 
-    /// 未配置态的紧凑行（一行文案 + 配置按钮），点开后才展开完整表单
+    /// 未配置态的紧凑行（一行文案 +「去设置配置」按钮）
     private let promptLabel = MenuPanelLabel.text("", font: BillingPaneStyle.cellTitleFont,
                                                   color: BillingPaneStyle.tertiaryText)
-    private let setupButtonRow = BillingPrimaryButtonRow(title: "配置")
+    private let settingsButtonRow = BillingPrimaryButtonRow(title: "去设置配置")
     private let setupRow = NSStackView()
-    /// 未配置块是否已展开完整凭据表单
-    private var isSetupExpanded = false
     /// 该 provider 没有可展开的用量内容（只查额度的 provider）
     private var suppressesExpansion = false
 
@@ -105,21 +100,19 @@ final class BillingProviderBlockView: NSView {
         summaryLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         usageSection.onRangeChange = { [weak self] range in self?.onRangeChange?(range) }
-        setupView.onSave = { [weak self] key in self?.onSaveCredential?(key) }
-        setupView.onOpenSite = { [weak self] in self?.onOpenSite?() }
         errorBanner.onRetry = { [weak self] in self?.onRetry?() }
 
-        setupButtonRow.setAccessibilityLabel("配置凭据")
-        setupButtonRow.onClick = { [weak self] in self?.toggleSetup() }
+        settingsButtonRow.setAccessibilityLabel("去设置配置额度 Provider")
+        settingsButtonRow.onClick = { [weak self] in self?.onOpenSettings?() }
         setupRow.orientation = .horizontal
         setupRow.alignment = .centerY
         setupRow.spacing = 8
         setupRow.addArrangedSubview(promptLabel)
         setupRow.addArrangedSubview(MenuPanelLabel.spacer())
-        setupRow.addArrangedSubview(setupButtonRow)
+        setupRow.addArrangedSubview(settingsButtonRow)
 
         let body = NSStackView(views: [headerRow, limitsRow, summaryRow, setupRow,
-                                       errorBanner, usageSection, setupView])
+                                       errorBanner, usageSection])
         body.orientation = .vertical
         body.alignment = .leading
         body.spacing = 6
@@ -153,8 +146,7 @@ final class BillingProviderBlockView: NSView {
         var rows: [MenuPanelRow] = []
         // 只查额度的 provider 标题行不可点，不进入焦点遍历（未配置态仍需点开凭据表单）
         if headerRow.isInteractive { rows.append(headerRow) }
-        if !setupRow.isHidden { rows.append(setupButtonRow) }
-        if !setupView.isHidden { rows.append(contentsOf: setupView.focusableRows) }
+        if !setupRow.isHidden { rows.append(settingsButtonRow) }
         if !usageSection.isHidden { rows.append(contentsOf: usageSection.focusableRows) }
         if !errorBanner.isHidden { rows.append(errorBanner.retryButtonRow) }
         return rows
@@ -189,19 +181,14 @@ final class BillingProviderBlockView: NSView {
 
         limitsRow.isHidden = !state.isConfigured
         summaryRow.isHidden = !state.isConfigured || !supportsUsage
-        if state.isConfigured { isSetupExpanded = false }
-        // 未配置块默认只占一行；点「配置」或标题行才展开完整表单
-        setupRow.isHidden = state.isConfigured || isSetupExpanded
-        setupView.isHidden = state.isConfigured || !isSetupExpanded
+        // 未配置块只占一行：文案 +「去设置配置」（凭据输入统一收进设置窗口）
+        setupRow.isHidden = state.isConfigured
 
         if state.isConfigured {
             applyLimits(state.balance)
             if supportsUsage { applySummary(state) }
         } else {
-            promptLabel.stringValue = Self.prompt(for: descriptor)
-            setupView.update(placeholder: descriptor.credentialHint,
-                             linkText: Self.linkText(for: descriptor),
-                             showsLink: descriptor.credentialPageURL != nil)
+            promptLabel.stringValue = "未配置凭据，无法查询额度"
         }
 
         // 能力位压住传入的展开态：没有用量接口就没有可展开内容
@@ -220,8 +207,8 @@ final class BillingProviderBlockView: NSView {
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 8, weight: .regular))
         chevronView?.isHidden = !state.isConfigured || !supportsUsage
 
-        // 只查额度的 provider 标题行不再响应点击（未配置态点击仍需展开凭据表单）
-        suppressesExpansion = state.isConfigured && !supportsUsage
+        // 只查额度 / 未配置的 provider 标题行不响应点击（配置入口在「去设置配置」）
+        suppressesExpansion = !state.isConfigured || !supportsUsage
         if suppressesExpansion {
             headerRow.onClick = nil
         } else {
@@ -249,25 +236,6 @@ final class BillingProviderBlockView: NSView {
 
     static func stamp(_ date: Date) -> String { stampFormatter.string(from: date) }
 
-    /// 未配置态的提示文案
-    private static func prompt(for descriptor: BillingMonitor.ProviderDescriptor) -> String {
-        "粘贴 \(descriptor.credentialHint) 开始监控"
-    }
-
-    /// 展开 / 收起未配置块的凭据表单
-    func toggleSetup() {
-        isSetupExpanded.toggle()
-        setupRow.isHidden = isSetupExpanded
-        setupView.isHidden = !isSetupExpanded
-    }
-
-    /// 配置态链接文案（Ollama 点明域名，其余用通用文案）
-    static func linkText(for descriptor: BillingMonitor.ProviderDescriptor) -> String {
-        if descriptor.displayName == "Ollama", let host = descriptor.credentialPageURL?.host {
-            return "在 \(host) 获取 API Key"
-        }
-        return "前往 \(descriptor.displayName) 网站获取凭据"
-    }
 }
 
 // MARK: - 状态圆点

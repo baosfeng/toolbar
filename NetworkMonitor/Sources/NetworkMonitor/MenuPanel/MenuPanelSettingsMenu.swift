@@ -27,8 +27,9 @@ extension MenuPanelView: NSMenuDelegate {
                                                     accessibilityDescription: "设置")?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .medium))
 
-        addSettingsMenuItem(title: "传送设置…",
-                            action: #selector(handleOpenTransferSettings))
+        addSettingsMenuItem(title: "设置…",
+                            action: #selector(handleOpenSettings),
+                            keyEquivalent: ",")
         settingsButton.menu?.addItem(.separator())
         addSettingsMenuItem(title: "开机自启动",
                             action: #selector(handleToggleLaunchAtStartup),
@@ -63,8 +64,8 @@ extension MenuPanelView: NSMenuDelegate {
 
     // MARK: - 菜单动作
 
-    @objc private func handleOpenTransferSettings() {
-        delegate?.menuPanelViewDidRequestTransferSettings(self)
+    @objc private func handleOpenSettings() {
+        delegate?.menuPanelViewDidRequestSettings(self, section: nil)
     }
 
     @objc private func handleToggleLaunchAtStartup() {

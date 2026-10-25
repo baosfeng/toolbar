@@ -40,7 +40,8 @@ public final class AppCoordinator {
     /// 面板控制器
     private var clipboardPanel: ClipboardPanelController!
     /// 设置窗
-    private var clipboardSettings: ClipboardSettingsWindow!
+    /// 统一设置窗口（六个分类页；组合根装配后长期持有）
+    var settingsWindow: SettingsWindow?
     /// 全局热键
     private var globalHotKey: GlobalHotKeyCenter!
     /// 截图 / 贴图链路
@@ -48,10 +49,13 @@ public final class AppCoordinator {
     var snipController: SnipController!
     /// 截图与贴图设置窗
     /// 放宽为 internal：截图装配扩展文件要写
-    var snipSettings: SnipSettingsWindow!
+
     /// 局域网互传面板控制器
     // 放宽为 internal：AppCoordinator+Transfer 装配扩展要写
     var transferController: TransferController?
+    /// 互传服务实例（设置页的接收目录统计/清理要用）
+    // setter 放宽为 internal：只有 AppCoordinator+Transfer 装配扩展写它
+    var transferService: TransferService?
 
     // MARK: - 日志
 
@@ -113,6 +117,9 @@ public final class AppCoordinator {
                                             alertService: billingAlerts,
                                             logger: logger)
         // 锁屏 / 休眠期间暂停额度后台轮询，解锁后立即刷新一次
+        // 6c. 统一设置窗口（六个分类页；额度页直接用上面这个 billingMonitor）
+        settingsWindow = makeSettingsWindow(billingMonitor: billingMonitor)
+
         let screenActivity = ScreenActivityMonitor()
         screenActivity.onChange = { [weak billingMonitor] active in
             if active {
@@ -140,7 +147,7 @@ public final class AppCoordinator {
             harnessUsage: harnessUsage
         )
         manager.onOpenClipboardHistory = { [weak self] in self?.clipboardPanel.toggle() }
-        manager.onOpenClipboardSettings = { [weak self] in self?.clipboardSettings.show() }
+        manager.onOpenSettings = { [weak self] section in self?.settingsWindow?.show(section: section) }
 
         // 8. 累计流量定期落盘（崩溃 / 强杀时也能保住当日基准）
         startTrafficPersistence()
@@ -215,14 +222,15 @@ public final class AppCoordinator {
                                                   captureService: watcher,
                                                   paster: paster,
                                                   stack: stack,
-                                                  // ⌘, 复用设置窗既有打开路径
-                                                  onRequestSettings: { [weak self] in self?.clipboardSettings.show() },
+                                                  // ⌘, 与面板内「设置」入口都走统一设置窗口的剪贴板页
+                                                  onRequestSettings: { [weak self] in
+                                                      self?.settingsWindow?.show(section: .clipboard)
+                                                  },
                                                   preferences: preferences)
         // 历史卡片右键「贴到屏幕」接到截图链路
         clipboardPanel.onRequestPin = { [weak self] item in
             self?.snipController.pinClipboardItem(item)
         }
-        clipboardSettings = ClipboardSettingsWindow(preferences: preferences, delegate: self)
 
         globalHotKey = GlobalHotKeyCenter()
         registerClipboardHotKey(preferences.panelToggleHotKey, presentingAlert: true)
@@ -280,7 +288,7 @@ public final class AppCoordinator {
             alert.addButton(withTitle: "打开剪贴板设置")
             alert.addButton(withTitle: "稍后")
             if alert.runModal() == .alertFirstButtonReturn {
-                self.clipboardSettings.show()
+                self.settingsWindow?.show(section: .clipboard)
             }
         }
     }

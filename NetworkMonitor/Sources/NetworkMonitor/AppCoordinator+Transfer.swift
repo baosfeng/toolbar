@@ -30,6 +30,12 @@ extension AppCoordinator {
         let controller = TransferController(service: service, registry: registry,
                                             preferences: preferences, logger: logger)
         transferController = controller
+        // 设置页要用同一实例做目录占用统计与清理，避免再建一个服务
+        transferService = service
+        // 互传面板里的「打开设置」统一落到设置窗口的传输页
+        controller.onOpenSettings = { [weak self] in
+            self?.settingsWindow?.show(section: .transfer)
+        }
         // 服务常驻：面板未打开也要能收发，启动在后台完成
         controller.start()
         return controller

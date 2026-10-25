@@ -65,6 +65,12 @@ final class BillingEmptyView: NSView {
                                         color: BillingPaneStyle.secondaryText)
         label.alignment = .center
         stack.addArrangedSubview(label)
+        // 全部停用与注册表为空共用本空态：两处都能靠这句找到恢复入口
+        let hint = MenuPanelLabel.text("可在「设置 › 额度 Provider」中启用",
+                                       font: NSFont.systemFont(ofSize: 10.5),
+                                       color: BillingPaneStyle.tertiaryText)
+        hint.alignment = .center
+        stack.addArrangedSubview(hint)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([

@@ -33,14 +33,16 @@ enum MenuPanelSnapshot {
 
     /// 入口：环境变量存在时延时执行快照并退出进程；未设置时立即返回
     static func runIfRequested(repository: (any ClipboardRepository)?,
-                                harness: (any HarnessUsageServicing)? = nil) {
+                                harness: (any HarnessUsageServicing)? = nil,
+                                settings: SettingsWindow? = nil) {
         guard let path = ProcessInfo.processInfo.environment[directoryEnvKey], !path.isEmpty else { return }
         let directory = URL(fileURLWithPath: path, isDirectory: true)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: delayNanoseconds)
             // Token 页：先等一次索引（已有落库数据时是快速增量），再用真实快照渲染
             let tokenSnapshot = await TokenPaneSnapshot.waitForSnapshot(harness: harness)
-            captureAll(directory: directory, repository: repository, tokenSnapshot: tokenSnapshot)
+            captureAll(directory: directory, repository: repository,
+                       tokenSnapshot: tokenSnapshot, settings: settings)
             TokenPaneSnapshot.capture(directory: directory, tokenSnapshot: tokenSnapshot)
             NSApp.terminate(nil)
         }
@@ -49,7 +51,8 @@ enum MenuPanelSnapshot {
     // MARK: - 快照主流程
 
     private static func captureAll(directory: URL, repository: (any ClipboardRepository)?,
-                                   tokenSnapshot: HarnessUsageSnapshot?) {
+                                   tokenSnapshot: HarnessUsageSnapshot?,
+                                   settings: SettingsWindow?) {
         let items = repository?.fetchClipboardItems(kind: nil, limit: 5) ?? []
         let stress = (ProcessInfo.processInfo.environment[stressEnvKey]?.isEmpty == false)
         let billingMock = (ProcessInfo.processInfo.environment[billingMockEnvKey]?.isEmpty == false)
@@ -91,6 +94,9 @@ enum MenuPanelSnapshot {
             render(view: clipboardBackdrop.makeView(), size: clipboardPanelSize,
                    appearanceName: appearance, to: url)
         }
+
+        // 5. 统一设置窗口：6 页 × 深浅色（与原型同画布 760×540）
+        SettingsSnapshot.capture(directory: directory, settings: settings)
 
         logger.info("快照完成：目录=\(directory.path)")
     }

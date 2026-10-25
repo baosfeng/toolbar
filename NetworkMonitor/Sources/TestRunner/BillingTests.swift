@@ -17,6 +17,9 @@ func runBillingTests() {
     print("\n🧪 Testing BillingRefreshScheduler...")
     testBillingRefreshScheduler()
 
+    print("\n🧪 Testing BillingProviderPreferences...")
+    testBillingProviderPreferences()
+
     print("\n🧪 Testing BillingLimitLayout...")
     testBillingLimitLayout()
 
@@ -132,6 +135,47 @@ private func testBillingRefreshScheduler() {
     assertEqual(BillingRefreshScheduler.isDue(now: now, lastAttempt: now,
                                               providerMinimum: 300, force: true), true,
                 "强制刷新跳过所有节流")
+}
+
+// MARK: - provider 启用偏好
+
+/// 默认启用 / 显式停用 / 过滤顺序 —— 停用只影响查询与展示，凭据键不被触碰
+private func testBillingProviderPreferences() {
+    let storage = InMemoryStorage()
+    let preferences = BillingProviderPreferences(storage: storage)
+
+    assertEqual(preferences.isEnabled("ollama"), true, "未写过键时默认启用")
+    assertEqual(storage.object(forKey: BillingProviderPreferences.storageKey(for: "ollama")) == nil,
+                true, "默认值不落盘（避免默认值变更后被旧键钉死）")
+
+    preferences.setEnabled(false, for: "opencode-go")
+    assertEqual(preferences.isEnabled("opencode-go"), false, "停用写入生效")
+    assertNotNil(storage.object(forKey: BillingProviderPreferences.storageKey(for: "opencode-go")),
+                 "键名 billing.enabled.<providerID> 已落盘")
+    assertEqual(storage.bool(forKey: BillingProviderPreferences.storageKey(for: "opencode-go")),
+                false, "停用值写入为 false")
+
+    preferences.setEnabled(true, for: "opencode-go")
+    assertEqual(preferences.isEnabled("opencode-go"), true, "重新启用生效")
+
+    let ids = ["ollama", "open-design", "opencode-go"]
+    preferences.setEnabled(false, for: "open-design")
+    assertEqual(preferences.enabledIDs(from: ids), ["ollama", "opencode-go"],
+                "按偏好过滤且保持注册顺序")
+    assertEqual(BillingProviderPreferences.filterEnabled(ids, preferences: preferences),
+                ["ollama", "opencode-go"], "纯函数过滤与实例方法一致")
+    assertEqual(preferences.enabledIDs(from: []), [], "空输入返回空")
+
+    for id in ids { preferences.setEnabled(false, for: id) }
+    assertEqual(preferences.enabledIDs(from: ids), [], "全部停用返回空")
+
+    // 停用不碰凭据键：重新打开开关后凭据仍在
+    storage.set("sk-test", forKey: PreferencesBillingCredentialStore.storageKey(for: "ollama"))
+    preferences.setEnabled(false, for: "ollama")
+    assertEqual(storage.string(forKey: PreferencesBillingCredentialStore.storageKey(for: "ollama")),
+                "sk-test", "停用开关不删除凭据")
+    preferences.setEnabled(true, for: "ollama")
+    assertEqual(preferences.isEnabled("ollama"), true, "重新启用默认恢复查询")
 }
 
 // MARK: - 额度格排版规则
