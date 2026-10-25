@@ -6,7 +6,9 @@ import NetworkMonitorCore
 /// OpenCode Go 额度 provider 测试：三窗口解码、已用→剩余换算、已限流置零、新旧字段兼容、
 /// 缺窗口降级、百分比钳制、HTTP 错误映射、fetchUsage 不发请求
 ///
-/// 全部为纯函数解码 + 错误映射测试，不依赖外网与真实 Key（该接口暂无真实 200 样本）。
+/// 全部为纯函数解码 + 错误映射测试，不依赖外网与真实 Key；其中
+/// `testOpencodeGoRealSample` 用的是 2026-10-25 实测的真实 200 响应体（去掉鉴权信息），
+/// 用来锁住「服务端实际形态」与解析口径，避免只按调研推测回归。
 func runOpencodeGoBillingTests() {
     print("\n🧪 Testing OpenCode Go 三窗口解码...")
     testOpencodeGoWindowDecoding()
@@ -25,6 +27,9 @@ func runOpencodeGoBillingTests() {
 
     print("\n🧪 Testing OpenCode Go fetchUsage 不发请求...")
     testOpencodeGoFetchUsageDoesNotRequest()
+
+    print("\n🧪 Testing OpenCode Go 真实响应样本...")
+    testOpencodeGoRealSample()
 
     print("\n🧪 Testing OpenCode Go 能力声明...")
     testOpencodeGoCapabilities()
@@ -203,6 +208,31 @@ private func testOpencodeGoFetchUsageDoesNotRequest() {
     }
     assertEqual(box.error, BillingError.invalidRequest("OpenCode Go 不提供用量明细"),
                 "fetchUsage 恒抛 invalidRequest")
+}
+
+// MARK: - 真实响应样本
+
+/// 真实 200 响应（2026-10-25 实测，已去掉鉴权信息）
+///
+/// 三点必须成立：`usage` 包壳、`percent` 为整数、`resetsAt` 带毫秒（漏解析会让重置时间整块丢）。
+private func testOpencodeGoRealSample() {
+    let json = """
+    {"usage":{"rolling":{"status":"ok","percent":2,"resetsAt":"2026-10-25T18:40:47.000Z"},\
+    "weekly":{"status":"ok","percent":1,"resetsAt":"2026-10-26T00:00:00.000Z"},\
+    "monthly":{"status":"ok","percent":52,"resetsAt":"2026-11-02T11:35:06.000Z"}}}
+    """
+    guard let balance = try? OpencodeGoBillingProvider.decodeBalance(from: Data(json.utf8)) else {
+        assertEqual("decode failed", "", "真实响应不应解码失败")
+        return
+    }
+    assertEqual(balance.percentLimits.count, 3, "真实响应三个窗口齐全")
+    assertEqual(balance.percentLimits.map(\.title), ["5 小时", "每周", "每月"], "真实响应窗口标题")
+    // 已用 2% / 1% / 52% → 剩余 98% / 99% / 48%（按展示口径断言，规避浮点尾差）
+    assertEqual(formatPercent(balance.percentLimits[0].remainingFraction), "98%", "5 小时窗口剩余")
+    assertEqual(formatPercent(balance.percentLimits[1].remainingFraction), "99%", "每周窗口剩余")
+    assertEqual(formatPercent(balance.percentLimits[2].remainingFraction), "48%", "每月窗口剩余")
+    assertEqual(balance.percentLimits[0].resetsAt != nil, true, "带毫秒的 RFC3339 可解析")
+    assertEqual(balance.percentLimits.allSatisfy { $0.badge == nil }, true, "正常窗口无角标")
 }
 
 // MARK: - 能力声明

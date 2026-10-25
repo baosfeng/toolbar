@@ -95,3 +95,19 @@ public func formatShortDateTime(_ date: Date) -> String {
     formatter.dateFormat = "M/d HH:mm"
     return formatter.string(from: date)
 }
+/// 余额快照摘要（调试日志用，如「5 小时 98% · 每周 99% · 每月 48%」）
+///
+/// 生产日志里没有额度数值就无从判断「额度页没数据」是没配凭据、接口失败还是解析偏移；
+/// 这里给一条可搜索的摘要，百分比按原值展示，与额度页口径一致。
+public func formatBalanceSummary(_ balance: BillingBalance) -> String {
+    if !balance.percentLimits.isEmpty {
+        return balance.percentLimits.map { limit -> String in
+            let badge = limit.badge.map { " \($0)" } ?? ""
+            return "\(limit.title) \(formatPercent(limit.remainingFraction))\(badge)"
+        }.joined(separator: " · ")
+    }
+    if let total = balance.totalAvailableUSD {
+        return "可用 \(formatUSD(total))"
+    }
+    return "无额度数据"
+}

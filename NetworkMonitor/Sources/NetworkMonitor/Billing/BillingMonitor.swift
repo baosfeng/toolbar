@@ -282,6 +282,10 @@ final class BillingMonitor {
             } else {
                 states[index].lastUpdated = Date()
                 states[index].errorMessage = nil
+                // 成功也留一条 debug：生产日志里没有额度数值时，无法判断「面板没数据」是哪一环
+                if let balance = states[index].balance {
+                    logger.debug("计费刷新成功（\(result.id)）：\(formatBalanceSummary(balance))")
+                }
             }
         }
         if let rateLimited {

@@ -89,6 +89,19 @@ private func testBillingModels() {
     let rateLimited = BillingPercentLimit(id: "window:rolling", title: "5 小时",
                                           remainingFraction: 0, resetsAt: nil, badge: "已限流")
     assertEqual(rateLimited.badge, "已限流", "角标原样保留")
+
+    // 日志摘要：三窗口按顺序拼接，已限流窗口带角标
+    let monthlyLimited = BillingPercentLimit(id: "window:monthly", title: "每月",
+                                             remainingFraction: 0, resetsAt: nil, badge: "已限流")
+    let summaryBalance = BillingBalance(percentLimits: [
+        BillingPercentLimit(id: "window:rolling", title: "5 小时", remainingFraction: 0.98, resetsAt: nil),
+        BillingPercentLimit(id: "window:weekly", title: "每周", remainingFraction: 0.99, resetsAt: nil),
+        monthlyLimited,
+    ])
+    assertEqual(formatBalanceSummary(summaryBalance), "5 小时 98% · 每周 99% · 每月 0% 已限流",
+                "余额摘要拼接")
+    assertEqual(formatBalanceSummary(BillingBalance(purchasedUSD: 25)), "可用 $25", "仅金额时的摘要")
+    assertEqual(formatBalanceSummary(BillingBalance()), "无额度数据", "空余额摘要")
 }
 
 // MARK: - 刷新节流
