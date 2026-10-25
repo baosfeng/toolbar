@@ -39,9 +39,14 @@ jobs:
       - name: File size gate
         run: bash NetworkMonitor/Scripts/check-file-size.sh
 
-      - name: Build
+      - name: Build (debug)
         working-directory: NetworkMonitor
         run: swift build --disable-sandbox
+
+      # release 构建单独跑一遍：生产方法误放进 DEBUG 块时只有这一步会红
+      - name: Build (release)
+        working-directory: NetworkMonitor
+        run: swift build -c release --disable-sandbox
 
       - name: Test
         working-directory: NetworkMonitor

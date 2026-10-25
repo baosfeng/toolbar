@@ -191,18 +191,21 @@ extension SnipOverlayView {
         needsDisplay = true
     }
 
+    /// 整屏成立选区（白板模式进入时用）
+    ///
+    /// 注意：这是生产路径方法，不能放进 DEBUG 条件编译块 —— 否则 release 构建里
+    /// 白板模式的调用点会编译失败（v1.7.0 的 GitHub Release 就是因此在打包步骤挂了）。
+    func selectFullBoard() {
+        state.select(bounds)
+        hoveredWindow = nil
+        needsDisplay = true
+    }
+
     #if DEBUG
     /// 仅 DEBUG：程序化把鼠标位置挪到某点，触发窗口检测与放大镜
     func debugHover(atLocalPoint point: CGPoint) {
         pointer = point
         updateHoveredWindow()
-        needsDisplay = true
-    }
-
-    /// 整屏成立选区（白板模式进入时用）
-    func selectFullBoard() {
-        state.select(bounds)
-        hoveredWindow = nil
         needsDisplay = true
     }
 
