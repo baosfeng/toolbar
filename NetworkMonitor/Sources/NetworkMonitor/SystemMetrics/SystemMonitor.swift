@@ -12,7 +12,7 @@ import NetworkMonitorCore
 /// - 跨队列只传值类型（CPUTickBaseline / DiskTransferTable / SystemMetricsSnapshot），
 ///   不共享可变对象，也不让 @MainActor 实例逃逸。
 ///
-/// 差分类指标（CPU 利用率、磁盘速率）首帧只建基线：字段留 nil 而不是 0，
+/// 差分类指标（CPU 利用率、磁盘速率 / IOPS / 繁忙度）首帧只建基线：字段留 nil 而不是 0，
 /// 避免面板把「还没测」显示成「完全不忙」。
 @MainActor
 final class SystemMonitor: @preconcurrency SystemMonitoringService {
@@ -126,13 +126,17 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
             }
             let disk: DiskSnapshot?
             if let capacity {
-                let rates = SystemDiskSampler.rates(previous: previousDiskBaseline,
-                                                    current: currentTransfers ?? [:],
-                                                    elapsed: elapsed)
+                // 速率 / IOPS / 繁忙度共用同一个 elapsed：三项必须同源，否则互相不可比
+                let throughput = SystemDiskSampler.throughput(previous: previousDiskBaseline,
+                                                              current: currentTransfers ?? [:],
+                                                              elapsed: elapsed)
                 disk = DiskSnapshot(used: capacity.used,
                                     total: capacity.total,
-                                    readBytesPerSecond: rates?.read,
-                                    writeBytesPerSecond: rates?.write)
+                                    readBytesPerSecond: throughput?.readBytesPerSecond,
+                                    writeBytesPerSecond: throughput?.writeBytesPerSecond,
+                                    readIOPS: throughput?.readIOPS,
+                                    writeIOPS: throughput?.writeIOPS,
+                                    busyFraction: throughput?.busyFraction)
             } else {
                 disk = nil
                 failures.append("磁盘容量读取失败")

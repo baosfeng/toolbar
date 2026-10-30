@@ -85,21 +85,6 @@ public enum SystemMetricsCalculations {
         current >= previous ? Double(current - previous) : 0
     }
 
-    // MARK: 磁盘
-
-    /// 单实例累计字节差换算速率（字节/秒）
-    ///
-    /// - 时间差 ≤ 0 或非有限 → nil（不除零）；
-    /// - 累计值倒退（换盘 / 计数器重置）→ nil（不返回负速率）；
-    /// - 无基线（首帧）由调用方直接跳过，本函数不处理 nil 基线。
-    public static func bytesPerSecond(previous: UInt64,
-                                      current: UInt64,
-                                      elapsed: TimeInterval) -> Double? {
-        guard elapsed > 0, elapsed.isFinite else { return nil }
-        guard current >= previous else { return nil }
-        return Double(current - previous) / elapsed
-    }
-
     // MARK: GPU
 
     /// 从 IOAccelerator 的 PerformanceStatistics 解析 GPU 利用率（0...1）

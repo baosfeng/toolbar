@@ -11,6 +11,9 @@ import NetworkMonitorCore
 /// - 不含 free：空闲页；
 /// - compressed 单独计：压缩器占用的物理页确实被占用（与活动监视器的「已用内存」口径接近）。
 ///
+/// active / wired / inactive 三项同时原样带进 MemorySnapshot，供面板分段展示；
+/// 三者都来自同一次 host_statistics64 调用，与 used 完全同源。
+///
 /// Apple Silicon 页大小为 16 KiB（本机 16384），Intel 为 4096，因此禁止硬编码。
 enum SystemMemorySampler {
 
@@ -37,6 +40,8 @@ enum SystemMemorySampler {
         let active = UInt64(stats.active_count) &* pageBytes
         let wired = UInt64(stats.wire_count) &* pageBytes
         let compressed = UInt64(stats.compressor_page_count) &* pageBytes
+        let inactive = UInt64(stats.inactive_count) &* pageBytes
+        // used 口径不变：active + wired + compressed；inactive 可被系统随时回收，不计入
         let used = active &+ wired &+ compressed
 
         guard let total = sysctlUInt64("hw.memsize"), total > 0 else {
@@ -58,7 +63,10 @@ enum SystemMemorySampler {
                                pressure: pressure,
                                swapUsed: swap?.used ?? 0,
                                swapTotal: swap?.total ?? 0,
-                               compressed: compressed),
+                               compressed: compressed,
+                               active: active,
+                               wired: wired,
+                               inactive: inactive),
                 issues)
     }
 

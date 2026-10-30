@@ -118,6 +118,8 @@ public enum MemoryPressureLevel: String, Sendable {
 /// 内存采样结果
 ///
 /// 口径：used = active + wired + compressed（不含 inactive / free，注释见采样实现）。
+/// active / wired / inactive 为拆分字段，供面板分段展示；inactive 不计入 used，
+/// 它是可被系统随时回收的页面，计进去会让读数长期偏高。
 public struct MemorySnapshot: Sendable, Equatable {
     /// 已用内存（字节）
     public let used: UInt64
@@ -131,19 +133,31 @@ public struct MemorySnapshot: Sendable, Equatable {
     public let swapTotal: UInt64
     /// 压缩器占用（字节）
     public let compressed: UInt64
+    /// 活跃内存（字节；vm_statistics64 的 active_count）
+    public let active: UInt64
+    /// 联动内存（字节；vm_statistics64 的 wire_count，不可换出）
+    public let wired: UInt64
+    /// 非活跃内存（字节；vm_statistics64 的 inactive_count，可被回收，不计入 used）
+    public let inactive: UInt64
 
     public init(used: UInt64,
                 total: UInt64,
                 pressure: MemoryPressureLevel,
                 swapUsed: UInt64,
                 swapTotal: UInt64,
-                compressed: UInt64) {
+                compressed: UInt64,
+                active: UInt64 = 0,
+                wired: UInt64 = 0,
+                inactive: UInt64 = 0) {
         self.used = used
         self.total = total
         self.pressure = pressure
         self.swapUsed = swapUsed
         self.swapTotal = swapTotal
         self.compressed = compressed
+        self.active = active
+        self.wired = wired
+        self.inactive = inactive
     }
 }
 
@@ -151,7 +165,8 @@ public struct MemorySnapshot: Sendable, Equatable {
 
 /// 磁盘采样结果
 ///
-/// 容量取根卷；读写速率为所有块存储驱动的增量之和，首帧（无基线）为 nil 而不是 0。
+/// 容量取根卷；读写速率、IOPS 与繁忙度为所有块存储驱动的增量之和，
+/// 首帧（无基线）一律为 nil 而不是 0。
 public struct DiskSnapshot: Sendable, Equatable {
     /// 已用容量（字节）= 总量 - 可用量
     public let used: UInt64
@@ -161,15 +176,27 @@ public struct DiskSnapshot: Sendable, Equatable {
     public let readBytesPerSecond: Double?
     /// 写入速率（字节/秒）；无基线或统计不可读为 nil
     public let writeBytesPerSecond: Double?
+    /// 读 IOPS（次/秒）；无基线或计数器倒退为 nil
+    public let readIOPS: Double?
+    /// 写 IOPS（次/秒）；无基线或计数器倒退为 nil
+    public let writeIOPS: Double?
+    /// 繁忙度（0...1）= 读服务时间 + 写服务时间 / 采样间隔；无基线为 nil
+    public let busyFraction: Double?
 
     public init(used: UInt64,
                 total: UInt64,
                 readBytesPerSecond: Double? = nil,
-                writeBytesPerSecond: Double? = nil) {
+                writeBytesPerSecond: Double? = nil,
+                readIOPS: Double? = nil,
+                writeIOPS: Double? = nil,
+                busyFraction: Double? = nil) {
         self.used = used
         self.total = total
         self.readBytesPerSecond = readBytesPerSecond
         self.writeBytesPerSecond = writeBytesPerSecond
+        self.readIOPS = readIOPS
+        self.writeIOPS = writeIOPS
+        self.busyFraction = busyFraction
     }
 }
 

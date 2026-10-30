@@ -16,6 +16,8 @@ func runSystemMetricsTests() {
         testSnapshotEquality()
         testPreferences()
         runSystemMetricsCalculationTests()
+        // 新增口径断言另开文件：本文件已接近 15 KiB 单文件上限
+        runSystemMetricsExtraTests()
     }
 }
 

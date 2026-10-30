@@ -1,4 +1,5 @@
 import Foundation
+import NetworkMonitorCore
 
 // MARK: - 采样中间值类型
 //
@@ -13,11 +14,12 @@ struct CPUTickBaseline: Sendable {
 
 // MARK: - 磁盘
 
-/// 单块块存储设备的累计读写字节
-struct DiskTransfer: Sendable, Equatable {
-    let readBytes: UInt64
-    let writeBytes: UInt64
-}
+/// 单块块存储设备的累计计数（字节 / 操作数 / 服务时间）
+///
+/// 直接复用 Core 的 DiskIOCounters：差分与配对函数（SystemMetricsCalculations.diskThroughput）
+/// 的入参就是这张表的元素类型，采样器若另立同构结构体就要在两侧来回转换，
+/// 白白多一处口径漂移风险。名字保留 DiskTransfer 以维持既有调用点语义。
+typealias DiskTransfer = DiskIOCounters
 
 /// 磁盘累计传输表：key 为 IORegistryEntryID
 ///
