@@ -174,6 +174,9 @@ enum MenuPanelSnapshot {
             // 系统页装配已拆到 MenuPanelSnapshot+SystemPage.swift（主文件贴顶）
             applySystemPage(to: panel)
         }
+        // 网络页的 Wi-Fi 链路条与系统页同源：两页都从系统快照取 wifi，
+        // 取证时要给出同一份（NM_SNAPSHOT_WIFI_MODE=off 时同样为空）
+        panel.updateWiFiLink(SnapshotFixtures.snapshotWiFi())
         panel.select(tab: tab)
         return panel
     }

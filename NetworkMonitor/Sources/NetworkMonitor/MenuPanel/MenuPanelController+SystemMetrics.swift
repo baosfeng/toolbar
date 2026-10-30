@@ -36,7 +36,11 @@ extension MenuPanelController {
     ///
     /// 历史按序列压缩：某一帧缺该项（如首帧 CPU 为 nil）就跳过该点，不影响其余序列。
     func renderSystem() {
-        content.updateSystem(systemMonitor?.snapshot, notifySize: popover.isShown)
+        let snapshot = systemMonitor?.snapshot
+        content.updateSystem(snapshot, notifySize: popover.isShown)
+        // 网络页的 Wi-Fi 链路条与系统页同源：同一份快照、同一 5 秒节拍，
+        // 不另起采样器（否则两处 RSSI 会各读各的）
+        content.updateWiFiLink(snapshot?.wifi)
         // 两处必须同时改：这里少补一位，对应曲线就永远拿不到点（不显示、也不报错）
         let diskBusy = historyValues { $0.disk?.busyFraction }
         content.systemPane.updateHistories(

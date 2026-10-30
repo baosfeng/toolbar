@@ -41,6 +41,7 @@ enum SnapshotFixtures {
     ///   - pressure: 内存压力等级；警告 / 紧张会点亮堆叠条内描边，用于核对压力态表达
     ///   - load: 负载快照；nil 用于核对「负载 + 进程榜」整块降级
     ///   - battery: 电池快照；nil 用于核对无电池 / 电池降级态
+    ///   - wifi: Wi-Fi 链路快照；nil 用于核对「无接口 / 关闭 / 未连接」的整条降级态
     static func systemSnapshot(gpu: GPUSnapshot? = GPUSnapshot(utilization: 0.41,
                                                                memoryUsed: 1_600_000_000,
                                                                memoryTotal: nil),
@@ -54,7 +55,8 @@ enum SnapshotFixtures {
                                                                            isOnAC: true,
                                                                            cycleCount: 89),
                                processes: ProcessResourceSnapshot? = nil,
-                               showsProcesses: Bool = true) -> SystemMetricsSnapshot {
+                               showsProcesses: Bool = true,
+                               wifi: WiFiLinkSnapshot? = defaultWiFi()) -> SystemMetricsSnapshot {
         // user + system 必须等于 total：卡头用户态由 total − system 现算，
         // 夹具若自相矛盾会让取证图看着对、口径却错
         SystemMetricsSnapshot(
@@ -90,8 +92,34 @@ enum SnapshotFixtures {
             // 显式开关而非「nil 就补默认值」：noproc 取证态要的正是「进程榜整块不可得」，
             // 用 nil 判定会把降级态又补回默认数据，取证图与满数据态一模一样（踩过）
             processes: showsProcesses ? (processes ?? defaultProcesses()) : nil,
-            battery: battery
+            battery: battery,
+            wifi: wifi
         )
+    }
+
+    /// 快照模式的 Wi-Fi 链路值 —— 受 `NM_SNAPSHOT_WIFI_MODE=off` 控制
+    ///
+    /// 网络页与系统页共用这一个入口，保证两页取证图取自同一份数据
+    /// （分头各判一次环境变量，迟早出现「网络页有值、系统页 —」的错位证据）。
+    static func snapshotWiFi() -> WiFiLinkSnapshot? {
+        ProcessInfo.processInfo.environment["NM_SNAPSHOT_WIFI_MODE"] == "off" ? nil : defaultWiFi()
+    }
+
+    /// Wi-Fi 链路示意数据 — 取本机实测的一组读数（-63…-66 dBm / 噪声 -96 / ch36 / 5 GHz /
+    /// 20 MHz / 103 Mbps / 802.11ax），用于核对链路条与状态带的排版与档位色。
+    ///
+    /// 只做 **#if DEBUG** 夹具：不进 release、也不喂给生产链路（真实值来自 SystemWiFiLinkSampler）。
+    static func defaultWiFi() -> WiFiLinkSnapshot {
+        WiFiLinkSnapshot(rssiDBm: -65,
+                         noiseDBm: -96,
+                         snrDB: 31,
+                         channelNumber: 36,
+                         band: .band5GHz,
+                         channelWidth: .width20MHz,
+                         centerFrequencyMHz: 5180,
+                         transmitRateMbps: 103,
+                         phyMode: .dot11ax,
+                         signalQuality: .fair)
     }
 
     /// 进程榜示意数据 — CPU% 覆盖「超 100% 多线程 / 常态榜首 / 碎进程」三档，

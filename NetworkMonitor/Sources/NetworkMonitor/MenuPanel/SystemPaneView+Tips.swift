@@ -111,8 +111,11 @@ enum SystemPaneTip {
 
     // MARK: v4 底部状态带
 
-    /// 状态带：温度来源 + 电池口径 + 估算功耗 + 不可得项
-    static func band(battery: BatterySnapshot?, thermal: ThermalSnapshot?) -> String {
+    /// 状态带：温度来源 + 电池口径 + Wi-Fi 口径 + 估算功耗 + 不可得项
+    ///
+    /// - Parameter wifi: Wi-Fi 链路快照；nil 时补一句「为什么是 —」，与链路条同一份措辞
+    static func band(battery: BatterySnapshot?, thermal: ThermalSnapshot?,
+                     wifi: WiFiLinkSnapshot? = nil) -> String {
         var parts = ["SoC 温度取自从 IOHIDEventSystemClient 读到的事件字段（非 SMC 键，超过 85°C 转警示色）"]
         if let battery {
             var batteryText = "电池电量来自 IOPSGetPowerSourceDescription 的 Current Capacity"
@@ -127,6 +130,8 @@ enum SystemPaneTip {
         } else {
             parts.append("电池读数不可得（本机可能无电池或 AppleSmartBattery 未暴露），显示「—」")
         }
+        parts.append("Wi-Fi 段只放 RSSI 与档位色点，信道 / 速率在状态带宽度里放不下（在「网络」页的链路条上）；"
+            + WiFiLinkFormatting.toolTip(wifi))
         parts.append("「估功耗」为 GPU 功耗估算值（IOReport Energy Model 的 GPU Energy 累加器，单位 nJ ÷ 1e9 ÷ 窗口秒数），非精确功耗计读数；CPU 功耗恒为 0，故不合成整机功耗")
         parts.append("GPU 独立温度与风扇转速完全不可得，不出该项")
         if let thermal, thermal.isEmpty {

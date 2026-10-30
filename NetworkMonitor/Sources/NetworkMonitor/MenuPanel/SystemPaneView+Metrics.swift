@@ -238,8 +238,10 @@ extension SystemPaneView {
     /// 电池：底部状态带（无电池机型 / 读取失败时显示「—」）
     func updateBattery(_ snapshot: BatterySnapshot?) {
         lastBatterySnapshot = snapshot
+        // Wi-Fi 段同样要重算 toolTip：三段说明共用一段文案，谁刷新都要带上最新的另外两段
         stateBand.updateBattery(snapshot)
-        stateBand.toolTip = SystemPaneTip.band(battery: snapshot, thermal: lastThermalSnapshot)
+        stateBand.toolTip = SystemPaneTip.band(battery: snapshot, thermal: lastThermalSnapshot,
+                                               wifi: lastWiFiSnapshot)
     }
 
     /// 刷新磁盘卡说明里的「近 60 秒繁忙度峰值」— 由历史注入链路调用
@@ -247,6 +249,15 @@ extension SystemPaneView {
     /// 界面只写当前值，峰值属于口径补充，进 toolTip；无历史（峰值 nil）时回到基础文案。
     func updateDiskBusyTip(busyPeakPercent: Int?) {
         diskCard.toolTip = SystemPaneTip.disk(busyPeakPercent: busyPeakPercent)
+    }
+
+    /// Wi-Fi 链路：底部状态带（只放 RSSI 与档位色点）
+    func updateWiFiLink(_ snapshot: WiFiLinkSnapshot?) {
+        lastWiFiSnapshot = snapshot
+        stateBand.updateWiFi(snapshot)
+        stateBand.toolTip = SystemPaneTip.band(battery: lastBatterySnapshot,
+                                               thermal: lastThermalSnapshot,
+                                               wifi: snapshot)
     }
 
     /// 温度与 GPU 功耗：底部状态带（温度卡在 v4 已下线）
@@ -257,6 +268,7 @@ extension SystemPaneView {
         lastThermalSnapshot = snapshot
         stateBand.updateTemperature(snapshot?.cpuTemperatureCelsius)
         stateBand.updatePower(snapshot?.powerWatts)
-        stateBand.toolTip = SystemPaneTip.band(battery: lastBatterySnapshot, thermal: snapshot)
+        stateBand.toolTip = SystemPaneTip.band(battery: lastBatterySnapshot, thermal: snapshot,
+                                               wifi: lastWiFiSnapshot)
     }
 }

@@ -142,6 +142,7 @@ final class SystemPaneView: MenuPanelPaneView {
         updateDisk(snapshot?.disk)
         updateThermal(snapshot?.thermal)
         updateBattery(snapshot?.battery)
+        updateWiFiLink(snapshot?.wifi)
     }
 
     // MARK: - 曲线历史（由控制器注入）
@@ -250,6 +251,8 @@ final class SystemPaneView: MenuPanelPaneView {
     /// 最近一次温度与电池快照（状态带 toolTip 需要把两者口径合并成一段说明）
     var lastThermalSnapshot: ThermalSnapshot?
     var lastBatterySnapshot: BatterySnapshot?
+    /// 最近一次 Wi-Fi 链路快照（状态带 toolTip 要把三段口径合并成一段说明）
+    var lastWiFiSnapshot: WiFiLinkSnapshot?
 
     /// Core 压力枚举 → 徽标级别（未知按正常显示，避免整条消失）
     func pressureLevel(_ pressure: MemoryPressureLevel) -> SystemPressureDotView.Level {

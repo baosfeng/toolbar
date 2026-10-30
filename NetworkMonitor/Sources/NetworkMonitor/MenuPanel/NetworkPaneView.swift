@@ -45,6 +45,16 @@ final class NetworkPaneView: MenuPanelPaneView {
     private let chartHeader = MenuPanelHeaderRow(title: "近 6 日下行")
     private let barsView = MenuPanelBarsView()
 
+    // MARK: Wi-Fi 链路
+
+    /// 链路条 — 今日流量卡下方、活跃进程上方的一条 20pt
+    ///
+    /// 内部访问级别：`MenuPanelView+DataUpdates` 要把系统快照里的 wifi 喂进来。
+    let wifiLinkBar = WiFiLinkBarView()
+
+    /// 链路条与上下区块的间距（主栈默认 10pt；这条按 4pt 收，见 init 里的理由）
+    private static let wifiLinkSpacing: CGFloat = 4
+
     /// 进程行签名 — 内容未变化时跳过重建，避免每 5 秒重建视图
     private var processSignature = ""
 
@@ -72,11 +82,20 @@ final class NetworkPaneView: MenuPanelPaneView {
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
+        let todayBox = makeTodayBox()
         stack.addArrangedSubview(makeHeroRow())
-        stack.addArrangedSubview(makeTodayBox())
+        stack.addArrangedSubview(todayBox)
+        // 链路条紧跟今日流量、在活跃进程之前（Lead 定的落点）
+        stack.addArrangedSubview(wifiLinkBar)
         stack.addArrangedSubview(makeProcessSection())
         let chartSection = makeChartSection()
         stack.addArrangedSubview(chartSection)
+
+        // 链路条前后各收一档间距：主栈默认 10pt，上下各 10pt 会把整页顶到 536pt
+        //（越过 520pt 预算）。收到 4pt 后实测 516pt，余量仅 4pt——网络页的空间
+        // 已被这条吃满，后续再加区块会立刻出滚动条。
+        stack.setCustomSpacing(Self.wifiLinkSpacing, after: todayBox)
+        stack.setCustomSpacing(Self.wifiLinkSpacing, after: wifiLinkBar)
 
         // 分区宽度撑满面板内容区
         for subview in stack.arrangedSubviews {
@@ -251,6 +270,11 @@ final class NetworkPaneView: MenuPanelPaneView {
         }
     }
 
+    /// 更新 Wi-Fi 链路条（跟随系统指标 5 秒慢节拍，不做独立高频刷新）
+    func updateWiFiLink(_ snapshot: WiFiLinkSnapshot?) {
+        wifiLinkBar.update(snapshot)
+    }
+
     /// 更新活跃进程 Top5（5 秒一次）
     func updateProcesses(_ processes: [ProcessNetUsage]) {
 #if DEBUG
@@ -291,37 +315,5 @@ final class NetworkPaneView: MenuPanelPaneView {
         default:
             return "\(bytes)"
         }
-    }
-}
-
-// MARK: - 进程行
-
-/// 活跃进程行 — 真实 App 图标（`NSWorkspace.icon(forFile:)`）+ 进程名 + 上下行速率
-final class MenuPanelProcessRow: MenuPanelRow {
-    private let iconView = NSImageView()
-
-    init(process: ProcessNetUsage) {
-        super.init(height: MenuPanelStyle.compactRowHeight, onClick: nil)
-
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconView.imageScaling = .scaleProportionallyDown
-        iconView.image = AppIconProvider.icon(forProcess: process.name, pid: process.pid, size: 20)
-            ?? AppIconProvider.placeholderIcon(size: 20)
-        iconView.contentTintColor = MenuPanelStyle.tertiaryText
-        NSLayoutConstraint.activate([
-            iconView.widthAnchor.constraint(equalToConstant: 20),
-            iconView.heightAnchor.constraint(equalToConstant: 20),
-        ])
-        contentStack.addArrangedSubview(iconView)
-
-        contentStack.addArrangedSubview(MenuPanelLabel.text(process.name, font: MenuPanelStyle.bodyFont))
-        contentStack.addArrangedSubview(MenuPanelLabel.spacer())
-
-        let downText = "↓" + formatSpeedShort(Double(process.bytesIn))
-        let upText = "↑" + formatSpeedShort(Double(process.bytesOut))
-        let speeds = MenuPanelLabel.text("\(downText)  \(upText)", font: MenuPanelStyle.smallValueFont,
-                                        color: MenuPanelStyle.secondaryText)
-        speeds.setContentHuggingPriority(.required, for: .horizontal)
-        contentStack.addArrangedSubview(speeds)
     }
 }

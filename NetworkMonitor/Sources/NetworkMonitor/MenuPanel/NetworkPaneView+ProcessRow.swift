@@ -1,0 +1,37 @@
+import AppKit
+import NetworkMonitorCore
+
+// MARK: - 网络页进程行（拆出 NetworkPaneView.swift）
+
+/// 活跃进程行 — 真实 App 图标（`NSWorkspace.icon(forFile:)`）+ 进程名 + 上下行速率
+///
+/// 从主文件拆出：`NetworkPaneView.swift` 加 Wi-Fi 链路条后越过单文件 15 KiB 门禁，
+/// 而行视图本就与页面装配无关，是最干净的一刀。
+final class MenuPanelProcessRow: MenuPanelRow {
+    private let iconView = NSImageView()
+
+    init(process: ProcessNetUsage) {
+        super.init(height: MenuPanelStyle.compactRowHeight, onClick: nil)
+
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.imageScaling = .scaleProportionallyDown
+        iconView.image = AppIconProvider.icon(forProcess: process.name, pid: process.pid, size: 20)
+            ?? AppIconProvider.placeholderIcon(size: 20)
+        iconView.contentTintColor = MenuPanelStyle.tertiaryText
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 20),
+            iconView.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        contentStack.addArrangedSubview(iconView)
+
+        contentStack.addArrangedSubview(MenuPanelLabel.text(process.name, font: MenuPanelStyle.bodyFont))
+        contentStack.addArrangedSubview(MenuPanelLabel.spacer())
+
+        let downText = "↓" + formatSpeedShort(Double(process.bytesIn))
+        let upText = "↑" + formatSpeedShort(Double(process.bytesOut))
+        let speeds = MenuPanelLabel.text("\(downText)  \(upText)", font: MenuPanelStyle.smallValueFont,
+                                        color: MenuPanelStyle.secondaryText)
+        speeds.setContentHuggingPriority(.required, for: .horizontal)
+        contentStack.addArrangedSubview(speeds)
+    }
+}

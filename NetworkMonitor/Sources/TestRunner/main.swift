@@ -49,6 +49,7 @@ runSystemMetricsTests()
 
 // MARK: - Wi-Fi 链路（信号分档 / 信道频率 / 占位值降级）
 runWiFiLinkTests()
+runWiFiLinkFormattingTests()
 
 // MARK: - 局域网文件互传
 runTransferTests()

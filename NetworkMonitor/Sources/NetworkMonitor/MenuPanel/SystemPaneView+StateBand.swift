@@ -16,6 +16,12 @@ final class SystemStateBandView: NSView {
     private let batteryNote: NSTextField
     private let powerCaption: NSTextField
     private let powerValue: NSTextField
+    // MARK: Wi-Fi 段
+    // 只放 RSSI 与档位色点：状态带一行只有约 282pt 内宽，四段并列已有 179pt，
+    // 再加信道 / 速率（ch36 5G 需 38pt、103 Mbps 需 43pt）会把功耗段挤出去。
+    private let wifiCaption: NSTextField
+    private let wifiValue: NSTextField
+    private let wifiDot: WiFiSignalDotView
 
     init() {
         tempCaption = MenuPanelLabel.text("SoC", font: SystemPaneStyle.microFont,
@@ -35,14 +41,22 @@ final class SystemStateBandView: NSView {
         powerValue = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                          font: MenuPanelStyle.smallValueFont,
                                          color: MenuPanelStyle.secondaryText)
+        wifiCaption = MenuPanelLabel.text("Wi-Fi", font: SystemPaneStyle.microFont,
+                                          color: MenuPanelStyle.tertiaryText)
+        wifiValue = MenuPanelLabel.text(SystemPaneFormat.placeholder,
+                                        font: MenuPanelStyle.smallValueFont,
+                                        color: MenuPanelStyle.secondaryText)
+        wifiDot = WiFiSignalDotView()
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
 
         let tempGroup = Self.group([tempCaption, tempValue])
         let batteryGroup = Self.group([batteryRing, batteryValue, batteryNote])
+        let wifiGroup = Self.group([wifiCaption, wifiValue, wifiDot])
         let powerGroup = Self.group([powerCaption, powerValue])
-        let stack = NSStackView(views: [tempGroup, batteryGroup, MenuPanelLabel.spacer(), powerGroup])
+        let stack = NSStackView(views: [tempGroup, batteryGroup, wifiGroup,
+                                        MenuPanelLabel.spacer(), powerGroup])
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 9
@@ -54,7 +68,7 @@ final class SystemStateBandView: NSView {
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
             heightAnchor.constraint(equalToConstant: 20),
         ])
-        for label in [tempValue, batteryValue, powerValue] {
+        for label in [tempValue, batteryValue, powerValue, wifiValue] {
             label.setContentHuggingPriority(.required, for: .horizontal)
         }
         setAccessibilityRole(.group)
@@ -126,6 +140,18 @@ final class SystemStateBandView: NSView {
         }
         powerValue.stringValue = String(format: "%.2f W", max(0, watts))
         powerValue.textColor = MenuPanelStyle.secondaryText
+    }
+
+    /// Wi-Fi 段 — 只放 RSSI 与档位色点
+    ///
+    /// 读不到时段内显示「—」且圆点转灰：整段保留而不是隐藏，
+    /// 避免温度 / 电池 / 功耗的位置随 Wi-Fi 有无左右横跳；也不写 0 dBm 冒充读数。
+    func updateWiFi(_ snapshot: WiFiLinkSnapshot?) {
+        let available = WiFiLinkFormatting.isAvailable(snapshot)
+        wifiValue.stringValue = WiFiLinkFormatting.rssiText(snapshot)
+        wifiValue.textColor = available ? MenuPanelStyle.secondaryText : MenuPanelStyle.tertiaryText
+        wifiDot.quality = available ? WiFiLinkFormatting.quality(snapshot) : .unknown
+        setAccessibilityLabel("系统状态带")
     }
 
     /// 温度是否显示（设置页 PanelItem.thermal 开关的新语义）
