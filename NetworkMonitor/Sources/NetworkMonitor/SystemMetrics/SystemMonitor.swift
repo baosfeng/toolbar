@@ -12,8 +12,11 @@ import NetworkMonitorCore
 /// - 跨队列只传值类型（CPUTickBaseline / DiskTransferTable / SystemMetricsSnapshot），
 ///   不共享可变对象，也不让 @MainActor 实例逃逸。
 ///
-/// 差分类指标（CPU 利用率、磁盘速率 / IOPS / 繁忙度）首帧只建基线：字段留 nil 而不是 0，
-/// 避免面板把「还没测」显示成「完全不忙」。
+/// 差分类指标（CPU 利用率、磁盘速率 / IOPS / 繁忙度、进程 CPU%）首帧只建基线：
+/// 字段留 nil 而不是 0，避免面板把「还没测」显示成「完全不忙」。
+///
+/// 只有一个定时器：负载 / 进程 Top-N / GPU 功耗 / 电池属「5 秒档」，
+/// 由 poll() 按上次慢采时间判断是否本帧顺带采集（见 SystemMonitor+SlowMetrics.swift）。
 @MainActor
 final class SystemMonitor: @preconcurrency SystemMonitoringService {
 
@@ -29,6 +32,8 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
     private let queue = DispatchQueue(label: "com.networkmonitor.system-metrics", qos: .utility)
     /// 温度读取器：内部缓存 IOHID client，只允许后台串行队列访问
     private let thermalReader = SystemThermalReader()
+    /// GPU 功耗读取器：内部缓存 IOReport subscription，只允许后台串行队列访问
+    private let powerReader = SystemGPUPowerReader()
     /// P/E 核数（启动时读一次，运行期不会变）
     private let coreCounts: (performance: Int, efficiency: Int)
 
@@ -37,6 +42,10 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
     private var cpuBaseline: CPUTickBaseline?
     private var diskBaseline: DiskTransferTable?
     private var lastSampleDate: Date?
+    /// 慢节拍（5 秒档）基线
+    private var slowBaselines = SlowMetricBaselines()
+    /// 上次慢采时刻；nil 表示还没采过（首帧必采）
+    private var lastSlowSampleDate: Date?
     /// GPU 首个样本丢弃：冷读可能返回 0%（不是没读到），第二帧起数值才可信
     private var hasGPUBaseline = false
 
@@ -91,6 +100,17 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
         let counts = coreCounts
         let isGPUBaselineReady = hasGPUBaseline
         let reader = thermalReader
+        let powerReader = self.powerReader
+        // 慢节拍判定在主线程做：5 秒档不是新 Timer，而是本帧顺手多采一组
+        let runsSlowSample = Self.shouldRunSlowSample(now: sampleStart, lastSlowDate: lastSlowSampleDate)
+        let slowBaselines = self.slowBaselines
+        let previousSlowDate = lastSlowSampleDate
+        let slowElapsed = previousSlowDate.map { sampleStart.timeIntervalSince($0) } ?? 0
+        // 上帧的慢节拍结果：本帧不采慢节拍时沿用它，避免面板每 5 秒才亮一次
+        let carriedLoad = snapshot?.load
+        let carriedProcesses = snapshot?.processes
+        let carriedBattery = snapshot?.battery
+        let carriedPower = snapshot?.thermal?.powerWatts
 
         queue.async { [weak self] in
             var failures: [String] = []
@@ -146,7 +166,20 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
             let gpu = SystemGPUSampler.snapshot(isWarm: isGPUBaselineReady)
 
             // 温度：私有 API 尽力而为，不可用不算故障（不回退，不重试）
-            let thermal = reader.read()
+            let thermalReading = reader.read()
+
+            // 慢节拍（5 秒档）：只在到点的那一帧采，其余帧沿用上一帧结果
+            let slowResult = runsSlowSample
+                ? Self.collectSlowMetrics(baselines: slowBaselines,
+                                          elapsed: slowElapsed,
+                                          powerReader: powerReader)
+                : nil
+            failures.append(contentsOf: slowResult?.failures ?? [])
+            issues.append(contentsOf: slowResult?.issues ?? [])
+
+            // GPU 功耗写进温度快照的 powerWatts（语义已改为 GPU 功耗，非整机）
+            let powerWatts = slowResult.map { $0.gpuPowerWatts } ?? carriedPower
+            let thermal = Self.merging(thermal: thermalReading, powerWatts: powerWatts)
 
             let sampledAt = Date()
             let nextSnapshot = SystemMetricsSnapshot(timestamp: sampledAt,
@@ -154,9 +187,14 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
                                                      gpu: gpu,
                                                      memory: memory.value,
                                                      disk: disk,
-                                                     thermal: thermal)
+                                                     thermal: thermal,
+                                                     load: slowResult?.load ?? carriedLoad,
+                                                     processes: slowResult?.processes ?? carriedProcesses,
+                                                     battery: slowResult?.battery ?? carriedBattery)
             let nextCPUBaseline = currentTicks.map { CPUTickBaseline(ticks: $0) }
             let nextDiskBaseline = currentTransfers
+            let nextSlowBaselines = slowResult?.nextBaselines ?? slowBaselines
+            let nextSlowDate = slowResult == nil ? previousSlowDate : sampledAt
 
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -164,11 +202,28 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
                 self.snapshot = nextSnapshot
                 self.cpuBaseline = nextCPUBaseline
                 self.diskBaseline = nextDiskBaseline
+                self.slowBaselines = nextSlowBaselines
                 self.lastSampleDate = sampledAt
+                self.lastSlowSampleDate = nextSlowDate
                 self.hasGPUBaseline = true
                 self.report(failures: failures, issues: issues)
             }
         }
+    }
+
+    // MARK: - 快照合并
+
+    /// 把 GPU 功耗并进温度快照
+    ///
+    /// 温度为 nil 但功耗有值时也要产出一个只含功耗的快照，否则面板会把已采到的
+    /// 功耗一并显示成「—」。功耗为 nil 时原样返回温度读数（可能也是 nil）。
+    private static func merging(thermal: ThermalSnapshot?, powerWatts: Double?) -> ThermalSnapshot? {
+        guard let powerWatts else { return thermal }
+        guard let thermal else { return ThermalSnapshot(powerWatts: powerWatts) }
+        return ThermalSnapshot(cpuTemperatureCelsius: thermal.cpuTemperatureCelsius,
+                               gpuTemperatureCelsius: thermal.gpuTemperatureCelsius,
+                               powerWatts: powerWatts,
+                               fanRPM: thermal.fanRPM)
     }
 
     // MARK: - 日志

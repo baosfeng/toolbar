@@ -18,6 +18,8 @@ func runSystemMetricsTests() {
         runSystemMetricsCalculationTests()
         // 新增口径断言另开文件：本文件已接近 15 KiB 单文件上限
         runSystemMetricsExtraTests()
+        // 第二批 P0（负载 / 进程 Top-N / GPU 功耗 / 电池）同样另开文件
+        runSystemMetricsSupplementTests()
     }
 }
 

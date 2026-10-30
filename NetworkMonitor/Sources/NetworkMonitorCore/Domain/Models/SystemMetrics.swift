@@ -19,19 +19,31 @@ public struct SystemMetricsSnapshot: Sendable, Equatable {
     public let disk: DiskSnapshot?
     /// 温度 / 功耗 / 风扇（全部不可得时为 nil）
     public let thermal: ThermalSnapshot?
+    /// 系统负载与调度状态（getloadavg 不可用时为 nil）
+    public let load: LoadSnapshot?
+    /// 进程 Top-N（首帧无基线、或一个进程都读不到时为 nil）
+    public let processes: ProcessResourceSnapshot?
+    /// 电池与电源（无电池机型 / 读取失败时为 nil）
+    public let battery: BatterySnapshot?
 
     public init(timestamp: Date = Date(),
                 cpu: CPUSnapshot? = nil,
                 gpu: GPUSnapshot? = nil,
                 memory: MemorySnapshot? = nil,
                 disk: DiskSnapshot? = nil,
-                thermal: ThermalSnapshot? = nil) {
+                thermal: ThermalSnapshot? = nil,
+                load: LoadSnapshot? = nil,
+                processes: ProcessResourceSnapshot? = nil,
+                battery: BatterySnapshot? = nil) {
         self.timestamp = timestamp
         self.cpu = cpu
         self.gpu = gpu
         self.memory = memory
         self.disk = disk
         self.thermal = thermal
+        self.load = load
+        self.processes = processes
+        self.battery = battery
     }
 }
 
@@ -211,7 +223,11 @@ public struct ThermalSnapshot: Sendable, Equatable {
     public let cpuTemperatureCelsius: Double?
     /// GPU 温度（摄氏度）
     public let gpuTemperatureCelsius: Double?
-    /// 整机功耗（瓦）
+    /// GPU 功耗（瓦，估算值）
+    ///
+    /// 来源 IOReport Energy Model 的 "GPU Energy" 累加器（单位 nJ）差分除以采样间隔。
+    /// **不是整机功耗**：同组的 CPU Energy / DRAM0 / ANE0 等通道在本机恒为 0，
+    /// 无法合成整机功耗（实测见第二批指标调研 §2.1），UI 须标注「估算」。
     public let powerWatts: Double?
     /// 风扇转速（RPM）
     public let fanRPM: Int?
