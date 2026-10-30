@@ -51,10 +51,21 @@ extension MenuPanelController {
                 guard let memory = snapshot.memory, memory.total > 0 else { return nil }
                 return Double(memory.used) / Double(memory.total)
             },
+            // 内存详情页的三段堆叠趋势：传占比（0...1），三段之和 = 已用占比、不含 inactive
+            memoryWired: historyValues { snapshot in
+                guard let memory = snapshot.memory, memory.total > 0 else { return nil }
+                return Double(memory.wired) / Double(memory.total)
+            },
+            memoryActive: historyValues { snapshot in
+                guard let memory = snapshot.memory, memory.total > 0 else { return nil }
+                return Double(memory.active) / Double(memory.total)
+            },
+            memoryCompressed: historyValues { snapshot in
+                guard let memory = snapshot.memory, memory.total > 0 else { return nil }
+                return Double(memory.compressed) / Double(memory.total)
+            },
             diskRead: historyValues { $0.disk?.readBytesPerSecond },
             diskWrite: historyValues { $0.disk?.writeBytesPerSecond },
-            diskReadIOPS: historyValues { $0.disk?.readIOPS },
-            diskWriteIOPS: historyValues { $0.disk?.writeIOPS },
             loadShort: historyValues { $0.load?.load1 },
             loadMedium: historyValues { $0.load?.load5 },
             loadLong: historyValues { $0.load?.load15 }
@@ -66,6 +77,8 @@ extension MenuPanelController {
         // 「底部状态带里的温度是否显示」；偏好默认开启，取不到按 nil 降级）
         if let systemPreferences {
             content.systemPane.setShowsThermalCard(systemPreferences.isPanelItemVisible(.thermal))
+            // 详情页「采样」行跟随真实偏好，不硬编码 1 秒
+            content.systemPane.updateSampleInterval(systemPreferences.sampleInterval)
         }
     }
 

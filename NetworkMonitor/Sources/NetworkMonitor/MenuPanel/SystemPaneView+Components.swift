@@ -7,10 +7,11 @@ import NetworkMonitorCore
 ///
 /// 进位与 Core 口径一致（内存/磁盘按 1024 进位，百分比入参 0...1）；
 /// 不可得一律返回「—」，由调用方决定字号与颜色，不隐藏整块。
+/// 容量与详情页格式化统一委托 `SystemDetailFormatting`，避免两处各写一套进位。
 enum SystemPaneFormat {
 
     /// 不可用占位
-    static let placeholder = "—"
+    static let placeholder = SystemDetailFormatting.placeholder
 
     /// 温度警示阈值（°C）：超过转警示色
     static let hotThreshold: Double = 85
@@ -21,24 +22,14 @@ enum SystemPaneFormat {
         return SystemMetricsFormatting.percentText(value)
     }
 
-    /// 容量（字节）— Core 目前只提供速率口径，容量格式化在本层补齐（1024 进位、K 以上 1 位小数）
+    /// 容量（字节）
     static func bytes(_ value: UInt64?) -> String {
-        guard let value else { return placeholder }
-        return bytes(Double(value))
+        SystemDetailFormatting.byteCountText(value)
     }
 
     /// 容量（字节，Double 入口：GPU 显存等）
     static func bytes(_ value: Double) -> String {
-        guard value.isFinite else { return placeholder }
-        let units = ["B", "KB", "MB", "GB", "TB", "PB"]
-        var scaled = max(0, value)
-        var index = 0
-        while scaled >= 1024, index < units.count - 1 {
-            scaled /= 1024
-            index += 1
-        }
-        guard index > 0 else { return String(format: "%.0f %@", scaled, units[index]) }
-        return String(format: "%.1f %@", scaled, units[index])
+        SystemDetailFormatting.byteCountText(value)
     }
 
     /// 速率（字节/秒）— 委托 Core 口径（nil 与非法值都返回「—」）
@@ -54,7 +45,7 @@ enum SystemPaneFormat {
 
     /// 容量（GB，1 位小数，不带单位）— 内存四段数值行用，单位写在卡片 toolTip
     static func gigabytes(_ value: UInt64) -> String {
-        String(format: "%.1f", Double(value) / 1_073_741_824)
+        SystemDetailFormatting.gigabyteValueText(value)
     }
 
     /// 0...1 比例原值（进度条用）；nil 或非有限值返回 0
@@ -87,7 +78,7 @@ enum SystemPaneFormat {
     }
 }
 
-// MARK: - 顶部三联小格
+// MARK: - 顶部四联小格
 
 /// 顶部指标小格 — 大号等宽数字 + 12pt 迷你曲线 + ≤4 字标签
 ///
@@ -98,12 +89,17 @@ final class SystemHeroTileView: NSView {
     private let sparkline: SystemSparklineView
     private let captionLabel: NSTextField
 
+    /// 底（原型 `--surface`；四联小格不是卡片 wash）
+    var tileColor: NSColor = SystemPalette.surface {
+        didSet { needsDisplay = true }
+    }
+
     /// 三联 → 四联后的主数值字号：四格等分后每格只有约 71pt 宽，
     /// 沿用 26pt 会在「100%」这类三位数时挤掉单位，故降到 20pt（原型 v4 约 19–21pt）。
     static let compactValueFont = NSFont.monospacedDigitSystemFont(ofSize: 20, weight: .semibold)
 
-    // 默认值用 NSColor 自带语义色而非 MenuPanelStyle：默认参数表达式在
-    // 非隔离上下文求值，直接引用 @MainActor 属性会被 Swift 6 拒绝（实测编译错误）
+    // 默认值用 NSColor 自带语义色而非 @MainActor 色板：默认参数表达式在
+    // 非隔离上下文求值，直接引用 SystemPalette 属性会被 Swift 6 拒绝（实测编译错误）
     init(label: String, lineColor: NSColor = .controlAccentColor, showsSparkline: Bool = true) {
         valueLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                         font: Self.compactValueFont,
@@ -111,7 +107,7 @@ final class SystemHeroTileView: NSView {
         sparkline = SystemSparklineView(lineColor: lineColor, height: 12)
         captionLabel = MenuPanelLabel.text(label,
                                            font: MenuPanelStyle.sectionFont,
-                                           color: MenuPanelStyle.tertiaryText)
+                                           color: SystemPalette.meta)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
@@ -145,7 +141,7 @@ final class SystemHeroTileView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        MenuPanelStyle.subtleFill.setFill()
+        tileColor.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: MenuPanelStyle.cornerRadius,
                      yRadius: MenuPanelStyle.cornerRadius).fill()
         super.draw(dirtyRect)
@@ -165,9 +161,11 @@ final class SystemHeroTileView: NSView {
 
 // MARK: - 卡片容器
 
-/// 卡片容器 — 标题 + 右侧补充 + 垂直内容区，圆角填充背景
+/// 卡片容器 — 语义 wash 底 + 标题 + 右侧补充 + 垂直内容区
 ///
 /// 口径说明只写在 `toolTip`（界面不出现解释性文字）。
+/// 可分族上色：`wash` 传对应族的卡底 token；不传则保持旧行为（`MenuPanelStyle.subtleFill`），
+/// 其它调用点零改动。`onTap` 非空时整卡可点（进二级详情页），右侧可挂「›」入口提示。
 final class SystemCardView: NSView {
 
     /// 内容区（各卡向此追加行）
@@ -175,21 +173,49 @@ final class SystemCardView: NSView {
     private let trailingLabel: NSTextField
     /// 卡头第三槽（图例 / 徽标等附属件），位于标题与右侧补充之间
     private let headerAccessorySlot = NSStackView()
+    /// 卡头最右槽（「›」入口提示 / 「全部 ›」按钮）
+    private let headerTrailingSlot = NSStackView()
+    private let washColor: NSColor
+    private let chevronLabel: NSTextField
 
-    init(title: String, trailing: String = "") {
+    /// 整卡点击回调（nil = 不可点）
+    var onTap: (() -> Void)? {
+        didSet {
+            window?.invalidateCursorRects(for: self)
+            setAccessibilityRole(onTap == nil ? .group : .button)
+        }
+    }
+
+    /// 键盘焦点态（由面板根视图设置；决定是否画焦点环）
+    private(set) var isCardKeyboardFocused = false
+
+    init(title: String, trailing: String = "", wash: NSColor? = nil) {
         trailingLabel = MenuPanelLabel.text(trailing,
                                             font: MenuPanelStyle.smallValueFont,
-                                            color: MenuPanelStyle.tertiaryText)
-        let titleLabel = MenuPanelLabel.section(title)
+                                            color: SystemPalette.meta)
+        chevronLabel = MenuPanelLabel.text("›",
+                                           font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                                           color: SystemPalette.meta)
+        washColor = wash ?? MenuPanelStyle.subtleFill
+        let titleLabel = MenuPanelLabel.text(title,
+                                             font: MenuPanelStyle.sectionFont,
+                                             color: SystemPalette.foregroundSecondary)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
 
+        chevronLabel.isHidden = true
         headerAccessorySlot.orientation = .horizontal
         headerAccessorySlot.alignment = .centerY
         headerAccessorySlot.spacing = 4
+        headerTrailingSlot.orientation = .horizontal
+        headerTrailingSlot.alignment = .centerY
+        headerTrailingSlot.spacing = 2
+        headerTrailingSlot.addArrangedSubview(chevronLabel)
+
         let header = NSStackView(views: [titleLabel, headerAccessorySlot,
-                                         MenuPanelLabel.spacer(), trailingLabel])
+                                         MenuPanelLabel.spacer(), trailingLabel,
+                                         headerTrailingSlot])
         header.orientation = .horizontal
         header.alignment = .centerY
         header.spacing = 5
@@ -220,10 +246,31 @@ final class SystemCardView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        MenuPanelStyle.subtleFill.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: MenuPanelStyle.cornerRadius,
-                     yRadius: MenuPanelStyle.cornerRadius).fill()
+        let shape = NSBezierPath(roundedRect: bounds, xRadius: MenuPanelStyle.cornerRadius,
+                                 yRadius: MenuPanelStyle.cornerRadius)
+        washColor.setFill()
+        shape.fill()
+        if isCardKeyboardFocused {
+            let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
+                                    xRadius: MenuPanelStyle.cornerRadius - 1,
+                                    yRadius: MenuPanelStyle.cornerRadius - 1)
+            ring.lineWidth = 2
+            SystemPalette.cpu.withAlphaComponent(0.5).setStroke()
+            ring.stroke()
+        }
         super.draw(dirtyRect)
+    }
+
+    /// 设置键盘焦点（面板根视图驱动）
+    func setCardKeyboardFocused(_ focused: Bool) {
+        guard isCardKeyboardFocused != focused else { return }
+        isCardKeyboardFocused = focused
+        needsDisplay = true
+    }
+
+    /// 执行点击动作（Return / Space 与鼠标共用）
+    func activateCard() {
+        onTap?()
     }
 
     /// 追加一行内容（自动撑满卡片内容宽）
@@ -241,10 +288,56 @@ final class SystemCardView: NSView {
     ///
     /// 位置在标题之后、弹性占位之前；重复调用替换上一件，避免同一槽位堆叠。
     func setHeaderAccessory(_ view: NSView) {
-        for existing in headerAccessorySlot.arrangedSubviews {
-            headerAccessorySlot.removeArrangedSubview(existing)
-            existing.removeFromSuperview()
+        replaceArrangedSubviews(in: headerAccessorySlot, with: [view])
+    }
+
+    /// 在卡头最右槽放入控件（「全部 ›」按钮等）——位于右侧补充文案之后
+    func setHeaderAction(_ view: NSView) {
+        replaceArrangedSubviews(in: headerTrailingSlot, with: [view, chevronLabel])
+    }
+
+    /// 显示 / 隐藏「›」入口提示（颜色随族 ink）
+    func setDisclosure(visible: Bool, color: NSColor? = nil) {
+        chevronLabel.isHidden = !visible
+        if let color {
+            chevronLabel.textColor = color
         }
-        headerAccessorySlot.addArrangedSubview(view)
+    }
+
+    /// 替换槽内全部视图（内部小工具）
+    private func replaceArrangedSubviews(in stack: NSStackView, with views: [NSView]) {
+        for existing in stack.arrangedSubviews {
+            stack.removeArrangedSubview(existing)
+        }
+        for view in views {
+            stack.addArrangedSubview(view)
+        }
+    }
+
+    // MARK: 点击
+
+    override func mouseDown(with event: NSEvent) {
+        guard let onTap else {
+            super.mouseDown(with: event)
+            return
+        }
+        onTap()
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        if onTap != nil {
+            addCursorRect(bounds, cursor: .pointingHand)
+        }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard let onTap else { return false }
+        onTap()
+        return true
     }
 }
+
+// MARK: - 键盘焦点协议一致性
+
+extension SystemCardView: MenuPanelCardFocusable {}

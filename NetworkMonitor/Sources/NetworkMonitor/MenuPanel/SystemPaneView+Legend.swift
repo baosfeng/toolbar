@@ -6,7 +6,7 @@ import AppKit
 final class SystemSwatchView: NSView {
 
     /// 色块颜色（动态色，draw 内按当前外观解析）
-    var color: NSColor = MenuPanelStyle.accentColor {
+    var color: NSColor = SystemPalette.cpu {
         didSet { needsDisplay = true }
     }
 
@@ -33,6 +33,7 @@ final class SystemSwatchView: NSView {
 /// CPU 卡头图例 — 「色块 + 数值」两枚，压在标题同一行（零新增行高）
 ///
 /// 界面只留数值：用户态 / 系统态各自的 ticks 占比口径写在 CPU 卡 toolTip 里。
+/// 数值走 CPU 族 ink（原型 `--m-cpu-ink`），色块分别是 `--m-cpu` / `--m-cpu-2`。
 final class SystemUsageSplitView: NSView {
 
     private let userLabel: NSTextField
@@ -41,16 +42,16 @@ final class SystemUsageSplitView: NSView {
     init() {
         userLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                         font: MenuPanelStyle.smallValueFont,
-                                        color: MenuPanelStyle.secondaryText)
+                                        color: SystemPalette.cpuInk)
         systemLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                           font: MenuPanelStyle.smallValueFont,
-                                          color: MenuPanelStyle.secondaryText)
+                                          color: SystemPalette.cpuInk)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         let userSwatch = SystemSwatchView()
-        userSwatch.color = MenuPanelStyle.accentColor
+        userSwatch.color = SystemPalette.cpu
         let systemSwatch = SystemSwatchView()
-        systemSwatch.color = SystemPaneStyle.systemUsageBand
+        systemSwatch.color = SystemPalette.cpuSecondary
         let stack = NSStackView(views: [Self.item(swatch: userSwatch, label: userLabel),
                                         Self.item(swatch: systemSwatch, label: systemLabel)])
         stack.orientation = .horizontal
@@ -95,94 +96,5 @@ final class SystemUsageSplitView: NSView {
         item.alignment = .centerY
         item.spacing = 2
         return item
-    }
-}
-
-// MARK: - 内存四段数值行
-
-/// 内存四段数值行 — 「3.6 内核 · 6.4 活跃 · 1.2 压缩 · 4.8 空闲」+ 右侧换出量
-///
-/// 四段数值单位为十进制 GB（与卡头 hero 同一进位，不重复写单位，单位写在卡 toolTip）；
-/// 标签均 ≤4 字，各段口径见内存卡 toolTip。
-final class SystemMemorySplitView: NSView {
-
-    private let wiredValue: NSTextField
-    private let activeValue: NSTextField
-    private let compressedValue: NSTextField
-    private let freeValue: NSTextField
-    private let swapValue: NSTextField
-
-    init() {
-        wiredValue = Self.valueLabel()
-        activeValue = Self.valueLabel()
-        compressedValue = Self.valueLabel()
-        freeValue = Self.valueLabel()
-        swapValue = Self.valueLabel()
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        let stack = NSStackView(views: [
-            Self.segment(value: wiredValue, caption: "内核"),
-            Self.segment(value: activeValue, caption: "活跃"),
-            Self.segment(value: compressedValue, caption: "压缩"),
-            Self.segment(value: freeValue, caption: "空闲"),
-            MenuPanelLabel.spacer(),
-            Self.segment(value: swapValue, caption: "交换"),
-        ])
-        stack.orientation = .horizontal
-        stack.alignment = .firstBaseline
-        stack.spacing = 7
-        stack.distribution = .gravityAreas
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-        setAccessibilityRole(.group)
-        setAccessibilityLabel("内存四段与换出量")
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    /// 更新四段（字节）与换出量（字节，nil 显示「—」）
-    func update(wired: UInt64, active: UInt64, compressed: UInt64, free: UInt64, swapUsed: UInt64?) {
-        wiredValue.stringValue = SystemPaneFormat.gigabytes(wired)
-        activeValue.stringValue = SystemPaneFormat.gigabytes(active)
-        compressedValue.stringValue = SystemPaneFormat.gigabytes(compressed)
-        freeValue.stringValue = SystemPaneFormat.gigabytes(free)
-        // 换出量量级跨 MB / GB，保留单位以免与四段的 GB 口径混淆
-        swapValue.stringValue = swapUsed.map { SystemPaneFormat.bytes($0) } ?? SystemPaneFormat.placeholder
-        invalidateIntrinsicContentSize()
-    }
-
-    /// 置空：四段与换出量全部显示「—」
-    ///
-    /// 空态不能填 0 —— 「0.0 内核」会被读成「真的只用了 0 GB」，而不是「读不到」。
-    func reset() {
-        for label in [wiredValue, activeValue, compressedValue, freeValue, swapValue] {
-            label.stringValue = SystemPaneFormat.placeholder
-        }
-    }
-
-    /// 单段数值标签（9pt 等宽数字 + 次要色）
-    private static func valueLabel() -> NSTextField {
-        MenuPanelLabel.text(SystemPaneFormat.placeholder,
-                            font: MenuPanelStyle.smallValueFont,
-                            color: MenuPanelStyle.secondaryText)
-    }
-
-    /// 单段「数值 + ≤2 字标签」（标签在后，与原型一致）
-    private static func segment(value: NSTextField, caption: String) -> NSStackView {
-        let captionLabel = MenuPanelLabel.text(caption,
-                                               font: SystemPaneStyle.microFont,
-                                               color: MenuPanelStyle.tertiaryText)
-        let segment = NSStackView(views: [value, captionLabel])
-        segment.orientation = .horizontal
-        segment.alignment = .firstBaseline
-        segment.spacing = 1.5
-        return segment
     }
 }

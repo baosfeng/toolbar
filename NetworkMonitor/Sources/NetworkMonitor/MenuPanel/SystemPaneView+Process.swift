@@ -8,25 +8,10 @@ import NetworkMonitorCore
 /// **CPU 榜的条形用绝对 sqrt 刻度**：`sqrt(cpuPercent) × 13`（满条 = 100% = 占满一个核）。
 /// 不能用「榜首归一化」——榜首一变全体按比例缩放，实测同一个 15.77% 的进程条长会在
 /// 26%~197% 之间乱跳；绝对刻度下它恒为 51.6pt，波动 0。条长只由进程自身 CPU% 决定。
-/// 内存榜按「常驻 / 物理内存」线性百分比（量级集中，不需要压缩）。
+/// 版2 首屏只显示 Top-2（卡头「全部 ›」进 CPU 详情），内存榜按定稿不再出现在首屏。
 final class SystemProcessListView: NSView {
 
-    /// 榜单维度
-    enum Metric {
-        /// CPU 占用降序（条形 = sqrt 绝对刻度）
-        case cpu
-        /// 常驻内存降序（条形 = 常驻 / 物理内存）
-        case memory
-
-        /// 卡头标签（≤4 字）
-        var title: String {
-            switch self {
-            case .cpu: return "CPU 榜"
-            case .memory: return "内存榜"
-            }
-        }
-    }
-    /// 单行数据（已按当前榜单排序）
+    /// 单行数据（已按 CPU 占用排序）
     struct Row: Equatable {
         /// 进程名（超宽截断显示，全名进 toolTip）
         let name: String
@@ -40,17 +25,13 @@ final class SystemProcessListView: NSView {
         let tip: String
     }
 
-    /// 展示行数（Top-3）
-    private static let visibleRows = 3
-
     private var rowViews: [ProcessRowView] = []
 
     init(rows: Int = 3) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         for _ in 0..<max(1, rows) {
-            let row = ProcessRowView()
-            rowViews.append(row)
+            rowViews.append(ProcessRowView())
         }
         let stack = NSStackView(views: rowViews)
         stack.orientation = .vertical
@@ -74,7 +55,7 @@ final class SystemProcessListView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    /// 更新榜单；rows 为空 = 不可得态（三行占位「—」，空条形）
+    /// 更新榜单；rows 为空 = 不可得态（占位「—」，空条形）
     func update(_ rows: [Row], unavailableTip: String) {
         for (index, view) in rowViews.enumerated() {
             if index < rows.count {
@@ -85,28 +66,27 @@ final class SystemProcessListView: NSView {
         }
     }
 
-    // MARK: 刻度口径
+}
 
-    /// CPU 榜条形比例（绝对 sqrt 刻度）：`min(1, sqrt(cpuPercent) × 13 / 100)`
-    ///
-    /// 系数 13 的实测依据（见原型 §39）：27.6% → 68% 条长、10.7% → 43%、3% → 23%、1% → 13%。
-    /// k=10 时榜首长态只有 52%，不够醒目；k=13 让常见区间都有足够权重，
-    /// 同时 1% 的碎进程仍有 13% 可见。
-    static func cpuBarFraction(_ cpuPercent: Double) -> Double {
-        let raw = cpuPercent.isFinite ? max(0, cpuPercent) : 0
-        return min(1, max(0, (raw.squareRoot() * 13) / 100))
-    }
+// MARK: - 行装配
 
-    /// 内存榜条形比例（线性）：常驻 / 物理内存
-    static func memoryBarFraction(residentBytes: UInt64, totalBytes: UInt64) -> Double {
-        guard totalBytes > 0 else { return 0 }
-        return min(1, Double(residentBytes) / Double(totalBytes))
-    }
+extension SystemPaneView {
 
-    /// CPU 榜数值文本：**原值不 clamp**（多线程可 >100%，削平会让排序失真）
-    static func cpuValueText(_ cpuPercent: Double) -> String {
-        guard cpuPercent.isFinite else { return SystemPaneFormat.placeholder }
-        return String(format: "%.1f%%", max(0, cpuPercent))
+    /// 按维度构造进程榜行（首屏 Top-2 与「压力详情」Top-10 共用同一口径）
+    static func processRows(_ snapshot: ProcessResourceSnapshot?,
+                            metric: SystemProcessMetric,
+                            limit: Int,
+                            memoryTotal: UInt64?) -> [SystemProcessListView.Row] {
+        SystemProcessBoard.rows(snapshot, metric: metric, limit: limit).map { usage in
+            SystemProcessListView.Row(
+                name: usage.name,
+                fraction: SystemProcessBoard.barFraction(for: usage, metric: metric,
+                                                        memoryTotal: memoryTotal),
+                valueText: SystemProcessBoard.valueText(for: usage, metric: metric),
+                isOver: metric == .cpu && usage.cpuPercent > 100,
+                tip: SystemPaneTip.processRow(usage: usage, metric: metric,
+                                              memoryTotal: memoryTotal))
+        }
     }
 }
 
@@ -122,11 +102,11 @@ final class ProcessRowView: NSView {
     init() {
         nameLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                         font: SystemPaneStyle.microFont,
-                                        color: MenuPanelStyle.secondaryText)
+                                        color: SystemPalette.foregroundSecondary)
         barTrack = ProcessBarTrackView()
         valueLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                          font: MenuPanelStyle.smallValueFont,
-                                         color: MenuPanelStyle.secondaryText)
+                                         color: SystemPalette.foregroundSecondary)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
@@ -160,9 +140,10 @@ final class ProcessRowView: NSView {
     /// 有数据
     func update(_ row: SystemProcessListView.Row) {
         nameLabel.stringValue = row.name
-        nameLabel.textColor = MenuPanelStyle.secondaryText
+        nameLabel.textColor = SystemPalette.foregroundSecondary
         valueLabel.stringValue = row.valueText
-        valueLabel.textColor = row.isOver ? SystemPaneStyle.processOverloaded : MenuPanelStyle.secondaryText
+        valueLabel.textColor = row.isOver ? SystemPaneStyle.processOverloaded
+            : SystemPalette.foregroundSecondary
         // 必须显式退出空态：首屏 update(snapshot: nil) 已把行置为空态，
         // 不复位的话真实数据进来仍会画成空心描边条（条长看着永远是 0）
         barTrack.isEmptyState = false
@@ -171,12 +152,12 @@ final class ProcessRowView: NSView {
         toolTip = row.tip
     }
 
-    /// 不可得：三行占位，空条形（描边 + 透明填充，与有数据的实心条明确区分）
+    /// 不可得：占位「—」，空条形（描边 + 透明填充，与有数据的实心条明确区分）
     func updateUnavailable(tip: String) {
         nameLabel.stringValue = SystemPaneFormat.placeholder
-        nameLabel.textColor = MenuPanelStyle.tertiaryText
+        nameLabel.textColor = SystemPalette.meta
         valueLabel.stringValue = SystemPaneFormat.placeholder
-        valueLabel.textColor = MenuPanelStyle.tertiaryText
+        valueLabel.textColor = SystemPalette.meta
         barTrack.fraction = 0
         barTrack.isEmptyState = true
         barTrack.isOver = false
@@ -226,14 +207,14 @@ final class ProcessBarTrackView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let radius = bounds.height / 2
-        MenuPanelStyle.trackColor.setFill()
+        SystemPalette.track.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
 
         if isEmptyState {
             let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
                                        xRadius: radius, yRadius: radius)
             outline.lineWidth = 1
-            MenuPanelStyle.trackColor.setStroke()
+            SystemPalette.track.setStroke()
             outline.stroke()
             return
         }
@@ -242,7 +223,7 @@ final class ProcessBarTrackView: NSView {
         guard value > 0 else { return }
         let fillRect = NSRect(x: bounds.minX, y: bounds.minY,
                               width: bounds.width * CGFloat(value), height: bounds.height)
-        (isOver ? SystemPaneStyle.processOverloaded : MenuPanelStyle.accentColor).setFill()
+        (isOver ? SystemPaneStyle.processOverloaded : SystemPalette.process).setFill()
         NSBezierPath(roundedRect: fillRect, xRadius: radius, yRadius: radius).fill()
     }
 }

@@ -80,7 +80,9 @@ extension SystemMonitor {
                 current: currentScan.baselines,
                 names: currentScan.names,
                 nanosecondsPerTick: SystemProcessSampler.nanosecondsPerTick,
-                elapsedSeconds: elapsed)
+                elapsedSeconds: elapsed,
+                // 详情页「压力」要 Top-10（首屏只取前 2 条）：两份榜单都按 10 条缓存
+                limit: SystemProcessSampler.topLimit)
             if let top {
                 processes = ProcessResourceSnapshot(topCPU: top.cpu,
                                                     topMemory: top.memory,

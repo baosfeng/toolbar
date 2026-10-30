@@ -7,7 +7,7 @@ extension SystemPaneView {
     /// 顶部四联：CPU / GPU / 内存 / 负载 等宽小格（(296 - 12) / 4 = 71pt）
     ///
     /// 四格比三联窄，主数值字号随之下调（见 SystemHeroTileView.compactValueFont），
-    /// 行高按原型 v4 收一档，省下的高度留给首屏的压力卡。
+    /// 行高按原型 v4 收一档，省下的高度留给首屏的压力卡与状态带。
     func makeHeroRow() -> NSView {
         let row = NSStackView(views: [cpuTile, gpuTile, memoryTile, loadTile])
         row.orientation = .horizontal
@@ -18,30 +18,30 @@ extension SystemPaneView {
         return row
     }
 
-    /// 压力卡：上半负载三线（含核数参考虚线），下半进程 Top-3 横向条形
+    /// 压力卡：负载三线图 + 进程 Top-2；卡头右端「全部 ›」进 CPU 详情
     ///
     /// 负载是「就绪队列多长」、进程榜是「谁在吃 CPU」，两者合起来才叫压力，
-    /// 故同卡上下排布；拆成两张卡会把首屏挤爆。
+    /// 故同卡上下排布；版2 把 Top-3 收到 Top-2 并取消「切」按钮（内存榜无入口，
+    /// 定稿论证见 variants.md §3：3 条之外没有可下沉字段）。
     func makeLoadCard() -> NSView {
         loadCard.toolTip = SystemPaneTip.load()
         loadCard.setHeaderAccessory(loadNumbers)
+        loadCard.onTap = { [weak self] in
+            guard let self else { return }
+            self.showDetail(.process, from: self.loadCard)
+        }
 
-        let headRow = NSStackView(views: [processMetricLabel,
-                                          MenuPanelLabel.spacer(),
-                                          processToggleButton])
-        headRow.orientation = .horizontal
-        headRow.alignment = .centerY
-        headRow.spacing = 4
-        processToggleButton.target = self
-        processToggleButton.action = #selector(toggleProcessMetric)
-        processToggleButton.isBordered = false
-        processToggleButton.font = SystemPaneStyle.microFont
-        processToggleButton.contentTintColor = MenuPanelStyle.accentColor
-        processToggleButton.setButtonType(.momentaryChange)
-        processToggleButton.setAccessibilityLabel("切换进程榜维度")
-        processToggleButton.toolTip = SystemPaneTip.processToggle
+        processAllButton.target = self
+        processAllButton.action = #selector(showAllProcesses)
+        processAllButton.isBordered = false
+        processAllButton.font = NSFont.systemFont(ofSize: 9, weight: .bold)
+        processAllButton.contentTintColor = SystemPalette.loadInk
+        processAllButton.setButtonType(.momentaryChange)
+        processAllButton.setAccessibilityLabel("查看进程详情")
+        processAllButton.toolTip = SystemPaneTip.processAll
+        loadCard.setHeaderAction(processAllButton)
 
-        let content = NSStackView(views: [loadChart, headRow, processList])
+        let content = NSStackView(views: [loadChart, processList])
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 4
@@ -52,51 +52,60 @@ extension SystemPaneView {
         return loadCard
     }
 
-    /// 在 CPU 榜 / 内存榜之间切换并立即重绘
-    @objc func toggleProcessMetric() {
-        processMetric = (processMetric == .cpu) ? .memory : .cpu
-        renderProcessList()
+    /// 「全部 ›」→ 压力详情（Top-10 进程榜 + CPU 榜 / 内存榜切换）
+    @objc func showAllProcesses() {
+        showDetail(.process, from: loadCard)
     }
 
-    /// CPU 卡：左 60 秒叠加面积图 + 右每核柱阵（柱阵不写字，悬停出核号与占比）
+    /// CPU 卡：卡内 23pt 总利用率 + 60 秒叠加面积图（版2 不画每核柱阵 → CPU 详情）
     ///
     /// 用户态 / 系统态两枚图例挂在卡头、与标题同行（零新增行高）。
     func makeCPUCard() -> NSView {
         cpuCard.toolTip = SystemPaneTip.cpu
         cpuCard.setHeaderAccessory(cpuSplit)
+        cpuCard.setDisclosure(visible: true, color: SystemPalette.cpuInk)
+        cpuCard.onTap = { [weak self] in
+            guard let self else { return }
+            self.showDetail(.cpu, from: self.cpuCard)
+        }
         // 系统态带与卡头图例色块必须同源：两处各写一份就会「图例深、图上浅」
         cpuArea.overlayColor = SystemPaneStyle.systemUsageBand
-        let row = NSStackView(views: [cpuArea, coreGrid])
+        cpuHero.setContentHuggingPriority(.required, for: .horizontal)
+        cpuHero.setContentCompressionResistancePriority(.required, for: .horizontal)
+        cpuArea.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        cpuArea.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let row = NSStackView(views: [cpuHero, cpuArea])
         row.orientation = .horizontal
-        row.alignment = .top
+        row.alignment = .bottom
         row.spacing = 8
-        coreGrid.widthAnchor.constraint(equalToConstant: 112).isActive = true
-        cpuArea.widthAnchor.constraint(equalTo: row.widthAnchor, constant: -120).isActive = true
+        row.distribution = .fill
         cpuCard.addContent(row)
         return cpuCard
     }
 
-    /// GPU 卡：环形利用率 + 60 秒折线 + 显存细条（显存不可得显示「—」）
+    /// GPU 卡：环形利用率 + 60 秒折线 + 已用显存数值行（版2 去掉显存条 → GPU 详情）
     func makeGPUCard() -> NSView {
         gpuCard.toolTip = SystemPaneTip.gpu
+        gpuCard.setDisclosure(visible: true, color: SystemPalette.gpuInk)
+        gpuCard.onTap = { [weak self] in
+            guard let self else { return }
+            self.showDetail(.gpu, from: self.gpuCard)
+        }
+        gpuSparkline.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
         let sparklineRow = NSStackView(views: [gpuRing, gpuSparkline])
         sparklineRow.orientation = .horizontal
         sparklineRow.alignment = .centerY
         sparklineRow.spacing = 10
-        gpuSparkline.widthAnchor.constraint(equalTo: sparklineRow.widthAnchor, constant: -54).isActive = true
+        gpuSparkline.widthAnchor.constraint(equalTo: sparklineRow.widthAnchor,
+                                            constant: -50).isActive = true
 
-        let memoryRow = NSStackView(views: [gpuMemoryTrack, gpuMemoryLabel])
-        memoryRow.orientation = .horizontal
-        memoryRow.alignment = .centerY
-        memoryRow.spacing = 8
-        gpuMemoryLabel.setContentHuggingPriority(.required, for: .horizontal)
-        gpuMemoryLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        gpuMemoryTrack.widthAnchor.constraint(equalTo: memoryRow.widthAnchor, constant: -96).isActive = true
-
+        let memoryRow = Self.trailingValueRow(caption: "显存", value: gpuMemoryLabel)
         let content = NSStackView(views: [sparklineRow, memoryRow])
         content.orientation = .vertical
         content.alignment = .leading
-        content.spacing = 6
+        content.spacing = 4
         for subview in content.arrangedSubviews {
             subview.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
         }
@@ -104,61 +113,51 @@ extension SystemPaneView {
         return gpuCard
     }
 
-    /// 内存卡：四段堆叠条 + 压力徽标 + 四段数值与换出量一行
+    /// 内存卡：只留四段堆叠条 + 压力徽标（四段数值行下沉到内存详情）
     func makeMemoryCard() -> NSView {
         memoryCard.toolTip = SystemPaneTip.memory
         memoryCard.setHeaderAccessory(pressureDot)
-        let barRow = NSStackView(views: [memoryBar])
-        barRow.orientation = .horizontal
-        barRow.alignment = .centerY
-        barRow.spacing = 6
-        memoryBar.widthAnchor.constraint(equalTo: barRow.widthAnchor).isActive = true
-
-        let content = NSStackView(views: [barRow, memorySplit])
-        content.orientation = .vertical
-        content.alignment = .leading
-        content.spacing = 6
-        for subview in content.arrangedSubviews {
-            subview.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        memoryCard.setDisclosure(visible: true, color: SystemPalette.memoryInk)
+        memoryCard.onTap = { [weak self] in
+            guard let self else { return }
+            self.showDetail(.memory, from: self.memoryCard)
         }
-        memoryCard.addContent(content)
+        memoryCard.addContent(memoryBar)
         return memoryCard
     }
 
-    /// 磁盘卡：卡头繁忙度微条 + 读写双色曲线（共坐标系）+ 容量条 + 读写速率与 IOPS
+    /// 磁盘卡：版2 压成单行 —— 卡头繁忙度微条 + 已用/总容量 + ›
     func makeDiskCard() -> NSView {
         // 繁忙度峰值随历史刷新补进说明（见 updateDiskBusyTip），此处给基础口径
         diskCard.toolTip = SystemPaneTip.disk(busyPeakPercent: nil)
-        // IOPS 虚线用的灰阶口径集中在 SystemPaneStyle，避免与样式表各写一份
-        diskSparkline.primaryOverlayColor = SystemPaneStyle.iopsPrimary
-        diskSparkline.secondaryOverlayColor = SystemPaneStyle.iopsSecondary
-        let busyRow = NSStackView(views: [diskBusyLabel, diskBusyTrack])
-        busyRow.orientation = .horizontal
-        busyRow.alignment = .centerY
-        busyRow.spacing = 4
-        diskBusyTrack.setContentHuggingPriority(.required, for: .horizontal)
-        diskBusyTrack.widthAnchor.constraint(equalToConstant: 22).isActive = true
-        diskCard.setHeaderAccessory(busyRow)
-
-        let ratesRow = NSStackView(views: [diskReadIOPSLabel, diskReadLabel,
-                                           MenuPanelLabel.spacer(),
-                                           diskWriteIOPSLabel, diskWriteLabel])
-        ratesRow.orientation = .horizontal
-        ratesRow.alignment = .firstBaseline
-        ratesRow.spacing = 4
-        for label in [diskReadIOPSLabel, diskReadLabel, diskWriteIOPSLabel, diskWriteLabel] {
-            label.setContentHuggingPriority(.required, for: .horizontal)
+        diskCard.setHeaderAccessory(Self.trailingValueRow(caption: "忙", value: diskBusyLabel,
+                                                          track: diskBusyTrack))
+        diskCard.setDisclosure(visible: true, color: SystemPalette.diskInk)
+        diskCard.onTap = { [weak self] in
+            guard let self else { return }
+            self.showDetail(.disk, from: self.diskCard)
         }
-
-        let content = NSStackView(views: [diskSparkline, diskCapacityTrack, ratesRow])
-        content.orientation = .vertical
-        content.alignment = .leading
-        content.spacing = 5
-        for subview in content.arrangedSubviews {
-            subview.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
-        }
-        diskCard.addContent(content)
         return diskCard
+    }
+
+    /// 「标签 + 值」或「标签 + 值 + 微条」卡头小组（GPU 显存行 / 磁盘繁忙度）
+    ///
+    /// 版2 的磁盘卡只有卡头一行，微条必须紧跟在「忙 xx%」后面才有读数感。
+    static func trailingValueRow(caption: String, value: NSTextField,
+                                 track: MenuPanelTrackView? = nil) -> NSStackView {
+        let captionLabel = MenuPanelLabel.text(caption,
+                                               font: SystemPaneStyle.microFont,
+                                               color: SystemPalette.meta)
+        captionLabel.setContentHuggingPriority(.required, for: .horizontal)
+        let arranged: [NSView] = track.map { [captionLabel, value, $0] } ?? [captionLabel, value]
+        let row = NSStackView(views: arranged)
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 4
+        value.setContentHuggingPriority(.required, for: .horizontal)
+        track?.setContentHuggingPriority(.required, for: .horizontal)
+        track?.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        return row
     }
 
     /// 显示 / 隐藏状态带里的温度段（设置页 PanelItem.thermal 开关的新语义）

@@ -3,46 +3,46 @@ import NetworkMonitorCore
 
 // MARK: - 系统页卡片 toolTip 文案
 
-/// 系统页各卡的 `toolTip` 文案 — 界面只留数值与 ≤4 字标签，口径 / 来源 / 不可得原因全部走这里
+/// 系统页各卡与详情页的 `toolTip` 文案 — 界面只留数值与 ≤4 字标签，口径 / 来源 / 不可得原因全部走这里
 ///
-/// 集中一处：卡片装配与历史刷新两条链路要写同一份说明，散落两处必然走样
-/// （此前温度卡 toolTip 还留着「取自 SMC」，实际已改走 IOHID）。
+/// 集中一处：卡片装配、历史刷新与详情页三条链路要写同一份说明，散落两处必然走样。
 enum SystemPaneTip {
 
-    /// CPU 卡：总占用口径 + 用户态 / 系统态双序列 + 每核柱阵
+    // MARK: 首屏五卡（版2）
+
+    /// CPU 卡：总占用口径 + 用户态 / 系统态双序列 + 每核数据的去向
     static let cpu = "CPU 利用率 = 1 − 空闲占比；USER + SYSTEM + NICE + IRQ ticks 差分 ÷ 全部 ticks（含 idle），"
         + "1 秒采样。图上浅蓝面积 = 用户态（应用与用户进程），其上深色带 = 系统态（内核与驱动），"
         + "带顶线为总占用；两段同处 0…100 刻度，带厚即系统态真实占比，不是量程换算。"
-        + "右侧每核柱阵按 P 核在前、E 核在后排列，悬停可看单核占用"
+        + "每核占用（P0–P7 / E0–E1）已下沉到 CPU 详情页，点卡片进入"
 
-    /// GPU 卡：利用率 + 显存
+    /// GPU 卡：利用率 + 显存数值
     static let gpu = "GPU 利用率为设备性能计数器读数；折线为最近 60 秒趋势；"
-        + "统一内存机型无显存总量，只显示已用显存（取不到时显示「—」）"
+        + "显存只给已用量（统一内存机型取不到总量，故不画占比条，取不到时显示「—」）；"
+        + "显存总量说明与 0–10% 量程曲线在 GPU 详情页"
 
-    /// 内存卡：四段口径（已用不含 inactive）+ 压力 + 换出量
-    static let memory = "物理内存四段（按物理内存占比）：深蓝 = 内核 wired（不可换出、不可压缩，源 wire_count）、"
-        + "主蓝 = 活跃 active（应用页，源 active_count）、浅蓝 = 压缩 compressed（压缩器实际物理占用，"
+    /// 内存卡：四段条与压力的口径（四段数值下沉到详情页）
+    static let memory = "物理内存四段（按物理内存占比）：深色 = 内核 wired（不可换出、不可压缩，源 wire_count）、"
+        + "主色 = 活跃 active（应用页，源 active_count）、浅色 = 压缩 compressed（压缩器实际物理占用，"
         + "源 compressor_page_count，是压缩后的物理占用而非压缩前体量）、空白 = 空闲 free；"
         + "四段之和等于物理内存总量，已用 = 活跃 + 内核 + 压缩，不含 inactive（可被系统随时回收，"
-        + "计进去读数会长期偏高）。圆点为系统内存压力（绿正常、黄警告、红严重，"
-        + "源 kern.memorystatus_vm_pressure_level）；右下「交换」为当前 swap 占用（源 sysctl vm.swapusage）"
+        + "计进去读数会长期偏高）。圆点为系统内存压力（绿正常、琥珀警告、红严重，"
+        + "源 kern.memorystatus_vm_pressure_level）。四段数值与占比、60 点堆叠趋势在内存详情页"
 
-    /// 磁盘卡：容量 + 字节速率 + IOPS 虚线 + 繁忙度
+    /// 磁盘卡：版2 单行口径
     ///
     /// - Parameter busyPeakPercent: 近 60 秒繁忙度峰值（百分数）；nil 表示尚无历史
     static func disk(busyPeakPercent: Int?) -> String {
-        let base = "容量取自根卷属性（含系统与用户数据）；实心面积为读写字节速率（Bytes 差分 ÷ 采样间隔），"
-            + "虚线的为每秒操作数（Operations 差分，对数刻度——0…3000 op/s 跨两个数量级，线性刻度会把日常量级压到底部；"
-            + "形状可比，真实数值见文字），读写共用同一纵轴，曲线为近 60 秒。"
+        let base = "磁盘卡只保留卡头：繁忙度 =（读服务时间 + 写服务时间）÷ 采样间隔，即设备处于 IO 的时间占比，"
+            + "走磁盘族石墨（「忙」是设备占用率，与读序列同色；写序列才是琥珀）；"
+            + "容量取自根卷属性（含系统与用户数据）。"
+            + "读写速率（Bytes 差分 ÷ 采样间隔）、读/写 IOPS（Operations 差分，次/秒）、"
+            + "繁忙度明细、60 秒读写双序列与可用容量都在磁盘详情页。"
             + "IOPS / 繁忙度与字节速率同一次 IOBlockStorageDriver 调用取回，零额外采样开销；"
-            + "该机型未返回 Operations / Total Time 键时 IOPS 与繁忙度显示「—」，字节速率照常。"
-            + "繁忙度 =（读服务时间 + 写服务时间）÷ 采样间隔，即设备处于 IO 的时间占比；"
-            + "高 IOPS 低字节（大量小文件随机 IO）时字节线平、繁忙度与 IOPS 高，只看吞吐看不出来"
+            + "该机型未返回 Operations / Total Time 键时 IOPS 与繁忙度显示「—」，字节速率照常"
         guard let busyPeakPercent else { return base }
         return base + "；近 60 秒繁忙度峰值 \(busyPeakPercent)%"
     }
-
-    // MARK: v4 压力卡
 
     /// 压力卡：负载口径 + 量程 + 进程榜口径（有负载快照时补核数与热压力）
     static func load(load snapshot: LoadSnapshot? = nil) -> String {
@@ -53,7 +53,8 @@ enum SystemPaneTip {
             + "纵轴不是固定 0–100%：上限 = max(核数 × 1.2, 近 60 秒峰值 × 1.15)，"
             + "下限用核数避免低负载把噪声放大成满画布，上限用峰值让三线用满高度。"
             + "进程榜取 proc_pidinfo 全量遍历（约 1.3ms/次），CPU% 为 1 秒差分，单进程可 >100%（多线程合法）；"
-            + "条形为 sqrt 绝对刻度（满条 = 100% = 占满一个核），只取决于该进程自身 CPU%，不随榜首联动"
+            + "条形为 sqrt 绝对刻度（满条 = 100% = 占满一个核），只取决于该进程自身 CPU%，不随榜首联动。"
+            + "版2 只显示 Top-2，卡头「全部 ›」进 CPU 详情（每核 + 忙闲拆分）"
         guard let snapshot else { return base }
         var detail = base + "。本帧核数 \(max(0, snapshot.coreCount))"
         if snapshot.thermalState != .unknown {
@@ -76,8 +77,15 @@ enum SystemPaneTip {
         }
     }
 
-    /// 榜单维度说明
-    static func processMetric(_ metric: SystemProcessListView.Metric) -> String {
+    /// 进程榜不可得
+    static let processUnavailable = "进程读数不可得 · 首帧差分需要两个采样点，"
+        + "或 proc_pidinfo 全部返回 -1（权限 / 僵尸进程）；本机实测多数进程有差分值，属正常现象"
+
+    /// 卡头「全部 ›」
+    static let processAll = "进 CPU 详情：每核热力格（P0–P7 / E0–E1 逐核百分比）+ 忙闲拆分"
+
+    /// 榜单维度说明（压力详情页切换按钮）
+    static func processMetric(_ metric: SystemProcessMetric) -> String {
         switch metric {
         case .cpu:
             return "CPU 榜 · 按 CPU 占用降序 · 1 秒差分（proc_pidinfo）。单进程可 >100%（多线程合法，"
@@ -90,13 +98,9 @@ enum SystemPaneTip {
     /// 切换按钮
     static let processToggle = "切换榜单维度：CPU 占用降序 / 常驻内存降序"
 
-    /// 进程榜不可得
-    static let processUnavailable = "进程读数不可得 · 首帧差分需要两个采样点，"
-        + "或 proc_pidinfo 全部返回 -1（权限 / 僵尸进程）；本机实测多数进程有差分值，属正常现象"
-
     /// 单行进程说明
     static func processRow(usage: ProcessResourceUsage,
-                           metric: SystemProcessListView.Metric,
+                           metric: SystemProcessMetric,
                            memoryTotal: UInt64?) -> String {
         switch metric {
         case .cpu:
@@ -109,7 +113,7 @@ enum SystemPaneTip {
         }
     }
 
-    // MARK: v4 底部状态带
+    // MARK: 底部状态带
 
     /// 状态带：温度来源 + 电池口径 + Wi-Fi 口径 + 估算功耗 + 不可得项
     ///

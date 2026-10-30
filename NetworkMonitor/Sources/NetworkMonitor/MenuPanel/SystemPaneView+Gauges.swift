@@ -1,123 +1,5 @@
 import AppKit
 
-// MARK: - 每核柱阵
-
-/// 每核占用柱阵 — P 核在前、E 核在后，用两级明度区分；悬停显示核号与占比
-final class SystemCoreBarGridView: NSView {
-
-    /// 每核数据（顺序即绘制顺序：P 核在前）
-    var cores: [SystemCoreUsage] = [] {
-        didSet {
-            guard cores != oldValue else { return }
-            hoveredIndex = nil
-            needsDisplay = true
-        }
-    }
-
-    private var hoveredIndex: Int?
-    private var trackingAreaRef: NSTrackingArea?
-
-    /// 柱与柱之间的间隙
-    private static let columnGap: CGFloat = 2
-
-    init(height: CGFloat = 44) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: height).isActive = true
-        setAccessibilityRole(.image)
-        setAccessibilityLabel("每核占用")
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override var isFlipped: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard !cores.isEmpty else {
-            // 无核数据：只留一条底纹，不画柱（卡头已显示「—」）
-            MenuPanelStyle.trackColor.setFill()
-            NSRect(x: bounds.minX, y: bounds.maxY - 1, width: bounds.width, height: 1).fill()
-            return
-        }
-        let width = columnWidth()
-        let radius = min(1.5, width / 2)
-        for (index, core) in cores.enumerated() {
-            let x = CGFloat(index) * (width + Self.columnGap)
-            MenuPanelStyle.trackColor.setFill()
-            NSBezierPath(roundedRect: NSRect(x: x, y: bounds.minY, width: width, height: bounds.height),
-                         xRadius: radius, yRadius: radius).fill()
-
-            let ratio = core.usage.isFinite ? min(1, max(0, core.usage)) : 0
-            let fillHeight = max(1, bounds.height * CGFloat(ratio))
-            let fill = NSRect(x: x, y: bounds.maxY - fillHeight, width: width, height: fillHeight)
-            barColor(core: core, isHovered: index == hoveredIndex).setFill()
-            NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
-        }
-        if let hoveredIndex, cores.indices.contains(hoveredIndex) {
-            let core = cores[hoveredIndex]
-            let centerX = CGFloat(hoveredIndex) * (width + Self.columnGap) + width / 2
-            let percent = Int((min(1, max(0, core.usage)) * 100).rounded())
-            SystemChartDrawing.drawTooltip("\(core.label) \(percent)%",
-                                           centerX: centerX, topY: 0, within: bounds)
-        }
-    }
-
-    /// 单列宽度（总宽扣掉间隙后等分）
-    private func columnWidth() -> CGFloat {
-        let count = CGFloat(cores.count)
-        guard count > 0 else { return 0 }
-        return max(1, (bounds.width - Self.columnGap * (count - 1)) / count)
-    }
-
-    /// P 核高对比、E 核低对比（同一强调色两级明度；悬停用满色强调）
-    private func barColor(core: SystemCoreUsage, isHovered: Bool) -> NSColor {
-        guard !isHovered else { return MenuPanelStyle.accentColor }
-        // E 核 0.38 在浅色卡片上不足 2:1、看不清，提到 0.58 仍与 P 核（0.85）分得开
-        return MenuPanelStyle.accentColor.withAlphaComponent(core.isPerformance ? 0.85 : 0.58)
-    }
-
-    // MARK: 悬停
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaRef { removeTrackingArea(trackingAreaRef) }
-        let area = NSTrackingArea(rect: bounds,
-                                  options: [.mouseEnteredAndExited, .mouseMoved,
-                                            .activeInKeyWindow, .inVisibleRect],
-                                  owner: self, userInfo: nil)
-        addTrackingArea(area)
-        trackingAreaRef = area
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        updateHover(at: convert(event.locationInWindow, from: nil))
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        guard hoveredIndex != nil else { return }
-        hoveredIndex = nil
-        needsDisplay = true
-    }
-
-    private func updateHover(at point: NSPoint) {
-        guard !cores.isEmpty, bounds.contains(point) else {
-            guard hoveredIndex != nil else { return }
-            hoveredIndex = nil
-            needsDisplay = true
-            return
-        }
-        let width = columnWidth()
-        let step = width + Self.columnGap
-        let index = Int(max(0, point.x) / step)
-        let startX = CGFloat(index) * step
-        let newValue = (index < cores.count && point.x - startX <= width) ? index : nil
-        guard newValue != hoveredIndex else { return }
-        hoveredIndex = newValue
-        needsDisplay = true
-    }
-}
-
 // MARK: - 环形利用率
 
 /// 环形利用率 — 中心显示百分比；空态显示「—」而不是隐藏整环
@@ -131,8 +13,13 @@ final class SystemRingView: NSView {
         }
     }
 
-    // 默认取项目强调色（与面板其它页同色系），调用方可覆盖
-    var ringColor: NSColor = MenuPanelStyle.accentColor {
+    /// 环色（GPU 族靛 / 电池绿等，调用方可覆盖）
+    var ringColor: NSColor = SystemPalette.gpu {
+        didSet { needsDisplay = true }
+    }
+
+    /// 环心文字颜色（数值走 ink 变体）
+    var textColor: NSColor = SystemPalette.gpuInk {
         didSet { needsDisplay = true }
     }
 
@@ -168,7 +55,7 @@ final class SystemRingView: NSView {
         let track = NSBezierPath()
         track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
         track.lineWidth = Self.ringWidth
-        MenuPanelStyle.trackColor.setStroke()
+        SystemPalette.track.setStroke()
         track.stroke()
 
         let value = fraction.isFinite ? min(1, max(0, fraction)) : 0
@@ -184,7 +71,7 @@ final class SystemRingView: NSView {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: Self.centerFont,
-            .foregroundColor: MenuPanelStyle.secondaryText,
+            .foregroundColor: textColor,
         ]
         let size = (centerText as NSString).size(withAttributes: attributes)
         (centerText as NSString).draw(at: NSPoint(x: center.x - size.width / 2,
@@ -195,19 +82,19 @@ final class SystemRingView: NSView {
 
 // MARK: - 堆叠条
 
-/// 分段堆叠条 — 按 `total` 归一化；圆角裁剪保证首尾圆润，段间留 1pt 缝便于分段识别
+/// 分段堆叠条 — 按 `total` 归一化；圆角裁剪保证首尾圆润，段间留 0.5pt 卡底色缝便于分段识别
 ///
 /// 内存卡用四段：wired / active / compressed 三段实色 + free 段传 `NSColor.clear`
 /// （留空露出轨道底色，即「空闲」），四段之和等于物理内存总量。
 /// 压力态（警告 / 紧张）额外给整条轨道 1pt 内描边：只靠卡头徽标时，
-/// 视线落在条形上根本看不出「紧张」，08 冻结版就是这么表达的。
+/// 视线落在条形上根本看不出「紧张」。
 final class SystemStackedBarView: NSView {
 
     /// 单个分段
     struct Segment {
         /// 分段数值（与 `total` 同单位）
         let value: Double
-        /// 分段颜色（语义色 + alpha；传 `.clear` 表示该段留空）
+        /// 分段颜色（语义色；传 `.clear` 表示该段留空）
         let color: NSColor
     }
 
@@ -231,8 +118,13 @@ final class SystemStackedBarView: NSView {
         }
     }
 
-    /// 段间缝隙（0 = 紧贴）
-    private static let segmentGap: CGFloat = 1
+    /// 段间缝隙颜色（nil 时取内存卡 wash：缝是「卡底透出来」，不是轨道灰）
+    var gapColor: NSColor? {
+        didSet { needsDisplay = true }
+    }
+
+    /// 段间缝隙宽度
+    private static let segmentGap: CGFloat = 0.5
 
     init(height: CGFloat = 9) {
         super.init(frame: .zero)
@@ -250,27 +142,31 @@ final class SystemStackedBarView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let clipPath = NSBezierPath(roundedRect: bounds, xRadius: 2, yRadius: 2)
         clipPath.addClip()
-        MenuPanelStyle.trackColor.setFill()
+        SystemPalette.track.setFill()
         bounds.fill()
 
         guard total > 0, total.isFinite else {
             drawPressureStroke()
             return
         }
-        // 段间缝隙从可用宽度里扣：否则累计间隙会把最后一段挤出可视区
         let visible = segments.filter { $0.value.isFinite && $0.value > 0 }
         guard !visible.isEmpty else {
             drawPressureStroke()
             return
         }
-        let usable = max(0, bounds.width - Self.segmentGap * CGFloat(visible.count - 1))
         var x = bounds.minX
-        for segment in visible {
+        for (index, segment) in visible.enumerated() {
             let ratio = min(1, max(0, segment.value / total))
-            let width = usable * CGFloat(ratio)
+            let width = bounds.width * CGFloat(ratio)
             segment.color.setFill()
             NSRect(x: x, y: bounds.minY, width: width, height: bounds.height).fill()
-            x += width + Self.segmentGap
+            // 段间缝：在边界处压一条卡底色细线（首段左侧与末段右侧不画）
+            if index < visible.count - 1 {
+                (gapColor ?? SystemPalette.color(.cardMemory)).setFill()
+                NSRect(x: x + width - Self.segmentGap, y: bounds.minY,
+                       width: Self.segmentGap, height: bounds.height).fill()
+            }
+            x += width
         }
         drawPressureStroke()
     }
@@ -288,8 +184,8 @@ final class SystemStackedBarView: NSView {
     /// 压力等级 → 描边色（正常 / 未知不描边，语义与卡头圆点一致）
     private var pressureStrokeColor: NSColor? {
         switch pressureLevel {
-        case .warning: return .systemYellow
-        case .critical: return .systemRed
+        case .warning: return SystemPalette.warn
+        case .critical: return SystemPalette.danger
         case .normal, .unknown: return nil
         }
     }
@@ -297,7 +193,7 @@ final class SystemStackedBarView: NSView {
 
 // MARK: - 压力徽标
 
-/// 内存压力徽标 — 8pt 圆点：正常绿 / 警告黄 / 严重红（未知灰）
+/// 内存压力徽标 — 8pt 圆点：正常绿 / 警告琥珀 / 严重红（未知灰）
 final class SystemPressureDotView: NSView {
 
     /// 压力级别（与 Core 三级枚举一一对应，未知态单独一档）
@@ -332,10 +228,10 @@ final class SystemPressureDotView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let color: NSColor
         switch level {
-        case .normal: color = .systemGreen
-        case .warning: color = .systemYellow
-        case .critical: color = .systemRed
-        case .unknown: color = MenuPanelStyle.trackColor
+        case .normal: color = SystemPalette.ok
+        case .warning: color = SystemPalette.warn
+        case .critical: color = SystemPalette.danger
+        case .unknown: color = SystemPalette.track
         }
         color.setFill()
         NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5)).fill()

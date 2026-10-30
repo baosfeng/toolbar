@@ -59,13 +59,16 @@ enum SnapshotFixtures {
                                wifi: WiFiLinkSnapshot? = defaultWiFi()) -> SystemMetricsSnapshot {
         // user + system 必须等于 total：卡头用户态由 total − system 现算，
         // 夹具若自相矛盾会让取证图看着对、口径却错
+        // 逐核顺序是 E 核在前、P 核在后（splitCores 口径）：E0/E1 高负载、P0–P7 低负载。
+        // 逐核均值 = (0.38+0.42+0.012+0.009+0.024+0.018+0.007+0.011+0.009+0.013)/10 ≈ 9.3%，
+        // 与卡头 totalUsage 9% 自洽；详情页「P 核均 1.3% · E 核均 40%」也由同一份逐核值算出。
         SystemMetricsSnapshot(
-            cpu: CPUSnapshot(totalUsage: 0.37,
-                             perCore: [0.12, 0.08, 0.62, 0.71, 0.44, 0.55, 0.38, 0.66, 0.29, 0.51],
+            cpu: CPUSnapshot(totalUsage: 0.09,
+                             perCore: [0.38, 0.42, 0.012, 0.009, 0.024, 0.018, 0.007, 0.011, 0.009, 0.013],
                              performanceCores: 8,
                              efficiencyCores: 2,
-                             userUsage: 0.22,
-                             systemUsage: 0.15),
+                             userUsage: 0.052,
+                             systemUsage: 0.038),
             gpu: gpu,
             // 四段按 16 GiB 物理内存的比例给：内核 3.6 / 活跃 6.4 / 压缩 1.2 / 空闲 4.8（GiB）；
             // used 必须等于前三段之和，否则卡片会显示「四段之和 ≠ 已用」（口径自相矛盾）
@@ -122,34 +125,36 @@ enum SnapshotFixtures {
                          signalQuality: .fair)
     }
 
-    /// 进程榜示意数据 — CPU% 覆盖「超 100% 多线程 / 常态榜首 / 碎进程」三档，
+    /// 进程榜示意数据 — 10 条覆盖「榜首高占用 / 中段递减 / 碎进程」三档，
+    /// 两份榜单由同一批进程排出来（CPU 榜按 CPU%、内存榜按常驻），首屏 Top-2 与详情 Top-10 同源。
     /// 用于核对 sqrt 绝对刻度：条长只由自身 CPU% 决定，与榜首是谁无关。
     static func defaultProcesses() -> ProcessResourceSnapshot {
-        let topCPU = [
-            ProcessResourceUsage(pid: 431, name: "qemu-system-aar", cpuPercent: 27.6,
+        let rows = [
+            ProcessResourceUsage(pid: 431, name: "qemu-system-aar", cpuPercent: 73.9,
                                  residentBytes: 2_400_000_000),
-            ProcessResourceUsage(pid: 918, name: "WindowServer", cpuPercent: 22.9,
+            ProcessResourceUsage(pid: 918, name: "WindowServer", cpuPercent: 41.2,
                                  residentBytes: 1_100_000_000),
-            ProcessResourceUsage(pid: 2261, name: "Helper", cpuPercent: 19.4,
-                                 residentBytes: 340_000_000),
-            ProcessResourceUsage(pid: 77, name: "mds_stores", cpuPercent: 3.1,
-                                 residentBytes: 88_000_000),
-            ProcessResourceUsage(pid: 1502, name: "Terminal", cpuPercent: 0.9,
+            ProcessResourceUsage(pid: 2261, name: "Xcode", cpuPercent: 27.6,
+                                 residentBytes: 3_900_000_000),
+            ProcessResourceUsage(pid: 77, name: "mds_stores", cpuPercent: 18.8,
+                                 residentBytes: 620_000_000),
+            ProcessResourceUsage(pid: 1502, name: "Terminal", cpuPercent: 12.4,
                                  residentBytes: 210_000_000),
-        ]
-        let topMemory = [
-            ProcessResourceUsage(pid: 431, name: "qemu-system-aar", cpuPercent: 27.6,
-                                 residentBytes: 6_400_000_000),
-            ProcessResourceUsage(pid: 918, name: "WindowServer", cpuPercent: 22.9,
-                                 residentBytes: 1_900_000_000),
-            ProcessResourceUsage(pid: 2261, name: "Xcode", cpuPercent: 8.2,
+            ProcessResourceUsage(pid: 302, name: "DeepSeek", cpuPercent: 8.6,
                                  residentBytes: 1_500_000_000),
-            ProcessResourceUsage(pid: 77, name: "Safari", cpuPercent: 3.1,
-                                 residentBytes: 900_000_000),
-            ProcessResourceUsage(pid: 1502, name: "Terminal", cpuPercent: 0.9,
-                                 residentBytes: 210_000_000),
+            ProcessResourceUsage(pid: 655, name: "Safari", cpuPercent: 5.2,
+                                 residentBytes: 980_000_000),
+            ProcessResourceUsage(pid: 812, name: "WeChat", cpuPercent: 3.1,
+                                 residentBytes: 740_000_000),
+            ProcessResourceUsage(pid: 933, name: "Spotify", cpuPercent: 1.8,
+                                 residentBytes: 320_000_000),
+            ProcessResourceUsage(pid: 1044, name: "Finder", cpuPercent: 0.9,
+                                 residentBytes: 180_000_000),
         ]
-        return ProcessResourceSnapshot(topCPU: topCPU, topMemory: topMemory, scannedCount: 512)
+        return ProcessResourceSnapshot(
+            topCPU: rows.sorted { $0.cpuPercent > $1.cpuPercent },
+            topMemory: rows.sorted { $0.residentBytes > $1.residentBytes },
+            scannedCount: 512)
     }
 
     /// 高负载示意：三线远超核数（10），配合 thermalState = critical 核对「排队」表达
@@ -163,27 +168,31 @@ enum SnapshotFixtures {
     /// CPU 系统态序列与总量同相位但恒小于总量：叠加带厚度即系统态占比，
     /// 若两条各自独立随机会出现「带比总量还高」的假读数。
     static func systemHistories() -> (cpu: [Double], cpuSystem: [Double], gpu: [Double],
-                                      memory: [Double], diskRead: [Double], diskWrite: [Double],
-                                      diskReadIOPS: [Double], diskWriteIOPS: [Double],
+                                      memory: [Double],
+                                      memoryWired: [Double], memoryActive: [Double],
+                                      memoryCompressed: [Double],
+                                      diskRead: [Double], diskWrite: [Double],
                                       loadShort: [Double], loadMedium: [Double],
                                       loadLong: [Double]) {
-        let cpu = history(base: 0.16, amplitude: 0.42).map { min(1, $0) }
+        // 与快照卡头同量级（9%）：曲线均值约 9%，不出现「卡头 9%、曲线却冲到 58%」的假读数
+        let cpu = history(base: 0.05, amplitude: 0.08).map { min(1, $0) }
         // 系统态占比与快照卡头同口径（15% ÷ 37% ≈ 0.41），图例与带厚才对得上
         let cpuSystem = cpu.map { $0 * 0.41 }
         let gpu = history(base: 0.10, amplitude: 0.35).map { min(1, $0) }
         let memory = history(base: 0.52, amplitude: 0.16).map { min(1, $0) }
+        // 三段堆叠趋势：占比口径（wired 11% / active 29% / compressed 24%），三段之和 = 已用占比
+        let wired = history(base: 0.11, amplitude: 0.04).map { min(0.20, max(0, $0)) }
+        let active = history(base: 0.29, amplitude: 0.10).map { min(0.45, max(0, $0)) }
+        let compressed = history(base: 0.24, amplitude: 0.08).map { min(0.38, max(0, $0)) }
         let read = history(base: 2_000_000, amplitude: 9_000_000)
         let write = history(base: 600_000, amplitude: 3_000_000)
-        // IOPS 与速率同相位（同一批 IO 的两面），量级按对数刻度可辨
-        let readIOPS = history(base: 90, amplitude: 260).map { max(0, $0) }
-        let writeIOPS = history(base: 30, amplitude: 110).map { max(0, $0) }
         // 负载三线围核数（10）上下抖动：1m 抖得最凶、15m 最平（长窗口天然滞后），
         // 让三线既越过参考虚线又留有回落区间——「越过即排队」的表达才看得见
         let load1 = history(base: 8.5, amplitude: 7.0)
         let load5 = history(base: 7.6, amplitude: 3.4)
         let load15 = history(base: 6.6, amplitude: 1.6)
-        return (cpu, cpuSystem, gpu, memory, read, write, readIOPS, writeIOPS,
-                load1, load5, load15)
+        return (cpu, cpuSystem, gpu, memory, wired, active, compressed,
+                read, write, load1, load5, load15)
     }
 
     /// 活跃进程示意数据（进程名真实 → 可验证 NSWorkspace 真实图标解析）

@@ -59,6 +59,9 @@ private let procAllPIDsType: UInt32 = 1
 /// 本机实测 528 个 pid 里约 326 个可读，**不得当错误刷日志**。
 enum SystemProcessSampler {
 
+    /// 进程榜缓存条数 — 「压力详情」要 Top-10，首屏只显示前 2 条
+    static let topLimit = 10
+
     /// 一次全量扫描结果
     struct ScanResult: Sendable {
         /// pid → 累计 CPU ticks 与常驻内存

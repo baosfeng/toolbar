@@ -25,27 +25,27 @@ final class SystemStateBandView: NSView {
 
     init() {
         tempCaption = MenuPanelLabel.text("SoC", font: SystemPaneStyle.microFont,
-                                          color: MenuPanelStyle.tertiaryText)
+                                          color: SystemPalette.meta)
         tempValue = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                         font: MenuPanelStyle.smallValueFont,
-                                        color: MenuPanelStyle.secondaryText)
+                                        color: SystemPalette.temperatureInk)
         batteryRing = SystemBatteryRingView()
         batteryValue = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                            font: MenuPanelStyle.smallValueFont,
-                                           color: MenuPanelStyle.secondaryText)
+                                           color: SystemPalette.batteryInk)
         batteryNote = MenuPanelLabel.text("", font: SystemPaneStyle.tinyFont,
-                                          color: MenuPanelStyle.tertiaryText)
+                                          color: SystemPalette.meta)
         // 「估」紧跟「功耗」：GPU 功耗是累加器估算，不是功耗计读数，不能只写数字
         powerCaption = MenuPanelLabel.text("估功耗", font: SystemPaneStyle.microFont,
-                                           color: MenuPanelStyle.tertiaryText)
+                                           color: SystemPalette.meta)
         powerValue = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                          font: MenuPanelStyle.smallValueFont,
-                                         color: MenuPanelStyle.secondaryText)
+                                         color: SystemPalette.powerInk)
         wifiCaption = MenuPanelLabel.text("Wi-Fi", font: SystemPaneStyle.microFont,
-                                          color: MenuPanelStyle.tertiaryText)
+                                          color: SystemPalette.meta)
         wifiValue = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                         font: MenuPanelStyle.smallValueFont,
-                                        color: MenuPanelStyle.secondaryText)
+                                        color: SystemPalette.wifiInk)
         wifiDot = WiFiSignalDotView()
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -79,7 +79,7 @@ final class SystemStateBandView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        MenuPanelStyle.subtleFill.setFill()
+        SystemPalette.bandBackground.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
         super.draw(dirtyRect)
     }
@@ -90,12 +90,12 @@ final class SystemStateBandView: NSView {
     func updateTemperature(_ celsius: Double?) {
         guard let celsius, celsius.isFinite else {
             tempValue.stringValue = SystemPaneFormat.placeholder
-            tempValue.textColor = MenuPanelStyle.tertiaryText
+            tempValue.textColor = SystemPalette.meta
             return
         }
         tempValue.stringValue = SystemPaneFormat.temperatureNumber(celsius) + "°"
         tempValue.textColor = celsius > SystemPaneFormat.hotThreshold
-            ? .systemRed : MenuPanelStyle.secondaryText
+            ? SystemPaneStyle.temperatureHot : SystemPalette.temperatureInk
     }
 
     /// 电池段 — 环 + 电量 + 状态小字（充 / AC）；循环次数进 toolTip（健康度不可得）
@@ -104,7 +104,7 @@ final class SystemStateBandView: NSView {
             batteryRing.fraction = 0
             batteryRing.tone = .unavailable
             batteryValue.stringValue = SystemPaneFormat.placeholder
-            batteryValue.textColor = MenuPanelStyle.tertiaryText
+            batteryValue.textColor = SystemPalette.meta
             batteryNote.stringValue = ""
             return
         }
@@ -121,25 +121,25 @@ final class SystemStateBandView: NSView {
             batteryRing.fraction = 0
             batteryRing.tone = .unavailable
             batteryValue.stringValue = SystemPaneFormat.placeholder
-            batteryValue.textColor = MenuPanelStyle.tertiaryText
+            batteryValue.textColor = SystemPalette.meta
             return
         }
         let ratio = SystemPaneFormat.unitFraction(percentage)
         batteryRing.fraction = ratio
         batteryRing.tone = ratio < 0.10 ? .critical : (ratio < 0.20 ? .warning : .normal)
         batteryValue.stringValue = SystemPaneFormat.percent(percentage)
-        batteryValue.textColor = MenuPanelStyle.secondaryText
+        batteryValue.textColor = SystemPalette.batteryInk
     }
 
     /// GPU 功耗段（估算值；nil 显示「—」）
     func updatePower(_ watts: Double?) {
         guard let watts, watts.isFinite else {
             powerValue.stringValue = SystemPaneFormat.placeholder
-            powerValue.textColor = MenuPanelStyle.tertiaryText
+            powerValue.textColor = SystemPalette.meta
             return
         }
         powerValue.stringValue = String(format: "%.2f W", max(0, watts))
-        powerValue.textColor = MenuPanelStyle.secondaryText
+        powerValue.textColor = SystemPalette.powerInk
     }
 
     /// Wi-Fi 段 — 只放 RSSI 与档位色点
@@ -149,7 +149,7 @@ final class SystemStateBandView: NSView {
     func updateWiFi(_ snapshot: WiFiLinkSnapshot?) {
         let available = WiFiLinkFormatting.isAvailable(snapshot)
         wifiValue.stringValue = WiFiLinkFormatting.rssiText(snapshot)
-        wifiValue.textColor = available ? MenuPanelStyle.secondaryText : MenuPanelStyle.tertiaryText
+        wifiValue.textColor = available ? SystemPalette.wifiInk : SystemPalette.meta
         wifiDot.quality = available ? WiFiLinkFormatting.quality(snapshot) : .unknown
         setAccessibilityLabel("系统状态带")
     }
@@ -224,7 +224,7 @@ final class SystemBatteryRingView: NSView {
         let track = NSBezierPath()
         track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
         track.lineWidth = Self.lineWidth
-        MenuPanelStyle.trackColor.setStroke()
+        SystemPalette.track.setStroke()
         track.stroke()
 
         let value = fraction.isFinite ? min(1, max(0, fraction)) : 0
@@ -243,7 +243,7 @@ final class SystemBatteryRingView: NSView {
         case .normal: return SystemPaneStyle.batteryRing
         case .warning: return SystemPaneStyle.batteryWarn
         case .critical: return SystemPaneStyle.batteryCritical
-        case .unavailable: return MenuPanelStyle.dynamicLabel(alpha: 0.24)
+        case .unavailable: return SystemPalette.track
         }
     }
 }

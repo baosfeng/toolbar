@@ -1,0 +1,1428 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>菜单面板「系统」页 · 三套配色方向对照（浅 / 深）</title>
+<style>
+:root {
+  /* ─── Surface (3 levels) ──────────────────────────────────────────
+   * Apple's binary section rhythm alternates pure white retail/hero
+   * canvases with pale Apple gray feature fields. We bind --bg to
+   * the white canvas (the most common default Apple page background)
+   * and --surface to the pale gray that cards and feature bands lift
+   * onto. --surface-warm is bound to a real third tier (#fbfbfd) —
+   * the near-white brightness shift that appears between hero and
+   * pale-gray bands on apple.com. Collapsing it to var(--surface)
+   * would erase a real brand feature, so we keep it independent. */
+  --bg: #ffffff;
+  --surface: #f5f5f7;
+  --surface-warm: #fbfbfd;
+
+  /* ─── Foreground ramp (4 levels) ─────────────────────────────────
+   * Apple's text neutrals are explicitly named in DESIGN.md §2:
+   * Near-Black Ink (primary), Utility Dark Gray (secondary text /
+   * dark-neutral surfaces in store contexts), Secondary Neutral Gray
+   * (helper copy / tertiary metadata), Mid Border Gray (the strongest
+   * neutral, used for stronger field outlines and the most-restrained
+   * caption tier). We bind all four — Apple genuinely walks the full
+   * ramp, so collapsing --fg-2 or --meta to siblings would flatten
+   * the brand.
+   *
+   * Note that none of these are pure black (#000000). #000000 is
+   * reserved for hero canvases and dark chapters; for body type on
+   * white, #1d1d1f gives the slight warmth that reads as Apple. */
+  --fg: #1d1d1f;
+  --fg-2: #424245;
+  --muted: #6e6e73;
+  --meta: #86868b;
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Soft Border Gray (#d2d2d7) is Apple's default divider weight and
+   * card-edge color. --border-soft is bound to a lighter near-neutral
+   * (#e8e8ed) for inner row separators in dense retail tables and
+   * configurator option lists, where the d2d2d7 hairline would
+   * over-compete with the option labels. */
+  --border: #d2d2d7;
+  --border-soft: #e8e8ed;
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Apple Action Blue — the system's only persistent chromatic move.
+   * DESIGN.md §7 ("Don't introduce broad secondary accent palettes
+   * that compete with Apple blue") makes this a one-color brand for
+   * action and link semantics; the schema's hard cap of ≤2 visible
+   * accent uses per screen aligns naturally. */
+  --accent: #0071e3;
+  --accent-on: #ffffff; /* white label on the blue fill */
+
+  /* ─── Accent states ───────────────────────────────────────────────
+   * Apple's live primary buttons LIGHTEN on hover (the blue gains
+   * luminance) and darken on press. The schema's default black-mix
+   * formula would fight that motion, so we hand-pick both values:
+   *   - hover: #0077ed (≈ 4% brighter than --accent)
+   *   - active: #0066cc (the documented Body Link Blue from DESIGN.md
+   *             §2, which doubles cleanly as the press tone)
+   *
+   * Schema rule: every brand provides --accent-hover and
+   * --accent-active. The binding strategy (formula / hand-picked /
+   * identity) is brand-decided. Default uses formulas; kami uses
+   * identity + hand-picked; Apple uses hand-picked in both
+   * directions. */
+  --accent-hover: #0077ed;
+  --accent-active: #0066cc;
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Apple's DESIGN.md §2 explicitly notes "no distinct semantic
+   * palette was consistently visible in the extracted surface set" —
+   * so we inherit the schema defaults verbatim. Apple artifacts
+   * almost never need success / warn / danger; when they do, the
+   * defaults are restrained enough not to fight the blue accent.
+   * Reserve under 5% of any surface area regardless. */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Apple's documented split is two SF Pro families: SF Pro Display
+   * for hero / merchandising headings, SF Pro Text for navigation,
+   * controls, and dense commerce copy. We mirror the exact published
+   * fallback chain (SF Pro Icons → Helvetica Neue → Helvetica → Arial
+   * → sans-serif) so artifacts rendered on non-macOS clients land on
+   * the closest practical substitute.
+   *
+   * SF Mono leads the monospace stack — Apple's brand mono — with
+   * the schema fallbacks behind it for portability. */
+  --font-display:
+    "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:
+    "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:
+    "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — derived from DESIGN.md §3 hierarchy table.
+   * Apple's body baseline is 17px (NOT the 16px web norm) because
+   * SF Pro Text was metrically tuned at 17 for Retina; rebinding
+   * --text-base to anything else collapses the brand's reading
+   * texture. The display ceiling is the 80px Hero Display XL. */
+  --text-xs:   12px;   /* Micro UI — fine print, micro labels */
+  --text-sm:   14px;   /* Control Label — buttons, helper labels */
+  --text-base: 17px;   /* Body Primary — Apple's reading baseline */
+  --text-lg:   21px;   /* Link/Action Heading — large promo links */
+  --text-xl:   28px;   /* Card/Product Title — tile-level naming */
+  --text-2xl:  40px;   /* Product Heading — campaign section titles */
+  --text-3xl:  56px;   /* Hero Display L — homepage hero moments */
+  --text-4xl:  80px;   /* Hero Display XL — Environment / store hero */
+
+  /* Apple's leading envelope is unusually tight at the top of the
+   * scale (display sizes ride at 1.00–1.10) and unusually airy in
+   * the body (1.47, well above the web 1.4 default). Both numbers
+   * come straight from DESIGN.md §3. */
+  --leading-body:  1.47;   /* SF Pro Text body, 17px */
+  --leading-tight: 1.05;   /* Hero Display XL ceiling */
+
+  /* Display tracking compresses to -0.015em — the famous Apple
+   * machined-headline feel. DESIGN.md §3 lists -1.2px on 80px
+   * (≈ -0.015em); we bind a single em-value so the same rule applies
+   * across the display tiers. Body type runs at 0 / -0.374px and is
+   * left to component-level rules so as not to hurt readability. */
+  --tracking-display: -0.015em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * Apple's underlying grid is 8px (DESIGN.md §5), with utility
+   * micro-steps (2/4/6/7/8/9/10) for precision alignment. The shared
+   * schema's 4-8-12-16-20-24-32-48 scale fits cleanly — we inherit
+   * the defaults. Component-internal values that don't match a token
+   * (Apple's 14px or 17px utility intervals) stay inline at the
+   * call site rather than spawning extra spacing tokens. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * Apple's billboard chapters lean noticeably more generous than the
+   * schema default of 80px — broad top/bottom breathing room is what
+   * lets product imagery dominate the page. We bind 100/64/40, a
+   * slightly wider envelope than default's 80/48/32. */
+  --section-y-desktop: 100px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Apple uses purposeful radius tiers (DESIGN.md §5 §7 — "don't
+   * flatten all corners to a single radius"). The mapping:
+   *   --radius-sm   → 8px   compact controls and fields
+   *   --radius-md   → 12px  standard buttons, configurator chips
+   *   --radius-lg   → 18px  cards, module frames, commerce panels
+   *   --radius-pill → 980px Apple's signature capsule CTA — we keep
+   *                          the literal value rather than collapse
+   *                          to 9999px because the number itself is
+   *                          a brand-recognisable detail in Apple's
+   *                          published CSS.
+   *
+   * The 28-36px spotlight tier and the 56px capsule sub-tier are
+   * component-internal one-offs and stay inline — they do not earn
+   * their own tokens until a second use appears. */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   18px;
+  --radius-pill: 980px;
+
+  /* ─── Elevation (3 levels) ────────────────────────────────────────
+   * Apple uses depth sparingly (DESIGN.md §6 — "depth is intentionally
+   * restrained"). Three sanctioned levels:
+   *   - flat   → none (the default; tonal contrast does the work)
+   *   - ring   → 0 0 0 1px var(--border) (border-led containment in
+   *              dense retail contexts)
+   *   - raised → 0 12px 32px rgba(0,0,0,0.08) (the soft Apple card
+   *              shadow; rgba 0.08 is the lower bound from DESIGN.md
+   *              §6's "0.08 → 0.22" range, which keeps cards from
+   *              feeling Material-flavoured)
+   *
+   * No fourth level — that would be the Material/neumorphism stack
+   * Apple consciously avoids. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 12px 32px rgba(0, 0, 0, 0.08);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Apple's keyboard-focus signal is a soft blue glow at the action
+   * accent (DESIGN.md §6 — "Blue focus signal (#0071e3) for keyboard
+   * and selection emphasis"). We use a 4px ring at ~35% accent
+   * opacity, slightly larger than the schema's 3px default so it
+   * reads as the deliberate Apple halo rather than a generic outline.
+   * Implemented as a box-shadow so it layers outside the element
+   * without affecting layout. */
+  --focus-ring: 0 0 0 4px color-mix(in oklab, var(--accent), transparent 65%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Apple transitions decelerate hard and settle — never bounce,
+   * never spring past the target. We override the schema default
+   * easing with cubic-bezier(0.28, 0, 0.22, 1), the curve Apple
+   * uses on apple.com for hover and section reveals; --motion-base
+   * is bumped from 200ms → 220ms because Apple's micro-interactions
+   * carry slightly more cinematic weight than the web default.
+   * --motion-fast stays at 150ms for true micro-states (hover tints,
+   * focus, kbd press feedback). */
+  --motion-fast:   150ms;
+  --motion-base:   220ms;
+  --ease-standard: cubic-bezier(0.28, 0, 0.22, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Apple's marketing core is a constrained readable column with
+   * generous outer margins (DESIGN.md §5). 1024px max keeps lines
+   * inside the SF Pro Text comfortable-measure ceiling (~80ch at
+   * 17px) while leaving the chapter band full-bleed. Gutters step
+   * 22 → 18 → 16 across desktop / tablet / phone — slightly tighter
+   * than default to honor Apple's "broad horizontal breathing room
+   * but column-disciplined content" balance. */
+  --container-max:            1024px;
+  --container-gutter-desktop: 22px;
+  --container-gutter-tablet:  18px;
+  --container-gutter-phone:   16px;
+}
+
+/* ══ 本项目色板取值（唯一色值来源；全部落在 :root，别处零裸色值） ══
+   a1/a2 = A 方案 浅/深 · b1/b2 = B 方案 浅/深 · c1/c2 = C 方案 浅/深。
+   用法层只认语义名（--m-cpu / --card-cpu …），方案差异只在这张表里。 */
+:root {
+  /* ── a1 ── */
+  --a1-bg:#ffffff; --a1-bg-2:#ffffff; --a1-surface:#f5f5f7; --a1-card:#f5f5f7;
+  --a1-card-cpu:#e9eef6; --a1-card-gpu:#ededf5; --a1-card-mem:#e9f0f1; --a1-card-load:#f2eceb;
+  --a1-card-disk:#f2edeb; --a1-fg:#1d1d1f; --a1-fg-2:#3d3d40; --a1-muted:#62626a;
+  --a1-meta:#6a6a72; --a1-border:#d2d2d7; --a1-border-soft:#e6e6eb; --a1-track:#e4e4ea;
+  --a1-soft-fill:#f0f0f4; --a1-band-bg:#f0f0f4; --a1-grid:#ececf1; --a1-tab-on-bg:#d5e4f4;
+  --a1-tab-on-ink:#0058b3; --a1-m-cpu:#0071e3; --a1-m-cpu-2:#0a4ea8; --a1-m-cpu-ink:#0058b3;
+  --a1-m-cpu-fill:#c4dbf3; --a1-m-cpu-fill-2:#c4dbf3; --a1-m-gpu:#5b5bd6; --a1-m-gpu-ink:#4a44b8;
+  --a1-m-gpu-fill:#d6d6f0; --a1-m-gpu-fill-2:#d6d6f0; --a1-m-mem:#0d9488; --a1-m-mem-1:#04302d;
+  --a1-m-mem-2:#0a6b62; --a1-m-mem-3:#0f9a8d; --a1-m-mem-ink:#0b6d64; --a1-m-mem-fill:#c7e2e1;
+  --a1-m-mem-fill-2:#c7e2e1; --a1-m-load:#c2410c; --a1-m-load-1:#c2410c; --a1-m-load-2:#e0632c;
+  --a1-m-load-3:#8a2f08; --a1-m-load-ink:#a83a0b; --a1-m-proc:#c2410c; --a1-m-load-ref:#9a9aa2;
+  --a1-m-load-fill:#ebd1c8; --a1-m-load-fill-2:#ebd1c8; --a1-m-disk:#b45309; --a1-m-disk-read:#b45309;
+  --a1-m-disk-write:#7c3d06; --a1-m-disk-ink:#8b4008; --a1-m-disk-read-fill:#ebdbd1; --a1-m-disk-read-fill-2:#e8d5c7;
+  --a1-m-disk-write-fill:#e2d8d0; --a1-m-disk-write-fill-2:#ddd0c7; --a1-m-temp:#d9480f; --a1-m-temp-ink:#a83509;
+  --a1-m-bat:#14913f; --a1-m-bat-ink:#116f33; --a1-m-wifi:#0071e3; --a1-m-wifi-ink:#0058b3;
+  --a1-m-power:#8e2fb8; --a1-m-power-ink:#6f2491; --a1-m-warn:#a16207; --a1-m-warn-ink:#7c4a06;
+  --a1-m-danger:#b91c1c; --a1-m-danger-ink:#991b1b; --a1-m-ok:#14913f; --a1-m-ok-ink:#116f33;
+  /* ── a2 ── */
+  --a2-bg:#1a1a1c; --a2-bg-2:#1a1a1c; --a2-surface:#242427; --a2-card:#26262a;
+  --a2-card-cpu:#282e39; --a2-card-gpu:#2f2e39; --a2-card-mem:#263234; --a2-card-load:#352d2c;
+  --a2-card-disk:#34302c; --a2-fg:#f5f5f7; --a2-fg-2:#d6d6da; --a2-muted:#a8a8ae;
+  --a2-meta:#98989d; --a2-border:#3d3d42; --a2-border-soft:#313136; --a2-track:#39393f;
+  --a2-soft-fill:#2e2e33; --a2-band-bg:#2b2b30; --a2-grid:#34343a; --a2-tab-on-bg:#2a3e57;
+  --a2-tab-on-ink:#6fb6ff; --a2-m-cpu:#409cff; --a2-m-cpu-2:#2b7fdd; --a2-m-cpu-ink:#6fb6ff;
+  --a2-m-cpu-fill:#2b3e55; --a2-m-cpu-fill-2:#29323f; --a2-m-gpu:#a89dff; --a2-m-gpu-ink:#bfb6ff;
+  --a2-m-gpu-fill:#403e55; --a2-m-gpu-fill-2:#33323f; --a2-m-mem:#2dd4bf; --a2-m-mem-1:#7ce3d8;
+  --a2-m-mem-2:#2dd4bf; --a2-m-mem-3:#0f8f83; --a2-m-mem-ink:#5ce3d2; --a2-m-mem-fill:#274948;
+  --a2-m-mem-fill-2:#273739; --a2-m-load:#ff8a4c; --a2-m-load-1:#ff8a4c; --a2-m-load-2:#c9682f;
+  --a2-m-load-3:#e8734a; --a2-m-load-ink:#ffab7d; --a2-m-proc:#ff8a4c; --a2-m-load-ref:#7d7d86;
+  --a2-m-load-fill:#513a31; --a2-m-load-fill-2:#3c302d; --a2-m-disk:#f5b942; --a2-m-disk-read:#f5b942;
+  --a2-m-disk-write:#c98f22; --a2-m-disk-ink:#ffcf72; --a2-m-disk-read-fill:#473e2e; --a2-m-disk-read-fill-2:#3b352c;
+  --a2-m-disk-write-fill:#403729; --a2-m-disk-write-fill-2:#363129; --a2-m-temp:#ff6b42; --a2-m-temp-ink:#ffa184;
+  --a2-m-bat:#34d399; --a2-m-bat-ink:#6ee7b7; --a2-m-wifi:#409cff; --a2-m-wifi-ink:#6fb6ff;
+  --a2-m-power:#c48bf5; --a2-m-power-ink:#d9b0ff; --a2-m-warn:#e3b341; --a2-m-warn-ink:#f0cf82;
+  --a2-m-danger:#ff6259; --a2-m-danger-ink:#ff9b95; --a2-m-ok:#34d399; --a2-m-ok-ink:#6ee7b7;
+  /* ── b1 ── */
+  --b1-bg:#ffffff; --b1-bg-2:#ffffff; --b1-surface:#eef2f8; --b1-card:#eef2f8;
+  --b1-card-cpu:#eef2f8; --b1-card-gpu:#eef2f8; --b1-card-mem:#eef2f8; --b1-card-load:#eef2f8;
+  --b1-card-disk:#eef2f8; --b1-fg:#14181f; --b1-fg-2:#333a45; --b1-muted:#5c6673;
+  --b1-meta:#616b78; --b1-border:#c9d3e0; --b1-border-soft:#dee5ee; --b1-track:#dbe3ee;
+  --b1-soft-fill:#e7ecf4; --b1-band-bg:#e6ecf5; --b1-grid:#dde5ef; --b1-tab-on-bg:#d0dff4;
+  --b1-tab-on-ink:#0a54b8; --b1-m-cpu:#0b63d6; --b1-m-cpu-2:#0a3f8f; --b1-m-cpu-ink:#0a54b8;
+  --b1-m-cpu-fill:#8fb6ea; --b1-m-cpu-fill-2:#e5ecf7; --b1-m-gpu:#4a4fd0; --b1-m-gpu-ink:#3c3fb0;
+  --b1-m-gpu-fill:#a9aee7; --b1-m-gpu-fill-2:#e7ebf6; --b1-m-mem:#0e7da8; --b1-m-mem-1:#093a52;
+  --b1-m-mem-2:#0c6f92; --b1-m-mem-3:#1e8fb5; --b1-m-mem-ink:#0a6b92; --b1-m-mem-fill:#90c1d6;
+  --b1-m-mem-fill-2:#e5edf5; --b1-m-load:#1b3f8f; --b1-m-load-1:#1b3f8f; --b1-m-load-2:#3f68b5;
+  --b1-m-load-3:#5f86cc; --b1-m-load-ink:#24406f; --b1-m-proc:#26467f; --b1-m-load-ref:#8a94a3;
+  --b1-m-load-fill:#95a7cc; --b1-m-load-fill-2:#e6ebf4; --b1-m-disk:#33566f; --b1-m-disk-read:#33566f;
+  --b1-m-disk-write:#62798f; --b1-m-disk-ink:#3d5c77; --b1-m-disk-read-fill:#afbeca; --b1-m-disk-read-fill-2:#e7ecf3;
+  --b1-m-disk-write-fill:#bfc9d5; --b1-m-disk-write-fill-2:#e8edf4; --b1-m-temp:#33566f; --b1-m-temp-ink:#2b4a60;
+  --b1-m-bat:#0f766e; --b1-m-bat-ink:#0d5f59; --b1-m-wifi:#0b63d6; --b1-m-wifi-ink:#0a54b8;
+  --b1-m-power:#4a4fd0; --b1-m-power-ink:#3c3fb0; --b1-m-warn:#a16207; --b1-m-warn-ink:#854d0e;
+  --b1-m-danger:#b91c1c; --b1-m-danger-ink:#991b1b; --b1-m-ok:#0f766e; --b1-m-ok-ink:#0f5f58;
+  /* ── b2 ── */
+  --b2-bg:#12171f; --b2-bg-2:#12171f; --b2-surface:#19212b; --b2-card:#1b232d;
+  --b2-card-cpu:#1b232d; --b2-card-gpu:#1b232d; --b2-card-mem:#1b232d; --b2-card-load:#1b232d;
+  --b2-card-disk:#1b232d; --b2-fg:#f1f5fa; --b2-fg-2:#cdd8e5; --b2-muted:#9aa7b6;
+  --b2-meta:#8c99a8; --b2-border:#2d3947; --b2-border-soft:#243040; --b2-track:#2c3745;
+  --b2-soft-fill:#212a35; --b2-band-bg:#1f2833; --b2-grid:#26303c; --b2-tab-on-bg:#273f5a;
+  --b2-tab-on-ink:#84beff; --b2-m-cpu:#5aa9ff; --b2-m-cpu-2:#2b6fd0; --b2-m-cpu-ink:#84beff;
+  --b2-m-cpu-fill:#2e4b6c; --b2-m-cpu-fill-2:#1d2733; --b2-m-gpu:#8b8dff; --b2-m-gpu-ink:#a9aaff;
+  --b2-m-gpu-fill:#3d436c; --b2-m-gpu-fill-2:#1e2633; --b2-m-mem:#45b8d8; --b2-m-mem-1:#8fd2e6;
+  --b2-m-mem-2:#45b8d8; --b2-m-mem-3:#2a86a5; --b2-m-mem-ink:#6fcbe4; --b2-m-mem-fill:#285060;
+  --b2-m-mem-fill-2:#1c2732; --b2-m-load:#a8c1e6; --b2-m-load-1:#a8c1e6; --b2-m-load-2:#7f9cc8;
+  --b2-m-load-3:#5f7ea8; --b2-m-load-ink:#a8c1e6; --b2-m-proc:#8ba6d0; --b2-m-load-ref:#6b7480;
+  --b2-m-load-fill:#455265; --b2-m-load-fill-2:#1f2833; --b2-m-disk:#7fa0bd; --b2-m-disk-read:#9fbad3;
+  --b2-m-disk-write:#6b8aa6; --b2-m-disk-ink:#9fbad3; --b2-m-disk-read-fill:#3b4755; --b2-m-disk-read-fill-2:#1f2832;
+  --b2-m-disk-write-fill:#2e3c4a; --b2-m-disk-write-fill-2:#1d2631; --b2-m-temp:#7fa8c4; --b2-m-temp-ink:#a8c8dd;
+  --b2-m-bat:#3fbfa0; --b2-m-bat-ink:#74d3b9; --b2-m-wifi:#5aa9ff; --b2-m-wifi-ink:#84beff;
+  --b2-m-power:#8b8dff; --b2-m-power-ink:#a9aaff; --b2-m-warn:#e3b341; --b2-m-warn-ink:#f0cf82;
+  --b2-m-danger:#ff6259; --b2-m-danger-ink:#ff9b95; --b2-m-ok:#3fbfa0; --b2-m-ok-ink:#74d3b9;
+  /* ── c1 ── */
+  --c1-bg:#fffdfa; --c1-bg-2:#fff6ee; --c1-surface:#f8f4ee; --c1-card:#f8f4ee;
+  --c1-card-cpu:#f8f4ee; --c1-card-gpu:#f8f4ee; --c1-card-mem:#f8f4ee; --c1-card-load:#f8f4ee;
+  --c1-card-disk:#f8f4ee; --c1-fg:#1f1a16; --c1-fg-2:#3f362e; --c1-muted:#6b6259;
+  --c1-meta:#6f6559; --c1-border:#ddd3c7; --c1-border-soft:#ece4da; --c1-track:#e8e0d5;
+  --c1-soft-fill:#f2ece4; --c1-band-bg:#f2ece4; --c1-grid:#efe6da; --c1-tab-on-bg:#dce3ee;
+  --c1-tab-on-ink:#1a5fc9; --c1-m-cpu:#1f6feb; --c1-m-cpu-2:#c03a24; --c1-m-cpu-ink:#1a5fc9;
+  --c1-m-cpu-fill:#c0d1ed; --c1-m-cpu-fill-2:#ebecee; --c1-m-gpu:#0f8a7e; --c1-m-gpu-ink:#0c7268;
+  --c1-m-gpu-fill:#bbd8d1; --c1-m-gpu-fill-2:#eaeee7; --c1-m-mem:#1f6feb; --c1-m-mem-1:#c03a24;
+  --c1-m-mem-2:#1f6feb; --c1-m-mem-3:#0f8a7e; --c1-m-mem-ink:#1a5fc9; --c1-m-mem-fill:#c0d1ed;
+  --c1-m-mem-fill-2:#ebecee; --c1-m-load:#1f6feb; --c1-m-load-1:#1f6feb; --c1-m-load-2:#e05a34;
+  --c1-m-load-3:#b8471f; --c1-m-load-ink:#b8471f; --c1-m-proc:#e05a34; --c1-m-load-ref:#a2968a;
+  --c1-m-load-fill:#c0d1ed; --c1-m-load-fill-2:#ebecee; --c1-m-disk:#0f8a7e; --c1-m-disk-read:#1f6feb;
+  --c1-m-disk-write:#e05a34; --c1-m-disk-ink:#0c7268; --c1-m-disk-read-fill:#cbd8ed; --c1-m-disk-read-fill-2:#ebecee;
+  --c1-m-disk-write-fill:#f3d4c7; --c1-m-disk-write-fill-2:#f7ebe3; --c1-m-temp:#c03a24; --c1-m-temp-ink:#a52f1c;
+  --c1-m-bat:#0f8a7e; --c1-m-bat-ink:#0c7268; --c1-m-wifi:#1f6feb; --c1-m-wifi-ink:#1a5fc9;
+  --c1-m-power:#8e2fb8; --c1-m-power-ink:#6f2491; --c1-m-warn:#b45309; --c1-m-warn-ink:#8b4008;
+  --c1-m-danger:#b3261e; --c1-m-danger-ink:#991b1b; --c1-m-ok:#0f8a7e; --c1-m-ok-ink:#0b6f65;
+  /* ── c2 ── */
+  --c2-bg:#1a1614; --c2-bg-2:#221b18; --c2-surface:#241f1c; --c2-card:#262120;
+  --c2-card-cpu:#262120; --c2-card-gpu:#262120; --c2-card-mem:#262120; --c2-card-load:#262120;
+  --c2-card-disk:#262120; --c2-fg:#f7f1ec; --c2-fg-2:#ded2c8; --c2-muted:#ab9d92;
+  --c2-meta:#9c8f85; --c2-border:#3a322d; --c2-border-soft:#2f2824; --c2-track:#382f2a;
+  --c2-soft-fill:#2d2723; --c2-band-bg:#2b2521; --c2-grid:#332c27; --c2-tab-on-bg:#31394d;
+  --c2-tab-on-ink:#87b3ff; --c2-m-cpu:#5d95fb; --c2-m-cpu-2:#ff7a5c; --c2-m-cpu-ink:#87b3ff;
+  --c2-m-cpu-fill:#323b50; --c2-m-cpu-fill-2:#29272b; --c2-m-gpu:#2fb3a0; --c2-m-gpu-ink:#5ecfbe;
+  --c2-m-gpu-fill:#28413c; --c2-m-gpu-fill-2:#262826; --c2-m-mem:#5d95fb; --c2-m-mem-1:#ff7a5c;
+  --c2-m-mem-2:#5d95fb; --c2-m-mem-3:#2fb3a0; --c2-m-mem-ink:#87b3ff; --c2-m-mem-fill:#323b50;
+  --c2-m-mem-fill-2:#29272b; --c2-m-load:#5d95fb; --c2-m-load-1:#5d95fb; --c2-m-load-2:#ff7a5c;
+  --c2-m-load-3:#c95c3f; --c2-m-load-ink:#ff9b82; --c2-m-proc:#ff7a5c; --c2-m-load-ref:#8d8078;
+  --c2-m-load-fill:#323b50; --c2-m-load-fill-2:#29272b; --c2-m-disk:#2fb3a0; --c2-m-disk-read:#5d95fb;
+  --c2-m-disk-write:#ff7a5c; --c2-m-disk-ink:#5ecfbe; --c2-m-disk-read-fill:#303547; --c2-m-disk-read-fill-2:#29272b;
+  --c2-m-disk-write-fill:#4c312b; --c2-m-disk-write-fill-2:#312523; --c2-m-temp:#ff7a5c; --c2-m-temp-ink:#ffa88f;
+  --c2-m-bat:#2fb3a0; --c2-m-bat-ink:#6ed4c4; --c2-m-wifi:#5d95fb; --c2-m-wifi-ink:#87b3ff;
+  --c2-m-power:#c48bf5; --c2-m-power-ink:#d9b0ff; --c2-m-warn:#e3b341; --c2-m-warn-ink:#f0cf82;
+  --c2-m-danger:#ff6259; --c2-m-danger-ink:#ff9b95; --c2-m-ok:#2fb3a0; --c2-m-ok-ink:#6ed4c4;
+}
+
+/* ══ 方案 / 深色别名：只做 var() 转发，不出现任何色值 ══ */
+.pal-a {
+  --bg:var(--a1-bg); --bg-2:var(--a1-bg-2); --surface:var(--a1-surface); --card:var(--a1-card);
+  --card-cpu:var(--a1-card-cpu); --card-gpu:var(--a1-card-gpu); --card-mem:var(--a1-card-mem); --card-load:var(--a1-card-load);
+  --card-disk:var(--a1-card-disk); --fg:var(--a1-fg); --fg-2:var(--a1-fg-2); --muted:var(--a1-muted);
+  --meta:var(--a1-meta); --border:var(--a1-border); --border-soft:var(--a1-border-soft); --track:var(--a1-track);
+  --soft-fill:var(--a1-soft-fill); --band-bg:var(--a1-band-bg); --grid:var(--a1-grid); --tab-on-bg:var(--a1-tab-on-bg);
+  --tab-on-ink:var(--a1-tab-on-ink); --m-cpu:var(--a1-m-cpu); --m-cpu-2:var(--a1-m-cpu-2); --m-cpu-ink:var(--a1-m-cpu-ink);
+  --m-cpu-fill:var(--a1-m-cpu-fill); --m-cpu-fill-2:var(--a1-m-cpu-fill-2); --m-gpu:var(--a1-m-gpu); --m-gpu-ink:var(--a1-m-gpu-ink);
+  --m-gpu-fill:var(--a1-m-gpu-fill); --m-gpu-fill-2:var(--a1-m-gpu-fill-2); --m-mem:var(--a1-m-mem); --m-mem-1:var(--a1-m-mem-1);
+  --m-mem-2:var(--a1-m-mem-2); --m-mem-3:var(--a1-m-mem-3); --m-mem-ink:var(--a1-m-mem-ink); --m-mem-fill:var(--a1-m-mem-fill);
+  --m-mem-fill-2:var(--a1-m-mem-fill-2); --m-load:var(--a1-m-load); --m-load-1:var(--a1-m-load-1); --m-load-2:var(--a1-m-load-2);
+  --m-load-3:var(--a1-m-load-3); --m-load-ink:var(--a1-m-load-ink); --m-proc:var(--a1-m-proc); --m-load-ref:var(--a1-m-load-ref);
+  --m-load-fill:var(--a1-m-load-fill); --m-load-fill-2:var(--a1-m-load-fill-2); --m-disk:var(--a1-m-disk); --m-disk-read:var(--a1-m-disk-read);
+  --m-disk-write:var(--a1-m-disk-write); --m-disk-ink:var(--a1-m-disk-ink); --m-disk-read-fill:var(--a1-m-disk-read-fill); --m-disk-read-fill-2:var(--a1-m-disk-read-fill-2);
+  --m-disk-write-fill:var(--a1-m-disk-write-fill); --m-disk-write-fill-2:var(--a1-m-disk-write-fill-2); --m-temp:var(--a1-m-temp); --m-temp-ink:var(--a1-m-temp-ink);
+  --m-bat:var(--a1-m-bat); --m-bat-ink:var(--a1-m-bat-ink); --m-wifi:var(--a1-m-wifi); --m-wifi-ink:var(--a1-m-wifi-ink);
+  --m-power:var(--a1-m-power); --m-power-ink:var(--a1-m-power-ink); --m-warn:var(--a1-m-warn); --m-warn-ink:var(--a1-m-warn-ink);
+  --m-danger:var(--a1-m-danger); --m-danger-ink:var(--a1-m-danger-ink); --m-ok:var(--a1-m-ok); --m-ok-ink:var(--a1-m-ok-ink);
+  --accent:var(--m-cpu); --accent-on:var(--card);
+}
+.pal-b {
+  --bg:var(--b1-bg); --bg-2:var(--b1-bg-2); --surface:var(--b1-surface); --card:var(--b1-card);
+  --card-cpu:var(--b1-card-cpu); --card-gpu:var(--b1-card-gpu); --card-mem:var(--b1-card-mem); --card-load:var(--b1-card-load);
+  --card-disk:var(--b1-card-disk); --fg:var(--b1-fg); --fg-2:var(--b1-fg-2); --muted:var(--b1-muted);
+  --meta:var(--b1-meta); --border:var(--b1-border); --border-soft:var(--b1-border-soft); --track:var(--b1-track);
+  --soft-fill:var(--b1-soft-fill); --band-bg:var(--b1-band-bg); --grid:var(--b1-grid); --tab-on-bg:var(--b1-tab-on-bg);
+  --tab-on-ink:var(--b1-tab-on-ink); --m-cpu:var(--b1-m-cpu); --m-cpu-2:var(--b1-m-cpu-2); --m-cpu-ink:var(--b1-m-cpu-ink);
+  --m-cpu-fill:var(--b1-m-cpu-fill); --m-cpu-fill-2:var(--b1-m-cpu-fill-2); --m-gpu:var(--b1-m-gpu); --m-gpu-ink:var(--b1-m-gpu-ink);
+  --m-gpu-fill:var(--b1-m-gpu-fill); --m-gpu-fill-2:var(--b1-m-gpu-fill-2); --m-mem:var(--b1-m-mem); --m-mem-1:var(--b1-m-mem-1);
+  --m-mem-2:var(--b1-m-mem-2); --m-mem-3:var(--b1-m-mem-3); --m-mem-ink:var(--b1-m-mem-ink); --m-mem-fill:var(--b1-m-mem-fill);
+  --m-mem-fill-2:var(--b1-m-mem-fill-2); --m-load:var(--b1-m-load); --m-load-1:var(--b1-m-load-1); --m-load-2:var(--b1-m-load-2);
+  --m-load-3:var(--b1-m-load-3); --m-load-ink:var(--b1-m-load-ink); --m-proc:var(--b1-m-proc); --m-load-ref:var(--b1-m-load-ref);
+  --m-load-fill:var(--b1-m-load-fill); --m-load-fill-2:var(--b1-m-load-fill-2); --m-disk:var(--b1-m-disk); --m-disk-read:var(--b1-m-disk-read);
+  --m-disk-write:var(--b1-m-disk-write); --m-disk-ink:var(--b1-m-disk-ink); --m-disk-read-fill:var(--b1-m-disk-read-fill); --m-disk-read-fill-2:var(--b1-m-disk-read-fill-2);
+  --m-disk-write-fill:var(--b1-m-disk-write-fill); --m-disk-write-fill-2:var(--b1-m-disk-write-fill-2); --m-temp:var(--b1-m-temp); --m-temp-ink:var(--b1-m-temp-ink);
+  --m-bat:var(--b1-m-bat); --m-bat-ink:var(--b1-m-bat-ink); --m-wifi:var(--b1-m-wifi); --m-wifi-ink:var(--b1-m-wifi-ink);
+  --m-power:var(--b1-m-power); --m-power-ink:var(--b1-m-power-ink); --m-warn:var(--b1-m-warn); --m-warn-ink:var(--b1-m-warn-ink);
+  --m-danger:var(--b1-m-danger); --m-danger-ink:var(--b1-m-danger-ink); --m-ok:var(--b1-m-ok); --m-ok-ink:var(--b1-m-ok-ink);
+  --accent:var(--m-cpu); --accent-on:var(--card);
+}
+.pal-c {
+  --bg:var(--c1-bg); --bg-2:var(--c1-bg-2); --surface:var(--c1-surface); --card:var(--c1-card);
+  --card-cpu:var(--c1-card-cpu); --card-gpu:var(--c1-card-gpu); --card-mem:var(--c1-card-mem); --card-load:var(--c1-card-load);
+  --card-disk:var(--c1-card-disk); --fg:var(--c1-fg); --fg-2:var(--c1-fg-2); --muted:var(--c1-muted);
+  --meta:var(--c1-meta); --border:var(--c1-border); --border-soft:var(--c1-border-soft); --track:var(--c1-track);
+  --soft-fill:var(--c1-soft-fill); --band-bg:var(--c1-band-bg); --grid:var(--c1-grid); --tab-on-bg:var(--c1-tab-on-bg);
+  --tab-on-ink:var(--c1-tab-on-ink); --m-cpu:var(--c1-m-cpu); --m-cpu-2:var(--c1-m-cpu-2); --m-cpu-ink:var(--c1-m-cpu-ink);
+  --m-cpu-fill:var(--c1-m-cpu-fill); --m-cpu-fill-2:var(--c1-m-cpu-fill-2); --m-gpu:var(--c1-m-gpu); --m-gpu-ink:var(--c1-m-gpu-ink);
+  --m-gpu-fill:var(--c1-m-gpu-fill); --m-gpu-fill-2:var(--c1-m-gpu-fill-2); --m-mem:var(--c1-m-mem); --m-mem-1:var(--c1-m-mem-1);
+  --m-mem-2:var(--c1-m-mem-2); --m-mem-3:var(--c1-m-mem-3); --m-mem-ink:var(--c1-m-mem-ink); --m-mem-fill:var(--c1-m-mem-fill);
+  --m-mem-fill-2:var(--c1-m-mem-fill-2); --m-load:var(--c1-m-load); --m-load-1:var(--c1-m-load-1); --m-load-2:var(--c1-m-load-2);
+  --m-load-3:var(--c1-m-load-3); --m-load-ink:var(--c1-m-load-ink); --m-proc:var(--c1-m-proc); --m-load-ref:var(--c1-m-load-ref);
+  --m-load-fill:var(--c1-m-load-fill); --m-load-fill-2:var(--c1-m-load-fill-2); --m-disk:var(--c1-m-disk); --m-disk-read:var(--c1-m-disk-read);
+  --m-disk-write:var(--c1-m-disk-write); --m-disk-ink:var(--c1-m-disk-ink); --m-disk-read-fill:var(--c1-m-disk-read-fill); --m-disk-read-fill-2:var(--c1-m-disk-read-fill-2);
+  --m-disk-write-fill:var(--c1-m-disk-write-fill); --m-disk-write-fill-2:var(--c1-m-disk-write-fill-2); --m-temp:var(--c1-m-temp); --m-temp-ink:var(--c1-m-temp-ink);
+  --m-bat:var(--c1-m-bat); --m-bat-ink:var(--c1-m-bat-ink); --m-wifi:var(--c1-m-wifi); --m-wifi-ink:var(--c1-m-wifi-ink);
+  --m-power:var(--c1-m-power); --m-power-ink:var(--c1-m-power-ink); --m-warn:var(--c1-m-warn); --m-warn-ink:var(--c1-m-warn-ink);
+  --m-danger:var(--c1-m-danger); --m-danger-ink:var(--c1-m-danger-ink); --m-ok:var(--c1-m-ok); --m-ok-ink:var(--c1-m-ok-ink);
+  --accent:var(--m-cpu); --accent-on:var(--card);
+}
+html[data-theme="dark"] .pal-a,
+.pal-a[data-theme="dark"] {
+  --bg:var(--a2-bg); --bg-2:var(--a2-bg-2); --surface:var(--a2-surface); --card:var(--a2-card);
+  --card-cpu:var(--a2-card-cpu); --card-gpu:var(--a2-card-gpu); --card-mem:var(--a2-card-mem); --card-load:var(--a2-card-load);
+  --card-disk:var(--a2-card-disk); --fg:var(--a2-fg); --fg-2:var(--a2-fg-2); --muted:var(--a2-muted);
+  --meta:var(--a2-meta); --border:var(--a2-border); --border-soft:var(--a2-border-soft); --track:var(--a2-track);
+  --soft-fill:var(--a2-soft-fill); --band-bg:var(--a2-band-bg); --grid:var(--a2-grid); --tab-on-bg:var(--a2-tab-on-bg);
+  --tab-on-ink:var(--a2-tab-on-ink); --m-cpu:var(--a2-m-cpu); --m-cpu-2:var(--a2-m-cpu-2); --m-cpu-ink:var(--a2-m-cpu-ink);
+  --m-cpu-fill:var(--a2-m-cpu-fill); --m-cpu-fill-2:var(--a2-m-cpu-fill-2); --m-gpu:var(--a2-m-gpu); --m-gpu-ink:var(--a2-m-gpu-ink);
+  --m-gpu-fill:var(--a2-m-gpu-fill); --m-gpu-fill-2:var(--a2-m-gpu-fill-2); --m-mem:var(--a2-m-mem); --m-mem-1:var(--a2-m-mem-1);
+  --m-mem-2:var(--a2-m-mem-2); --m-mem-3:var(--a2-m-mem-3); --m-mem-ink:var(--a2-m-mem-ink); --m-mem-fill:var(--a2-m-mem-fill);
+  --m-mem-fill-2:var(--a2-m-mem-fill-2); --m-load:var(--a2-m-load); --m-load-1:var(--a2-m-load-1); --m-load-2:var(--a2-m-load-2);
+  --m-load-3:var(--a2-m-load-3); --m-load-ink:var(--a2-m-load-ink); --m-proc:var(--a2-m-proc); --m-load-ref:var(--a2-m-load-ref);
+  --m-load-fill:var(--a2-m-load-fill); --m-load-fill-2:var(--a2-m-load-fill-2); --m-disk:var(--a2-m-disk); --m-disk-read:var(--a2-m-disk-read);
+  --m-disk-write:var(--a2-m-disk-write); --m-disk-ink:var(--a2-m-disk-ink); --m-disk-read-fill:var(--a2-m-disk-read-fill); --m-disk-read-fill-2:var(--a2-m-disk-read-fill-2);
+  --m-disk-write-fill:var(--a2-m-disk-write-fill); --m-disk-write-fill-2:var(--a2-m-disk-write-fill-2); --m-temp:var(--a2-m-temp); --m-temp-ink:var(--a2-m-temp-ink);
+  --m-bat:var(--a2-m-bat); --m-bat-ink:var(--a2-m-bat-ink); --m-wifi:var(--a2-m-wifi); --m-wifi-ink:var(--a2-m-wifi-ink);
+  --m-power:var(--a2-m-power); --m-power-ink:var(--a2-m-power-ink); --m-warn:var(--a2-m-warn); --m-warn-ink:var(--a2-m-warn-ink);
+  --m-danger:var(--a2-m-danger); --m-danger-ink:var(--a2-m-danger-ink); --m-ok:var(--a2-m-ok); --m-ok-ink:var(--a2-m-ok-ink);
+  --accent:var(--m-cpu); --accent-on:var(--card);
+}
+html[data-theme="dark"] .pal-b,
+.pal-b[data-theme="dark"] {
+  --bg:var(--b2-bg); --bg-2:var(--b2-bg-2); --surface:var(--b2-surface); --card:var(--b2-card);
+  --card-cpu:var(--b2-card-cpu); --card-gpu:var(--b2-card-gpu); --card-mem:var(--b2-card-mem); --card-load:var(--b2-card-load);
+  --card-disk:var(--b2-card-disk); --fg:var(--b2-fg); --fg-2:var(--b2-fg-2); --muted:var(--b2-muted);
+  --meta:var(--b2-meta); --border:var(--b2-border); --border-soft:var(--b2-border-soft); --track:var(--b2-track);
+  --soft-fill:var(--b2-soft-fill); --band-bg:var(--b2-band-bg); --grid:var(--b2-grid); --tab-on-bg:var(--b2-tab-on-bg);
+  --tab-on-ink:var(--b2-tab-on-ink); --m-cpu:var(--b2-m-cpu); --m-cpu-2:var(--b2-m-cpu-2); --m-cpu-ink:var(--b2-m-cpu-ink);
+  --m-cpu-fill:var(--b2-m-cpu-fill); --m-cpu-fill-2:var(--b2-m-cpu-fill-2); --m-gpu:var(--b2-m-gpu); --m-gpu-ink:var(--b2-m-gpu-ink);
+  --m-gpu-fill:var(--b2-m-gpu-fill); --m-gpu-fill-2:var(--b2-m-gpu-fill-2); --m-mem:var(--b2-m-mem); --m-mem-1:var(--b2-m-mem-1);
+  --m-mem-2:var(--b2-m-mem-2); --m-mem-3:var(--b2-m-mem-3); --m-mem-ink:var(--b2-m-mem-ink); --m-mem-fill:var(--b2-m-mem-fill);
+  --m-mem-fill-2:var(--b2-m-mem-fill-2); --m-load:var(--b2-m-load); --m-load-1:var(--b2-m-load-1); --m-load-2:var(--b2-m-load-2);
+  --m-load-3:var(--b2-m-load-3); --m-load-ink:var(--b2-m-load-ink); --m-proc:var(--b2-m-proc); --m-load-ref:var(--b2-m-load-ref);
+  --m-load-fill:var(--b2-m-load-fill); --m-load-fill-2:var(--b2-m-load-fill-2); --m-disk:var(--b2-m-disk); --m-disk-read:var(--b2-m-disk-read);
+  --m-disk-write:var(--b2-m-disk-write); --m-disk-ink:var(--b2-m-disk-ink); --m-disk-read-fill:var(--b2-m-disk-read-fill); --m-disk-read-fill-2:var(--b2-m-disk-read-fill-2);
+  --m-disk-write-fill:var(--b2-m-disk-write-fill); --m-disk-write-fill-2:var(--b2-m-disk-write-fill-2); --m-temp:var(--b2-m-temp); --m-temp-ink:var(--b2-m-temp-ink);
+  --m-bat:var(--b2-m-bat); --m-bat-ink:var(--b2-m-bat-ink); --m-wifi:var(--b2-m-wifi); --m-wifi-ink:var(--b2-m-wifi-ink);
+  --m-power:var(--b2-m-power); --m-power-ink:var(--b2-m-power-ink); --m-warn:var(--b2-m-warn); --m-warn-ink:var(--b2-m-warn-ink);
+  --m-danger:var(--b2-m-danger); --m-danger-ink:var(--b2-m-danger-ink); --m-ok:var(--b2-m-ok); --m-ok-ink:var(--b2-m-ok-ink);
+  --accent:var(--m-cpu); --accent-on:var(--card);
+}
+html[data-theme="dark"] .pal-c,
+.pal-c[data-theme="dark"] {
+  --bg:var(--c2-bg); --bg-2:var(--c2-bg-2); --surface:var(--c2-surface); --card:var(--c2-card);
+  --card-cpu:var(--c2-card-cpu); --card-gpu:var(--c2-card-gpu); --card-mem:var(--c2-card-mem); --card-load:var(--c2-card-load);
+  --card-disk:var(--c2-card-disk); --fg:var(--c2-fg); --fg-2:var(--c2-fg-2); --muted:var(--c2-muted);
+  --meta:var(--c2-meta); --border:var(--c2-border); --border-soft:var(--c2-border-soft); --track:var(--c2-track);
+  --soft-fill:var(--c2-soft-fill); --band-bg:var(--c2-band-bg); --grid:var(--c2-grid); --tab-on-bg:var(--c2-tab-on-bg);
+  --tab-on-ink:var(--c2-tab-on-ink); --m-cpu:var(--c2-m-cpu); --m-cpu-2:var(--c2-m-cpu-2); --m-cpu-ink:var(--c2-m-cpu-ink);
+  --m-cpu-fill:var(--c2-m-cpu-fill); --m-cpu-fill-2:var(--c2-m-cpu-fill-2); --m-gpu:var(--c2-m-gpu); --m-gpu-ink:var(--c2-m-gpu-ink);
+  --m-gpu-fill:var(--c2-m-gpu-fill); --m-gpu-fill-2:var(--c2-m-gpu-fill-2); --m-mem:var(--c2-m-mem); --m-mem-1:var(--c2-m-mem-1);
+  --m-mem-2:var(--c2-m-mem-2); --m-mem-3:var(--c2-m-mem-3); --m-mem-ink:var(--c2-m-mem-ink); --m-mem-fill:var(--c2-m-mem-fill);
+  --m-mem-fill-2:var(--c2-m-mem-fill-2); --m-load:var(--c2-m-load); --m-load-1:var(--c2-m-load-1); --m-load-2:var(--c2-m-load-2);
+  --m-load-3:var(--c2-m-load-3); --m-load-ink:var(--c2-m-load-ink); --m-proc:var(--c2-m-proc); --m-load-ref:var(--c2-m-load-ref);
+  --m-load-fill:var(--c2-m-load-fill); --m-load-fill-2:var(--c2-m-load-fill-2); --m-disk:var(--c2-m-disk); --m-disk-read:var(--c2-m-disk-read);
+  --m-disk-write:var(--c2-m-disk-write); --m-disk-ink:var(--c2-m-disk-ink); --m-disk-read-fill:var(--c2-m-disk-read-fill); --m-disk-read-fill-2:var(--c2-m-disk-read-fill-2);
+  --m-disk-write-fill:var(--c2-m-disk-write-fill); --m-disk-write-fill-2:var(--c2-m-disk-write-fill-2); --m-temp:var(--c2-m-temp); --m-temp-ink:var(--c2-m-temp-ink);
+  --m-bat:var(--c2-m-bat); --m-bat-ink:var(--c2-m-bat-ink); --m-wifi:var(--c2-m-wifi); --m-wifi-ink:var(--c2-m-wifi-ink);
+  --m-power:var(--c2-m-power); --m-power-ink:var(--c2-m-power-ink); --m-warn:var(--c2-m-warn); --m-warn-ink:var(--c2-m-warn-ink);
+  --m-danger:var(--c2-m-danger); --m-danger-ink:var(--c2-m-danger-ink); --m-ok:var(--c2-m-ok); --m-ok-ink:var(--c2-m-ok-ink);
+  --accent:var(--m-cpu); --accent-on:var(--card);
+}
+
+/* ── 页面外壳（只服务对照页，不属于面板色板） ─────────────── */
+:root {
+  --sheet-bg:#eceff3;
+  --sheet-ink:#39404a;
+  --sheet-ink-2:#5a6270;
+  --sheet-line:#ccd3dd;
+  --sheet-card:#ffffff;
+  --sheet-card-hover:#f6f8fb;
+  --panel-grad:linear-gradient(180deg, var(--bg), var(--bg-2));
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--sheet-bg); color:var(--sheet-ink);
+  font-family:"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  padding:24px 28px 40px; -webkit-font-smoothing:antialiased;
+}
+.sheet-head{max-width:2080px;margin:0 auto 6px}
+.sheet-head h1{font-size:15px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em}
+.sheet-head p{margin:0 0 8px;font-size:11.5px;line-height:1.6;color:var(--sheet-ink-2);max-width:1220px}
+.sheet-head p b{color:var(--sheet-ink)}
+.nav{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;margin:2px 0 18px}
+.nav span.k{color:var(--sheet-ink-2);margin-right:2px}
+.nav a{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:6px;
+  background:var(--sheet-card);box-shadow:0 0 0 1px var(--sheet-line);color:var(--sheet-ink);text-decoration:none;font-weight:600}
+.nav a:hover{background:var(--sheet-card-hover)}
+.nav a:focus-visible{outline:0;box-shadow:0 0 0 1px var(--sheet-line),0 0 0 4px rgba(0,90,200,.3)}
+.deck-wrap{overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
+.deck{display:grid;grid-auto-flow:column;grid-template-rows:repeat(2,auto);gap:22px;align-items:start;width:max-content}
+.set{display:contents}
+/* 只看某套：锚点命中时隐藏其余方案（纯 CSS，无脚本） */
+body:has(.set:target) .set:not(:target){display:none}
+.screen{width:320px;zoom:2;display:flex;flex-direction:column;gap:10px}
+.screen>.defs{position:absolute;width:0;height:0}
+.shead{display:flex;align-items:baseline;gap:6px;padding-left:2px;line-height:1.2}
+.shead b{font-size:10px;font-weight:700;color:var(--sheet-ink)}
+.sbadge{font-size:8.5px;font-weight:700;color:var(--sheet-ink-2);background:var(--sheet-card);border-radius:99px;padding:1px 6px;
+  box-shadow:inset 0 0 0 1px var(--sheet-line)}
+.stag{font-size:8.5px;color:var(--sheet-ink-2);font-weight:400}
+
+/* ── 面板本体（对齐 MenuPanelStyle：320pt · 圆角 12 · 内留白 12） ── */
+.panel{
+  width:320px;background-color:var(--bg);background-image:var(--panel-grad);border-radius:12px;overflow:hidden;
+  box-shadow:0 0 0 1px var(--border-soft),0 12px 32px rgba(0,0,0,.10);
+  display:flex;flex-direction:column;color:var(--fg);
+  font-family:"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+/* B：单一冷灰蓝 tint + 内描边分层；C：暖白底 */
+.pal-b .panel{box-shadow:0 0 0 1px var(--border),0 12px 32px rgba(10,30,60,.13)}
+.pal-b .card{box-shadow:inset 0 0 0 1px var(--border-soft)}
+.pal-c .panel{box-shadow:0 0 0 1px var(--border-soft),0 12px 32px rgba(90,60,30,.11)}
+
+.tabbar{display:flex;align-items:center;gap:1px;margin:10px 12px 0;background:var(--surface);
+  border:1px solid var(--border-soft);border-radius:8px;padding:2px}
+.tab{flex:1;height:24px;display:flex;align-items:center;justify-content:center;border:0;border-radius:6px;
+  background:transparent;color:var(--meta);font-family:inherit;font-size:9.5px;line-height:1;cursor:default;white-space:nowrap;padding:0}
+.tab.on{background:var(--tab-on-bg);color:var(--tab-on-ink);font-weight:700;box-shadow:inset 0 0 0 1px var(--tab-on-bg)}
+.gear{width:18px;height:20px;display:flex;align-items:center;justify-content:center;color:var(--tab-on-ink);margin:0 2px 0 3px;flex:0 0 auto}
+.gear svg{width:12px;height:12px}
+
+.content{padding:10px 12px 12px;display:flex;flex-direction:column;gap:7px}
+.pagehead{display:flex;align-items:center;gap:6px;min-height:16px}
+.pagehead .host{font-size:10.5px;font-weight:600;color:var(--fg-2)}
+.pagehead .sp{flex:1}
+.live{display:flex;align-items:center;gap:4px;font-size:9px;color:var(--meta);font-variant-numeric:tabular-nums}
+.live i{width:5px;height:5px;border-radius:50%;background:var(--m-ok)}
+.stamp{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9px;color:var(--meta);font-variant-numeric:tabular-nums}
+
+/* 顶部四联 */
+.hstats{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.hstat{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  padding:4px 2px 3px;border-radius:8px;background:var(--surface);min-width:0}
+.hstat .hv{display:flex;align-items:baseline;gap:1px;font-family:"SF Mono",ui-monospace,Menlo,monospace;
+  font-size:17px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.05}
+.hstat .hv .u{font-size:8.5px;font-weight:400;margin-left:1px}
+.hstat .hk{font-size:8.5px;font-weight:600;color:var(--meta);line-height:1.1;white-space:nowrap}
+.mini{display:block;width:100%;height:10px;overflow:visible}
+.mini .ml{fill:none;stroke-width:1.1;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}
+.hs .hv{color:var(--m-cpu-ink)} .hs .ml{stroke:var(--m-cpu)}
+.hg .hv{color:var(--m-gpu-ink)} .hg .ml{stroke:var(--m-gpu)}
+.hm .hv{color:var(--m-mem-ink)} .hm .ml{stroke:var(--m-mem)}
+.hl .hv{font-size:14px;color:var(--m-load-ink)} .hl .ml{stroke:var(--m-load)}
+
+/* 卡片 */
+.card{border-radius:10px;padding:8px 10px 9px;display:flex;flex-direction:column;gap:6px}
+.c-cpu{background:var(--card-cpu)} .c-gpu{background:var(--card-gpu)}
+.c-load{background:var(--card-load)} .c-mem{background:var(--card-mem)} .c-disk{background:var(--card-disk)}
+.card-head{display:flex;align-items:center;gap:5px}
+.card-head .lbl{font-size:10.5px;font-weight:600;color:var(--fg-2);letter-spacing:.01em}
+.card-head .sp{flex:1}
+.card-head .meta{font-size:9px;color:var(--meta);font-variant-numeric:tabular-nums;white-space:nowrap}
+.card-head .meta b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;font-weight:600;color:var(--fg-2)}
+
+.hero-row{display:flex;align-items:flex-end;gap:8px}
+.hero{display:flex;align-items:baseline;gap:2px;flex:0 0 auto}
+.hero b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:23px;font-weight:600;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;line-height:1;color:var(--m-cpu-ink)}
+.hero span{font-size:9px;color:var(--meta);font-family:"SF Mono",ui-monospace,Menlo,monospace}
+
+.spark{display:block;flex:1;min-width:0;overflow:visible}
+.spark .gl{stroke:var(--grid);stroke-width:1;stroke-dasharray:2 3;vector-effect:non-scaling-stroke;display:none}
+.pal-b .spark .gl{display:block}
+.spark .ln{fill:none;stroke:var(--m-cpu);stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.spark.gpu .ln{stroke:var(--m-gpu)}
+.spark .ln.rd{stroke:var(--m-disk-read)}
+.spark .ln.wr{stroke:var(--m-disk-write)}
+.spark .ar-s{stroke:var(--m-cpu-2);stroke-width:.5;vector-effect:non-scaling-stroke}
+.spark .l1{fill:none;stroke:var(--m-load-1);stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.spark .l5{fill:none;stroke:var(--m-load-2);stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.spark .l15{fill:none;stroke:var(--m-load-3);stroke-width:1;stroke-dasharray:3 2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.spark .lnref{stroke:var(--m-load-ref);stroke-width:1;stroke-dasharray:2 3;vector-effect:non-scaling-stroke}
+
+/* CPU 图例 / 每核柱阵 */
+.usplit{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.usplit span{display:inline-flex;align-items:center;gap:2px;font-size:8.5px;line-height:1;font-weight:600;color:var(--meta)}
+.usplit i{width:6px;height:6px;border-radius:1.5px;display:block;flex:0 0 auto}
+.usplit b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.us i{background:var(--m-cpu)} .us b{color:var(--m-cpu-ink)}
+.ss i{background:var(--m-cpu-2)} .ss b{color:var(--m-cpu-ink)}
+.cores{display:flex;gap:6px;align-items:flex-end;flex:0 0 auto}
+.cluster{display:flex;flex-direction:column;gap:2px}
+.clbl{display:flex;align-items:baseline;gap:2px;font-size:8px;color:var(--meta);font-weight:600;white-space:nowrap}
+.clbl b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:8px;color:var(--fg-2);font-weight:600}
+.bars{display:flex;align-items:flex-end;gap:2px;height:18px}
+.barlo{width:10px;height:18px;border-radius:2.5px;background:var(--track);display:flex;align-items:flex-end;overflow:hidden;flex:0 0 10px}
+.barlo i{display:block;width:100%;border-radius:3px;background:var(--m-cpu)}
+.barlo i.e{background:var(--m-cpu-2)}
+.coreids{display:flex;gap:2px}
+.coreids span{width:10px;flex:0 0 10px;text-align:center;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:7px;color:var(--meta);line-height:1}
+
+/* GPU：左环 + 中线 + 显存条 */
+.gpu-row{display:flex;align-items:center;gap:10px}
+.gring{position:relative;width:40px;height:40px;flex:0 0 40px;display:flex;align-items:center;justify-content:center}
+.gring svg{width:40px;height:40px;transform:rotate(-90deg)}
+.grt{position:absolute;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;font-weight:600;color:var(--m-gpu-ink)}
+.rbg{fill:none;stroke:var(--track);stroke-width:3.6}
+.rfg{fill:none;stroke:var(--m-gpu);stroke-width:3.6;stroke-linecap:butt}
+.rfg.bat{stroke:var(--m-bat);stroke-linecap:round}
+
+/* 压力：三线图例 / 进程榜 */
+.ldnum{display:flex;align-items:baseline;gap:6px;font-size:8.5px;color:var(--meta);font-weight:600;line-height:1}
+.ldnum span{display:inline-flex;align-items:baseline;gap:2px}
+.ldnum b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--fg-2)}
+.ldnum i{width:7px;height:2px;border-radius:1px;display:block}
+.ldnum .k1{background:var(--m-load-1)} .ldnum .k2{background:var(--m-load-2)} .ldnum .k3{background:var(--m-load-3)}
+.phead{display:flex;align-items:center;gap:4px;margin-top:1px}
+.phead .meta{font-size:8.5px;color:var(--meta);font-weight:600}
+.phead .sp{flex:1}
+.phead .act{border:0;background:transparent;color:var(--m-load-ink);font-family:inherit;font-size:9px;font-weight:700;cursor:default;padding:0 0 0 2px}
+.procs{display:flex;flex-direction:column;gap:2px}
+.proc{display:grid;grid-template-columns:minmax(0,58px) minmax(0,1fr) 34px;align-items:center;gap:5px;height:13px}
+.proc .pn{font-size:9px;color:var(--fg-2);line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proc .pb{height:5px;border-radius:2.5px;background:var(--track);overflow:hidden;display:flex}
+.proc .pb i{display:block;height:100%;border-radius:2.5px;background:var(--m-proc)}
+.proc .pv{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9px;color:var(--fg-2);text-align:right;font-variant-numeric:tabular-nums;line-height:1}
+
+/* 内存：四段堆叠 + 单行数值 */
+.dot{width:5px;height:5px;border-radius:50%;background:var(--m-ok);flex:0 0 auto}
+.track{height:4px;border-radius:2px;background:var(--track);overflow:hidden}
+.track i{display:block;height:100%;border-radius:2px;background:var(--m-disk)}
+.track.busy{width:30px;flex:0 0 auto;height:3px;background:var(--soft-fill)}
+.track.busy i{background:var(--m-disk)}
+.track.stacked{height:9px;border-radius:2px;display:flex;background:var(--track);overflow:hidden}
+.track.stacked i{height:100%;border-radius:0;flex:0 0 auto;box-shadow:0 0 0 .5px var(--card-mem)}
+.track.stacked i.w{background:var(--m-mem-1)}
+.track.stacked i.a{background:var(--m-mem-2)}
+.track.stacked i.c{background:var(--m-mem-3)}
+.track.stacked i.f{background:transparent}
+.split-nums{display:flex;align-items:baseline;gap:6px;font-size:8.5px;color:var(--meta);font-weight:600;line-height:1;white-space:nowrap}
+.split-nums span{display:inline-flex;align-items:baseline;gap:1.5px}
+.split-nums span.sw{margin-left:auto}
+.split-nums b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;font-weight:600;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.split-nums span.sw b{color:var(--m-mem-ink)}
+.split-nums span.w b,.split-nums span.a b,.split-nums span.c b{color:var(--fg-2)}
+/* 深色下内存阶梯反转（wired 最亮 / compressed 最暗），小字统一回到 ink 兜底 */
+.pal-a[data-theme="dark"] .split-nums span.w b,
+.pal-a[data-theme="dark"] .split-nums span.c b,
+.pal-b[data-theme="dark"] .split-nums span.w b,
+.pal-b[data-theme="dark"] .split-nums span.c b{color:var(--m-mem-ink)}
+
+/* 磁盘：双序列 */
+.dual{display:flex;gap:12px}
+.dual>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.dlbl{display:flex;align-items:baseline;gap:4px;font-size:8.5px;color:var(--meta)}
+.dlbl .v{margin-left:auto;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--fg-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dlbl .v .u{color:var(--meta);font-size:8px;margin-left:2px}
+
+/* 底部状态带 */
+.stateband{display:flex;align-items:center;gap:8px;height:20px;padding:0 7px;border-radius:6px;
+  font-size:8.5px;color:var(--meta);font-weight:600;line-height:1;
+  background:var(--band-bg);box-shadow:inset 0 0 0 1px var(--border-soft)}
+.stateband .sb{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.stateband .sb i{font-style:normal;color:var(--meta)}
+.stateband .sb b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.stateband .sb b .u{font-size:8px;margin-left:1px;color:var(--meta)}
+.stateband .sp{flex:1}
+.stateband .sb.t b{color:var(--m-temp-ink)}
+.stateband .sb.b b{color:var(--m-bat-ink)}
+.stateband .sb.w b{color:var(--m-wifi-ink)}
+.stateband .sb.est b{color:var(--m-power-ink)}
+.bring{width:12px;height:12px;flex:0 0 auto;transform:rotate(-90deg)}
+@media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+</style>
+</head>
+<body>
+<div class="sheet-head" data-od-id="sheet-head">
+  <h1>菜单面板「系统」页 · 三套配色方向整屏对照</h1>
+  <p><b>取舍一句话：</b>A 最易辨 —— 一卡一族，扫视最快，代价是色相最多、最容易显得花；B 最克制 —— 全冷色靠明度 / 渐变 / 分层消除单调，最贴现有纪律，代价是「一眼分辨」仍要靠读标签；C 折中 —— 固定三元组按主 / 次 / 辅分工，比 A 安静、比 B 有温度，代价是同一色在不同卡里含义不同，「卡＝色」的直觉被弱化。</p>
+  <p>结构与数据全同（320pt 面板 · 四联 22/0/54/7.82 · 五卡 · 四段状态带），<b>只换颜色</b>。6 屏 = 3 方案 × 浅 / 深，2 倍呈现，均为原样全高（内容总高超过 520pt 首屏，磁盘卡与状态带在折叠线以下）。</p>
+  <nav class="nav" data-od-id="sheet-nav">
+    <span class="k">切到只看：</span>
+    <a href="#all" data-od-id="anchor-all">全部 6 屏</a>
+    <a href="#set-a" data-od-id="anchor-a">只看 A · 语义分族</a>
+    <a href="#set-b" data-od-id="anchor-b">只看 B · 冷调层次</a>
+    <a href="#set-c" data-od-id="anchor-c">只看 C · 暖冷平衡</a>
+  </nav>
+</div>
+<div class="deck-wrap" data-od-id="deck-wrap">
+<div class="deck" data-od-id="deck">
+ <section class="set" id="set-a" data-od-id="set-a">
+  <article class="screen pal-a" data-theme="light" data-od-id="screen-a-light">
+    <svg class="defs" width="0" height="0" aria-hidden="true"><defs><linearGradient id="a-light-cpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="a-light-gpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-gpu-fill)"/><stop offset="1" stop-color="var(--m-gpu-fill-2)"/></linearGradient><linearGradient id="a-light-mem" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-mem-fill)"/><stop offset="1" stop-color="var(--m-mem-fill-2)"/></linearGradient><linearGradient id="a-light-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="a-light-rd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-read-fill)"/><stop offset="1" stop-color="var(--m-disk-read-fill-2)"/></linearGradient><linearGradient id="a-light-wr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-write-fill)"/><stop offset="1" stop-color="var(--m-disk-write-fill-2)"/></linearGradient></defs></svg>
+    <header class="shead" data-od-id="screen-head-@UID@"><b>A · 语义分族</b><span class="sbadge">浅色</span><span class="stag">每个指标卡一个独立色相族</span></header>
+
+<section class="panel a" data-od-id="panel-a-light" aria-label="系统页 · A · 语义分族 · 浅色">
+  <div class="tabbar" data-od-id="tabbar-a-light" role="tablist" aria-label="面板分段">
+    <button type="button" role="tab" class="tab" aria-selected="false">网络</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">剪贴板</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">传送</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">额度</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">Token</button>
+    <button type="button" role="tab" class="tab on" aria-selected="true">系统</button>
+    <span class="gear" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M12.7 3.3l-1.2 1.2M4.5 11.5l-1.2 1.2"/></svg></span>
+  </div>
+  <div class="content" data-od-id="panel-content-a-light">
+    <header class="pagehead" data-od-id="sys-head-a-light">
+      <span class="host">M1 Pro · 10 核</span><span class="sp"></span>
+      <span class="live"><i></i>1 秒</span><span class="stamp">23:04:12</span>
+    </header>
+
+    <div class="hstats" data-od-id="hero-row-a-light">
+      <div class="hstat hs" data-od-id="hero-cpu-a-light"><span class="hv"><b>22</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60 L100.00,12 L0,12 Z" fill="url(#a-light-cpu-m)"/><path class="ml" d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60"/></svg><span class="hk">CPU</span></div>
+      <div class="hstat hg" data-od-id="hero-gpu-a-light"><span class="hv"><b>0</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00 L100.00,12 L0,12 Z" fill="url(#a-light-gpu-m)"/><path class="ml" d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00"/></svg><span class="hk">GPU</span></div>
+      <div class="hstat hm" data-od-id="hero-mem-a-light"><span class="hv"><b>54</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#a-light-mem-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">内存</span></div>
+      <div class="hstat hl" data-od-id="hero-load-a-light"><span class="hv"><b>7.82</b></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#a-light-mem2-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">负载</span></div>
+    </div>
+
+    <div class="card c-cpu" data-od-id="cpu-card-a-light">
+      <div class="card-head">
+        <span class="lbl">CPU</span>
+        <span class="usplit"><span class="us"><i></i><b>14%</b></span><span class="ss"><i></i><b>8%</b></span></span>
+        <span class="sp"></span><span class="meta">8P · 2E</span>
+      </div>
+      <div class="hero-row">
+        <div class="hero"><b>22</b><span>%</span></div>
+        <svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none" height="34" role="img" aria-label="近 60 秒 CPU 堆叠面积">
+          <line class="gl" x1="0" y1="8.0" x2="100" y2="8.0"/><line class="gl" x1="0" y1="16.0" x2="100" y2="16.0"/><line class="gl" x1="0" y1="24.0" x2="100" y2="24.0"/>
+          <path d="M0.00,28.80 L4.35,28.16 L8.70,28.48 L13.04,27.52 L17.39,27.84 L21.74,27.20 L26.09,28.16 L30.43,28.48 L34.78,27.52 L39.13,27.84 L43.48,28.16 L47.83,27.20 L52.17,27.52 L56.52,27.84 L60.87,28.16 L65.22,27.52 L69.57,27.84 L73.91,28.48 L78.26,28.16 L82.61,27.52 L86.96,27.84 L91.30,27.20 L95.65,28.16 L100.00,27.52 L100.00,32 L0,32 Z" fill="url(#a-light-cpu)"/>
+          <path class="ar-s" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96 0.00,27.52 L4.35,28.16 L8.70,27.20 L13.04,27.84 L17.39,27.52 L21.74,28.16 L26.09,28.48 L30.43,27.84 L34.78,27.52 L39.13,28.16 L43.48,27.84 L47.83,27.52 L52.17,27.20 L56.52,28.16 L60.87,27.84 L65.22,27.52 L69.57,28.48 L73.91,28.16 L78.26,27.20 L82.61,27.84 L86.96,27.52 L91.30,28.48 L95.65,28.16 L100.00,28.80 Z" fill="var(--m-cpu-2)" opacity=".92"/>
+          <path class="ln" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96"/>
+        </svg>
+        <div class="cores">
+          <div class="cluster"><span class="clbl">P 核 <b>1.9%</b></span><div class="bars"><span class="barlo"><i class="" style="height:9%"></i></span><span class="barlo"><i class="" style="height:14%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:12%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:10%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span></div><div class="coreids"><span>P0</span><span>P1</span><span>P2</span><span>P3</span><span>P4</span><span>P5</span><span>P6</span><span>P7</span></div></div>
+          <div class="cluster"><span class="clbl">E 核 <b>38%</b></span><div class="bars"><span class="barlo"><i class="e" style="height:38%"></i></span><span class="barlo"><i class="e" style="height:42%"></i></span></div><div class="coreids"><span>E0</span><span>E1</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card c-gpu" data-od-id="gpu-card-a-light">
+      <div class="card-head"><span class="lbl">GPU</span><span class="sp"></span><span class="meta">16 核 GPU</span></div>
+      <div class="gpu-row">
+        <span class="gring">
+          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg" cx="18" cy="18" r="15" stroke-dasharray="0 94.2"/></svg>
+          <b class="grt">0%</b>
+        </span>
+        <svg class="spark gpu" viewBox="0 0 100 22" preserveAspectRatio="none" height="30" role="img" aria-label="近 60 秒 GPU 利用率">
+          <line class="gl" x1="0" y1="5.5" x2="100" y2="5.5"/><line class="gl" x1="0" y1="11.0" x2="100" y2="11.0"/><line class="gl" x1="0" y1="16.5" x2="100" y2="16.5"/>
+          <path d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00 L100.00,22 L0,22 Z" fill="url(#a-light-gpu)"/>
+          <path class="ln" d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00"/>
+        </svg>
+      </div>
+      <div class="dlbl"><span>显存</span><span class="v">557.7<span class="u">MB</span></span></div>
+      <div class="track"><i style="width:3.4%"></i></div>
+    </div>
+
+    <div class="card c-load" data-od-id="load-card-a-light">
+      <div class="card-head">
+        <span class="lbl">压力</span>
+        <span class="ldnum">
+          <span><i class="k1"></i><b>7.82</b></span><span><i class="k2"></i><b>8.28</b></span><span><i class="k3"></i><b>6.15</b></span>
+        </span>
+        <span class="sp"></span><span class="meta">/10</span>
+      </div>
+      <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" height="26" role="img" aria-label="负载三线与核数参考">
+        <line class="gl" x1="0" y1="6.5" x2="100" y2="6.5"/><line class="gl" x1="0" y1="13.0" x2="100" y2="13.0"/><line class="gl" x1="0" y1="19.5" x2="100" y2="19.5"/>
+        <line class="lnref" x1="0" y1="4.3" x2="100" y2="4.3"/>
+        <path class="l15" d="M0.00,22.75 L4.35,22.53 L8.70,22.53 L13.04,22.32 L17.39,22.53 L21.74,22.10 L26.09,22.32 L30.43,22.32 L34.78,22.10 L39.13,22.32 L43.48,22.32 L47.83,21.88 L52.17,22.10 L56.52,22.10 L60.87,21.88 L65.22,21.88 L69.57,21.67 L73.91,21.45 L78.26,21.02 L82.61,20.15 L86.96,18.20 L91.30,16.03 L95.65,14.30 L100.00,12.67"/>
+        <path class="l5" d="M0.00,23.40 L4.35,23.18 L8.70,23.40 L13.04,22.97 L17.39,23.18 L21.74,22.75 L26.09,22.97 L30.43,23.18 L34.78,22.75 L39.13,22.97 L43.48,23.18 L47.83,22.53 L52.17,22.75 L56.52,22.97 L60.87,22.75 L65.22,22.53 L69.57,22.75 L73.91,22.32 L78.26,22.53 L82.61,22.10 L86.96,20.80 L91.30,16.03 L95.65,12.57 L100.00,8.06"/>
+        <path class="l1" d="M0.00,24.27 L4.35,23.83 L8.70,24.05 L13.04,23.40 L17.39,23.83 L21.74,22.97 L26.09,23.62 L30.43,23.83 L34.78,23.18 L39.13,23.40 L43.48,23.83 L47.83,22.75 L52.17,23.18 L56.52,23.62 L60.87,23.40 L65.22,22.97 L69.57,23.40 L73.91,22.53 L78.26,23.18 L82.61,23.40 L86.96,23.62 L91.30,14.73 L95.65,11.27 L100.00,9.06"/>
+      </svg>
+      <div class="phead"><span class="meta">CPU 榜</span><span class="sp"></span><button type="button" class="act">切</button></div>
+      <div class="procs" data-od-id="proc-list-a-light"><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:73.9%"></i></span><span class="pv">73.9%</span></div><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:18.8%"></i></span><span class="pv">18.8%</span></div><div class="proc"><span class="pn">qemu-syst…</span><span class="pb"><i style="width:17.3%"></i></span><span class="pv">17.3%</span></div></div>
+    </div>
+
+    <div class="card c-mem" data-od-id="mem-card-a-light">
+      <div class="card-head"><span class="lbl">内存</span><span class="dot"></span><span class="sp"></span><span class="meta"><b>10.3 GB</b> / 16.0 GB</span></div>
+      <div class="track stacked">
+        <i class="w" style="width:11.3%"></i><i class="a" style="width:28.8%"></i><i class="c" style="width:24.4%"></i><i class="f" style="width:35.5%"></i>
+      </div>
+      <div class="split-nums">
+        <span class="w"><b>1.8</b>内核</span><span class="a"><b>4.6</b>活跃</span><span class="c"><b>3.9</b>压缩</span><span class="f"><b>5.7</b>空闲</span>
+        <span class="sw"><b>3.5 GB</b> 交换</span>
+      </div>
+    </div>
+
+    <div class="card c-disk" data-od-id="disk-card-a-light">
+      <div class="card-head">
+        <span class="lbl">磁盘</span>
+        <span class="meta">忙 <b>2%</b></span>
+        <span class="track busy"><i style="width:2%"></i></span>
+        <span class="sp"></span>
+        <span class="meta"><b>432.9 GB</b> / 926.4 GB</span>
+      </div>
+      <div class="track"><i style="width:46.7%"></i></div>
+      <div class="dual">
+        <div><div class="dlbl"><span>读</span><span class="v">1.6<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘读速率"><path d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70 L100.00,18 L0,18 Z" fill="url(#a-light-rd)"/><path class="ln rd" d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70"/></svg></div>
+        <div><div class="dlbl"><span>写</span><span class="v">0.9<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘写速率"><path d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00 L100.00,18 L0,18 Z" fill="url(#a-light-wr)"/><path class="ln wr" d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00"/></svg></div>
+      </div>
+    </div>
+
+    <div class="stateband" data-od-id="stateband-a-light">
+      <span class="sb t"><i>SoC</i><b>41.6°</b></span>
+      <span class="sb b"><svg class="bring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg bat" cx="18" cy="18" r="15" stroke-dasharray="81 94.2"/></svg><b>86%</b></span>
+      <span class="sb w"><i>Wi-Fi</i><b>−65</b></span>
+      <span class="sp"></span>
+      <span class="sb est"><i>估</i><i>功耗</i><b>4.8<span class="u">W</span></b></span>
+    </div>
+  </div>
+</section>
+  </article>
+  <article class="screen pal-a" data-theme="dark" data-od-id="screen-a-dark">
+    <svg class="defs" width="0" height="0" aria-hidden="true"><defs><linearGradient id="a-dark-cpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="a-dark-gpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-gpu-fill)"/><stop offset="1" stop-color="var(--m-gpu-fill-2)"/></linearGradient><linearGradient id="a-dark-mem" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-mem-fill)"/><stop offset="1" stop-color="var(--m-mem-fill-2)"/></linearGradient><linearGradient id="a-dark-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="a-dark-rd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-read-fill)"/><stop offset="1" stop-color="var(--m-disk-read-fill-2)"/></linearGradient><linearGradient id="a-dark-wr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-write-fill)"/><stop offset="1" stop-color="var(--m-disk-write-fill-2)"/></linearGradient></defs></svg>
+    <header class="shead" data-od-id="screen-head-@UID@"><b>A · 语义分族</b><span class="sbadge">深色</span><span class="stag">每个指标卡一个独立色相族</span></header>
+
+<section class="panel a" data-od-id="panel-a-dark" aria-label="系统页 · A · 语义分族 · 深色">
+  <div class="tabbar" data-od-id="tabbar-a-dark" role="tablist" aria-label="面板分段">
+    <button type="button" role="tab" class="tab" aria-selected="false">网络</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">剪贴板</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">传送</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">额度</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">Token</button>
+    <button type="button" role="tab" class="tab on" aria-selected="true">系统</button>
+    <span class="gear" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M12.7 3.3l-1.2 1.2M4.5 11.5l-1.2 1.2"/></svg></span>
+  </div>
+  <div class="content" data-od-id="panel-content-a-dark">
+    <header class="pagehead" data-od-id="sys-head-a-dark">
+      <span class="host">M1 Pro · 10 核</span><span class="sp"></span>
+      <span class="live"><i></i>1 秒</span><span class="stamp">23:04:12</span>
+    </header>
+
+    <div class="hstats" data-od-id="hero-row-a-dark">
+      <div class="hstat hs" data-od-id="hero-cpu-a-dark"><span class="hv"><b>22</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60 L100.00,12 L0,12 Z" fill="url(#a-dark-cpu-m)"/><path class="ml" d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60"/></svg><span class="hk">CPU</span></div>
+      <div class="hstat hg" data-od-id="hero-gpu-a-dark"><span class="hv"><b>0</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00 L100.00,12 L0,12 Z" fill="url(#a-dark-gpu-m)"/><path class="ml" d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00"/></svg><span class="hk">GPU</span></div>
+      <div class="hstat hm" data-od-id="hero-mem-a-dark"><span class="hv"><b>54</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#a-dark-mem-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">内存</span></div>
+      <div class="hstat hl" data-od-id="hero-load-a-dark"><span class="hv"><b>7.82</b></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#a-dark-mem2-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">负载</span></div>
+    </div>
+
+    <div class="card c-cpu" data-od-id="cpu-card-a-dark">
+      <div class="card-head">
+        <span class="lbl">CPU</span>
+        <span class="usplit"><span class="us"><i></i><b>14%</b></span><span class="ss"><i></i><b>8%</b></span></span>
+        <span class="sp"></span><span class="meta">8P · 2E</span>
+      </div>
+      <div class="hero-row">
+        <div class="hero"><b>22</b><span>%</span></div>
+        <svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none" height="34" role="img" aria-label="近 60 秒 CPU 堆叠面积">
+          <line class="gl" x1="0" y1="8.0" x2="100" y2="8.0"/><line class="gl" x1="0" y1="16.0" x2="100" y2="16.0"/><line class="gl" x1="0" y1="24.0" x2="100" y2="24.0"/>
+          <path d="M0.00,28.80 L4.35,28.16 L8.70,28.48 L13.04,27.52 L17.39,27.84 L21.74,27.20 L26.09,28.16 L30.43,28.48 L34.78,27.52 L39.13,27.84 L43.48,28.16 L47.83,27.20 L52.17,27.52 L56.52,27.84 L60.87,28.16 L65.22,27.52 L69.57,27.84 L73.91,28.48 L78.26,28.16 L82.61,27.52 L86.96,27.84 L91.30,27.20 L95.65,28.16 L100.00,27.52 L100.00,32 L0,32 Z" fill="url(#a-dark-cpu)"/>
+          <path class="ar-s" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96 0.00,27.52 L4.35,28.16 L8.70,27.20 L13.04,27.84 L17.39,27.52 L21.74,28.16 L26.09,28.48 L30.43,27.84 L34.78,27.52 L39.13,28.16 L43.48,27.84 L47.83,27.52 L52.17,27.20 L56.52,28.16 L60.87,27.84 L65.22,27.52 L69.57,28.48 L73.91,28.16 L78.26,27.20 L82.61,27.84 L86.96,27.52 L91.30,28.48 L95.65,28.16 L100.00,28.80 Z" fill="var(--m-cpu-2)" opacity=".92"/>
+          <path class="ln" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96"/>
+        </svg>
+        <div class="cores">
+          <div class="cluster"><span class="clbl">P 核 <b>1.9%</b></span><div class="bars"><span class="barlo"><i class="" style="height:9%"></i></span><span class="barlo"><i class="" style="height:14%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:12%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:10%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span></div><div class="coreids"><span>P0</span><span>P1</span><span>P2</span><span>P3</span><span>P4</span><span>P5</span><span>P6</span><span>P7</span></div></div>
+          <div class="cluster"><span class="clbl">E 核 <b>38%</b></span><div class="bars"><span class="barlo"><i class="e" style="height:38%"></i></span><span class="barlo"><i class="e" style="height:42%"></i></span></div><div class="coreids"><span>E0</span><span>E1</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card c-gpu" data-od-id="gpu-card-a-dark">
+      <div class="card-head"><span class="lbl">GPU</span><span class="sp"></span><span class="meta">16 核 GPU</span></div>
+      <div class="gpu-row">
+        <span class="gring">
+          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg" cx="18" cy="18" r="15" stroke-dasharray="0 94.2"/></svg>
+          <b class="grt">0%</b>
+        </span>
+        <svg class="spark gpu" viewBox="0 0 100 22" preserveAspectRatio="none" height="30" role="img" aria-label="近 60 秒 GPU 利用率">
+          <line class="gl" x1="0" y1="5.5" x2="100" y2="5.5"/><line class="gl" x1="0" y1="11.0" x2="100" y2="11.0"/><line class="gl" x1="0" y1="16.5" x2="100" y2="16.5"/>
+          <path d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00 L100.00,22 L0,22 Z" fill="url(#a-dark-gpu)"/>
+          <path class="ln" d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00"/>
+        </svg>
+      </div>
+      <div class="dlbl"><span>显存</span><span class="v">557.7<span class="u">MB</span></span></div>
+      <div class="track"><i style="width:3.4%"></i></div>
+    </div>
+
+    <div class="card c-load" data-od-id="load-card-a-dark">
+      <div class="card-head">
+        <span class="lbl">压力</span>
+        <span class="ldnum">
+          <span><i class="k1"></i><b>7.82</b></span><span><i class="k2"></i><b>8.28</b></span><span><i class="k3"></i><b>6.15</b></span>
+        </span>
+        <span class="sp"></span><span class="meta">/10</span>
+      </div>
+      <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" height="26" role="img" aria-label="负载三线与核数参考">
+        <line class="gl" x1="0" y1="6.5" x2="100" y2="6.5"/><line class="gl" x1="0" y1="13.0" x2="100" y2="13.0"/><line class="gl" x1="0" y1="19.5" x2="100" y2="19.5"/>
+        <line class="lnref" x1="0" y1="4.3" x2="100" y2="4.3"/>
+        <path class="l15" d="M0.00,22.75 L4.35,22.53 L8.70,22.53 L13.04,22.32 L17.39,22.53 L21.74,22.10 L26.09,22.32 L30.43,22.32 L34.78,22.10 L39.13,22.32 L43.48,22.32 L47.83,21.88 L52.17,22.10 L56.52,22.10 L60.87,21.88 L65.22,21.88 L69.57,21.67 L73.91,21.45 L78.26,21.02 L82.61,20.15 L86.96,18.20 L91.30,16.03 L95.65,14.30 L100.00,12.67"/>
+        <path class="l5" d="M0.00,23.40 L4.35,23.18 L8.70,23.40 L13.04,22.97 L17.39,23.18 L21.74,22.75 L26.09,22.97 L30.43,23.18 L34.78,22.75 L39.13,22.97 L43.48,23.18 L47.83,22.53 L52.17,22.75 L56.52,22.97 L60.87,22.75 L65.22,22.53 L69.57,22.75 L73.91,22.32 L78.26,22.53 L82.61,22.10 L86.96,20.80 L91.30,16.03 L95.65,12.57 L100.00,8.06"/>
+        <path class="l1" d="M0.00,24.27 L4.35,23.83 L8.70,24.05 L13.04,23.40 L17.39,23.83 L21.74,22.97 L26.09,23.62 L30.43,23.83 L34.78,23.18 L39.13,23.40 L43.48,23.83 L47.83,22.75 L52.17,23.18 L56.52,23.62 L60.87,23.40 L65.22,22.97 L69.57,23.40 L73.91,22.53 L78.26,23.18 L82.61,23.40 L86.96,23.62 L91.30,14.73 L95.65,11.27 L100.00,9.06"/>
+      </svg>
+      <div class="phead"><span class="meta">CPU 榜</span><span class="sp"></span><button type="button" class="act">切</button></div>
+      <div class="procs" data-od-id="proc-list-a-dark"><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:73.9%"></i></span><span class="pv">73.9%</span></div><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:18.8%"></i></span><span class="pv">18.8%</span></div><div class="proc"><span class="pn">qemu-syst…</span><span class="pb"><i style="width:17.3%"></i></span><span class="pv">17.3%</span></div></div>
+    </div>
+
+    <div class="card c-mem" data-od-id="mem-card-a-dark">
+      <div class="card-head"><span class="lbl">内存</span><span class="dot"></span><span class="sp"></span><span class="meta"><b>10.3 GB</b> / 16.0 GB</span></div>
+      <div class="track stacked">
+        <i class="w" style="width:11.3%"></i><i class="a" style="width:28.8%"></i><i class="c" style="width:24.4%"></i><i class="f" style="width:35.5%"></i>
+      </div>
+      <div class="split-nums">
+        <span class="w"><b>1.8</b>内核</span><span class="a"><b>4.6</b>活跃</span><span class="c"><b>3.9</b>压缩</span><span class="f"><b>5.7</b>空闲</span>
+        <span class="sw"><b>3.5 GB</b> 交换</span>
+      </div>
+    </div>
+
+    <div class="card c-disk" data-od-id="disk-card-a-dark">
+      <div class="card-head">
+        <span class="lbl">磁盘</span>
+        <span class="meta">忙 <b>2%</b></span>
+        <span class="track busy"><i style="width:2%"></i></span>
+        <span class="sp"></span>
+        <span class="meta"><b>432.9 GB</b> / 926.4 GB</span>
+      </div>
+      <div class="track"><i style="width:46.7%"></i></div>
+      <div class="dual">
+        <div><div class="dlbl"><span>读</span><span class="v">1.6<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘读速率"><path d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70 L100.00,18 L0,18 Z" fill="url(#a-dark-rd)"/><path class="ln rd" d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70"/></svg></div>
+        <div><div class="dlbl"><span>写</span><span class="v">0.9<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘写速率"><path d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00 L100.00,18 L0,18 Z" fill="url(#a-dark-wr)"/><path class="ln wr" d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00"/></svg></div>
+      </div>
+    </div>
+
+    <div class="stateband" data-od-id="stateband-a-dark">
+      <span class="sb t"><i>SoC</i><b>41.6°</b></span>
+      <span class="sb b"><svg class="bring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg bat" cx="18" cy="18" r="15" stroke-dasharray="81 94.2"/></svg><b>86%</b></span>
+      <span class="sb w"><i>Wi-Fi</i><b>−65</b></span>
+      <span class="sp"></span>
+      <span class="sb est"><i>估</i><i>功耗</i><b>4.8<span class="u">W</span></b></span>
+    </div>
+  </div>
+</section>
+  </article>
+ </section>
+ <section class="set" id="set-b" data-od-id="set-b">
+  <article class="screen pal-b" data-theme="light" data-od-id="screen-b-light">
+    <svg class="defs" width="0" height="0" aria-hidden="true"><defs><linearGradient id="b-light-cpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="b-light-gpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-gpu-fill)"/><stop offset="1" stop-color="var(--m-gpu-fill-2)"/></linearGradient><linearGradient id="b-light-mem" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-mem-fill)"/><stop offset="1" stop-color="var(--m-mem-fill-2)"/></linearGradient><linearGradient id="b-light-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="b-light-rd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-read-fill)"/><stop offset="1" stop-color="var(--m-disk-read-fill-2)"/></linearGradient><linearGradient id="b-light-wr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-write-fill)"/><stop offset="1" stop-color="var(--m-disk-write-fill-2)"/></linearGradient></defs></svg>
+    <header class="shead" data-od-id="screen-head-@UID@"><b>B · 冷调层次</b><span class="sbadge">浅色</span><span class="stag">全冷色区，靠明度 / 渐变 / 层次</span></header>
+
+<section class="panel b" data-od-id="panel-b-light" aria-label="系统页 · B · 冷调层次 · 浅色">
+  <div class="tabbar" data-od-id="tabbar-b-light" role="tablist" aria-label="面板分段">
+    <button type="button" role="tab" class="tab" aria-selected="false">网络</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">剪贴板</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">传送</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">额度</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">Token</button>
+    <button type="button" role="tab" class="tab on" aria-selected="true">系统</button>
+    <span class="gear" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M12.7 3.3l-1.2 1.2M4.5 11.5l-1.2 1.2"/></svg></span>
+  </div>
+  <div class="content" data-od-id="panel-content-b-light">
+    <header class="pagehead" data-od-id="sys-head-b-light">
+      <span class="host">M1 Pro · 10 核</span><span class="sp"></span>
+      <span class="live"><i></i>1 秒</span><span class="stamp">23:04:12</span>
+    </header>
+
+    <div class="hstats" data-od-id="hero-row-b-light">
+      <div class="hstat hs" data-od-id="hero-cpu-b-light"><span class="hv"><b>22</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60 L100.00,12 L0,12 Z" fill="url(#b-light-cpu-m)"/><path class="ml" d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60"/></svg><span class="hk">CPU</span></div>
+      <div class="hstat hg" data-od-id="hero-gpu-b-light"><span class="hv"><b>0</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00 L100.00,12 L0,12 Z" fill="url(#b-light-gpu-m)"/><path class="ml" d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00"/></svg><span class="hk">GPU</span></div>
+      <div class="hstat hm" data-od-id="hero-mem-b-light"><span class="hv"><b>54</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#b-light-mem-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">内存</span></div>
+      <div class="hstat hl" data-od-id="hero-load-b-light"><span class="hv"><b>7.82</b></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#b-light-mem2-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">负载</span></div>
+    </div>
+
+    <div class="card c-cpu" data-od-id="cpu-card-b-light">
+      <div class="card-head">
+        <span class="lbl">CPU</span>
+        <span class="usplit"><span class="us"><i></i><b>14%</b></span><span class="ss"><i></i><b>8%</b></span></span>
+        <span class="sp"></span><span class="meta">8P · 2E</span>
+      </div>
+      <div class="hero-row">
+        <div class="hero"><b>22</b><span>%</span></div>
+        <svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none" height="34" role="img" aria-label="近 60 秒 CPU 堆叠面积">
+          <line class="gl" x1="0" y1="8.0" x2="100" y2="8.0"/><line class="gl" x1="0" y1="16.0" x2="100" y2="16.0"/><line class="gl" x1="0" y1="24.0" x2="100" y2="24.0"/>
+          <path d="M0.00,28.80 L4.35,28.16 L8.70,28.48 L13.04,27.52 L17.39,27.84 L21.74,27.20 L26.09,28.16 L30.43,28.48 L34.78,27.52 L39.13,27.84 L43.48,28.16 L47.83,27.20 L52.17,27.52 L56.52,27.84 L60.87,28.16 L65.22,27.52 L69.57,27.84 L73.91,28.48 L78.26,28.16 L82.61,27.52 L86.96,27.84 L91.30,27.20 L95.65,28.16 L100.00,27.52 L100.00,32 L0,32 Z" fill="url(#b-light-cpu)"/>
+          <path class="ar-s" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96 0.00,27.52 L4.35,28.16 L8.70,27.20 L13.04,27.84 L17.39,27.52 L21.74,28.16 L26.09,28.48 L30.43,27.84 L34.78,27.52 L39.13,28.16 L43.48,27.84 L47.83,27.52 L52.17,27.20 L56.52,28.16 L60.87,27.84 L65.22,27.52 L69.57,28.48 L73.91,28.16 L78.26,27.20 L82.61,27.84 L86.96,27.52 L91.30,28.48 L95.65,28.16 L100.00,28.80 Z" fill="var(--m-cpu-2)" opacity=".92"/>
+          <path class="ln" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96"/>
+        </svg>
+        <div class="cores">
+          <div class="cluster"><span class="clbl">P 核 <b>1.9%</b></span><div class="bars"><span class="barlo"><i class="" style="height:9%"></i></span><span class="barlo"><i class="" style="height:14%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:12%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:10%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span></div><div class="coreids"><span>P0</span><span>P1</span><span>P2</span><span>P3</span><span>P4</span><span>P5</span><span>P6</span><span>P7</span></div></div>
+          <div class="cluster"><span class="clbl">E 核 <b>38%</b></span><div class="bars"><span class="barlo"><i class="e" style="height:38%"></i></span><span class="barlo"><i class="e" style="height:42%"></i></span></div><div class="coreids"><span>E0</span><span>E1</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card c-gpu" data-od-id="gpu-card-b-light">
+      <div class="card-head"><span class="lbl">GPU</span><span class="sp"></span><span class="meta">16 核 GPU</span></div>
+      <div class="gpu-row">
+        <span class="gring">
+          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg" cx="18" cy="18" r="15" stroke-dasharray="0 94.2"/></svg>
+          <b class="grt">0%</b>
+        </span>
+        <svg class="spark gpu" viewBox="0 0 100 22" preserveAspectRatio="none" height="30" role="img" aria-label="近 60 秒 GPU 利用率">
+          <line class="gl" x1="0" y1="5.5" x2="100" y2="5.5"/><line class="gl" x1="0" y1="11.0" x2="100" y2="11.0"/><line class="gl" x1="0" y1="16.5" x2="100" y2="16.5"/>
+          <path d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00 L100.00,22 L0,22 Z" fill="url(#b-light-gpu)"/>
+          <path class="ln" d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00"/>
+        </svg>
+      </div>
+      <div class="dlbl"><span>显存</span><span class="v">557.7<span class="u">MB</span></span></div>
+      <div class="track"><i style="width:3.4%"></i></div>
+    </div>
+
+    <div class="card c-load" data-od-id="load-card-b-light">
+      <div class="card-head">
+        <span class="lbl">压力</span>
+        <span class="ldnum">
+          <span><i class="k1"></i><b>7.82</b></span><span><i class="k2"></i><b>8.28</b></span><span><i class="k3"></i><b>6.15</b></span>
+        </span>
+        <span class="sp"></span><span class="meta">/10</span>
+      </div>
+      <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" height="26" role="img" aria-label="负载三线与核数参考">
+        <line class="gl" x1="0" y1="6.5" x2="100" y2="6.5"/><line class="gl" x1="0" y1="13.0" x2="100" y2="13.0"/><line class="gl" x1="0" y1="19.5" x2="100" y2="19.5"/>
+        <line class="lnref" x1="0" y1="4.3" x2="100" y2="4.3"/>
+        <path class="l15" d="M0.00,22.75 L4.35,22.53 L8.70,22.53 L13.04,22.32 L17.39,22.53 L21.74,22.10 L26.09,22.32 L30.43,22.32 L34.78,22.10 L39.13,22.32 L43.48,22.32 L47.83,21.88 L52.17,22.10 L56.52,22.10 L60.87,21.88 L65.22,21.88 L69.57,21.67 L73.91,21.45 L78.26,21.02 L82.61,20.15 L86.96,18.20 L91.30,16.03 L95.65,14.30 L100.00,12.67"/>
+        <path class="l5" d="M0.00,23.40 L4.35,23.18 L8.70,23.40 L13.04,22.97 L17.39,23.18 L21.74,22.75 L26.09,22.97 L30.43,23.18 L34.78,22.75 L39.13,22.97 L43.48,23.18 L47.83,22.53 L52.17,22.75 L56.52,22.97 L60.87,22.75 L65.22,22.53 L69.57,22.75 L73.91,22.32 L78.26,22.53 L82.61,22.10 L86.96,20.80 L91.30,16.03 L95.65,12.57 L100.00,8.06"/>
+        <path class="l1" d="M0.00,24.27 L4.35,23.83 L8.70,24.05 L13.04,23.40 L17.39,23.83 L21.74,22.97 L26.09,23.62 L30.43,23.83 L34.78,23.18 L39.13,23.40 L43.48,23.83 L47.83,22.75 L52.17,23.18 L56.52,23.62 L60.87,23.40 L65.22,22.97 L69.57,23.40 L73.91,22.53 L78.26,23.18 L82.61,23.40 L86.96,23.62 L91.30,14.73 L95.65,11.27 L100.00,9.06"/>
+      </svg>
+      <div class="phead"><span class="meta">CPU 榜</span><span class="sp"></span><button type="button" class="act">切</button></div>
+      <div class="procs" data-od-id="proc-list-b-light"><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:73.9%"></i></span><span class="pv">73.9%</span></div><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:18.8%"></i></span><span class="pv">18.8%</span></div><div class="proc"><span class="pn">qemu-syst…</span><span class="pb"><i style="width:17.3%"></i></span><span class="pv">17.3%</span></div></div>
+    </div>
+
+    <div class="card c-mem" data-od-id="mem-card-b-light">
+      <div class="card-head"><span class="lbl">内存</span><span class="dot"></span><span class="sp"></span><span class="meta"><b>10.3 GB</b> / 16.0 GB</span></div>
+      <div class="track stacked">
+        <i class="w" style="width:11.3%"></i><i class="a" style="width:28.8%"></i><i class="c" style="width:24.4%"></i><i class="f" style="width:35.5%"></i>
+      </div>
+      <div class="split-nums">
+        <span class="w"><b>1.8</b>内核</span><span class="a"><b>4.6</b>活跃</span><span class="c"><b>3.9</b>压缩</span><span class="f"><b>5.7</b>空闲</span>
+        <span class="sw"><b>3.5 GB</b> 交换</span>
+      </div>
+    </div>
+
+    <div class="card c-disk" data-od-id="disk-card-b-light">
+      <div class="card-head">
+        <span class="lbl">磁盘</span>
+        <span class="meta">忙 <b>2%</b></span>
+        <span class="track busy"><i style="width:2%"></i></span>
+        <span class="sp"></span>
+        <span class="meta"><b>432.9 GB</b> / 926.4 GB</span>
+      </div>
+      <div class="track"><i style="width:46.7%"></i></div>
+      <div class="dual">
+        <div><div class="dlbl"><span>读</span><span class="v">1.6<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘读速率"><path d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70 L100.00,18 L0,18 Z" fill="url(#b-light-rd)"/><path class="ln rd" d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70"/></svg></div>
+        <div><div class="dlbl"><span>写</span><span class="v">0.9<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘写速率"><path d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00 L100.00,18 L0,18 Z" fill="url(#b-light-wr)"/><path class="ln wr" d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00"/></svg></div>
+      </div>
+    </div>
+
+    <div class="stateband" data-od-id="stateband-b-light">
+      <span class="sb t"><i>SoC</i><b>41.6°</b></span>
+      <span class="sb b"><svg class="bring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg bat" cx="18" cy="18" r="15" stroke-dasharray="81 94.2"/></svg><b>86%</b></span>
+      <span class="sb w"><i>Wi-Fi</i><b>−65</b></span>
+      <span class="sp"></span>
+      <span class="sb est"><i>估</i><i>功耗</i><b>4.8<span class="u">W</span></b></span>
+    </div>
+  </div>
+</section>
+  </article>
+  <article class="screen pal-b" data-theme="dark" data-od-id="screen-b-dark">
+    <svg class="defs" width="0" height="0" aria-hidden="true"><defs><linearGradient id="b-dark-cpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="b-dark-gpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-gpu-fill)"/><stop offset="1" stop-color="var(--m-gpu-fill-2)"/></linearGradient><linearGradient id="b-dark-mem" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-mem-fill)"/><stop offset="1" stop-color="var(--m-mem-fill-2)"/></linearGradient><linearGradient id="b-dark-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="b-dark-rd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-read-fill)"/><stop offset="1" stop-color="var(--m-disk-read-fill-2)"/></linearGradient><linearGradient id="b-dark-wr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-write-fill)"/><stop offset="1" stop-color="var(--m-disk-write-fill-2)"/></linearGradient></defs></svg>
+    <header class="shead" data-od-id="screen-head-@UID@"><b>B · 冷调层次</b><span class="sbadge">深色</span><span class="stag">全冷色区，靠明度 / 渐变 / 层次</span></header>
+
+<section class="panel b" data-od-id="panel-b-dark" aria-label="系统页 · B · 冷调层次 · 深色">
+  <div class="tabbar" data-od-id="tabbar-b-dark" role="tablist" aria-label="面板分段">
+    <button type="button" role="tab" class="tab" aria-selected="false">网络</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">剪贴板</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">传送</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">额度</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">Token</button>
+    <button type="button" role="tab" class="tab on" aria-selected="true">系统</button>
+    <span class="gear" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M12.7 3.3l-1.2 1.2M4.5 11.5l-1.2 1.2"/></svg></span>
+  </div>
+  <div class="content" data-od-id="panel-content-b-dark">
+    <header class="pagehead" data-od-id="sys-head-b-dark">
+      <span class="host">M1 Pro · 10 核</span><span class="sp"></span>
+      <span class="live"><i></i>1 秒</span><span class="stamp">23:04:12</span>
+    </header>
+
+    <div class="hstats" data-od-id="hero-row-b-dark">
+      <div class="hstat hs" data-od-id="hero-cpu-b-dark"><span class="hv"><b>22</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60 L100.00,12 L0,12 Z" fill="url(#b-dark-cpu-m)"/><path class="ml" d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60"/></svg><span class="hk">CPU</span></div>
+      <div class="hstat hg" data-od-id="hero-gpu-b-dark"><span class="hv"><b>0</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00 L100.00,12 L0,12 Z" fill="url(#b-dark-gpu-m)"/><path class="ml" d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00"/></svg><span class="hk">GPU</span></div>
+      <div class="hstat hm" data-od-id="hero-mem-b-dark"><span class="hv"><b>54</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#b-dark-mem-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">内存</span></div>
+      <div class="hstat hl" data-od-id="hero-load-b-dark"><span class="hv"><b>7.82</b></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#b-dark-mem2-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">负载</span></div>
+    </div>
+
+    <div class="card c-cpu" data-od-id="cpu-card-b-dark">
+      <div class="card-head">
+        <span class="lbl">CPU</span>
+        <span class="usplit"><span class="us"><i></i><b>14%</b></span><span class="ss"><i></i><b>8%</b></span></span>
+        <span class="sp"></span><span class="meta">8P · 2E</span>
+      </div>
+      <div class="hero-row">
+        <div class="hero"><b>22</b><span>%</span></div>
+        <svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none" height="34" role="img" aria-label="近 60 秒 CPU 堆叠面积">
+          <line class="gl" x1="0" y1="8.0" x2="100" y2="8.0"/><line class="gl" x1="0" y1="16.0" x2="100" y2="16.0"/><line class="gl" x1="0" y1="24.0" x2="100" y2="24.0"/>
+          <path d="M0.00,28.80 L4.35,28.16 L8.70,28.48 L13.04,27.52 L17.39,27.84 L21.74,27.20 L26.09,28.16 L30.43,28.48 L34.78,27.52 L39.13,27.84 L43.48,28.16 L47.83,27.20 L52.17,27.52 L56.52,27.84 L60.87,28.16 L65.22,27.52 L69.57,27.84 L73.91,28.48 L78.26,28.16 L82.61,27.52 L86.96,27.84 L91.30,27.20 L95.65,28.16 L100.00,27.52 L100.00,32 L0,32 Z" fill="url(#b-dark-cpu)"/>
+          <path class="ar-s" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96 0.00,27.52 L4.35,28.16 L8.70,27.20 L13.04,27.84 L17.39,27.52 L21.74,28.16 L26.09,28.48 L30.43,27.84 L34.78,27.52 L39.13,28.16 L43.48,27.84 L47.83,27.52 L52.17,27.20 L56.52,28.16 L60.87,27.84 L65.22,27.52 L69.57,28.48 L73.91,28.16 L78.26,27.20 L82.61,27.84 L86.96,27.52 L91.30,28.48 L95.65,28.16 L100.00,28.80 Z" fill="var(--m-cpu-2)" opacity=".92"/>
+          <path class="ln" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96"/>
+        </svg>
+        <div class="cores">
+          <div class="cluster"><span class="clbl">P 核 <b>1.9%</b></span><div class="bars"><span class="barlo"><i class="" style="height:9%"></i></span><span class="barlo"><i class="" style="height:14%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:12%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:10%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span></div><div class="coreids"><span>P0</span><span>P1</span><span>P2</span><span>P3</span><span>P4</span><span>P5</span><span>P6</span><span>P7</span></div></div>
+          <div class="cluster"><span class="clbl">E 核 <b>38%</b></span><div class="bars"><span class="barlo"><i class="e" style="height:38%"></i></span><span class="barlo"><i class="e" style="height:42%"></i></span></div><div class="coreids"><span>E0</span><span>E1</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card c-gpu" data-od-id="gpu-card-b-dark">
+      <div class="card-head"><span class="lbl">GPU</span><span class="sp"></span><span class="meta">16 核 GPU</span></div>
+      <div class="gpu-row">
+        <span class="gring">
+          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg" cx="18" cy="18" r="15" stroke-dasharray="0 94.2"/></svg>
+          <b class="grt">0%</b>
+        </span>
+        <svg class="spark gpu" viewBox="0 0 100 22" preserveAspectRatio="none" height="30" role="img" aria-label="近 60 秒 GPU 利用率">
+          <line class="gl" x1="0" y1="5.5" x2="100" y2="5.5"/><line class="gl" x1="0" y1="11.0" x2="100" y2="11.0"/><line class="gl" x1="0" y1="16.5" x2="100" y2="16.5"/>
+          <path d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00 L100.00,22 L0,22 Z" fill="url(#b-dark-gpu)"/>
+          <path class="ln" d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00"/>
+        </svg>
+      </div>
+      <div class="dlbl"><span>显存</span><span class="v">557.7<span class="u">MB</span></span></div>
+      <div class="track"><i style="width:3.4%"></i></div>
+    </div>
+
+    <div class="card c-load" data-od-id="load-card-b-dark">
+      <div class="card-head">
+        <span class="lbl">压力</span>
+        <span class="ldnum">
+          <span><i class="k1"></i><b>7.82</b></span><span><i class="k2"></i><b>8.28</b></span><span><i class="k3"></i><b>6.15</b></span>
+        </span>
+        <span class="sp"></span><span class="meta">/10</span>
+      </div>
+      <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" height="26" role="img" aria-label="负载三线与核数参考">
+        <line class="gl" x1="0" y1="6.5" x2="100" y2="6.5"/><line class="gl" x1="0" y1="13.0" x2="100" y2="13.0"/><line class="gl" x1="0" y1="19.5" x2="100" y2="19.5"/>
+        <line class="lnref" x1="0" y1="4.3" x2="100" y2="4.3"/>
+        <path class="l15" d="M0.00,22.75 L4.35,22.53 L8.70,22.53 L13.04,22.32 L17.39,22.53 L21.74,22.10 L26.09,22.32 L30.43,22.32 L34.78,22.10 L39.13,22.32 L43.48,22.32 L47.83,21.88 L52.17,22.10 L56.52,22.10 L60.87,21.88 L65.22,21.88 L69.57,21.67 L73.91,21.45 L78.26,21.02 L82.61,20.15 L86.96,18.20 L91.30,16.03 L95.65,14.30 L100.00,12.67"/>
+        <path class="l5" d="M0.00,23.40 L4.35,23.18 L8.70,23.40 L13.04,22.97 L17.39,23.18 L21.74,22.75 L26.09,22.97 L30.43,23.18 L34.78,22.75 L39.13,22.97 L43.48,23.18 L47.83,22.53 L52.17,22.75 L56.52,22.97 L60.87,22.75 L65.22,22.53 L69.57,22.75 L73.91,22.32 L78.26,22.53 L82.61,22.10 L86.96,20.80 L91.30,16.03 L95.65,12.57 L100.00,8.06"/>
+        <path class="l1" d="M0.00,24.27 L4.35,23.83 L8.70,24.05 L13.04,23.40 L17.39,23.83 L21.74,22.97 L26.09,23.62 L30.43,23.83 L34.78,23.18 L39.13,23.40 L43.48,23.83 L47.83,22.75 L52.17,23.18 L56.52,23.62 L60.87,23.40 L65.22,22.97 L69.57,23.40 L73.91,22.53 L78.26,23.18 L82.61,23.40 L86.96,23.62 L91.30,14.73 L95.65,11.27 L100.00,9.06"/>
+      </svg>
+      <div class="phead"><span class="meta">CPU 榜</span><span class="sp"></span><button type="button" class="act">切</button></div>
+      <div class="procs" data-od-id="proc-list-b-dark"><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:73.9%"></i></span><span class="pv">73.9%</span></div><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:18.8%"></i></span><span class="pv">18.8%</span></div><div class="proc"><span class="pn">qemu-syst…</span><span class="pb"><i style="width:17.3%"></i></span><span class="pv">17.3%</span></div></div>
+    </div>
+
+    <div class="card c-mem" data-od-id="mem-card-b-dark">
+      <div class="card-head"><span class="lbl">内存</span><span class="dot"></span><span class="sp"></span><span class="meta"><b>10.3 GB</b> / 16.0 GB</span></div>
+      <div class="track stacked">
+        <i class="w" style="width:11.3%"></i><i class="a" style="width:28.8%"></i><i class="c" style="width:24.4%"></i><i class="f" style="width:35.5%"></i>
+      </div>
+      <div class="split-nums">
+        <span class="w"><b>1.8</b>内核</span><span class="a"><b>4.6</b>活跃</span><span class="c"><b>3.9</b>压缩</span><span class="f"><b>5.7</b>空闲</span>
+        <span class="sw"><b>3.5 GB</b> 交换</span>
+      </div>
+    </div>
+
+    <div class="card c-disk" data-od-id="disk-card-b-dark">
+      <div class="card-head">
+        <span class="lbl">磁盘</span>
+        <span class="meta">忙 <b>2%</b></span>
+        <span class="track busy"><i style="width:2%"></i></span>
+        <span class="sp"></span>
+        <span class="meta"><b>432.9 GB</b> / 926.4 GB</span>
+      </div>
+      <div class="track"><i style="width:46.7%"></i></div>
+      <div class="dual">
+        <div><div class="dlbl"><span>读</span><span class="v">1.6<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘读速率"><path d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70 L100.00,18 L0,18 Z" fill="url(#b-dark-rd)"/><path class="ln rd" d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70"/></svg></div>
+        <div><div class="dlbl"><span>写</span><span class="v">0.9<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘写速率"><path d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00 L100.00,18 L0,18 Z" fill="url(#b-dark-wr)"/><path class="ln wr" d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00"/></svg></div>
+      </div>
+    </div>
+
+    <div class="stateband" data-od-id="stateband-b-dark">
+      <span class="sb t"><i>SoC</i><b>41.6°</b></span>
+      <span class="sb b"><svg class="bring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg bat" cx="18" cy="18" r="15" stroke-dasharray="81 94.2"/></svg><b>86%</b></span>
+      <span class="sb w"><i>Wi-Fi</i><b>−65</b></span>
+      <span class="sp"></span>
+      <span class="sb est"><i>估</i><i>功耗</i><b>4.8<span class="u">W</span></b></span>
+    </div>
+  </div>
+</section>
+  </article>
+ </section>
+ <section class="set" id="set-c" data-od-id="set-c">
+  <article class="screen pal-c" data-theme="light" data-od-id="screen-c-light">
+    <svg class="defs" width="0" height="0" aria-hidden="true"><defs><linearGradient id="c-light-cpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="c-light-gpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-gpu-fill)"/><stop offset="1" stop-color="var(--m-gpu-fill-2)"/></linearGradient><linearGradient id="c-light-mem" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-mem-fill)"/><stop offset="1" stop-color="var(--m-mem-fill-2)"/></linearGradient><linearGradient id="c-light-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="c-light-rd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-read-fill)"/><stop offset="1" stop-color="var(--m-disk-read-fill-2)"/></linearGradient><linearGradient id="c-light-wr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-write-fill)"/><stop offset="1" stop-color="var(--m-disk-write-fill-2)"/></linearGradient></defs></svg>
+    <header class="shead" data-od-id="screen-head-@UID@"><b>C · 暖冷平衡</b><span class="sbadge">浅色</span><span class="stag">主蓝 / 珊瑚橙 / 青绿 三元组分工</span></header>
+
+<section class="panel c" data-od-id="panel-c-light" aria-label="系统页 · C · 暖冷平衡 · 浅色">
+  <div class="tabbar" data-od-id="tabbar-c-light" role="tablist" aria-label="面板分段">
+    <button type="button" role="tab" class="tab" aria-selected="false">网络</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">剪贴板</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">传送</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">额度</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">Token</button>
+    <button type="button" role="tab" class="tab on" aria-selected="true">系统</button>
+    <span class="gear" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M12.7 3.3l-1.2 1.2M4.5 11.5l-1.2 1.2"/></svg></span>
+  </div>
+  <div class="content" data-od-id="panel-content-c-light">
+    <header class="pagehead" data-od-id="sys-head-c-light">
+      <span class="host">M1 Pro · 10 核</span><span class="sp"></span>
+      <span class="live"><i></i>1 秒</span><span class="stamp">23:04:12</span>
+    </header>
+
+    <div class="hstats" data-od-id="hero-row-c-light">
+      <div class="hstat hs" data-od-id="hero-cpu-c-light"><span class="hv"><b>22</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60 L100.00,12 L0,12 Z" fill="url(#c-light-cpu-m)"/><path class="ml" d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60"/></svg><span class="hk">CPU</span></div>
+      <div class="hstat hg" data-od-id="hero-gpu-c-light"><span class="hv"><b>0</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00 L100.00,12 L0,12 Z" fill="url(#c-light-gpu-m)"/><path class="ml" d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00"/></svg><span class="hk">GPU</span></div>
+      <div class="hstat hm" data-od-id="hero-mem-c-light"><span class="hv"><b>54</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#c-light-mem-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">内存</span></div>
+      <div class="hstat hl" data-od-id="hero-load-c-light"><span class="hv"><b>7.82</b></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#c-light-mem2-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">负载</span></div>
+    </div>
+
+    <div class="card c-cpu" data-od-id="cpu-card-c-light">
+      <div class="card-head">
+        <span class="lbl">CPU</span>
+        <span class="usplit"><span class="us"><i></i><b>14%</b></span><span class="ss"><i></i><b>8%</b></span></span>
+        <span class="sp"></span><span class="meta">8P · 2E</span>
+      </div>
+      <div class="hero-row">
+        <div class="hero"><b>22</b><span>%</span></div>
+        <svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none" height="34" role="img" aria-label="近 60 秒 CPU 堆叠面积">
+          <line class="gl" x1="0" y1="8.0" x2="100" y2="8.0"/><line class="gl" x1="0" y1="16.0" x2="100" y2="16.0"/><line class="gl" x1="0" y1="24.0" x2="100" y2="24.0"/>
+          <path d="M0.00,28.80 L4.35,28.16 L8.70,28.48 L13.04,27.52 L17.39,27.84 L21.74,27.20 L26.09,28.16 L30.43,28.48 L34.78,27.52 L39.13,27.84 L43.48,28.16 L47.83,27.20 L52.17,27.52 L56.52,27.84 L60.87,28.16 L65.22,27.52 L69.57,27.84 L73.91,28.48 L78.26,28.16 L82.61,27.52 L86.96,27.84 L91.30,27.20 L95.65,28.16 L100.00,27.52 L100.00,32 L0,32 Z" fill="url(#c-light-cpu)"/>
+          <path class="ar-s" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96 0.00,27.52 L4.35,28.16 L8.70,27.20 L13.04,27.84 L17.39,27.52 L21.74,28.16 L26.09,28.48 L30.43,27.84 L34.78,27.52 L39.13,28.16 L43.48,27.84 L47.83,27.52 L52.17,27.20 L56.52,28.16 L60.87,27.84 L65.22,27.52 L69.57,28.48 L73.91,28.16 L78.26,27.20 L82.61,27.84 L86.96,27.52 L91.30,28.48 L95.65,28.16 L100.00,28.80 Z" fill="var(--m-cpu-2)" opacity=".92"/>
+          <path class="ln" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96"/>
+        </svg>
+        <div class="cores">
+          <div class="cluster"><span class="clbl">P 核 <b>1.9%</b></span><div class="bars"><span class="barlo"><i class="" style="height:9%"></i></span><span class="barlo"><i class="" style="height:14%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:12%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:10%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span></div><div class="coreids"><span>P0</span><span>P1</span><span>P2</span><span>P3</span><span>P4</span><span>P5</span><span>P6</span><span>P7</span></div></div>
+          <div class="cluster"><span class="clbl">E 核 <b>38%</b></span><div class="bars"><span class="barlo"><i class="e" style="height:38%"></i></span><span class="barlo"><i class="e" style="height:42%"></i></span></div><div class="coreids"><span>E0</span><span>E1</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card c-gpu" data-od-id="gpu-card-c-light">
+      <div class="card-head"><span class="lbl">GPU</span><span class="sp"></span><span class="meta">16 核 GPU</span></div>
+      <div class="gpu-row">
+        <span class="gring">
+          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg" cx="18" cy="18" r="15" stroke-dasharray="0 94.2"/></svg>
+          <b class="grt">0%</b>
+        </span>
+        <svg class="spark gpu" viewBox="0 0 100 22" preserveAspectRatio="none" height="30" role="img" aria-label="近 60 秒 GPU 利用率">
+          <line class="gl" x1="0" y1="5.5" x2="100" y2="5.5"/><line class="gl" x1="0" y1="11.0" x2="100" y2="11.0"/><line class="gl" x1="0" y1="16.5" x2="100" y2="16.5"/>
+          <path d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00 L100.00,22 L0,22 Z" fill="url(#c-light-gpu)"/>
+          <path class="ln" d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00"/>
+        </svg>
+      </div>
+      <div class="dlbl"><span>显存</span><span class="v">557.7<span class="u">MB</span></span></div>
+      <div class="track"><i style="width:3.4%"></i></div>
+    </div>
+
+    <div class="card c-load" data-od-id="load-card-c-light">
+      <div class="card-head">
+        <span class="lbl">压力</span>
+        <span class="ldnum">
+          <span><i class="k1"></i><b>7.82</b></span><span><i class="k2"></i><b>8.28</b></span><span><i class="k3"></i><b>6.15</b></span>
+        </span>
+        <span class="sp"></span><span class="meta">/10</span>
+      </div>
+      <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" height="26" role="img" aria-label="负载三线与核数参考">
+        <line class="gl" x1="0" y1="6.5" x2="100" y2="6.5"/><line class="gl" x1="0" y1="13.0" x2="100" y2="13.0"/><line class="gl" x1="0" y1="19.5" x2="100" y2="19.5"/>
+        <line class="lnref" x1="0" y1="4.3" x2="100" y2="4.3"/>
+        <path class="l15" d="M0.00,22.75 L4.35,22.53 L8.70,22.53 L13.04,22.32 L17.39,22.53 L21.74,22.10 L26.09,22.32 L30.43,22.32 L34.78,22.10 L39.13,22.32 L43.48,22.32 L47.83,21.88 L52.17,22.10 L56.52,22.10 L60.87,21.88 L65.22,21.88 L69.57,21.67 L73.91,21.45 L78.26,21.02 L82.61,20.15 L86.96,18.20 L91.30,16.03 L95.65,14.30 L100.00,12.67"/>
+        <path class="l5" d="M0.00,23.40 L4.35,23.18 L8.70,23.40 L13.04,22.97 L17.39,23.18 L21.74,22.75 L26.09,22.97 L30.43,23.18 L34.78,22.75 L39.13,22.97 L43.48,23.18 L47.83,22.53 L52.17,22.75 L56.52,22.97 L60.87,22.75 L65.22,22.53 L69.57,22.75 L73.91,22.32 L78.26,22.53 L82.61,22.10 L86.96,20.80 L91.30,16.03 L95.65,12.57 L100.00,8.06"/>
+        <path class="l1" d="M0.00,24.27 L4.35,23.83 L8.70,24.05 L13.04,23.40 L17.39,23.83 L21.74,22.97 L26.09,23.62 L30.43,23.83 L34.78,23.18 L39.13,23.40 L43.48,23.83 L47.83,22.75 L52.17,23.18 L56.52,23.62 L60.87,23.40 L65.22,22.97 L69.57,23.40 L73.91,22.53 L78.26,23.18 L82.61,23.40 L86.96,23.62 L91.30,14.73 L95.65,11.27 L100.00,9.06"/>
+      </svg>
+      <div class="phead"><span class="meta">CPU 榜</span><span class="sp"></span><button type="button" class="act">切</button></div>
+      <div class="procs" data-od-id="proc-list-c-light"><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:73.9%"></i></span><span class="pv">73.9%</span></div><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:18.8%"></i></span><span class="pv">18.8%</span></div><div class="proc"><span class="pn">qemu-syst…</span><span class="pb"><i style="width:17.3%"></i></span><span class="pv">17.3%</span></div></div>
+    </div>
+
+    <div class="card c-mem" data-od-id="mem-card-c-light">
+      <div class="card-head"><span class="lbl">内存</span><span class="dot"></span><span class="sp"></span><span class="meta"><b>10.3 GB</b> / 16.0 GB</span></div>
+      <div class="track stacked">
+        <i class="w" style="width:11.3%"></i><i class="a" style="width:28.8%"></i><i class="c" style="width:24.4%"></i><i class="f" style="width:35.5%"></i>
+      </div>
+      <div class="split-nums">
+        <span class="w"><b>1.8</b>内核</span><span class="a"><b>4.6</b>活跃</span><span class="c"><b>3.9</b>压缩</span><span class="f"><b>5.7</b>空闲</span>
+        <span class="sw"><b>3.5 GB</b> 交换</span>
+      </div>
+    </div>
+
+    <div class="card c-disk" data-od-id="disk-card-c-light">
+      <div class="card-head">
+        <span class="lbl">磁盘</span>
+        <span class="meta">忙 <b>2%</b></span>
+        <span class="track busy"><i style="width:2%"></i></span>
+        <span class="sp"></span>
+        <span class="meta"><b>432.9 GB</b> / 926.4 GB</span>
+      </div>
+      <div class="track"><i style="width:46.7%"></i></div>
+      <div class="dual">
+        <div><div class="dlbl"><span>读</span><span class="v">1.6<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘读速率"><path d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70 L100.00,18 L0,18 Z" fill="url(#c-light-rd)"/><path class="ln rd" d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70"/></svg></div>
+        <div><div class="dlbl"><span>写</span><span class="v">0.9<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘写速率"><path d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00 L100.00,18 L0,18 Z" fill="url(#c-light-wr)"/><path class="ln wr" d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00"/></svg></div>
+      </div>
+    </div>
+
+    <div class="stateband" data-od-id="stateband-c-light">
+      <span class="sb t"><i>SoC</i><b>41.6°</b></span>
+      <span class="sb b"><svg class="bring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg bat" cx="18" cy="18" r="15" stroke-dasharray="81 94.2"/></svg><b>86%</b></span>
+      <span class="sb w"><i>Wi-Fi</i><b>−65</b></span>
+      <span class="sp"></span>
+      <span class="sb est"><i>估</i><i>功耗</i><b>4.8<span class="u">W</span></b></span>
+    </div>
+  </div>
+</section>
+  </article>
+  <article class="screen pal-c" data-theme="dark" data-od-id="screen-c-dark">
+    <svg class="defs" width="0" height="0" aria-hidden="true"><defs><linearGradient id="c-dark-cpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="c-dark-gpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-gpu-fill)"/><stop offset="1" stop-color="var(--m-gpu-fill-2)"/></linearGradient><linearGradient id="c-dark-mem" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-mem-fill)"/><stop offset="1" stop-color="var(--m-mem-fill-2)"/></linearGradient><linearGradient id="c-dark-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="c-dark-rd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-read-fill)"/><stop offset="1" stop-color="var(--m-disk-read-fill-2)"/></linearGradient><linearGradient id="c-dark-wr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-write-fill)"/><stop offset="1" stop-color="var(--m-disk-write-fill-2)"/></linearGradient></defs></svg>
+    <header class="shead" data-od-id="screen-head-@UID@"><b>C · 暖冷平衡</b><span class="sbadge">深色</span><span class="stag">主蓝 / 珊瑚橙 / 青绿 三元组分工</span></header>
+
+<section class="panel c" data-od-id="panel-c-dark" aria-label="系统页 · C · 暖冷平衡 · 深色">
+  <div class="tabbar" data-od-id="tabbar-c-dark" role="tablist" aria-label="面板分段">
+    <button type="button" role="tab" class="tab" aria-selected="false">网络</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">剪贴板</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">传送</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">额度</button>
+    <button type="button" role="tab" class="tab" aria-selected="false">Token</button>
+    <button type="button" role="tab" class="tab on" aria-selected="true">系统</button>
+    <span class="gear" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M12.7 3.3l-1.2 1.2M4.5 11.5l-1.2 1.2"/></svg></span>
+  </div>
+  <div class="content" data-od-id="panel-content-c-dark">
+    <header class="pagehead" data-od-id="sys-head-c-dark">
+      <span class="host">M1 Pro · 10 核</span><span class="sp"></span>
+      <span class="live"><i></i>1 秒</span><span class="stamp">23:04:12</span>
+    </header>
+
+    <div class="hstats" data-od-id="hero-row-c-dark">
+      <div class="hstat hs" data-od-id="hero-cpu-c-dark"><span class="hv"><b>22</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60 L100.00,12 L0,12 Z" fill="url(#c-dark-cpu-m)"/><path class="ml" d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60"/></svg><span class="hk">CPU</span></div>
+      <div class="hstat hg" data-od-id="hero-gpu-c-dark"><span class="hv"><b>0</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00 L100.00,12 L0,12 Z" fill="url(#c-dark-gpu-m)"/><path class="ml" d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00"/></svg><span class="hk">GPU</span></div>
+      <div class="hstat hm" data-od-id="hero-mem-c-dark"><span class="hv"><b>54</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#c-dark-mem-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">内存</span></div>
+      <div class="hstat hl" data-od-id="hero-load-c-dark"><span class="hv"><b>7.82</b></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#c-dark-mem2-m)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">负载</span></div>
+    </div>
+
+    <div class="card c-cpu" data-od-id="cpu-card-c-dark">
+      <div class="card-head">
+        <span class="lbl">CPU</span>
+        <span class="usplit"><span class="us"><i></i><b>14%</b></span><span class="ss"><i></i><b>8%</b></span></span>
+        <span class="sp"></span><span class="meta">8P · 2E</span>
+      </div>
+      <div class="hero-row">
+        <div class="hero"><b>22</b><span>%</span></div>
+        <svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none" height="34" role="img" aria-label="近 60 秒 CPU 堆叠面积">
+          <line class="gl" x1="0" y1="8.0" x2="100" y2="8.0"/><line class="gl" x1="0" y1="16.0" x2="100" y2="16.0"/><line class="gl" x1="0" y1="24.0" x2="100" y2="24.0"/>
+          <path d="M0.00,28.80 L4.35,28.16 L8.70,28.48 L13.04,27.52 L17.39,27.84 L21.74,27.20 L26.09,28.16 L30.43,28.48 L34.78,27.52 L39.13,27.84 L43.48,28.16 L47.83,27.20 L52.17,27.52 L56.52,27.84 L60.87,28.16 L65.22,27.52 L69.57,27.84 L73.91,28.48 L78.26,28.16 L82.61,27.52 L86.96,27.84 L91.30,27.20 L95.65,28.16 L100.00,27.52 L100.00,32 L0,32 Z" fill="url(#c-dark-cpu)"/>
+          <path class="ar-s" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96 0.00,27.52 L4.35,28.16 L8.70,27.20 L13.04,27.84 L17.39,27.52 L21.74,28.16 L26.09,28.48 L30.43,27.84 L34.78,27.52 L39.13,28.16 L43.48,27.84 L47.83,27.52 L52.17,27.20 L56.52,28.16 L60.87,27.84 L65.22,27.52 L69.57,28.48 L73.91,28.16 L78.26,27.20 L82.61,27.84 L86.96,27.52 L91.30,28.48 L95.65,28.16 L100.00,28.80 Z" fill="var(--m-cpu-2)" opacity=".92"/>
+          <path class="ln" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96"/>
+        </svg>
+        <div class="cores">
+          <div class="cluster"><span class="clbl">P 核 <b>1.9%</b></span><div class="bars"><span class="barlo"><i class="" style="height:9%"></i></span><span class="barlo"><i class="" style="height:14%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:12%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:10%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span><span class="barlo"><i class="" style="height:8%"></i></span></div><div class="coreids"><span>P0</span><span>P1</span><span>P2</span><span>P3</span><span>P4</span><span>P5</span><span>P6</span><span>P7</span></div></div>
+          <div class="cluster"><span class="clbl">E 核 <b>38%</b></span><div class="bars"><span class="barlo"><i class="e" style="height:38%"></i></span><span class="barlo"><i class="e" style="height:42%"></i></span></div><div class="coreids"><span>E0</span><span>E1</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card c-gpu" data-od-id="gpu-card-c-dark">
+      <div class="card-head"><span class="lbl">GPU</span><span class="sp"></span><span class="meta">16 核 GPU</span></div>
+      <div class="gpu-row">
+        <span class="gring">
+          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg" cx="18" cy="18" r="15" stroke-dasharray="0 94.2"/></svg>
+          <b class="grt">0%</b>
+        </span>
+        <svg class="spark gpu" viewBox="0 0 100 22" preserveAspectRatio="none" height="30" role="img" aria-label="近 60 秒 GPU 利用率">
+          <line class="gl" x1="0" y1="5.5" x2="100" y2="5.5"/><line class="gl" x1="0" y1="11.0" x2="100" y2="11.0"/><line class="gl" x1="0" y1="16.5" x2="100" y2="16.5"/>
+          <path d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00 L100.00,22 L0,22 Z" fill="url(#c-dark-gpu)"/>
+          <path class="ln" d="M0.00,19.80 L4.35,22.00 L8.70,17.60 L13.04,15.40 L17.39,22.00 L21.74,19.80 L26.09,17.60 L30.43,13.20 L34.78,15.40 L39.13,19.80 L43.48,22.00 L47.83,17.60 L52.17,11.00 L56.52,13.20 L60.87,17.60 L65.22,19.80 L69.57,22.00 L73.91,19.80 L78.26,15.40 L82.61,17.60 L86.96,19.80 L91.30,22.00 L95.65,19.80 L100.00,22.00"/>
+        </svg>
+      </div>
+      <div class="dlbl"><span>显存</span><span class="v">557.7<span class="u">MB</span></span></div>
+      <div class="track"><i style="width:3.4%"></i></div>
+    </div>
+
+    <div class="card c-load" data-od-id="load-card-c-dark">
+      <div class="card-head">
+        <span class="lbl">压力</span>
+        <span class="ldnum">
+          <span><i class="k1"></i><b>7.82</b></span><span><i class="k2"></i><b>8.28</b></span><span><i class="k3"></i><b>6.15</b></span>
+        </span>
+        <span class="sp"></span><span class="meta">/10</span>
+      </div>
+      <svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" height="26" role="img" aria-label="负载三线与核数参考">
+        <line class="gl" x1="0" y1="6.5" x2="100" y2="6.5"/><line class="gl" x1="0" y1="13.0" x2="100" y2="13.0"/><line class="gl" x1="0" y1="19.5" x2="100" y2="19.5"/>
+        <line class="lnref" x1="0" y1="4.3" x2="100" y2="4.3"/>
+        <path class="l15" d="M0.00,22.75 L4.35,22.53 L8.70,22.53 L13.04,22.32 L17.39,22.53 L21.74,22.10 L26.09,22.32 L30.43,22.32 L34.78,22.10 L39.13,22.32 L43.48,22.32 L47.83,21.88 L52.17,22.10 L56.52,22.10 L60.87,21.88 L65.22,21.88 L69.57,21.67 L73.91,21.45 L78.26,21.02 L82.61,20.15 L86.96,18.20 L91.30,16.03 L95.65,14.30 L100.00,12.67"/>
+        <path class="l5" d="M0.00,23.40 L4.35,23.18 L8.70,23.40 L13.04,22.97 L17.39,23.18 L21.74,22.75 L26.09,22.97 L30.43,23.18 L34.78,22.75 L39.13,22.97 L43.48,23.18 L47.83,22.53 L52.17,22.75 L56.52,22.97 L60.87,22.75 L65.22,22.53 L69.57,22.75 L73.91,22.32 L78.26,22.53 L82.61,22.10 L86.96,20.80 L91.30,16.03 L95.65,12.57 L100.00,8.06"/>
+        <path class="l1" d="M0.00,24.27 L4.35,23.83 L8.70,24.05 L13.04,23.40 L17.39,23.83 L21.74,22.97 L26.09,23.62 L30.43,23.83 L34.78,23.18 L39.13,23.40 L43.48,23.83 L47.83,22.75 L52.17,23.18 L56.52,23.62 L60.87,23.40 L65.22,22.97 L69.57,23.40 L73.91,22.53 L78.26,23.18 L82.61,23.40 L86.96,23.62 L91.30,14.73 L95.65,11.27 L100.00,9.06"/>
+      </svg>
+      <div class="phead"><span class="meta">CPU 榜</span><span class="sp"></span><button type="button" class="act">切</button></div>
+      <div class="procs" data-od-id="proc-list-c-dark"><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:73.9%"></i></span><span class="pv">73.9%</span></div><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:18.8%"></i></span><span class="pv">18.8%</span></div><div class="proc"><span class="pn">qemu-syst…</span><span class="pb"><i style="width:17.3%"></i></span><span class="pv">17.3%</span></div></div>
+    </div>
+
+    <div class="card c-mem" data-od-id="mem-card-c-dark">
+      <div class="card-head"><span class="lbl">内存</span><span class="dot"></span><span class="sp"></span><span class="meta"><b>10.3 GB</b> / 16.0 GB</span></div>
+      <div class="track stacked">
+        <i class="w" style="width:11.3%"></i><i class="a" style="width:28.8%"></i><i class="c" style="width:24.4%"></i><i class="f" style="width:35.5%"></i>
+      </div>
+      <div class="split-nums">
+        <span class="w"><b>1.8</b>内核</span><span class="a"><b>4.6</b>活跃</span><span class="c"><b>3.9</b>压缩</span><span class="f"><b>5.7</b>空闲</span>
+        <span class="sw"><b>3.5 GB</b> 交换</span>
+      </div>
+    </div>
+
+    <div class="card c-disk" data-od-id="disk-card-c-dark">
+      <div class="card-head">
+        <span class="lbl">磁盘</span>
+        <span class="meta">忙 <b>2%</b></span>
+        <span class="track busy"><i style="width:2%"></i></span>
+        <span class="sp"></span>
+        <span class="meta"><b>432.9 GB</b> / 926.4 GB</span>
+      </div>
+      <div class="track"><i style="width:46.7%"></i></div>
+      <div class="dual">
+        <div><div class="dlbl"><span>读</span><span class="v">1.6<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘读速率"><path d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70 L100.00,18 L0,18 Z" fill="url(#c-dark-rd)"/><path class="ln rd" d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70"/></svg></div>
+        <div><div class="dlbl"><span>写</span><span class="v">0.9<span class="u">MB/s</span></span></div>
+          <svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘写速率"><path d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00 L100.00,18 L0,18 Z" fill="url(#c-dark-wr)"/><path class="ln wr" d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00"/></svg></div>
+      </div>
+    </div>
+
+    <div class="stateband" data-od-id="stateband-c-dark">
+      <span class="sb t"><i>SoC</i><b>41.6°</b></span>
+      <span class="sb b"><svg class="bring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg bat" cx="18" cy="18" r="15" stroke-dasharray="81 94.2"/></svg><b>86%</b></span>
+      <span class="sb w"><i>Wi-Fi</i><b>−65</b></span>
+      <span class="sp"></span>
+      <span class="sb est"><i>估</i><i>功耗</i><b>4.8<span class="u">W</span></b></span>
+    </div>
+  </div>
+</section>
+  </article>
+ </section>
+</div>
+</div>
+</body>
+</html>

@@ -70,7 +70,7 @@ final class SystemLoadChartView: NSView {
         let hasData = shortValues.count >= 2 || mediumValues.count >= 2 || longValues.count >= 2
         guard hasData else {
             // 无数据：中线一条灰线，避免整格空白被误读成渲染失败
-            MenuPanelStyle.trackColor.setFill()
+            SystemPalette.track.setFill()
             NSRect(x: bounds.minX, y: bounds.midY, width: bounds.width, height: 0.5).fill()
             return
         }

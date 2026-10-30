@@ -47,6 +47,11 @@ runClipboardRelativeTimeTests()
 runMenuPanelMetricsTests()
 runSystemMetricsTests()
 
+// MARK: - 系统页 v2 色板与二级详情页口径
+runSystemPaletteTests()
+runSystemDetailFormattingTests()
+runSystemProcessBoardTests()
+
 // MARK: - Wi-Fi 链路（信号分档 / 信道频率 / 占位值降级）
 runWiFiLinkTests()
 runWiFiLinkFormattingTests()

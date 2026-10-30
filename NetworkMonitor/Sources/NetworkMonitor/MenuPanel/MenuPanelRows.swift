@@ -243,11 +243,12 @@ final class MenuPanelTrackView: NSView {
     /// 填充色（下行绿 / 上行橙）
     var fillColor: NSColor = MenuPanelStyle.downColor { didSet { needsDisplay = true } }
 
-    init(fillColor: NSColor) {
+    /// - Parameter height: 轨道高度（默认 4pt；系统页卡头繁忙度微条用 3pt）
+    init(fillColor: NSColor, height: CGFloat = 4) {
         self.fillColor = fillColor
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([heightAnchor.constraint(equalToConstant: 4)])
+        NSLayoutConstraint.activate([heightAnchor.constraint(equalToConstant: height)])
     }
 
     @available(*, unavailable)
@@ -266,12 +267,32 @@ final class MenuPanelTrackView: NSView {
     }
 }
 
+// MARK: - 可点击卡片焦点协议
+
+/// 可点击卡片的键盘焦点协议 — 给「整卡可点、但内部是多行布局」的卡片用
+///
+/// `MenuPanelRow` 固定单行布局，装不下系统页的五张多行卡片；这里只要求
+/// 「能画焦点环 / 能执行点击」两件事，面板根视图把行与卡片合成一条焦序遍历
+/// （行在前、卡片在后；系统页没有行，顺序即卡片自上而下）。
+@MainActor
+protocol MenuPanelCardFocusable: AnyObject {
+    /// 当前是否持有键盘焦点（决定焦点环）
+    var isCardKeyboardFocused: Bool { get }
+    /// 设置键盘焦点
+    func setCardKeyboardFocused(_ focused: Bool)
+    /// 执行点击动作（鼠标与键盘共用）
+    func activateCard()
+}
+
 // MARK: - 面板分页基类
 
 /// 面板分页基类 — 三个 tab 的内容视图共同基类
 ///
-/// `focusableRows` 给出该页内可点击行的自上而下顺序，供面板根视图做键盘焦点遍历。
+/// `focusableRows` / `focusableCards` 给出该页内可点击元素的自上而下顺序，
+/// 供面板根视图做键盘焦点遍历。
 class MenuPanelPaneView: NSView {
     /// 键盘可达的行（自上而下）
     var focusableRows: [MenuPanelRow] { [] }
+    /// 键盘可达的卡片（自上而下）— 默认无，系统页按需给
+    var focusableCards: [any MenuPanelCardFocusable] { [] }
 }

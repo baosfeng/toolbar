@@ -82,6 +82,9 @@ enum MenuPanelSnapshot {
             }
         }
 
+        // 1.5 系统页五个二级详情页（cpu / gpu / mem / disk / proc，浅深各一套）
+        captureSystemDetails(directory: directory, items: items)
+
         // 2. 额度页补充状态：未配置凭据 / 查询失败 + 遗留计划限额（浅色 + 深色）
         captureCreditsStates(directory: directory)
 
@@ -143,7 +146,9 @@ enum MenuPanelSnapshot {
     }
 
     /// 构建菜单面板并填入快照数据（速率/流量/进程为固定示意值，剪贴板/系统取真实数据）
-    private static func makeMenuPanel(tab: MenuPanelTab, items: [ClipboardItem],
+    ///
+    /// internal：系统页详情页取证（MenuPanelSnapshot+SystemPage.swift）要复用同一套装配。
+    static func makeMenuPanel(tab: MenuPanelTab, items: [ClipboardItem],
                                       processCount: Int = 5,
                                       tokenSnapshot: HarnessUsageSnapshot? = nil) -> MenuPanelView {
         let panel = MenuPanelView()

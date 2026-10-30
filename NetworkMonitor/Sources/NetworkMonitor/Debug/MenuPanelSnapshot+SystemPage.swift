@@ -57,10 +57,11 @@ extension MenuPanelSnapshot {
                                              cpuSystem: histories.cpuSystem,
                                              gpu: histories.gpu,
                                              memory: histories.memory,
+                                             memoryWired: histories.memoryWired,
+                                             memoryActive: histories.memoryActive,
+                                             memoryCompressed: histories.memoryCompressed,
                                              diskRead: histories.diskRead,
                                              diskWrite: histories.diskWrite,
-                                             diskReadIOPS: histories.diskReadIOPS,
-                                             diskWriteIOPS: histories.diskWriteIOPS,
                                              loadShort: histories.loadShort,
                                              loadMedium: histories.loadMedium,
                                              loadLong: histories.loadLong)
@@ -68,9 +69,34 @@ extension MenuPanelSnapshot {
             panel.systemPane.updateDiskBusyTip(busyPeakPercent: 12)
         }
         // 与线上链路一致：按 Core 偏好默认值应用状态带温度段显隐（与空态无关）
-        let showsThermal = SystemMonitorPreferences().isPanelItemVisible(.thermal)
+        let preferences = SystemMonitorPreferences()
+        let showsThermal = preferences.isPanelItemVisible(.thermal)
         panel.systemPane.setShowsThermalCard(showsThermal)
+        // 与线上链路一致：采样周期取偏好真实值（详情页「采样」行不硬编码 1 秒）
+        panel.systemPane.updateSampleInterval(preferences.sampleInterval)
         AppContext.shared.logger.info("系统页取证态：\(mode)，Wi-Fi 态：\(wifiOff ? "off" : "normal")，温度段偏好：\(showsThermal)")
+    }
+
+    /// 五个二级详情页取证 — menu-system-detail-{cpu,gpu,mem,disk,proc}-{light,dark}.png
+    ///
+    /// 每页都重新装配面板（同一份示意快照 + 全量历史），进入详情页后再量高度：
+    /// 高度随页面内容变化，必须按详情页实际内容重算画布，不能沿用首屏高度。
+    static func captureSystemDetails(directory: URL, items: [ClipboardItem]) {
+        let pages: [(SystemPaneView.DetailPage, String)] = [
+            (.cpu, "cpu"), (.gpu, "gpu"), (.memory, "mem"), (.disk, "disk"), (.process, "proc"),
+        ]
+        for (page, name) in pages {
+            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+                let suffix = appearance == .aqua ? "light" : "dark"
+                let panel = makeMenuPanel(tab: .system, items: items)
+                panel.systemPane.showDetail(page)
+                let needed = panel.desiredContentHeight
+                let height = min(max(needed, 180), MenuPanelStyle.maxHeight)
+                let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
+                let url = directory.appendingPathComponent("menu-system-detail-\(name)-\(suffix).png")
+                render(view: panel, size: size, appearanceName: appearance, to: url)
+            }
+        }
     }
 }
 #endif

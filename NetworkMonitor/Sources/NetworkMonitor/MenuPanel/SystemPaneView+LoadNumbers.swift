@@ -56,7 +56,7 @@ final class SystemLoadNumbersView: NSView {
     private static func valueLabel() -> NSTextField {
         MenuPanelLabel.text(SystemPaneFormat.placeholder,
                             font: MenuPanelStyle.smallValueFont,
-                            color: MenuPanelStyle.secondaryText)
+                            color: SystemPalette.foregroundSecondary)
     }
 
     /// 单枚「2pt 线形色块 + 数值」：色块用线段而非方点，暗示对应曲线是线
@@ -76,7 +76,7 @@ final class SystemLoadNumbersView: NSView {
 /// 7×2pt 线段色块 — 给线形曲线做图例（与方点色块区分：线形 ↔ 线）
 final class SystemLineSwatchView: NSView {
 
-    var color: NSColor = MenuPanelStyle.accentColor {
+    var color: NSColor = SystemPalette.loadShort {
         didSet { needsDisplay = true }
     }
 

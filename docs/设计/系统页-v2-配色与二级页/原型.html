@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetworkMonitor · 菜单面板「系统」v2 定稿原型（两版首屏 + 四个二级详情页）</title>
+<style>
+:root {
+  /* ─── Surface (3 levels) ──────────────────────────────────────────
+   * Apple's binary section rhythm alternates pure white retail/hero
+   * canvases with pale Apple gray feature fields. We bind --bg to
+   * the white canvas (the most common default Apple page background)
+   * and --surface to the pale gray that cards and feature bands lift
+   * onto. --surface-warm is bound to a real third tier (#fbfbfd) —
+   * the near-white brightness shift that appears between hero and
+   * pale-gray bands on apple.com. Collapsing it to var(--surface)
+   * would erase a real brand feature, so we keep it independent. */
+  --bg: #ffffff;
+  --surface: #f5f5f7;
+  --surface-warm: #fbfbfd;
+
+  /* ─── Foreground ramp (4 levels) ─────────────────────────────────
+   * Apple's text neutrals are explicitly named in DESIGN.md §2:
+   * Near-Black Ink (primary), Utility Dark Gray (secondary text /
+   * dark-neutral surfaces in store contexts), Secondary Neutral Gray
+   * (helper copy / tertiary metadata), Mid Border Gray (the strongest
+   * neutral, used for stronger field outlines and the most-restrained
+   * caption tier). We bind all four — Apple genuinely walks the full
+   * ramp, so collapsing --fg-2 or --meta to siblings would flatten
+   * the brand.
+   *
+   * Note that none of these are pure black (#000000). #000000 is
+   * reserved for hero canvases and dark chapters; for body type on
+   * white, #1d1d1f gives the slight warmth that reads as Apple. */
+  --fg: #1d1d1f;
+  --fg-2: #424245;
+  --muted: #6e6e73;
+  --meta: #86868b;
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Soft Border Gray (#d2d2d7) is Apple's default divider weight and
+   * card-edge color. --border-soft is bound to a lighter near-neutral
+   * (#e8e8ed) for inner row separators in dense retail tables and
+   * configurator option lists, where the d2d2d7 hairline would
+   * over-compete with the option labels. */
+  --border: #d2d2d7;
+  --border-soft: #e8e8ed;
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Apple Action Blue — the system's only persistent chromatic move.
+   * DESIGN.md §7 ("Don't introduce broad secondary accent palettes
+   * that compete with Apple blue") makes this a one-color brand for
+   * action and link semantics; the schema's hard cap of ≤2 visible
+   * accent uses per screen aligns naturally. */
+  --accent: #0071e3;
+  --accent-on: #ffffff; /* white label on the blue fill */
+
+  /* ─── Accent states ───────────────────────────────────────────────
+   * Apple's live primary buttons LIGHTEN on hover (the blue gains
+   * luminance) and darken on press. The schema's default black-mix
+   * formula would fight that motion, so we hand-pick both values:
+   *   - hover: #0077ed (≈ 4% brighter than --accent)
+   *   - active: #0066cc (the documented Body Link Blue from DESIGN.md
+   *             §2, which doubles cleanly as the press tone)
+   *
+   * Schema rule: every brand provides --accent-hover and
+   * --accent-active. The binding strategy (formula / hand-picked /
+   * identity) is brand-decided. Default uses formulas; kami uses
+   * identity + hand-picked; Apple uses hand-picked in both
+   * directions. */
+  --accent-hover: #0077ed;
+  --accent-active: #0066cc;
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Apple's DESIGN.md §2 explicitly notes "no distinct semantic
+   * palette was consistently visible in the extracted surface set" —
+   * so we inherit the schema defaults verbatim. Apple artifacts
+   * almost never need success / warn / danger; when they do, the
+   * defaults are restrained enough not to fight the blue accent.
+   * Reserve under 5% of any surface area regardless. */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Apple's documented split is two SF Pro families: SF Pro Display
+   * for hero / merchandising headings, SF Pro Text for navigation,
+   * controls, and dense commerce copy. We mirror the exact published
+   * fallback chain (SF Pro Icons → Helvetica Neue → Helvetica → Arial
+   * → sans-serif) so artifacts rendered on non-macOS clients land on
+   * the closest practical substitute.
+   *
+   * SF Mono leads the monospace stack — Apple's brand mono — with
+   * the schema fallbacks behind it for portability. */
+  --font-display:
+    "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:
+    "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:
+    "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — derived from DESIGN.md §3 hierarchy table.
+   * Apple's body baseline is 17px (NOT the 16px web norm) because
+   * SF Pro Text was metrically tuned at 17 for Retina; rebinding
+   * --text-base to anything else collapses the brand's reading
+   * texture. The display ceiling is the 80px Hero Display XL. */
+  --text-xs:   12px;   /* Micro UI — fine print, micro labels */
+  --text-sm:   14px;   /* Control Label — buttons, helper labels */
+  --text-base: 17px;   /* Body Primary — Apple's reading baseline */
+  --text-lg:   21px;   /* Link/Action Heading — large promo links */
+  --text-xl:   28px;   /* Card/Product Title — tile-level naming */
+  --text-2xl:  40px;   /* Product Heading — campaign section titles */
+  --text-3xl:  56px;   /* Hero Display L — homepage hero moments */
+  --text-4xl:  80px;   /* Hero Display XL — Environment / store hero */
+
+  /* Apple's leading envelope is unusually tight at the top of the
+   * scale (display sizes ride at 1.00–1.10) and unusually airy in
+   * the body (1.47, well above the web 1.4 default). Both numbers
+   * come straight from DESIGN.md §3. */
+  --leading-body:  1.47;   /* SF Pro Text body, 17px */
+  --leading-tight: 1.05;   /* Hero Display XL ceiling */
+
+  /* Display tracking compresses to -0.015em — the famous Apple
+   * machined-headline feel. DESIGN.md §3 lists -1.2px on 80px
+   * (≈ -0.015em); we bind a single em-value so the same rule applies
+   * across the display tiers. Body type runs at 0 / -0.374px and is
+   * left to component-level rules so as not to hurt readability. */
+  --tracking-display: -0.015em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * Apple's underlying grid is 8px (DESIGN.md §5), with utility
+   * micro-steps (2/4/6/7/8/9/10) for precision alignment. The shared
+   * schema's 4-8-12-16-20-24-32-48 scale fits cleanly — we inherit
+   * the defaults. Component-internal values that don't match a token
+   * (Apple's 14px or 17px utility intervals) stay inline at the
+   * call site rather than spawning extra spacing tokens. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * Apple's billboard chapters lean noticeably more generous than the
+   * schema default of 80px — broad top/bottom breathing room is what
+   * lets product imagery dominate the page. We bind 100/64/40, a
+   * slightly wider envelope than default's 80/48/32. */
+  --section-y-desktop: 100px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Apple uses purposeful radius tiers (DESIGN.md §5 §7 — "don't
+   * flatten all corners to a single radius"). The mapping:
+   *   --radius-sm   → 8px   compact controls and fields
+   *   --radius-md   → 12px  standard buttons, configurator chips
+   *   --radius-lg   → 18px  cards, module frames, commerce panels
+   *   --radius-pill → 980px Apple's signature capsule CTA — we keep
+   *                          the literal value rather than collapse
+   *                          to 9999px because the number itself is
+   *                          a brand-recognisable detail in Apple's
+   *                          published CSS.
+   *
+   * The 28-36px spotlight tier and the 56px capsule sub-tier are
+   * component-internal one-offs and stay inline — they do not earn
+   * their own tokens until a second use appears. */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   18px;
+  --radius-pill: 980px;
+
+  /* ─── Elevation (3 levels) ────────────────────────────────────────
+   * Apple uses depth sparingly (DESIGN.md §6 — "depth is intentionally
+   * restrained"). Three sanctioned levels:
+   *   - flat   → none (the default; tonal contrast does the work)
+   *   - ring   → 0 0 0 1px var(--border) (border-led containment in
+   *              dense retail contexts)
+   *   - raised → 0 12px 32px rgba(0,0,0,0.08) (the soft Apple card
+   *              shadow; rgba 0.08 is the lower bound from DESIGN.md
+   *              §6's "0.08 → 0.22" range, which keeps cards from
+   *              feeling Material-flavoured)
+   *
+   * No fourth level — that would be the Material/neumorphism stack
+   * Apple consciously avoids. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 12px 32px rgba(0, 0, 0, 0.08);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Apple's keyboard-focus signal is a soft blue glow at the action
+   * accent (DESIGN.md §6 — "Blue focus signal (#0071e3) for keyboard
+   * and selection emphasis"). We use a 4px ring at ~35% accent
+   * opacity, slightly larger than the schema's 3px default so it
+   * reads as the deliberate Apple halo rather than a generic outline.
+   * Implemented as a box-shadow so it layers outside the element
+   * without affecting layout. */
+  --focus-ring: 0 0 0 4px color-mix(in oklab, var(--accent), transparent 65%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Apple transitions decelerate hard and settle — never bounce,
+   * never spring past the target. We override the schema default
+   * easing with cubic-bezier(0.28, 0, 0.22, 1), the curve Apple
+   * uses on apple.com for hover and section reveals; --motion-base
+   * is bumped from 200ms → 220ms because Apple's micro-interactions
+   * carry slightly more cinematic weight than the web default.
+   * --motion-fast stays at 150ms for true micro-states (hover tints,
+   * focus, kbd press feedback). */
+  --motion-fast:   150ms;
+  --motion-base:   220ms;
+  --ease-standard: cubic-bezier(0.28, 0, 0.22, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Apple's marketing core is a constrained readable column with
+   * generous outer margins (DESIGN.md §5). 1024px max keeps lines
+   * inside the SF Pro Text comfortable-measure ceiling (~80ch at
+   * 17px) while leaving the chapter band full-bleed. Gutters step
+   * 22 → 18 → 16 across desktop / tablet / phone — slightly tighter
+   * than default to honor Apple's "broad horizontal breathing room
+   * but column-disciplined content" balance. */
+  --container-max:            1024px;
+  --container-gutter-desktop: 22px;
+  --container-gutter-tablet:  18px;
+  --container-gutter-phone:   16px;
+}
+
+:root {
+  /* ── 本项目定稿色板（唯一色值来源；两套外观都在这一个 :root 里，别处零裸色值） ── */
+  /* 浅色 */
+  --d1-bg:#ffffff; --d1-bg-2:#ffffff; --d1-surface:#f5f5f7; --d1-card:#f5f5f7;
+  --d1-track:#e4e4ea; --d1-track-2:#d6d6de; --d1-soft-fill:#f0f0f4; --d1-band-bg:#f0f0f4;
+  --d1-grid:#ececf1; --d1-row-alt:#efeff1; --d1-fg:#1d1d1f; --d1-fg-2:#3d3d40;
+  --d1-muted:#62626a; --d1-meta:#6a6a72; --d1-border:#d2d2d7; --d1-border-soft:#e6e6eb;
+  --d1-tab-on-bg:#d5e4f4; --d1-tab-on-ink:#0058b3; --d1-card-cpu:#eaeff6; --d1-card-gpu:#eeeef6;
+  --d1-card-mem:#ebf1f2; --d1-card-load:#f3edec; --d1-card-disk:#f2eeec; --d1-m-cpu:#0071e3;
+  --d1-m-cpu-2:#0a4ea8; --d1-m-cpu-ink:#0058b3; --d1-m-cpu-fill:#bfd8f3; --d1-m-cpu-fill-2:#f5f5f7;
+  --d1-m-gpu:#5b5bd6; --d1-m-gpu-ink:#4a44b8; --d1-m-gpu-fill:#d3d3f0; --d1-m-gpu-fill-2:#f5f5f7;
+  --d1-m-mem:#0d9488; --d1-m-mem-1:#04302d; --d1-m-mem-2:#0a6b62; --d1-m-mem-3:#0f9a8d;
+  --d1-m-mem-ink:#0b6d64; --d1-m-mem-fill:#c2e0df; --d1-m-mem-fill-2:#f5f5f7; --d1-m-load:#c2410c;
+  --d1-m-load-1:#c2410c; --d1-m-load-2:#e0632c; --d1-m-load-3:#8a2f08; --d1-m-load-ink:#a83a0b;
+  --d1-m-proc:#c2410c; --d1-m-load-ref:#7f7f88; --d1-m-load-fill:#eacdc3; --d1-m-load-fill-2:#f5f5f7;
+  --d1-m-disk:#55657a; --d1-m-disk-read:#55657a; --d1-m-disk-write:#b45309; --d1-m-disk-ink:#3f4c5c;
+  --d1-m-disk-read-fill:#d8dbe0; --d1-m-disk-read-fill-2:#f5f5f7; --d1-m-disk-write-fill:#e9d8cc; --d1-m-disk-write-fill-2:#f5f5f7;
+  --d1-m-temp:#d9480f; --d1-m-temp-ink:#a83509; --d1-m-bat:#14913f; --d1-m-bat-ink:#116f33;
+  --d1-m-wifi:#0071e3; --d1-m-wifi-ink:#0058b3; --d1-m-power:#8e2fb8; --d1-m-power-ink:#6f2491;
+  --d1-m-warn:#a16207; --d1-m-warn-ink:#7c4a06; --d1-m-danger:#b91c1c; --d1-m-danger-ink:#991b1b;
+  --d1-m-ok:#14913f; --d1-m-ok-ink:#116f33;
+  /* 深色 */
+  --d2-bg:#1a1a1c; --d2-bg-2:#1a1a1c; --d2-surface:#242427; --d2-card:#26262a;
+  --d2-track:#39393f; --d2-track-2:#43434a; --d2-soft-fill:#2e2e33; --d2-band-bg:#2b2b30;
+  --d2-grid:#34343a; --d2-row-alt:#303034; --d2-fg:#f5f5f7; --d2-fg-2:#d6d6da;
+  --d2-muted:#a8a8ae; --d2-meta:#98989d; --d2-border:#3d3d42; --d2-border-soft:#313136;
+  --d2-tab-on-bg:#2a3e57; --d2-tab-on-ink:#6fb6ff; --d2-card-cpu:#282d37; --d2-card-gpu:#2e2d37;
+  --d2-card-mem:#263033; --d2-card-load:#332c2c; --d2-card-disk:#322f2b; --d2-m-cpu:#409cff;
+  --d2-m-cpu-2:#2b7fdd; --d2-m-cpu-ink:#6fb6ff; --d2-m-cpu-fill:#2c4059; --d2-m-cpu-fill-2:#26262a;
+  --d2-m-gpu:#a89dff; --d2-m-gpu-ink:#bfb6ff; --d2-m-gpu-fill:#434059; --d2-m-gpu-fill-2:#26262a;
+  --d2-m-mem:#2dd4bf; --d2-m-mem-1:#7ce3d8; --d2-m-mem-2:#2dd4bf; --d2-m-mem-3:#0f8f83;
+  --d2-m-mem-ink:#5ce3d2; --d2-m-mem-fill:#284c4b; --d2-m-mem-fill-2:#26262a; --d2-m-load:#ff8a4c;
+  --d2-m-load-1:#ff8a4c; --d2-m-load-2:#c9682f; --d2-m-load-3:#e8734a; --d2-m-load-ink:#ffab7d;
+  --d2-m-proc:#ff8a4c; --d2-m-load-ref:#7d7d86; --d2-m-load-fill:#563c31; --d2-m-load-fill-2:#26262a;
+  --d2-m-disk:#a9b8cc; --d2-m-disk-read:#a9b8cc; --d2-m-disk-write:#f5b942; --d2-m-disk-ink:#c8d4e4;
+  --d2-m-disk-read-fill:#3e4047; --d2-m-disk-read-fill-2:#26262a; --d2-m-disk-write-fill:#4b402e; --d2-m-disk-write-fill-2:#26262a;
+  --d2-m-temp:#ff6b42; --d2-m-temp-ink:#ffa184; --d2-m-bat:#34d399; --d2-m-bat-ink:#6ee7b7;
+  --d2-m-wifi:#409cff; --d2-m-wifi-ink:#6fb6ff; --d2-m-power:#c48bf5; --d2-m-power-ink:#d9b0ff;
+  --d2-m-warn:#e3b341; --d2-m-warn-ink:#f0cf82; --d2-m-danger:#ff6259; --d2-m-danger-ink:#ff9b95;
+  --d2-m-ok:#34d399; --d2-m-ok-ink:#6ee7b7;
+  /* 浅色 = 默认绑定（全部走 var() 转发） */
+  --bg:var(--d1-bg); --bg-2:var(--d1-bg-2); --surface:var(--d1-surface); --card:var(--d1-card);
+  --track:var(--d1-track); --track-2:var(--d1-track-2); --soft-fill:var(--d1-soft-fill); --band-bg:var(--d1-band-bg);
+  --grid:var(--d1-grid); --row-alt:var(--d1-row-alt); --fg:var(--d1-fg); --fg-2:var(--d1-fg-2);
+  --muted:var(--d1-muted); --meta:var(--d1-meta); --border:var(--d1-border); --border-soft:var(--d1-border-soft);
+  --tab-on-bg:var(--d1-tab-on-bg); --tab-on-ink:var(--d1-tab-on-ink); --card-cpu:var(--d1-card-cpu); --card-gpu:var(--d1-card-gpu);
+  --card-mem:var(--d1-card-mem); --card-load:var(--d1-card-load); --card-disk:var(--d1-card-disk); --m-cpu:var(--d1-m-cpu);
+  --m-cpu-2:var(--d1-m-cpu-2); --m-cpu-ink:var(--d1-m-cpu-ink); --m-cpu-fill:var(--d1-m-cpu-fill); --m-cpu-fill-2:var(--d1-m-cpu-fill-2);
+  --m-gpu:var(--d1-m-gpu); --m-gpu-ink:var(--d1-m-gpu-ink); --m-gpu-fill:var(--d1-m-gpu-fill); --m-gpu-fill-2:var(--d1-m-gpu-fill-2);
+  --m-mem:var(--d1-m-mem); --m-mem-1:var(--d1-m-mem-1); --m-mem-2:var(--d1-m-mem-2); --m-mem-3:var(--d1-m-mem-3);
+  --m-mem-ink:var(--d1-m-mem-ink); --m-mem-fill:var(--d1-m-mem-fill); --m-mem-fill-2:var(--d1-m-mem-fill-2); --m-load:var(--d1-m-load);
+  --m-load-1:var(--d1-m-load-1); --m-load-2:var(--d1-m-load-2); --m-load-3:var(--d1-m-load-3); --m-load-ink:var(--d1-m-load-ink);
+  --m-proc:var(--d1-m-proc); --m-load-ref:var(--d1-m-load-ref); --m-load-fill:var(--d1-m-load-fill); --m-load-fill-2:var(--d1-m-load-fill-2);
+  --m-disk:var(--d1-m-disk); --m-disk-read:var(--d1-m-disk-read); --m-disk-write:var(--d1-m-disk-write); --m-disk-ink:var(--d1-m-disk-ink);
+  --m-disk-read-fill:var(--d1-m-disk-read-fill); --m-disk-read-fill-2:var(--d1-m-disk-read-fill-2); --m-disk-write-fill:var(--d1-m-disk-write-fill); --m-disk-write-fill-2:var(--d1-m-disk-write-fill-2);
+  --m-temp:var(--d1-m-temp); --m-temp-ink:var(--d1-m-temp-ink); --m-bat:var(--d1-m-bat); --m-bat-ink:var(--d1-m-bat-ink);
+  --m-wifi:var(--d1-m-wifi); --m-wifi-ink:var(--d1-m-wifi-ink); --m-power:var(--d1-m-power); --m-power-ink:var(--d1-m-power-ink);
+  --m-warn:var(--d1-m-warn); --m-warn-ink:var(--d1-m-warn-ink); --m-danger:var(--d1-m-danger); --m-danger-ink:var(--d1-m-danger-ink);
+  --m-ok:var(--d1-m-ok); --m-ok-ink:var(--d1-m-ok-ink);
+}
+
+/* 深色：同一批 token 覆盖，只做 var() 转发（不复制任何结构） */
+html[data-theme="dark"] {
+  --bg:var(--d2-bg); --bg-2:var(--d2-bg-2); --surface:var(--d2-surface); --card:var(--d2-card);
+  --track:var(--d2-track); --track-2:var(--d2-track-2); --soft-fill:var(--d2-soft-fill); --band-bg:var(--d2-band-bg);
+  --grid:var(--d2-grid); --row-alt:var(--d2-row-alt); --fg:var(--d2-fg); --fg-2:var(--d2-fg-2);
+  --muted:var(--d2-muted); --meta:var(--d2-meta); --border:var(--d2-border); --border-soft:var(--d2-border-soft);
+  --tab-on-bg:var(--d2-tab-on-bg); --tab-on-ink:var(--d2-tab-on-ink); --card-cpu:var(--d2-card-cpu); --card-gpu:var(--d2-card-gpu);
+  --card-mem:var(--d2-card-mem); --card-load:var(--d2-card-load); --card-disk:var(--d2-card-disk); --m-cpu:var(--d2-m-cpu);
+  --m-cpu-2:var(--d2-m-cpu-2); --m-cpu-ink:var(--d2-m-cpu-ink); --m-cpu-fill:var(--d2-m-cpu-fill); --m-cpu-fill-2:var(--d2-m-cpu-fill-2);
+  --m-gpu:var(--d2-m-gpu); --m-gpu-ink:var(--d2-m-gpu-ink); --m-gpu-fill:var(--d2-m-gpu-fill); --m-gpu-fill-2:var(--d2-m-gpu-fill-2);
+  --m-mem:var(--d2-m-mem); --m-mem-1:var(--d2-m-mem-1); --m-mem-2:var(--d2-m-mem-2); --m-mem-3:var(--d2-m-mem-3);
+  --m-mem-ink:var(--d2-m-mem-ink); --m-mem-fill:var(--d2-m-mem-fill); --m-mem-fill-2:var(--d2-m-mem-fill-2); --m-load:var(--d2-m-load);
+  --m-load-1:var(--d2-m-load-1); --m-load-2:var(--d2-m-load-2); --m-load-3:var(--d2-m-load-3); --m-load-ink:var(--d2-m-load-ink);
+  --m-proc:var(--d2-m-proc); --m-load-ref:var(--d2-m-load-ref); --m-load-fill:var(--d2-m-load-fill); --m-load-fill-2:var(--d2-m-load-fill-2);
+  --m-disk:var(--d2-m-disk); --m-disk-read:var(--d2-m-disk-read); --m-disk-write:var(--d2-m-disk-write); --m-disk-ink:var(--d2-m-disk-ink);
+  --m-disk-read-fill:var(--d2-m-disk-read-fill); --m-disk-read-fill-2:var(--d2-m-disk-read-fill-2); --m-disk-write-fill:var(--d2-m-disk-write-fill); --m-disk-write-fill-2:var(--d2-m-disk-write-fill-2);
+  --m-temp:var(--d2-m-temp); --m-temp-ink:var(--d2-m-temp-ink); --m-bat:var(--d2-m-bat); --m-bat-ink:var(--d2-m-bat-ink);
+  --m-wifi:var(--d2-m-wifi); --m-wifi-ink:var(--d2-m-wifi-ink); --m-power:var(--d2-m-power); --m-power-ink:var(--d2-m-power-ink);
+  --m-warn:var(--d2-m-warn); --m-warn-ink:var(--d2-m-warn-ink); --m-danger:var(--d2-m-danger); --m-danger-ink:var(--d2-m-danger-ink);
+  --m-ok:var(--d2-m-ok); --m-ok-ink:var(--d2-m-ok-ink);
+}
+
+:root {
+  /* 页面外壳（只服务原型演示，不属于面板色板） */
+  --stage-bg:#eceff3;
+  --stage-ink:#39404a;
+  --stage-ink-2:#5a6270;
+  --stage-line:#ccd3dd;
+  --stage-card:#ffffff;
+  --focus-ring-c:rgba(0,90,200,.36);
+}
+
+/* ── 面板（对齐 MenuPanelStyle：320pt · 圆角 12 · 内留白 12 · 首屏上限 520） ── */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  font-family:"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  background:var(--stage-bg); color:var(--stage-ink);
+  padding:18px 22px 30px; -webkit-font-smoothing:antialiased;
+}
+.stage{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+
+/* 演示控件条（demo-only，不进产品） */
+.demo{width:640px;max-width:100%;display:flex;flex-direction:column;gap:7px;margin-bottom:14px}
+.demo h1{font-size:14px;font-weight:600;margin:0}
+.demo p{margin:0;font-size:11px;line-height:1.55;color:var(--stage-ink-2)}
+.demo .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.demo .k{font-size:10px;font-weight:600;color:var(--stage-ink-2);margin-right:2px}
+.demo button{height:24px;padding:0 10px;border:0;border-radius:6px;cursor:pointer;
+  background:var(--stage-card);box-shadow:0 0 0 1px var(--stage-line);color:var(--stage-ink);
+  font-family:inherit;font-size:11px;line-height:1}
+.demo button[aria-pressed="true"]{background:var(--tab-on-bg);box-shadow:inset 0 0 0 1px var(--tab-on-bg);color:var(--tab-on-ink);font-weight:700}
+.demo button:focus-visible{outline:0;box-shadow:0 0 0 1px var(--stage-line),0 0 0 4px var(--focus-ring-c)}
+
+.panel{
+  width:320px;max-height:520px;display:flex;flex-direction:column;
+  background-color:var(--bg);background-image:linear-gradient(180deg,var(--bg),var(--bg-2));
+  border-radius:12px;overflow:hidden;color:var(--fg);
+  box-shadow:0 0 0 1px var(--border-soft),0 14px 34px rgba(0,0,0,.12);
+}
+.tabbar{display:flex;align-items:center;gap:1px;margin:10px 12px 0;background:var(--surface);
+  border:1px solid var(--border-soft);border-radius:8px;padding:2px;flex:0 0 auto}
+.tab{flex:1;height:24px;display:flex;align-items:center;justify-content:center;border:0;border-radius:6px;
+  background:transparent;color:var(--meta);font-family:inherit;font-size:9.5px;line-height:1;white-space:nowrap;padding:0}
+.tab.on{background:var(--tab-on-bg);color:var(--tab-on-ink);font-weight:700}
+.gear{width:18px;height:20px;display:flex;align-items:center;justify-content:center;color:var(--tab-on-ink);margin:0 2px 0 3px;flex:0 0 auto}
+.gear svg{width:12px;height:12px}
+
+.content{padding:10px 12px 12px;display:flex;flex-direction:column;overflow-y:auto;min-height:0;
+  scrollbar-width:thin;gap:7px}
+.pane,.detail{display:flex;flex-direction:column;gap:7px}
+[hidden]{display:none !important}
+
+.pagehead{display:flex;align-items:center;gap:6px;min-height:16px;flex:0 0 auto}
+.pagehead .host{font-size:10.5px;font-weight:600;color:var(--fg-2)}
+.pagehead .sp{flex:1}
+.live{display:flex;align-items:center;gap:4px;font-size:9px;color:var(--meta);font-variant-numeric:tabular-nums}
+.live i{width:5px;height:5px;border-radius:50%;background:var(--m-ok)}
+.stamp{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9px;color:var(--meta);font-variant-numeric:tabular-nums}
+
+/* 四联 */
+.hstats{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;flex:0 0 auto}
+.hstat{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  padding:4px 2px 3px;border-radius:8px;background:var(--surface);min-width:0}
+.hstat .hv{display:flex;align-items:baseline;gap:1px;font-family:"SF Mono",ui-monospace,Menlo,monospace;
+  font-size:17px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.05}
+.hstat .hv .u{font-size:8.5px;font-weight:400;margin-left:1px}
+.hstat .hk{font-size:8.5px;font-weight:600;color:var(--meta);line-height:1.1;white-space:nowrap}
+.mini{display:block;width:100%;height:10px;overflow:visible}
+.mini .ml{fill:none;stroke-width:1.1;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}
+.hs .hv{color:var(--m-cpu-ink)} .hs .ml{stroke:var(--m-cpu)}
+.hg .hv{color:var(--m-gpu-ink)} .hg .ml{stroke:var(--m-gpu)}
+.hm .hv{color:var(--m-mem-ink)} .hm .ml{stroke:var(--m-mem)}
+.hl .hv{font-size:14px;color:var(--m-load-ink)} .hl .ml{stroke:var(--m-load)}
+
+/* 卡片 */
+.card{border-radius:10px;padding:8px 10px 9px;display:flex;flex-direction:column;gap:6px;
+  flex:0 0 auto;text-align:left;font-family:inherit;color:inherit;border:0;width:100%}
+.card.tap{cursor:pointer}
+.card.tap:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring-c)}
+.c-cpu{background:var(--card-cpu)} .c-gpu{background:var(--card-gpu)}
+.c-load{background:var(--card-load)} .c-mem{background:var(--card-mem)} .c-disk{background:var(--card-disk)}
+.card-head{display:flex;align-items:center;gap:5px}
+.card-head .lbl{font-size:10.5px;font-weight:700;color:var(--fg-2);letter-spacing:.01em}
+.card-head .sp{flex:1}
+.card-head .meta{font-size:9px;color:var(--meta);font-variant-numeric:tabular-nums;white-space:nowrap}
+.card-head .meta b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;font-weight:600;color:var(--fg-2)}
+.card-head .go{width:14px;height:14px;display:flex;align-items:center;justify-content:center;color:var(--meta);flex:0 0 auto}
+.card-head .go svg{width:10px;height:10px}
+.cpu-go{color:var(--m-cpu-ink)} .gpu-go{color:var(--m-gpu-ink)} .mem-go{color:var(--m-mem-ink)} .disk-go{color:var(--m-disk-ink)}
+
+.hero-row{display:flex;align-items:flex-end;gap:8px}
+.hero{display:flex;align-items:baseline;gap:2px;flex:0 0 auto}
+.hero b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:23px;font-weight:700;letter-spacing:-.025em;
+  font-variant-numeric:tabular-nums;line-height:1;color:var(--m-cpu-ink)}
+.hero span{font-size:9px;color:var(--meta);font-family:"SF Mono",ui-monospace,Menlo,monospace}
+.hero.g b{color:var(--m-gpu-ink)} .hero.m b{color:var(--m-mem-ink)} .hero.d b{color:var(--m-disk-ink)}
+
+.spark{display:block;flex:1;min-width:0;overflow:visible}
+.spark .gl{stroke:var(--grid);stroke-width:1;stroke-dasharray:2 3;vector-effect:non-scaling-stroke}
+.spark .ln{fill:none;stroke:var(--m-cpu);stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.spark.gpu .ln{stroke:var(--m-gpu)}
+.spark .ln.rd{stroke:var(--m-disk-read)} .spark .ln.wr{stroke:var(--m-disk-write)}
+.spark .ar-s{stroke:var(--m-cpu-2);stroke-width:.5;vector-effect:non-scaling-stroke}
+.spark .l1{fill:none;stroke:var(--m-load-1);stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.spark .l5{fill:none;stroke:var(--m-load-2);stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.spark .l15{fill:none;stroke:var(--m-load-3);stroke-width:1;stroke-dasharray:3 2;stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.spark .lnref{stroke:var(--m-load-ref);stroke-width:1;stroke-dasharray:2 3;vector-effect:non-scaling-stroke}
+
+.usplit{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.usplit span{display:inline-flex;align-items:center;gap:2px;font-size:8.5px;line-height:1;font-weight:600;color:var(--meta)}
+.usplit i{width:6px;height:6px;border-radius:1.5px;display:block;flex:0 0 auto}
+.usplit b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--m-cpu-ink)}
+.us i{background:var(--m-cpu)} .ss i{background:var(--m-cpu-2)}
+.cores{display:flex;gap:6px;align-items:flex-end;flex:0 0 auto}
+.cluster{display:flex;flex-direction:column;gap:2px}
+.clbl{display:flex;align-items:baseline;gap:2px;font-size:8px;color:var(--meta);font-weight:600;white-space:nowrap}
+.clbl b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:8px;color:var(--fg-2);font-weight:600}
+.bars{display:flex;align-items:flex-end;gap:2px;height:18px}
+.barlo{width:10px;height:18px;border-radius:2.5px;background:var(--track-2);display:flex;align-items:flex-end;overflow:hidden;flex:0 0 10px}
+.barlo i{display:block;width:100%;border-radius:3px;background:var(--m-cpu)}
+.barlo i.e{background:var(--m-cpu-2)}
+.coreids{display:flex;gap:2px}
+.coreids{display:none}
+
+.gpu-row{display:flex;align-items:center;gap:10px}
+.gring{position:relative;width:40px;height:40px;flex:0 0 40px;display:flex;align-items:center;justify-content:center}
+.gring svg{width:40px;height:40px;transform:rotate(-90deg)}
+.grt{position:absolute;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;font-weight:700;color:var(--m-gpu-ink)}
+.rbg{fill:none;stroke:var(--track);stroke-width:3.6}
+.rfg{fill:none;stroke:var(--m-gpu);stroke-width:3.6;stroke-linecap:butt}
+.rfg.bat{stroke:var(--m-bat);stroke-linecap:round}
+
+.ldnum{display:flex;align-items:baseline;gap:6px;font-size:8.5px;color:var(--meta);font-weight:600;line-height:1}
+.ldnum span{display:inline-flex;align-items:baseline;gap:2px}
+.ldnum b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--fg-2)}
+.ldnum i{width:7px;height:2px;border-radius:1px;display:block}
+.ldnum .k1{background:var(--m-load-1)} .ldnum .k2{background:var(--m-load-2)} .ldnum .k3{background:var(--m-load-3)}
+.phead{display:flex;align-items:center;gap:4px;margin-top:1px}
+.phead .meta{font-size:8.5px;color:var(--meta);font-weight:700}
+.phead .sp{flex:1}
+.phead .act{border:0;background:transparent;color:var(--m-load-ink);font-family:inherit;font-size:9px;font-weight:700;cursor:pointer;padding:0 0 0 2px}
+.phead .act:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring-c);border-radius:3px}
+.procs{display:flex;flex-direction:column;gap:2px}
+.proc{display:grid;grid-template-columns:minmax(0,58px) minmax(0,1fr) 34px;align-items:center;gap:5px;height:13px}
+.proc .pn{font-size:9px;color:var(--fg-2);line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proc .pb{height:5px;border-radius:2.5px;background:var(--track);overflow:hidden;display:flex}
+.proc .pb i{display:block;height:100%;border-radius:2.5px;background:var(--m-proc)}
+.proc .pv{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9px;color:var(--fg-2);text-align:right;font-variant-numeric:tabular-nums;line-height:1}
+
+.dot{width:5px;height:5px;border-radius:50%;background:var(--m-ok);flex:0 0 auto}
+.badge{display:inline-flex;align-items:center;height:15px;padding:0 6px;border-radius:99px;font-size:9px;font-weight:700;line-height:1;
+  background:var(--card-mem);color:var(--m-mem-ink);box-shadow:inset 0 0 0 1px var(--m-mem-3)}
+.badge.warn{color:var(--m-warn-ink);box-shadow:inset 0 0 0 1px var(--m-warn)}
+.badge.danger{color:var(--m-danger-ink);box-shadow:inset 0 0 0 1px var(--m-danger)}
+.track{height:4px;border-radius:2px;background:var(--track);overflow:hidden;flex:0 0 auto}
+.track i{display:block;height:100%;border-radius:2px;background:var(--m-disk)}
+.track.busy{width:30px;height:3px;background:var(--track-2)}
+.track.busy i{background:var(--m-disk)}
+.track.stacked{height:9px;border-radius:2px;display:flex;background:var(--track);overflow:hidden}
+.track.stacked i{height:100%;border-radius:0;flex:0 0 auto;box-shadow:0 0 0 .5px var(--card-mem)}
+.track.stacked i.w{background:var(--m-mem-1)} .track.stacked i.a{background:var(--m-mem-2)}
+.track.stacked i.c{background:var(--m-mem-3)} .track.stacked i.f{background:transparent}
+.split-nums{display:flex;align-items:baseline;gap:6px;font-size:8.5px;color:var(--meta);font-weight:600;line-height:1;white-space:nowrap}
+.split-nums span{display:inline-flex;align-items:baseline;gap:1.5px}
+.split-nums span.sw{margin-left:auto}
+.split-nums b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;font-weight:600;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.sw b{color:var(--m-mem-ink)}
+
+.dual{display:flex;gap:12px}
+.dual>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.dlbl{display:flex;align-items:baseline;gap:4px;font-size:8.5px;color:var(--meta)}
+.dlbl .v{margin-left:auto;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--fg-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.dlbl .v .u{color:var(--meta);font-size:8px;margin-left:2px}
+
+.stateband{display:flex;align-items:center;gap:8px;height:20px;padding:0 7px;border-radius:6px;
+  font-size:8.5px;color:var(--meta);font-weight:600;line-height:1;flex:0 0 auto;
+  background:var(--band-bg);box-shadow:inset 0 0 0 1px var(--border-soft)}
+.stateband .sb{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.stateband .sb i{font-style:normal;color:var(--meta)}
+.stateband .sb b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:9.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.stateband .sb b .u{font-size:8px;margin-left:1px;color:var(--meta)}
+.stateband .sp{flex:1}
+.stateband .sb.t b{color:var(--m-temp-ink)} .stateband .sb.b b{color:var(--m-bat-ink)}
+.stateband .sb.w b{color:var(--m-wifi-ink)} .stateband .sb.est b{color:var(--m-power-ink)}
+.bring{width:12px;height:12px;flex:0 0 auto;transform:rotate(-90deg)}
+
+/* ── 二级详情页（覆盖式，不弹窗） ── */
+.backbar{display:flex;align-items:center;gap:5px;min-height:18px;flex:0 0 auto}
+.back{display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 7px 0 4px;border:0;border-radius:6px;
+  background:var(--soft-fill);color:var(--fg);font-family:inherit;font-size:10px;font-weight:700;line-height:1;cursor:pointer}
+.back svg{width:9px;height:9px;color:var(--meta)}
+.back:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring-c)}
+.backbar .crumb{font-size:9px;color:var(--meta);font-weight:600}
+.backbar .sp{flex:1}
+.backbar .meta{font-size:8.5px;color:var(--meta);font-variant-numeric:tabular-nums}
+.dhero{display:flex;align-items:baseline;gap:3px}
+.dhero b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:28px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+.dhero .u{font-size:10px;color:var(--meta);font-family:"SF Mono",ui-monospace,Menlo,monospace}
+.dhero.cpu b{color:var(--m-cpu-ink)} .dhero.gpu b{color:var(--m-gpu-ink)}
+.dhero.mem b{color:var(--m-mem-ink)} .dhero.disk b{color:var(--m-disk-ink)}
+.dsub{font-size:9px;color:var(--meta);font-weight:600}
+.dcard{border-radius:10px;padding:8px 10px 9px;display:flex;flex-direction:column;gap:6px;flex:0 0 auto}
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+.drow{display:flex;align-items:baseline;gap:4px;font-size:9px;color:var(--meta);font-weight:600}
+.drow .v{margin-left:auto;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:11px;font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}
+.drow .v .u{font-size:8.5px;color:var(--meta);margin-left:1px}
+.drow.key .v{color:var(--m-cpu-ink)}
+.dnote{font-size:8.5px;color:var(--meta);line-height:1.45}
+.kvline{display:flex;align-items:baseline;gap:6px;font-size:9px;color:var(--meta);font-weight:600}
+.kvline b{margin-left:auto;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:10px;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.heat{display:flex;flex-wrap:wrap;gap:3px}
+.heat span{width:26px;height:26px;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:7.5px;line-height:1.15;color:var(--fg-2);background:var(--track-2)}
+.heat span.h2{background:color-mix(in oklab, var(--m-cpu) 26%, var(--track-2))}
+.heat span.h3{background:var(--m-cpu);color:var(--accent-on)}
+/* ── 版2「紧凑首屏」：把可下沉内容压进二级页，目标 520pt 内看到状态带 ── */
+.pane[data-screen="v2"] .card{padding:7px 9px 7px;gap:5px}
+.pane[data-screen="v2"] .split-nums{display:none}
+.pane[data-screen="v2"] .hstat{padding:3px 2px 2px;gap:1px}
+.pane[data-screen="v2"] .hstat .hv{font-size:16px}
+.pane[data-screen="v2"] .hstat .hk{font-size:8px}
+.pane[data-screen="v2"] .phead{margin-top:0}
+.pane[data-screen="v2"] .proc{height:11px}
+.pane[data-screen="v2"] .pagehead{min-height:14px}
+
+/* 「全部 ›」按钮：无边框文字按钮，hover 只给极淡底，focus-visible 才有环 */
+.card-head .act{border:0;background:transparent;color:var(--m-load-ink);font-family:inherit;font-size:9px;
+  font-weight:700;line-height:1;padding:1px 3px;border-radius:4px;cursor:pointer;margin-left:1px}
+.card-head .act:hover{background:color-mix(in oklab, var(--m-load) 14%, transparent)}
+.card-head .act:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring-c)}
+.drow.key.gpu .v{color:var(--m-gpu-ink)}
+/* GPU 卡「显存」条：通用 .track i 默认吃磁盘族色，这里收回 GPU 族 */
+.c-gpu .track i{background:var(--m-gpu)}
+.drow.key.disk .v{color:var(--m-disk-ink)}
+@media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+
+</style>
+</head>
+<body>
+<div class="demo" data-od-id="demo-only:controls" data-demo="true"><h1>系统页 v2 · 定稿配色（A 骨架 + B 手法 + C 橙次级）+ 二级详情页</h1><p>点任意卡片 → 进入详情（覆盖在面板内，不弹窗）；点「‹ 系统」返回。演示控件只服务评审，不进产品。</p><div class="row"><span class="k">首屏</span><button type="button" data-view="v1" aria-pressed="true" data-od-id="demo-only:view-v1">版1 · 原结构 + 入口</button><button type="button" data-view="v2" aria-pressed="false" data-od-id="demo-only:view-v2">版2 · 紧凑首屏</button><span class="k">外观</span><button type="button" data-theme-btn="light" aria-pressed="true" data-od-id="demo-only:theme-light">浅色</button><button type="button" data-theme-btn="dark" aria-pressed="false" data-od-id="demo-only:theme-dark">深色</button></div></div>
+<div class="stage" data-od-id="stage">
+<section class="panel" id="panel" data-od-id="panel" aria-label="菜单栏面板 · 系统分段">
+<svg class="defs" width="0" height="0" aria-hidden="true"><defs><linearGradient id="g-cpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="g-m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="g-m2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-cpu-fill)"/><stop offset="1" stop-color="var(--m-cpu-fill-2)"/></linearGradient><linearGradient id="g-gpu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-gpu-fill)"/><stop offset="1" stop-color="var(--m-gpu-fill-2)"/></linearGradient><linearGradient id="g-mem" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-mem-fill)"/><stop offset="1" stop-color="var(--m-mem-fill-2)"/></linearGradient><linearGradient id="g-rd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-read-fill)"/><stop offset="1" stop-color="var(--m-disk-read-fill-2)"/></linearGradient><linearGradient id="g-wr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-disk-write-fill)"/><stop offset="1" stop-color="var(--m-disk-write-fill-2)"/></linearGradient><linearGradient id="g-ld" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--m-load-fill)"/><stop offset="1" stop-color="var(--m-load-fill-2)"/></linearGradient></defs></svg>
+<div class="tabbar" role="tablist" aria-label="面板分段" data-od-id="tabbar"><button type="button" role="tab" class="tab" aria-selected="false">网络</button><button type="button" role="tab" class="tab" aria-selected="false">剪贴板</button><button type="button" role="tab" class="tab" aria-selected="false">传送</button><button type="button" role="tab" class="tab" aria-selected="false">额度</button><button type="button" role="tab" class="tab" aria-selected="false">Token</button><button type="button" role="tab" class="tab on" aria-selected="true">系统</button><span class="gear" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="2.4"/><path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M12.7 3.3l-1.2 1.2M4.5 11.5l-1.2 1.2"/></svg></span></div>
+<div class="content" id="content" data-od-id="panel-content">
+<div class="pane" data-screen="v1" data-od-id="pane-v1"><header class="pagehead" data-od-id="sys-head-v1"><span class="host">M1 Pro · 10 核</span><span class="sp"></span><span class="live"><i></i>1 秒</span><span class="stamp">23:04:12</span></header><div class="hstats" data-od-id="hero-row-v1"><div class="hstat hs" data-od-id="hero-cpu"><span class="hv"><b>22</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60 L100.00,12 L0,12 Z" fill="url(#g-m)"/><path class="ml" d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60"/></svg><span class="hk">CPU</span></div><div class="hstat hg" data-od-id="hero-gpu"><span class="hv"><b>0</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00 L100.00,12 L0,12 Z" fill="url(#g-gpu)"/><path class="ml" d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00"/></svg><span class="hk">GPU</span></div><div class="hstat hm" data-od-id="hero-mem"><span class="hv"><b>54</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#g-mem)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">内存</span></div><div class="hstat hl" data-od-id="hero-load"><span class="hv"><b>7.82</b></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#g-m2)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">负载</span></div></div><div class="card tap c-cpu" role="button" tabindex="0" data-goto="cpu" data-od-id="cpu-card-v1" aria-label="CPU 详情"><div class="card-head"><span class="lbl">CPU</span><span class="usplit"><span class="us"><i></i><b>14%</b></span><span class="ss"><i></i><b>8%</b></span></span><span class="sp"></span><span class="meta">8P · 2E</span><span class="go cpu-go"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 2.6 7.8 6l-3.4 3.4"/></svg></span></div><div class="hero-row"><div class="hero"><b>22</b><span>%</span></div><svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none" height="34" role="img" aria-label="近 60 秒 CPU 堆叠面积"><line class="gl" x1="0" y1="8.0" x2="100" y2="8.0"/><line class="gl" x1="0" y1="16.0" x2="100" y2="16.0"/><line class="gl" x1="0" y1="24.0" x2="100" y2="24.0"/><path d="M0.00,28.80 L4.35,28.16 L8.70,28.48 L13.04,27.52 L17.39,27.84 L21.74,27.20 L26.09,28.16 L30.43,28.48 L34.78,27.52 L39.13,27.84 L43.48,28.16 L47.83,27.20 L52.17,27.52 L56.52,27.84 L60.87,28.16 L65.22,27.52 L69.57,27.84 L73.91,28.48 L78.26,28.16 L82.61,27.52 L86.96,27.84 L91.30,27.20 L95.65,28.16 L100.00,27.52 L100.00,32 L0,32 Z" fill="url(#g-cpu)"/><path class="ar-s" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96 L100.00,27.52 L95.65,28.16 L91.30,27.20 L86.96,27.84 L82.61,27.52 L78.26,28.16 L73.91,28.48 L69.57,27.84 L65.22,27.52 L60.87,28.16 L56.52,27.84 L52.17,27.52 L47.83,27.20 L43.48,28.16 L39.13,27.84 L34.78,27.52 L30.43,28.48 L26.09,28.16 L21.74,27.20 L17.39,27.84 L13.04,27.52 L8.70,28.48 L4.35,28.16 L0.00,28.80 Z" fill="var(--m-cpu-2)" opacity=".92"/><path class="ln" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96"/></svg><div class="cores"><div class="cluster"><span class="clbl">P 核 <b>1.3%</b></span><div class="bars"><span class="barlo"><i style="height:9%"></i></span><span class="barlo"><i style="height:14%"></i></span><span class="barlo"><i style="height:8%"></i></span><span class="barlo"><i style="height:12%"></i></span><span class="barlo"><i style="height:8%"></i></span><span class="barlo"><i style="height:10%"></i></span><span class="barlo"><i style="height:8%"></i></span><span class="barlo"><i style="height:8%"></i></span></div><div class="coreids"><span>P0</span><span>P1</span><span>P2</span><span>P3</span><span>P4</span><span>P5</span><span>P6</span><span>P7</span></div></div><div class="cluster"><span class="clbl">E 核 <b>40%</b></span><div class="bars"><span class="barlo"><i class="e" style="height:38%"></i></span><span class="barlo"><i class="e" style="height:42%"></i></span></div><div class="coreids"><span>E0</span><span>E1</span></div></div></div></div></div><div class="card tap c-gpu" role="button" tabindex="0" data-goto="gpu" data-od-id="gpu-card-v1" aria-label="GPU 详情"><div class="card-head"><span class="lbl">GPU</span><span class="sp"></span><span class="meta">16 核 GPU</span><span class="go gpu-go"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 2.6 7.8 6l-3.4 3.4"/></svg></span></div><div class="gpu-row"><span class="gring"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg" cx="18" cy="18" r="15" stroke-dasharray="0 94.2"/></svg><b class="grt">0%</b></span><svg class="spark gpu" viewBox="0 0 100 22" preserveAspectRatio="none" height="30" role="img" aria-label="近 60 秒 GPU 利用率（0%）"><line class="gl" x1="0" y1="5.5" x2="100" y2="5.5"/><line class="gl" x1="0" y1="11.0" x2="100" y2="11.0"/><line class="gl" x1="0" y1="16.5" x2="100" y2="16.5"/><path d="M0.00,22.00 L4.35,22.00 L8.70,21.34 L13.04,22.00 L17.39,21.56 L21.74,22.00 L26.09,22.00 L30.43,21.78 L34.78,21.12 L39.13,22.00 L43.48,21.56 L47.83,22.00 L52.17,22.00 L56.52,21.34 L60.87,22.00 L65.22,22.00 L69.57,21.56 L73.91,22.00 L78.26,21.78 L82.61,21.34 L86.96,22.00 L91.30,22.00 L95.65,21.56 L100.00,22.00 L100.00,22 L0,22 Z" fill="url(#g-gpu)"/><path class="ln" d="M0.00,22.00 L4.35,22.00 L8.70,21.34 L13.04,22.00 L17.39,21.56 L21.74,22.00 L26.09,22.00 L30.43,21.78 L34.78,21.12 L39.13,22.00 L43.48,21.56 L47.83,22.00 L52.17,22.00 L56.52,21.34 L60.87,22.00 L65.22,22.00 L69.57,21.56 L73.91,22.00 L78.26,21.78 L82.61,21.34 L86.96,22.00 L91.30,22.00 L95.65,21.56 L100.00,22.00"/></svg></div><div class="dlbl"><span>显存</span><span class="v">557.7<span class="u">MB</span></span></div><div class="track"><i style="width:3.4%"></i></div></div><div class="card c-load" data-od-id="load-card-v1"><div class="card-head"><span class="lbl">压力</span><span class="ldnum"><span><i class="k1"></i><b>7.82</b></span><span><i class="k2"></i><b>8.28</b></span><span><i class="k3"></i><b>6.15</b></span></span><span class="sp"></span><span class="meta">/10</span></div><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" height="26" role="img" aria-label="负载三线与核数参考"><line class="gl" x1="0" y1="6.5" x2="100" y2="6.5"/><line class="gl" x1="0" y1="13.0" x2="100" y2="13.0"/><line class="gl" x1="0" y1="19.5" x2="100" y2="19.5"/><line class="lnref" x1="0" y1="4.3" x2="100" y2="4.3"/><path class="l15" d="M0.00,22.75 L4.35,22.53 L8.70,22.53 L13.04,22.32 L17.39,22.53 L21.74,22.10 L26.09,22.32 L30.43,22.32 L34.78,22.10 L39.13,22.32 L43.48,22.32 L47.83,21.88 L52.17,22.10 L56.52,22.10 L60.87,21.88 L65.22,21.88 L69.57,21.67 L73.91,21.45 L78.26,21.02 L82.61,20.15 L86.96,18.20 L91.30,16.03 L95.65,14.30 L100.00,12.67"/><path class="l5" d="M0.00,23.40 L4.35,23.18 L8.70,23.40 L13.04,22.97 L17.39,23.18 L21.74,22.75 L26.09,22.97 L30.43,23.18 L34.78,22.75 L39.13,22.97 L43.48,23.18 L47.83,22.53 L52.17,22.75 L56.52,22.97 L60.87,22.75 L65.22,22.53 L69.57,22.75 L73.91,22.32 L78.26,22.53 L82.61,22.10 L86.96,20.80 L91.30,16.03 L95.65,12.57 L100.00,8.06"/><path class="l1" d="M0.00,24.27 L4.35,23.83 L8.70,24.05 L13.04,23.40 L17.39,23.83 L21.74,22.97 L26.09,23.62 L30.43,23.83 L34.78,23.18 L39.13,23.40 L43.48,23.83 L47.83,22.75 L52.17,23.18 L56.52,23.62 L60.87,23.40 L65.22,22.97 L69.57,23.40 L73.91,22.53 L78.26,23.18 L82.61,23.40 L86.96,23.62 L91.30,14.73 L95.65,11.27 L100.00,9.06"/></svg><div class="phead"><span class="meta">CPU 榜</span><span class="sp"></span><button type="button" class="act" aria-pressed="false">切</button></div><div class="procs" data-od-id="proc-list-v1"><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:73.9%"></i></span><span class="pv">73.9%</span></div><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:18.8%"></i></span><span class="pv">18.8%</span></div><div class="proc"><span class="pn">qemu-syst…</span><span class="pb"><i style="width:17.3%"></i></span><span class="pv">17.3%</span></div></div></div><div class="card tap c-mem" role="button" tabindex="0" data-goto="mem" data-od-id="mem-card-v1" aria-label="内存详情"><div class="card-head"><span class="lbl">内存</span><span class="dot"></span><span class="sp"></span><span class="meta"><b>10.3 GB</b> / 16.0 GB</span><span class="go mem-go"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 2.6 7.8 6l-3.4 3.4"/></svg></span></div><div class="track stacked" data-od-id="mem-stack-v1"><i class="w" style="width:11.3%"></i><i class="a" style="width:28.8%"></i><i class="c" style="width:24.4%"></i><i class="f" style="width:35.5%"></i></div><div class="split-nums"><span class="w"><b>1.8</b>内核</span><span class="a"><b>4.6</b>活跃</span><span class="c"><b>3.9</b>压缩</span><span class="f"><b>5.7</b>空闲</span><span class="sw"><b>3.5 GB</b> 交换</span></div></div><div class="card tap c-disk" role="button" tabindex="0" data-goto="disk" data-od-id="disk-card-v1" aria-label="磁盘详情"><div class="card-head"><span class="lbl">磁盘</span><span class="meta">忙 <b>2%</b></span><span class="track busy"><i style="width:2%"></i></span><span class="sp"></span><span class="meta"><b>432.9 GB</b> / 926.4 GB</span><span class="go disk-go"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 2.6 7.8 6l-3.4 3.4"/></svg></span></div><div class="track"><i style="width:46.7%"></i></div><div class="dual"><div><div class="dlbl"><span>读</span><span class="v">1.6<span class="u">MB/s</span></span></div><svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘读"><path d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70 L100.00,18 L0,18 Z" fill="url(#g-rd)"/><path class="ln rd" d="M0.00,18.00 L4.35,17.40 L8.70,15.60 L13.04,17.70 L17.39,18.00 L21.74,18.00 L26.09,16.50 L30.43,9.00 L34.78,0.00 L39.13,12.00 L43.48,16.80 L47.83,18.00 L52.17,17.70 L56.52,18.00 L60.87,18.00 L65.22,14.40 L69.57,6.00 L73.91,0.60 L78.26,9.00 L82.61,16.50 L86.96,18.00 L91.30,18.00 L95.65,17.10 L100.00,17.70"/></svg></div><div><div class="dlbl"><span>写</span><span class="v">0.9<span class="u">MB/s</span></span></div><svg class="spark" viewBox="0 0 100 18" preserveAspectRatio="none" height="18" role="img" aria-label="磁盘写"><path d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00 L100.00,18 L0,18 Z" fill="url(#g-wr)"/><path class="ln wr" d="M0.00,18.00 L4.35,17.70 L8.70,12.00 L13.04,6.00 L17.39,15.00 L21.74,17.40 L26.09,18.00 L30.43,16.50 L34.78,10.50 L39.13,3.00 L43.48,13.50 L47.83,17.10 L52.17,18.00 L56.52,17.70 L60.87,15.60 L65.22,9.00 L69.57,4.50 L73.91,12.00 L78.26,16.80 L82.61,18.00 L86.96,17.40 L91.30,18.00 L95.65,17.70 L100.00,18.00"/></svg></div></div></div><div class="stateband" data-od-id="stateband-v1"><span class="sb t"><i>SoC</i><b>41.6°</b></span><span class="sb b"><svg class="bring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg bat" cx="18" cy="18" r="15" stroke-dasharray="81 94.2"/></svg><b>86%</b></span><span class="sb w"><i>Wi-Fi</i><b>−65</b></span><span class="sp"></span><span class="sb est"><i>估</i><i>功耗</i><b>4.8<span class="u">W</span></b></span></div></div>
+<div class="pane" data-screen="v2" hidden data-od-id="pane-v2"><header class="pagehead" data-od-id="sys-head-v2"><span class="host">M1 Pro · 10 核</span><span class="sp"></span><span class="live"><i></i>1 秒</span><span class="stamp">23:04:12</span></header><div class="hstats" data-od-id="hero-row-v2"><div class="hstat hs" data-od-id="hero-cpu"><span class="hv"><b>22</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60 L100.00,12 L0,12 Z" fill="url(#g-m)"/><path class="ml" d="M0.00,9.60 L4.35,9.20 L8.70,9.40 L13.04,8.80 L17.39,9.20 L21.74,9.00 L26.09,9.60 L30.43,9.20 L34.78,9.00 L39.13,9.40 L43.48,9.20 L47.83,8.80 L52.17,9.00 L56.52,9.20 L60.87,9.40 L65.22,9.00 L69.57,9.20 L73.91,9.60 L78.26,9.40 L82.61,9.00 L86.96,9.20 L91.30,8.80 L95.65,9.40 L100.00,7.60"/></svg><span class="hk">CPU</span></div><div class="hstat hg" data-od-id="hero-gpu"><span class="hv"><b>0</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00 L100.00,12 L0,12 Z" fill="url(#g-gpu)"/><path class="ml" d="M0.00,12.00 L4.35,11.80 L8.70,12.00 L13.04,11.60 L17.39,11.40 L21.74,12.00 L26.09,11.80 L30.43,11.60 L34.78,11.20 L39.13,11.40 L43.48,11.80 L47.83,12.00 L52.17,11.60 L56.52,11.80 L60.87,12.00 L65.22,11.80 L69.57,11.60 L73.91,12.00 L78.26,11.80 L82.61,11.60 L86.96,11.80 L91.30,12.00 L95.65,11.80 L100.00,12.00"/></svg><span class="hk">GPU</span></div><div class="hstat hm" data-od-id="hero-mem"><span class="hv"><b>54</b><span class="u">%</span></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#g-mem)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">内存</span></div><div class="hstat hl" data-od-id="hero-load"><span class="hv"><b>7.82</b></span><svg class="mini" viewBox="0 0 100 12" preserveAspectRatio="none" height="10" aria-hidden="true"><path d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20 L100.00,12 L0,12 Z" fill="url(#g-m2)"/><path class="ml" d="M0.00,2.00 L4.35,1.80 L8.70,1.60 L13.04,1.80 L17.39,1.40 L21.74,1.60 L26.09,1.60 L30.43,1.80 L34.78,1.60 L39.13,1.40 L43.48,1.60 L47.83,1.80 L52.17,1.60 L56.52,1.40 L60.87,1.60 L65.22,1.40 L69.57,1.20 L73.91,1.20 L78.26,1.40 L82.61,1.20 L86.96,1.20 L91.30,1.40 L95.65,1.20 L100.00,1.20"/></svg><span class="hk">负载</span></div></div><div class="card tap c-cpu" role="button" tabindex="0" data-goto="cpu" data-od-id="cpu-card-v2" aria-label="CPU 详情"><div class="card-head"><span class="lbl">CPU</span><span class="usplit"><span class="us"><i></i><b>14%</b></span><span class="ss"><i></i><b>8%</b></span></span><span class="sp"></span><span class="meta">8P · 2E</span><span class="go cpu-go"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 2.6 7.8 6l-3.4 3.4"/></svg></span></div><div class="hero-row"><div class="hero"><b>22</b><span>%</span></div><svg class="spark" viewBox="0 0 100 32" preserveAspectRatio="none" height="34" role="img" aria-label="近 60 秒 CPU 堆叠面积"><line class="gl" x1="0" y1="8.0" x2="100" y2="8.0"/><line class="gl" x1="0" y1="16.0" x2="100" y2="16.0"/><line class="gl" x1="0" y1="24.0" x2="100" y2="24.0"/><path d="M0.00,28.80 L4.35,28.16 L8.70,28.48 L13.04,27.52 L17.39,27.84 L21.74,27.20 L26.09,28.16 L30.43,28.48 L34.78,27.52 L39.13,27.84 L43.48,28.16 L47.83,27.20 L52.17,27.52 L56.52,27.84 L60.87,28.16 L65.22,27.52 L69.57,27.84 L73.91,28.48 L78.26,28.16 L82.61,27.52 L86.96,27.84 L91.30,27.20 L95.65,28.16 L100.00,27.52 L100.00,32 L0,32 Z" fill="url(#g-cpu)"/><path class="ar-s" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96 L100.00,27.52 L95.65,28.16 L91.30,27.20 L86.96,27.84 L82.61,27.52 L78.26,28.16 L73.91,28.48 L69.57,27.84 L65.22,27.52 L60.87,28.16 L56.52,27.84 L52.17,27.52 L47.83,27.20 L43.48,28.16 L39.13,27.84 L34.78,27.52 L30.43,28.48 L26.09,28.16 L21.74,27.20 L17.39,27.84 L13.04,27.52 L8.70,28.48 L4.35,28.16 L0.00,28.80 Z" fill="var(--m-cpu-2)" opacity=".92"/><path class="ln" d="M0.00,27.20 L4.35,26.24 L8.70,26.24 L13.04,24.96 L17.39,25.92 L21.74,24.96 L26.09,26.24 L30.43,26.56 L34.78,24.96 L39.13,25.60 L43.48,26.24 L47.83,24.96 L52.17,25.28 L56.52,25.92 L60.87,26.24 L65.22,25.28 L69.57,25.92 L73.91,26.56 L78.26,25.92 L82.61,24.96 L86.96,25.92 L91.30,24.96 L95.65,26.24 L100.00,24.96"/></svg></div></div><div class="card tap c-gpu" role="button" tabindex="0" data-goto="gpu" data-od-id="gpu-card-v2" aria-label="GPU 详情"><div class="card-head"><span class="lbl">GPU</span><span class="sp"></span><span class="meta">16 核 GPU</span><span class="go gpu-go"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 2.6 7.8 6l-3.4 3.4"/></svg></span></div><div class="gpu-row"><span class="gring"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg" cx="18" cy="18" r="15" stroke-dasharray="0 94.2"/></svg><b class="grt">0%</b></span><svg class="spark gpu" viewBox="0 0 100 22" preserveAspectRatio="none" height="30" role="img" aria-label="近 60 秒 GPU 利用率（0%）"><line class="gl" x1="0" y1="5.5" x2="100" y2="5.5"/><line class="gl" x1="0" y1="11.0" x2="100" y2="11.0"/><line class="gl" x1="0" y1="16.5" x2="100" y2="16.5"/><path d="M0.00,22.00 L4.35,22.00 L8.70,21.34 L13.04,22.00 L17.39,21.56 L21.74,22.00 L26.09,22.00 L30.43,21.78 L34.78,21.12 L39.13,22.00 L43.48,21.56 L47.83,22.00 L52.17,22.00 L56.52,21.34 L60.87,22.00 L65.22,22.00 L69.57,21.56 L73.91,22.00 L78.26,21.78 L82.61,21.34 L86.96,22.00 L91.30,22.00 L95.65,21.56 L100.00,22.00 L100.00,22 L0,22 Z" fill="url(#g-gpu)"/><path class="ln" d="M0.00,22.00 L4.35,22.00 L8.70,21.34 L13.04,22.00 L17.39,21.56 L21.74,22.00 L26.09,22.00 L30.43,21.78 L34.78,21.12 L39.13,22.00 L43.48,21.56 L47.83,22.00 L52.17,22.00 L56.52,21.34 L60.87,22.00 L65.22,22.00 L69.57,21.56 L73.91,22.00 L78.26,21.78 L82.61,21.34 L86.96,22.00 L91.30,22.00 L95.65,21.56 L100.00,22.00"/></svg></div></div><div class="card c-load" data-od-id="load-card-v2"><div class="card-head"><span class="lbl">压力</span><span class="ldnum"><span><i class="k1"></i><b>7.82</b></span><span><i class="k2"></i><b>8.28</b></span><span><i class="k3"></i><b>6.15</b></span></span><span class="sp"></span><span class="meta">/10</span><button type="button" class="act" data-goto="cpu">全部 ›</button></div><svg class="spark" viewBox="0 0 100 26" preserveAspectRatio="none" height="26" role="img" aria-label="负载三线与核数参考"><line class="gl" x1="0" y1="6.5" x2="100" y2="6.5"/><line class="gl" x1="0" y1="13.0" x2="100" y2="13.0"/><line class="gl" x1="0" y1="19.5" x2="100" y2="19.5"/><line class="lnref" x1="0" y1="4.3" x2="100" y2="4.3"/><path class="l15" d="M0.00,22.75 L4.35,22.53 L8.70,22.53 L13.04,22.32 L17.39,22.53 L21.74,22.10 L26.09,22.32 L30.43,22.32 L34.78,22.10 L39.13,22.32 L43.48,22.32 L47.83,21.88 L52.17,22.10 L56.52,22.10 L60.87,21.88 L65.22,21.88 L69.57,21.67 L73.91,21.45 L78.26,21.02 L82.61,20.15 L86.96,18.20 L91.30,16.03 L95.65,14.30 L100.00,12.67"/><path class="l5" d="M0.00,23.40 L4.35,23.18 L8.70,23.40 L13.04,22.97 L17.39,23.18 L21.74,22.75 L26.09,22.97 L30.43,23.18 L34.78,22.75 L39.13,22.97 L43.48,23.18 L47.83,22.53 L52.17,22.75 L56.52,22.97 L60.87,22.75 L65.22,22.53 L69.57,22.75 L73.91,22.32 L78.26,22.53 L82.61,22.10 L86.96,20.80 L91.30,16.03 L95.65,12.57 L100.00,8.06"/><path class="l1" d="M0.00,24.27 L4.35,23.83 L8.70,24.05 L13.04,23.40 L17.39,23.83 L21.74,22.97 L26.09,23.62 L30.43,23.83 L34.78,23.18 L39.13,23.40 L43.48,23.83 L47.83,22.75 L52.17,23.18 L56.52,23.62 L60.87,23.40 L65.22,22.97 L69.57,23.40 L73.91,22.53 L78.26,23.18 L82.61,23.40 L86.96,23.62 L91.30,14.73 L95.65,11.27 L100.00,9.06"/></svg><div class="procs" data-od-id="proc-list-v2"><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:73.9%"></i></span><span class="pv">73.9%</span></div><div class="proc"><span class="pn">DeepSeek…</span><span class="pb"><i style="width:18.8%"></i></span><span class="pv">18.8%</span></div></div></div><div class="card tap c-mem" role="button" tabindex="0" data-goto="mem" data-od-id="mem-card-v2" aria-label="内存详情"><div class="card-head"><span class="lbl">内存</span><span class="dot"></span><span class="sp"></span><span class="meta"><b>10.3 GB</b> / 16.0 GB</span><span class="go mem-go"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 2.6 7.8 6l-3.4 3.4"/></svg></span></div><div class="track stacked" data-od-id="mem-stack-v2"><i class="w" style="width:11.3%"></i><i class="a" style="width:28.8%"></i><i class="c" style="width:24.4%"></i><i class="f" style="width:35.5%"></i></div><div class="split-nums"><span class="w"><b>1.8</b>内核</span><span class="a"><b>4.6</b>活跃</span><span class="c"><b>3.9</b>压缩</span><span class="f"><b>5.7</b>空闲</span><span class="sw"><b>3.5 GB</b> 交换</span></div></div><div class="card tap c-disk" role="button" tabindex="0" data-goto="disk" data-od-id="disk-card-v2" aria-label="磁盘详情"><div class="card-head"><span class="lbl">磁盘</span><span class="meta">忙 <b>2%</b></span><span class="track busy"><i style="width:2%"></i></span><span class="sp"></span><span class="meta"><b>432.9 GB</b> / 926.4 GB</span><span class="go disk-go"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 2.6 7.8 6l-3.4 3.4"/></svg></span></div></div><div class="stateband" data-od-id="stateband-v2"><span class="sb t"><i>SoC</i><b>41.6°</b></span><span class="sb b"><svg class="bring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rbg" cx="18" cy="18" r="15"/><circle class="rfg bat" cx="18" cy="18" r="15" stroke-dasharray="81 94.2"/></svg><b>86%</b></span><span class="sb w"><i>Wi-Fi</i><b>−65</b></span><span class="sp"></span><span class="sb est"><i>估</i><i>功耗</i><b>4.8<span class="u">W</span></b></span></div></div>
+<div class="detail" data-detail="cpu" hidden data-od-id="detail-cpu"><div class="backbar" data-od-id="backbar-CPU"><button type="button" class="back" data-back="1" aria-label="返回系统页"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.6 2.6 4.2 6l3.4 3.4"/></svg>系统</button><span class="crumb">/ CPU 详情</span><span class="sp"></span><span class="meta">近 60 秒</span></div><div class="dhero cpu"><b>22</b><span class="u">%</span></div><div class="dsub">总利用率 · host_processor_info 全核 ticks 差分 · 1 秒采样</div><div class="dcard c-cpu" data-od-id="detail-cpu-chart"><div class="card-head"><span class="lbl">近 60 秒</span><span class="usplit"><span class="us"><i></i><b>14%</b></span><span class="ss"><i></i><b>8%</b></span></span><span class="sp"></span><span class="meta">用户 / 系统</span></div><svg class="spark" viewBox="0 0 100 46" preserveAspectRatio="none" height="46" role="img" aria-label="CPU 60 秒堆叠面积"><line class="gl" x1="0" y1="11.5" x2="100" y2="11.5"/><line class="gl" x1="0" y1="23.0" x2="100" y2="23.0"/><line class="gl" x1="0" y1="34.5" x2="100" y2="34.5"/><path d="M0.00,41.40 L4.35,40.48 L8.70,40.94 L13.04,39.56 L17.39,40.02 L21.74,39.10 L26.09,40.48 L30.43,40.94 L34.78,39.56 L39.13,40.02 L43.48,40.48 L47.83,39.10 L52.17,39.56 L56.52,40.02 L60.87,40.48 L65.22,39.56 L69.57,40.02 L73.91,40.94 L78.26,40.48 L82.61,39.56 L86.96,40.02 L91.30,39.10 L95.65,40.48 L100.00,39.56 L100.00,46 L0,46 Z" fill="url(#g-cpu)"/><path class="ar-s" d="M0.00,39.10 L4.35,37.72 L8.70,37.72 L13.04,35.88 L17.39,37.26 L21.74,35.88 L26.09,37.72 L30.43,38.18 L34.78,35.88 L39.13,36.80 L43.48,37.72 L47.83,35.88 L52.17,36.34 L56.52,37.26 L60.87,37.72 L65.22,36.34 L69.57,37.26 L73.91,38.18 L78.26,37.26 L82.61,35.88 L86.96,37.26 L91.30,35.88 L95.65,37.72 L100.00,35.88 L100.00,39.56 L95.65,40.48 L91.30,39.10 L86.96,40.02 L82.61,39.56 L78.26,40.48 L73.91,40.94 L69.57,40.02 L65.22,39.56 L60.87,40.48 L56.52,40.02 L52.17,39.56 L47.83,39.10 L43.48,40.48 L39.13,40.02 L34.78,39.56 L30.43,40.94 L26.09,40.48 L21.74,39.10 L17.39,40.02 L13.04,39.56 L8.70,40.94 L4.35,40.48 L0.00,41.40 Z" fill="var(--m-cpu-2)" opacity=".92"/><path class="ln" d="M0.00,39.10 L4.35,37.72 L8.70,37.72 L13.04,35.88 L17.39,37.26 L21.74,35.88 L26.09,37.72 L30.43,38.18 L34.78,35.88 L39.13,36.80 L43.48,37.72 L47.83,35.88 L52.17,36.34 L56.52,37.26 L60.87,37.72 L65.22,36.34 L69.57,37.26 L73.91,38.18 L78.26,37.26 L82.61,35.88 L86.96,37.26 L91.30,35.88 L95.65,37.72 L100.00,35.88"/></svg></div><div class="dcard c-cpu" data-od-id="detail-cpu-cores"><div class="card-head"><span class="lbl">每核</span><span class="sp"></span><span class="meta">P 核均 1.3% · E 核均 40%</span></div><div class="heat"><span class="h1">P0<br>1.2</span><span class="h1">P1<br>0.9</span><span class="h1">P2<br>2.4</span><span class="h1">P3<br>1.8</span><span class="h1">P4<br>0.7</span><span class="h1">P5<br>1.1</span><span class="h1">P6<br>0.9</span><span class="h1">P7<br>1.3</span><span class="h3">E0<br>38</span><span class="h3">E1<br>42</span></div></div><div class="dcard c-cpu" data-od-id="detail-cpu-facts"><div class="dgrid"><div class="drow"><span>P 核（性能）</span><span class="v">8<span class="u">个</span></span></div><div class="drow"><span>E 核（能效）</span><span class="v">2<span class="u">个</span></span></div><div class="drow key"><span>忙（非空闲）</span><span class="v">22<span class="u">%</span></span></div><div class="drow"><span>空闲</span><span class="v">78<span class="u">%</span></span></div></div></div></div>
+<div class="detail" data-detail="gpu" hidden data-od-id="detail-gpu"><div class="backbar" data-od-id="backbar-GPU"><button type="button" class="back" data-back="1" aria-label="返回系统页"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.6 2.6 4.2 6l3.4 3.4"/></svg>系统</button><span class="crumb">/ GPU 详情</span><span class="sp"></span><span class="meta">近 60 秒</span></div><div class="dhero gpu"><b>0</b><span class="u">%</span></div><div class="dsub">活跃利用率 · IOAccelerator PerformanceStatistics · Device Utilization</div><div class="dcard c-gpu" data-od-id="detail-gpu-chart"><div class="card-head"><span class="lbl">近 60 秒</span><span class="sp"></span><span class="meta">0–10%</span></div><svg class="spark gpu" viewBox="0 0 100 46" preserveAspectRatio="none" height="46" role="img" aria-label="近 60 秒 GPU 利用率（0%）"><line class="gl" x1="0" y1="11.5" x2="100" y2="11.5"/><line class="gl" x1="0" y1="23.0" x2="100" y2="23.0"/><line class="gl" x1="0" y1="34.5" x2="100" y2="34.5"/><path d="M0.00,46.00 L4.35,46.00 L8.70,44.62 L13.04,46.00 L17.39,45.08 L21.74,46.00 L26.09,46.00 L30.43,45.54 L34.78,44.16 L39.13,46.00 L43.48,45.08 L47.83,46.00 L52.17,46.00 L56.52,44.62 L60.87,46.00 L65.22,46.00 L69.57,45.08 L73.91,46.00 L78.26,45.54 L82.61,44.62 L86.96,46.00 L91.30,46.00 L95.65,45.08 L100.00,46.00 L100.00,46 L0,46 Z" fill="url(#g-gpu)"/><path class="ln" d="M0.00,46.00 L4.35,46.00 L8.70,44.62 L13.04,46.00 L17.39,45.08 L21.74,46.00 L26.09,46.00 L30.43,45.54 L34.78,44.16 L39.13,46.00 L43.48,45.08 L47.83,46.00 L52.17,46.00 L56.52,44.62 L60.87,46.00 L65.22,46.00 L69.57,45.08 L73.91,46.00 L78.26,45.54 L82.61,44.62 L86.96,46.00 L91.30,46.00 L95.65,45.08 L100.00,46.00"/></svg></div><div class="dcard c-gpu" data-od-id="detail-gpu-facts"><div class="dgrid"><div class="drow key gpu"><span>已用显存</span><span class="v">557.7<span class="u">MB</span></span></div><div class="drow"><span>GPU 核数</span><span class="v">16<span class="u">核</span></span></div><div class="drow"><span>当前</span><span class="v">空闲</span></div><div class="drow"><span>采样</span><span class="v">1<span class="u">秒</span></span></div></div><div class="dnote">显存总量在本机取不到（IOAccelerator 无 total），故只显示已用、不给占比条。</div></div></div>
+<div class="detail" data-detail="mem" hidden data-od-id="detail-mem"><div class="backbar" data-od-id="backbar-内存"><button type="button" class="back" data-back="1" aria-label="返回系统页"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.6 2.6 4.2 6l3.4 3.4"/></svg>系统</button><span class="crumb">/ 内存 详情</span><span class="sp"></span><span class="meta">近 60 秒</span></div><div class="dhero mem"><b>10.3</b><span class="u">GB / 16.0 GB</span></div><div class="dsub">已用 = 内核 + 活跃 + 压缩 ÷ 物理内存 · 64.4%<span class="badge" style="margin-left:6px">正常</span></div><div class="dcard c-mem" data-od-id="detail-mem-stack"><div class="track stacked" style="height:12px"><i class="w" style="width:11.3%"></i><i class="a" style="width:28.8%"></i><i class="c" style="width:24.4%"></i><i class="f" style="width:35.5%"></i></div><div class="dgrid" style="margin-top:2px"><div class="drow"><span>内核</span><span class="v">1.8<span class="u">GB · 11%</span></span></div><div class="drow"><span>活跃</span><span class="v">4.6<span class="u">GB · 29%</span></span></div><div class="drow"><span>压缩</span><span class="v">3.9<span class="u">GB · 24%</span></span></div><div class="drow"><span>空闲</span><span class="v">5.7<span class="u">GB · 36%</span></span></div></div></div><div class="dcard c-mem" data-od-id="detail-mem-trend"><div class="card-head"><span class="lbl">近 60 秒堆叠</span><span class="sp"></span><span class="meta">wired → active → compressed</span></div><svg class="spark" viewBox="0 0 100 40" preserveAspectRatio="none" height="40" role="img" aria-label="内存 60 秒三段堆叠趋势"><path d="M0.00,36.00 L4.35,35.60 L8.70,35.60 L13.04,35.20 L17.39,35.60 L21.74,35.20 L26.09,35.60 L30.43,35.60 L34.78,35.20 L39.13,35.60 L43.48,35.60 L47.83,35.20 L52.17,35.60 L56.52,35.20 L60.87,35.60 L65.22,35.20 L69.57,35.60 L73.91,35.60 L78.26,35.20 L82.61,35.60 L86.96,35.60 L91.30,35.20 L95.65,35.60 L100.00,35.60 L100.00,40.00 L95.65,40.00 L91.30,40.00 L86.96,40.00 L82.61,40.00 L78.26,40.00 L73.91,40.00 L69.57,40.00 L65.22,40.00 L60.87,40.00 L56.52,40.00 L52.17,40.00 L47.83,40.00 L43.48,40.00 L39.13,40.00 L34.78,40.00 L30.43,40.00 L26.09,40.00 L21.74,40.00 L17.39,40.00 L13.04,40.00 L8.70,40.00 L4.35,40.00 L0.00,40.00 Z" fill="var(--m-mem-1)"/><path d="M0.00,25.20 L4.35,24.40 L8.70,24.40 L13.04,23.60 L17.39,24.40 L21.74,23.60 L26.09,24.40 L30.43,24.40 L34.78,23.60 L39.13,24.40 L43.48,24.40 L47.83,23.60 L52.17,24.40 L56.52,23.60 L60.87,24.40 L65.22,23.60 L69.57,24.40 L73.91,24.40 L78.26,23.60 L82.61,24.40 L86.96,24.40 L91.30,23.60 L95.65,24.40 L100.00,24.40 L100.00,35.60 L95.65,35.60 L91.30,35.20 L86.96,35.60 L82.61,35.60 L78.26,35.20 L73.91,35.60 L69.57,35.60 L65.22,35.20 L60.87,35.60 L56.52,35.20 L52.17,35.60 L47.83,35.20 L43.48,35.60 L39.13,35.60 L34.78,35.20 L30.43,35.60 L26.09,35.60 L21.74,35.20 L17.39,35.60 L13.04,35.20 L8.70,35.60 L4.35,35.60 L0.00,36.00 Z" fill="var(--m-mem-2)"/><path d="M0.00,16.00 L4.35,15.20 L8.70,14.80 L13.04,14.00 L17.39,15.20 L21.74,14.00 L26.09,15.20 L30.43,15.20 L34.78,14.00 L39.13,15.20 L43.48,15.20 L47.83,14.00 L52.17,15.20 L56.52,14.00 L60.87,15.20 L65.22,14.00 L69.57,15.20 L73.91,15.20 L78.26,14.00 L82.61,15.20 L86.96,15.20 L91.30,14.00 L95.65,15.20 L100.00,14.80 L100.00,24.40 L95.65,24.40 L91.30,23.60 L86.96,24.40 L82.61,24.40 L78.26,23.60 L73.91,24.40 L69.57,24.40 L65.22,23.60 L60.87,24.40 L56.52,23.60 L52.17,24.40 L47.83,23.60 L43.48,24.40 L39.13,24.40 L34.78,23.60 L30.43,24.40 L26.09,24.40 L21.74,23.60 L17.39,24.40 L13.04,23.60 L8.70,24.40 L4.35,24.40 L0.00,25.20 Z" fill="var(--m-mem-3)"/><path d="M0.00,16.00 L4.35,15.20 L8.70,14.80 L13.04,14.00 L17.39,15.20 L21.74,14.00 L26.09,15.20 L30.43,15.20 L34.78,14.00 L39.13,15.20 L43.48,15.20 L47.83,14.00 L52.17,15.20 L56.52,14.00 L60.87,15.20 L65.22,14.00 L69.57,15.20 L73.91,15.20 L78.26,14.00 L82.61,15.20 L86.96,15.20 L91.30,14.00 L95.65,15.20 L100.00,14.80" fill="none" stroke="var(--m-mem-1)" stroke-width="1" vector-effect="non-scaling-stroke"/></svg></div><div class="dcard c-mem" data-od-id="detail-mem-facts"><div class="dgrid"><div class="drow key"><span>交换</span><span class="v">3.5<span class="u">GB</span></span></div><div class="drow"><span>压力等级</span><span class="v">正常</span></div><div class="drow"><span>物理内存</span><span class="v">16.0<span class="u">GB</span></span></div><div class="drow"><span>已用</span><span class="v">10.3<span class="u">GB</span></span></div></div></div></div>
+<div class="detail" data-detail="disk" hidden data-od-id="detail-disk"><div class="backbar" data-od-id="backbar-磁盘"><button type="button" class="back" data-back="1" aria-label="返回系统页"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.6 2.6 4.2 6l3.4 3.4"/></svg>系统</button><span class="crumb">/ 磁盘 详情</span><span class="sp"></span><span class="meta">近 60 秒</span></div><div class="dhero disk"><b>432.9</b><span class="u">GB / 926.4 GB</span></div><div class="dsub">已用 46.7% · 可用 493.5 GB · 卷 Macintosh HD</div><div class="dcard c-disk" data-od-id="detail-disk-cap"><div class="track" style="height:8px"><i style="width:46.7%"></i></div><div class="dgrid" style="margin-top:2px"><div class="drow key disk"><span>已用</span><span class="v">432.9<span class="u">GB</span></span></div><div class="drow"><span>可用</span><span class="v">493.5<span class="u">GB</span></span></div><div class="drow"><span>总量</span><span class="v">926.4<span class="u">GB</span></span></div><div class="drow"><span>繁忙度</span><span class="v">2<span class="u">%</span></span></div></div></div><div class="dcard c-disk" data-od-id="detail-disk-io"><div class="card-head"><span class="lbl">读写速率</span><span class="sp"></span><span class="meta">近 60 秒</span></div><div class="dual"><div><div class="dlbl"><span>读</span><span class="v">1.6<span class="u">MB/s</span></span></div><svg class="spark" viewBox="0 0 100 34" preserveAspectRatio="none" height="34" role="img" aria-label="读速率"><path d="M0.00,34.00 L4.35,32.87 L8.70,29.47 L13.04,33.43 L17.39,34.00 L21.74,34.00 L26.09,31.17 L30.43,17.00 L34.78,0.00 L39.13,22.67 L43.48,31.73 L47.83,34.00 L52.17,33.43 L56.52,34.00 L60.87,34.00 L65.22,27.20 L69.57,11.33 L73.91,1.13 L78.26,17.00 L82.61,31.17 L86.96,34.00 L91.30,34.00 L95.65,32.30 L100.00,33.43 L100.00,34 L0,34 Z" fill="url(#g-rd)"/><path class="ln rd" d="M0.00,34.00 L4.35,32.87 L8.70,29.47 L13.04,33.43 L17.39,34.00 L21.74,34.00 L26.09,31.17 L30.43,17.00 L34.78,0.00 L39.13,22.67 L43.48,31.73 L47.83,34.00 L52.17,33.43 L56.52,34.00 L60.87,34.00 L65.22,27.20 L69.57,11.33 L73.91,1.13 L78.26,17.00 L82.61,31.17 L86.96,34.00 L91.30,34.00 L95.65,32.30 L100.00,33.43"/></svg></div><div><div class="dlbl"><span>写</span><span class="v">0.9<span class="u">MB/s</span></span></div><svg class="spark" viewBox="0 0 100 34" preserveAspectRatio="none" height="34" role="img" aria-label="写速率"><path d="M0.00,34.00 L4.35,33.43 L8.70,22.67 L13.04,11.33 L17.39,28.33 L21.74,32.87 L26.09,34.00 L30.43,31.17 L34.78,19.83 L39.13,5.67 L43.48,25.50 L47.83,32.30 L52.17,34.00 L56.52,33.43 L60.87,29.47 L65.22,17.00 L69.57,8.50 L73.91,22.67 L78.26,31.73 L82.61,34.00 L86.96,32.87 L91.30,34.00 L95.65,33.43 L100.00,34.00 L100.00,34 L0,34 Z" fill="url(#g-wr)"/><path class="ln wr" d="M0.00,34.00 L4.35,33.43 L8.70,22.67 L13.04,11.33 L17.39,28.33 L21.74,32.87 L26.09,34.00 L30.43,31.17 L34.78,19.83 L39.13,5.67 L43.48,25.50 L47.83,32.30 L52.17,34.00 L56.52,33.43 L60.87,29.47 L65.22,17.00 L69.57,8.50 L73.91,22.67 L78.26,31.73 L82.61,34.00 L86.96,32.87 L91.30,34.00 L95.65,33.43 L100.00,34.00"/></svg></div></div></div><div class="dcard c-disk" data-od-id="detail-disk-facts"><div class="dgrid"><div class="drow"><span>读 IOPS</span><span class="v">120<span class="u">op/s</span></span></div><div class="drow"><span>写 IOPS</span><span class="v">88<span class="u">op/s</span></span></div><div class="drow"><span>繁忙度</span><span class="v">2<span class="u">%</span></span></div><div class="drow"><span>采样</span><span class="v">1<span class="u">秒</span></span></div></div><div class="dnote">繁忙度 =（Total Time Read + Total Time Write）÷ 采样间隔；与字节速率同一次 IOBlockStorageDriver 调用取回。</div></div></div>
+</div>
+</section>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var content = document.getElementById('content');
+  var screens = [].slice.call(content.querySelectorAll('[data-screen]'));
+  var details = [].slice.call(content.querySelectorAll('[data-detail]'));
+  var viewBtns = [].slice.call(document.querySelectorAll('[data-view]'));
+  var themeBtns = [].slice.call(document.querySelectorAll('[data-theme-btn]'));
+  var cur = 'v1';
+  var lastCard = null;
+
+  function setPressed(list, key, val) {
+    list.forEach(function (b) {
+      var on = b.getAttribute(key) === val;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+  function showScreen(name) {
+    cur = name;
+    screens.forEach(function (p) { p.hidden = p.getAttribute('data-screen') !== name; });
+    details.forEach(function (d) { d.hidden = true; });
+    content.scrollTop = 0;
+    setPressed(viewBtns, 'data-view', name);
+  }
+  function showDetail(name) {
+    screens.forEach(function (p) { p.hidden = true; });
+    details.forEach(function (d) { d.hidden = d.getAttribute('data-detail') !== name; });
+    content.scrollTop = 0;
+    var back = content.querySelector('[data-detail="' + name + '"] .back');
+    if (back) back.focus();
+  }
+  function backToScreen() {
+    var was = cur;
+    showScreen(was);
+    if (lastCard) lastCard.focus();
+  }
+
+  content.addEventListener('click', function (e) {
+    var go = e.target.closest('[data-goto]');
+    if (go) { lastCard = go; showDetail(go.getAttribute('data-goto')); return; }
+    var back = e.target.closest('[data-back]');
+    if (back) { backToScreen(); }
+  });
+  content.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var go = e.target.closest && e.target.closest('[data-goto]');
+    if (go) { e.preventDefault(); lastCard = go; showDetail(go.getAttribute('data-goto')); }
+  });
+  viewBtns.forEach(function (b) {
+    b.addEventListener('click', function () { showScreen(b.getAttribute('data-view')); });
+  });
+  themeBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      var t = b.getAttribute('data-theme-btn');
+      root.setAttribute('data-theme', t);
+      setPressed(themeBtns, 'data-theme-btn', t);
+    });
+  });
+  root.setAttribute('data-theme', 'light');
+  showScreen('v1');
+})();
+</script>
+</body>
+</html>
