@@ -25,12 +25,15 @@ extension BillingMonitor {
         let supportsTimeSeries: Bool
         /// 是否提供用量明细（false 时 UI 隐藏用量区与摘要行）
         let supportsUsage: Bool
+        /// 支持查询的用量范围（UI 只渲染这些范围按钮）
+        let supportedRanges: [BillingRange]
         /// 凭据获取页面（配置态链接跳转目标；nil = 无在线入口）
         let credentialPageURL: URL?
 
         /// 兼容默认值（快照示意数据 / 测试构造用）
         init(id: String, displayName: String, symbolName: String, credentialHint: String,
              supportsModelBreakdown: Bool, supportsUsage: Bool = true, supportsTimeSeries: Bool = true,
+             supportedRanges: [BillingRange] = BillingRange.allCases,
              credentialPageURL: URL? = nil) {
             self.id = id
             self.displayName = displayName
@@ -39,6 +42,7 @@ extension BillingMonitor {
             self.supportsModelBreakdown = supportsModelBreakdown
             self.supportsUsage = supportsUsage
             self.supportsTimeSeries = supportsTimeSeries
+            self.supportedRanges = supportedRanges
             self.credentialPageURL = credentialPageURL
         }
     }

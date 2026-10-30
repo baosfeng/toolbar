@@ -96,25 +96,40 @@ struct OpenDesignUsageDTO: Decodable {
 // MARK: - 时间范围映射
 
 extension BillingRange {
+    /// 服务端允许的最长查询跨度（秒）
+    ///
+    /// 实测 `/billing/usage` 只接受最近 7 天的窗口：跨度超过 7 天、或起点早于 7 天前，
+    /// 一律返回 400 `invalid_workspace_usage_time_range`；终点晚于当前时刻同样报错。
+    static let openDesignUsageMaxSpan: TimeInterval = 7 * 86_400
+
     /// 范围 → 聚合粒度（24h 按小时，其余按天）
     public var granularity: BillingGranularity {
         self == .last24Hours ? .hour : .day
     }
 
     /// 范围 → 查询窗口（截至当前时刻，向前推对应时长；
-    /// 24 小时按整点对齐，7/30 天按自然日起点对齐，与服务端分桶口径一致）
+    /// 24 小时按小时起点对齐（23 个整点步长），7/30 天按自然日起点对齐）
+    ///
+    /// 终点夹到 `now`：自然日口径算出的终点是「明天 0 点」，属于未来时刻，
+    /// 服务端直接 400 拒绝；起点不早于 7 天前，跨度超出部分裁掉，避免整段被拒。
     public func queryWindow(now: Date = Date(), calendar: Calendar = .current) -> DateInterval {
+        let raw: DateInterval
         switch self {
         case .last24Hours:
-            let end = calendar.date(bySetting: .minute, value: 0, of: now) ?? now
-            let start = calendar.date(bySetting: .minute, value: 0,
-                                      of: now.addingTimeInterval(-23 * 3_600)) ?? now
-            return DateInterval(start: start, end: end)
+            // 用当前小时起点做锚点：不依赖 date(bySetting:)（它会取严格之后的匹配，
+            // 端点可能落到未来整点，正是服务端判非法范围的来源）
+            let hourStart = calendar.dateInterval(of: .hour, for: now)?.start ?? now
+            let start = calendar.date(byAdding: .hour, value: -23, to: hourStart) ?? hourStart
+            raw = DateInterval(start: start, end: hourStart)
         case .last7Days:
-            return dayWindow(days: 7, now: now, calendar: calendar)
+            raw = dayWindow(days: 7, now: now, calendar: calendar)
         case .last30Days:
-            return dayWindow(days: 30, now: now, calendar: calendar)
+            raw = dayWindow(days: 30, now: now, calendar: calendar)
         }
+        let end = min(raw.end, now)
+        let earliest = now.addingTimeInterval(-Self.openDesignUsageMaxSpan)
+        let start = max(raw.start, earliest)
+        return DateInterval(start: start, end: max(start, end))
     }
 
     /// 以「当日 00:00」为起点、往前回溯 days 天的自然日窗口

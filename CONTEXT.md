@@ -22,4 +22,4 @@ NetworkMonitor / macMonitor — macOS 菜单栏应用。本文档定义项目术
 - 剪贴板数据落库后发 `AppEvents.postClipboardChanged()`，UI 订阅后立即刷新
 - `NetworkMonitorCore` 禁止 import AppKit；依赖方向 App → Core
 - 测试：`swift run --disable-sandbox --build-system native TestRunner`，内存 SQLite，无 XCTest
-- Open Design 额度接口只认浏览器 Cookie（`__Secure-better-auth.session_token`），Bearer 一律 401；用量接口的 `entries` 分页上限 100 条但 30 天可达 1.6 万条，**汇总必须读顶层 `summary` / `totalCount`，不要翻页**
+- Open Design 额度接口只认浏览器 Cookie（`__Secure-better-auth.session_token`），Bearer 一律 401；用量接口只接受最近 7 天窗口（超窗或终点在未来都 400 `invalid_workspace_usage_time_range`），**汇总必须读顶层 `summary` / `totalCount`，不要翻页**

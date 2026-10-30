@@ -106,6 +106,8 @@ final class BillingMonitor {
     /// 切换某个 provider 的用量范围 — 只重拉该 provider 的用量，余额沿用
     func selectRange(_ range: BillingRange, providerID: String) {
         guard let index = states.firstIndex(where: { $0.descriptor.id == providerID }),
+              // provider 不支持的窗口（如服务端只给 7 天）不切换，避免必然 400 的请求
+              states[index].descriptor.supportedRanges.contains(range),
               states[index].range != range else { return }
         states[index].range = range
 

@@ -19,6 +19,11 @@ public protocol BillingProvider: Sendable {
     var supportsTimeSeries: Bool { get }
     /// 是否提供用量明细（false = 只查额度；状态管理器跳过用量请求，UI 隐藏用量区）
     var supportsUsage: Bool { get }
+    /// 支持查询的用量时间范围（UI 只渲染这些范围按钮；默认全部）
+    ///
+    /// 服务端有窗口上限的 provider（如 Open Design 只接受最近 7 天）必须收窄，
+    /// 否则用户切到超限范围只会拿到 400，界面留下一条无法自愈的报错。
+    var supportedUsageRanges: [BillingRange] { get }
     /// provider 建议的最小刷新间隔（秒；0 = 只受全局下限约束）
     ///
     /// 限流口径写在文档里的 provider（如 Ollama 10 次/分钟）可跟随全局 60 秒；
@@ -129,6 +134,9 @@ extension BillingProvider {
 
     /// 默认提供用量明细（provider 未声明时按支持处理）
     public var supportsUsage: Bool { true }
+
+    /// 默认支持全部范围（provider 未声明窗口上限时）
+    public var supportedUsageRanges: [BillingRange] { BillingRange.allCases }
 
     /// 默认只受全局节流约束（provider 未声明时按 0 处理）
     public var minimumRefreshInterval: TimeInterval { 0 }

@@ -60,6 +60,7 @@ runBillingAlertTests()
 
 // MARK: - Open Design 额度（归一化 / 工作区发现 / 窗口映射 / 用量聚合）
 runOpenDesignBillingTests()
+runOpenDesignUsageTests()
 
 // MARK: - OpenCode Go 额度（三窗口已用→剩余 / 限流角标 / 新旧字段兼容 / 错误映射）
 runOpencodeGoBillingTests()

@@ -22,6 +22,7 @@
 
 - **鉴权只认 Cookie**：`Cookie: __Secure-better-auth.session_token=<token>`；`Authorization: Bearer` 一律 401。
 - **`summary` 与 `totalCount` 是全范围聚合**（与 `limit` 无关），因此用量汇总**不需要翻页**。实测 30 天区间 `totalCount` 可达 1.6 万条，靠 cursor 翻页不可接受。
+- **时间窗口上限 7 天**（2026-10 实测）：`from` 早于 7 天前或跨度超 7 天、终点晚于当前时刻，一律 400 `invalid_workspace_usage_time_range`；因此 UI 只提供 24 小时 / 7 天两档，30 天档无数据可取。
 - **没有服务端分桶接口**（`granularity` / `group_by` / `aggregate` 等参数均被忽略，仍返回明细）。按小时/天画柱状图需要每个桶一次请求，24 小时就是 25 次，不可取。
 - **按模型拆分**：`filterOptions.runtimes` 给出模型名，逐个 `?runtime=<name>` 查询读 `summary` 即可，模型数通常 1–2 个。
 - **花费不可用**：`chargeCredits` 全为 0（编码计划按 credits 配额计量），`listChargedUsd` 只是标价。用量不做金额换算，避免展示虚高花费。

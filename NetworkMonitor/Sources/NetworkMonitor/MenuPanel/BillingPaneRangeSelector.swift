@@ -11,6 +11,8 @@ final class BillingRangeSegmentedView: NSView {
 
     private let stack = NSStackView()
     private var buttons: [BillingRangeButtonRow] = []
+    /// 当前渲染的范围（provider 能力收窄时整体重建按钮）
+    private(set) var ranges: [BillingRange] = BillingRange.allCases
 
     init() {
         super.init(frame: .zero)
@@ -30,13 +32,7 @@ final class BillingRangeSegmentedView: NSView {
             heightAnchor.constraint(equalToConstant: 22),
         ])
 
-        for range in BillingRange.allCases {
-            let button = BillingRangeButtonRow(title: range.title) { [weak self] in
-                self?.onSelect?(range)
-            }
-            buttons.append(button)
-            stack.addArrangedSubview(button)
-        }
+        rebuild(ranges: BillingRange.allCases)
         setAccessibilityRole(.group)
         setAccessibilityLabel("用量时间范围")
     }
@@ -49,14 +45,36 @@ final class BillingRangeSegmentedView: NSView {
         return NSSize(width: fitting.width + 4, height: 22)
     }
 
-    /// 键盘可达行：三个范围按钮
+    /// 键盘可达行：当前可选的范围按钮
     var focusableRows: [MenuPanelRow] { buttons }
 
-    /// 同步选中态
-    func update(selected: BillingRange) {
-        for (index, range) in BillingRange.allCases.enumerated() {
+    /// 同步可选范围与选中态
+    ///
+    /// 范围集合由 provider 能力决定（服务端窗口有上限时少一档），变化时重建按钮，
+    /// 宽度与焦点顺序随之更新；选中态始终按传入范围高亮。
+    func update(ranges newRanges: [BillingRange], selected: BillingRange) {
+        if newRanges != ranges { rebuild(ranges: newRanges) }
+        for (index, range) in ranges.enumerated() {
             buttons[index].setSelected(range == selected)
         }
+    }
+
+    /// 按范围重建按钮（空集合回退到全部范围，避免面板出现空分段）
+    private func rebuild(ranges newRanges: [BillingRange]) {
+        let effective = newRanges.isEmpty ? BillingRange.allCases : newRanges
+        ranges = effective
+        for button in buttons {
+            stack.removeArrangedSubview(button)
+            button.removeFromSuperview()
+        }
+        buttons = effective.map { range in
+            let button = BillingRangeButtonRow(title: range.title) { [weak self] in
+                self?.onSelect?(range)
+            }
+            stack.addArrangedSubview(button)
+            return button
+        }
+        invalidateIntrinsicContentSize()
     }
 
     override func draw(_ dirtyRect: NSRect) {

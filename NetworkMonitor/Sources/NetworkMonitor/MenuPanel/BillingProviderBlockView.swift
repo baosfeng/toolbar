@@ -199,6 +199,7 @@ final class BillingProviderBlockView: NSView {
         if expanded {
             usageSection.update(usage: state.usage,
                                 range: state.range,
+                                supportedRanges: descriptor.supportedRanges,
                                 showsModelBreakdown: descriptor.supportsModelBreakdown,
                                 showsTimeSeries: descriptor.supportsTimeSeries)
         }

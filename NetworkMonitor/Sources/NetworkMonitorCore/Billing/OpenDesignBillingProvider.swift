@@ -10,6 +10,7 @@ import Foundation
 /// 凭据只填 token 一段，工作区自动发现（`GET /api/v1/workspaces` 取首个 workspaceId 并缓存）。
 ///
 /// 用量接口特性（实测）：
+/// - 窗口上限：只接受最近 7 天（跨度超 7 天或起点更早 → 400 `invalid_workspace_usage_time_range`）
 /// - 顶层 `summary` / `totalCount` 是**全范围聚合**，与 `limit` 无关 → 汇总不需要翻页
 ///   （30 天区间明细可达 1.6 万条，翻页不可接受）
 /// - 服务端**不提供服务端分桶**（`granularity` / `group_by` 等参数被忽略）→ 不画柱状图，
@@ -22,6 +23,8 @@ public final class OpenDesignBillingProvider: BillingProvider {
     public let supportsModelBreakdown = true
     /// 服务端不分桶：UI 隐藏柱状图，只显示指标与按模型明细
     public let supportsTimeSeries = false
+    /// 服务端只接受最近 7 天的用量窗口（30 天跨度直接 400），UI 不提供 30 天入口
+    public let supportedUsageRanges: [BillingRange] = [.last24Hours, .last7Days]
     public let credentialHint = "Open Design session token"
     public let credentialPageURL: URL? = URL(string: "https://open-design.ai/")
 
@@ -60,6 +63,9 @@ public final class OpenDesignBillingProvider: BillingProvider {
     }
 
     public func fetchUsage(range: BillingRange, credential: String) async throws -> BillingUsage {
+        guard supportedUsageRanges.contains(range) else {
+            throw BillingError.invalidRequest("服务端仅支持最近 7 天的用量")
+        }
         let token = try Self.normalizedToken(credential)
         let workspaceID = try await resolveWorkspaceID(token: token)
         let window = range.queryWindow()

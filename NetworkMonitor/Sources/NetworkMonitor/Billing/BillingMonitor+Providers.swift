@@ -38,9 +38,10 @@ extension BillingMonitor {
                                             supportsModelBreakdown: provider.supportsModelBreakdown,
                                             supportsUsage: provider.supportsUsage,
                                             supportsTimeSeries: provider.supportsTimeSeries,
+                                            supportedRanges: provider.supportedUsageRanges,
                                             credentialPageURL: provider.credentialPageURL)
         return ProviderState(descriptor: descriptor,
-                             range: .last24Hours,
+                             range: provider.supportedUsageRanges.first ?? .last24Hours,
                              isConfigured: credentialStore.credential(for: provider.id) != nil,
                              balance: nil,
                              usage: nil,
