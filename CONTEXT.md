@@ -30,6 +30,8 @@ NetworkMonitor / macMonitor — macOS 菜单栏应用。本文档定义项目术
 - 测试：`swift run --disable-sandbox --build-system native TestRunner`，内存 SQLite，无 XCTest
 - Open Design 额度接口只认浏览器 Cookie（`__Secure-better-auth.session_token`），Bearer 一律 401；用量接口只接受最近 7 天窗口（超窗或终点在未来都 400 `invalid_workspace_usage_time_range`），**汇总必须读顶层 `summary` / `totalCount`，不要翻页**
 - 系统监控：CPU 功耗恒为 0（不可得）、风扇转速在 Apple Silicon 不可得，UI 用「—」表达，**不填假值**；恒不可得项还有 CPU 频率绝对值、GPU 独立温度、电池健康度百分比、Wi-Fi SSID/BSSID，一律不出该项、不留空位
+- **Wi-Fi 链路的 nil 不是 0**：CoreWLAN 在 Wi-Fi 关闭 / 未连接 / 无接口时返回 0 等占位值，采样器一律折成 `nil`，两处 UI 都不许显示「0 dBm」或「极佳」；`ssid()` / `bssid()` 需定位授权，不申请、不调用
+- **P 核 P-state 与本机无关**：IOReport `CPU Stats` 的 residency 是 **mach ticks**（与进程 CPU% 同一个时基坑），且同名通道会重复出现、**必须按数组下标读**；更关键的是本机 P 核稳态只有 IDLE / 满性能两态，非 IDLE 占比约等于 CPU 利用率，故**已判定不接入**，不要按「16 态聚合 4 档」的老结论重开
 - 磁盘速率必须按 `IORegistryEntryGetRegistryEntryID` 配对（按数组索引会串号出负速率）；内存页大小用 `host_page_size()` 动态取（Apple Silicon 16KiB / Intel 4KiB）
 - **进程 CPU% 的时基是 mach ticks 不是纳秒**：`proc_pidinfo(PROC_PIDTASKINFO)` 的 `pti_total_user/system` 单位是 tick，Apple Silicon `mach_timebase_info = 125/3`（1 tick ≈ 41.67 ns）。按纳秒直接换算会**系统性偏小 41.67 倍**（3 线程自旋实测误算 7.2% vs 正确 298.0%）。nsPerTick 必须运行时读取，禁止硬编码（Intel 是 1/1）。详见 [进程 CPU 百分比时基换算](docs/踩坑/运行时/进程CPU百分比时基换算.md)
 - **IOReport 单位混排**：`Energy Model` 组同一批通道里混着 uJ / nJ / mJ；有值的 `GPU Energy` 是 **nJ**，恒为 0 的 `CPU Energy` 标的是 mJ。单位一律读通道自带 label 换算，**禁止硬编码量纲**（否则出「0.29 kW」这种荒谬读数）

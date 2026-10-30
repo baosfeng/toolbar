@@ -30,7 +30,7 @@
 | 剪贴板历史 | 全局快捷键面板、模糊搜索、Paste Stack 顺序粘贴、图片原图落盘 |
 | 局域网文件互传 | UDP 发现 + HTTP 传输 + 扫码接收 + PIN 配对，支持断点续传 |
 | Token 用量监控 | 菜单面板「Token」tab：DSH 会话事件流（zstd）增量索引，今日/本周/累计、按小时与按天趋势、项目与模型分布、缓存复用率；同会话多版本文件按内容键去重，折叠区给摘要 |
-| 系统监控 | 菜单面板「系统」tab：顶部四联（CPU/GPU/内存/负载）+ 五卡（CPU 双序列与每核、GPU、压力=负载三线+进程 Top-3、内存四段、磁盘容量/速率/IOPS/繁忙度）+ 底部 20pt 状态带（SoC 温度·电池环·估功耗）；免 root 采样（host_processor_info / host_statistics64 / IOAccelerator / IOBlockStorageDriver / IOHID / IOReport / libproc / IOPS），不可得项降级为「—」 |
+| 系统监控 | 菜单面板「系统」tab：顶部四联（CPU/GPU/内存/负载）+ 五卡（CPU 双序列与每核、GPU、压力=负载三线+进程 Top-3、内存四段、磁盘容量/速率/IOPS/繁忙度）+ 底部 20pt 四段状态带（SoC 温度·电池环·Wi-Fi·估功耗）；网络页另有一条 20pt Wi-Fi 链路条（RSSI/信道/速率/档位点，与状态带同源）。免 root 采样（host_processor_info / host_statistics64 / IOAccelerator / IOBlockStorageDriver / IOHID / IOReport / libproc / IOPS / CoreWLAN），不可得项降级为「—」 |
 
 ## 开发指南
 → [编码规范 skill](.agents/skills/toolbar-coding-standards/SKILL.md)（规范权威来源，**规范更新一律写入 skill，不另建独立规范文档**）
