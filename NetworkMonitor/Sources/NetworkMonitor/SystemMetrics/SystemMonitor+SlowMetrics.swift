@@ -3,8 +3,8 @@ import NetworkMonitorCore
 
 // MARK: - 慢节拍指标采集（拆出主文件）
 //
-// 拆出原因：主文件负责调度与 1 秒档指标，本文件负责 5 秒档的四项
-// （负载 / 进程 Top-N / GPU 功耗 / 电池），两者职责独立，拆开后都远离 15 KiB 门禁。
+// 拆出原因：主文件负责调度与 1 秒档指标，本文件负责 5 秒档的五项
+// （负载 / 进程 Top-N / GPU 功耗 / 电池 / Wi-Fi 链路），两者职责独立，拆开后都远离 15 KiB 门禁。
 //
 // **只有一个定时器**：「5 秒档」不是另起 Timer，而是由 SystemMonitor.poll() 按
 // 上次慢采时间判断是否本帧顺带采集。采集仍跑在同一个后台串行队列上。
@@ -26,6 +26,8 @@ struct SlowMetricResult: Sendable {
     let load: LoadSnapshot?
     let processes: ProcessResourceSnapshot?
     let battery: BatterySnapshot?
+    /// Wi-Fi 链路；无接口 / 关闭 / 未连接为 nil（降级不是失败）
+    let wifi: WiFiLinkSnapshot?
     /// GPU 功耗（瓦）；首帧或 IOReport 不可用为 nil
     let gpuPowerWatts: Double?
     let nextBaselines: SlowMetricBaselines
@@ -98,9 +100,15 @@ extension SystemMonitor {
         // 电池：无电池机型（台式机）不算故障，只在读不到时静默降级
         let battery = SystemBatterySampler.snapshot()
 
+        // Wi-Fi 链路：无接口 / Wi-Fi 关闭 / 未连接 / RSSI 占位值都是降级，**不是失败**
+        // （只在 issues 里记一次性 debug 提示，不进 failures，不刷 warning）
+        let wifi = SystemWiFiLinkSampler.snapshot()
+        issues.append(contentsOf: wifi.issues)
+
         return SlowMetricResult(load: load.value,
                                 processes: processes,
                                 battery: battery,
+                                wifi: wifi.value,
                                 gpuPowerWatts: gpuPower,
                                 nextBaselines: nextBaselines,
                                 failures: failures,

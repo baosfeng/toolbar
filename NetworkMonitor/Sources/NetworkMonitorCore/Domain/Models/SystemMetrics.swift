@@ -25,6 +25,8 @@ public struct SystemMetricsSnapshot: Sendable, Equatable {
     public let processes: ProcessResourceSnapshot?
     /// 电池与电源（无电池机型 / 读取失败时为 nil）
     public let battery: BatterySnapshot?
+    /// Wi-Fi 链路（无 Wi-Fi 接口 / Wi-Fi 关闭 / 未连接时为 nil，不是 0）
+    public let wifi: WiFiLinkSnapshot?
 
     public init(timestamp: Date = Date(),
                 cpu: CPUSnapshot? = nil,
@@ -34,7 +36,8 @@ public struct SystemMetricsSnapshot: Sendable, Equatable {
                 thermal: ThermalSnapshot? = nil,
                 load: LoadSnapshot? = nil,
                 processes: ProcessResourceSnapshot? = nil,
-                battery: BatterySnapshot? = nil) {
+                battery: BatterySnapshot? = nil,
+                wifi: WiFiLinkSnapshot? = nil) {
         self.timestamp = timestamp
         self.cpu = cpu
         self.gpu = gpu
@@ -44,6 +47,7 @@ public struct SystemMetricsSnapshot: Sendable, Equatable {
         self.load = load
         self.processes = processes
         self.battery = battery
+        self.wifi = wifi
     }
 }
 

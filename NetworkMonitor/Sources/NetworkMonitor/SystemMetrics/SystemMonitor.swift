@@ -110,6 +110,7 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
         let carriedLoad = snapshot?.load
         let carriedProcesses = snapshot?.processes
         let carriedBattery = snapshot?.battery
+        let carriedWiFi = snapshot?.wifi
         let carriedPower = snapshot?.thermal?.powerWatts
 
         queue.async { [weak self] in
@@ -190,7 +191,10 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
                                                      thermal: thermal,
                                                      load: slowResult?.load ?? carriedLoad,
                                                      processes: slowResult?.processes ?? carriedProcesses,
-                                                     battery: slowResult?.battery ?? carriedBattery)
+                                                     battery: slowResult?.battery ?? carriedBattery,
+                                                     // Wi-Fi 用 map 而不是 ??：慢采到点时必须用本帧结果，
+                                                     // 断网 / Wi-Fi 关闭要让链路指标真的消失，不能沿用旧值
+                                                     wifi: slowResult.map { $0.wifi } ?? carriedWiFi)
             let nextCPUBaseline = currentTicks.map { CPUTickBaseline(ticks: $0) }
             let nextDiskBaseline = currentTransfers
             let nextSlowBaselines = slowResult?.nextBaselines ?? slowBaselines
