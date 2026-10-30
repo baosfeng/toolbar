@@ -37,15 +37,26 @@ extension MenuPanelController {
     /// 历史按序列压缩：某一帧缺该项（如首帧 CPU 为 nil）就跳过该点，不影响其余序列。
     func renderSystem() {
         content.updateSystem(systemMonitor?.snapshot, notifySize: popover.isShown)
-        content.systemPane.updateHistories(cpu: historyValues { $0.cpu?.totalUsage },
-                                   gpu: historyValues { $0.gpu?.utilization },
-                                   memory: historyValues { snapshot in
-                                       guard let memory = snapshot.memory, memory.total > 0 else { return nil }
-                                       return Double(memory.used) / Double(memory.total)
-                                   },
-                                   diskRead: historyValues { $0.disk?.readBytesPerSecond },
-                                   diskWrite: historyValues { $0.disk?.writeBytesPerSecond })
-        // 温度卡显隐由设置页开关驱动（偏好默认关闭：Core 的 defaultVisibleItems 不含温度）
+        // 两处必须同时改：这里少补一位，对应曲线就永远拿不到点（不显示、也不报错）
+        let diskBusy = historyValues { $0.disk?.busyFraction }
+        content.systemPane.updateHistories(
+            cpu: historyValues { $0.cpu?.totalUsage },
+            cpuSystem: historyValues { $0.cpu?.systemUsage },
+            gpu: historyValues { $0.gpu?.utilization },
+            memory: historyValues { snapshot in
+                guard let memory = snapshot.memory, memory.total > 0 else { return nil }
+                return Double(memory.used) / Double(memory.total)
+            },
+            diskRead: historyValues { $0.disk?.readBytesPerSecond },
+            diskWrite: historyValues { $0.disk?.writeBytesPerSecond },
+            diskReadIOPS: historyValues { $0.disk?.readIOPS },
+            diskWriteIOPS: historyValues { $0.disk?.writeIOPS }
+        )
+        content.systemPane.updateDiskBusyTip(busyPeakPercent: diskBusy.max().map {
+            Int(($0 * 100).rounded())
+        })
+        // 温度卡显隐由设置页开关驱动（偏好默认开启：Core 的 defaultVisibleItems 含温度，
+        // 温度走 IOHID 读取，取不到按 nil 降级，不影响其余卡片）
         if let systemPreferences {
             content.systemPane.setShowsThermalCard(systemPreferences.isPanelItemVisible(.thermal))
         }

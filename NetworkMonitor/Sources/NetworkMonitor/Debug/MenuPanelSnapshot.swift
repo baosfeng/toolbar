@@ -153,26 +153,8 @@ enum MenuPanelSnapshot {
             panel.updateToken(tokenSnapshot, notifySize: false)
         }
         if tab == .system {
-            // 系统页：NM_SNAPSHOT_SYSTEM_MODE 控制三种取证态
-            //   full（默认）完整数据 / empty 整体 nil 空态 / nogpu GPU 为 nil 降级态
-            switch ProcessInfo.processInfo.environment["NM_SNAPSHOT_SYSTEM_MODE"] ?? "full" {
-            case "empty":
-                break   // 不注入：验证 snapshot=nil 的空态
-            case "nogpu":
-                panel.updateSystem(SnapshotFixtures.systemSnapshot(gpu: nil), notifySize: false)
-            default:
-                panel.updateSystem(SnapshotFixtures.systemSnapshot(), notifySize: false)
-            }
-            let histories = SnapshotFixtures.systemHistories()
-            panel.systemPane.updateHistories(cpu: histories.cpu,
-                                             gpu: histories.gpu,
-                                             memory: histories.memory,
-                                             diskRead: histories.diskRead,
-                                             diskWrite: histories.diskWrite)
-            // 与线上链路一致：按 Core 偏好默认值应用温度卡显隐（验证默认即 6 卡）
-            let showsThermal = SystemMonitorPreferences().isPanelItemVisible(.thermal)
-            panel.systemPane.setShowsThermalCard(showsThermal)
-            logger.info("系统页温度卡偏好：\(showsThermal)")
+            // 系统页装配已拆到 MenuPanelSnapshot+SystemPage.swift（主文件贴顶）
+            applySystemPage(to: panel)
         }
         panel.select(tab: tab)
         return panel

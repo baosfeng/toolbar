@@ -15,10 +15,14 @@ extension SystemPaneView {
         return row
     }
 
-    /// CPU 卡：左 60 秒面积图 + 右每核柱阵（柱阵不写字，悬停出核号与占比）
+    /// CPU 卡：左 60 秒叠加面积图 + 右每核柱阵（柱阵不写字，悬停出核号与占比）
+    ///
+    /// 用户态 / 系统态两枚图例挂在卡头、与标题同行（零新增行高）。
     func makeCPUCard() -> NSView {
-        cpuCard.toolTip = "CPU 利用率 = 1 减空闲占比，1 秒采样差分；左侧为最近 60 秒面积趋势；"
-            + "右侧每核柱阵按 P 核在前、E 核在后排列，悬停可看单核占用"
+        cpuCard.toolTip = SystemPaneTip.cpu
+        cpuCard.setHeaderAccessory(cpuSplit)
+        // 系统态带与卡头图例色块必须同源：两处各写一份就会「图例深、图上浅」
+        cpuArea.overlayColor = SystemPaneStyle.systemUsageBand
         let row = NSStackView(views: [cpuArea, coreGrid])
         row.orientation = .horizontal
         row.alignment = .top
@@ -31,8 +35,7 @@ extension SystemPaneView {
 
     /// GPU 卡：环形利用率 + 60 秒折线 + 显存细条（显存不可得显示「—」）
     func makeGPUCard() -> NSView {
-        gpuCard.toolTip = "GPU 利用率为设备性能计数器读数；折线为最近 60 秒趋势；"
-            + "统一内存机型无显存总量，只显示已用显存（取不到时显示「—」）"
+        gpuCard.toolTip = SystemPaneTip.gpu
         let sparklineRow = NSStackView(views: [gpuRing, gpuSparkline])
         sparklineRow.orientation = .horizontal
         sparklineRow.alignment = .centerY
@@ -58,28 +61,17 @@ extension SystemPaneView {
         return gpuCard
     }
 
-    /// 内存卡：分段堆叠条 + 压力徽标 + SWAP 一行
+    /// 内存卡：四段堆叠条 + 压力徽标 + 四段数值与换出量一行
     func makeMemoryCard() -> NSView {
-        memoryCard.toolTip = "内存已用 = wired + compressed + active；堆叠条自左至右为非压缩已用 / 压缩内存 / 空闲；"
-            + "圆点为系统内存压力（绿正常、黄警告、红严重）；快照未拆分 wired/active，故合并为一段显示"
-        let barRow = NSStackView(views: [memoryBar, pressureDot])
+        memoryCard.toolTip = SystemPaneTip.memory
+        memoryCard.setHeaderAccessory(pressureDot)
+        let barRow = NSStackView(views: [memoryBar])
         barRow.orientation = .horizontal
         barRow.alignment = .centerY
         barRow.spacing = 6
-        memoryBar.widthAnchor.constraint(equalTo: barRow.widthAnchor, constant: -14).isActive = true
+        memoryBar.widthAnchor.constraint(equalTo: barRow.widthAnchor).isActive = true
 
-        let swapRow = NSStackView(views: [
-            MenuPanelLabel.text("SWAP", font: MenuPanelStyle.smallValueFont,
-                                color: MenuPanelStyle.tertiaryText),
-            MenuPanelLabel.spacer(),
-            memorySwapLabel,
-        ])
-        swapRow.orientation = .horizontal
-        swapRow.alignment = .centerY
-        swapRow.spacing = 6
-        memorySwapLabel.setContentHuggingPriority(.required, for: .horizontal)
-
-        let content = NSStackView(views: [barRow, swapRow])
+        let content = NSStackView(views: [barRow, memorySplit])
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 6
@@ -90,16 +82,30 @@ extension SystemPaneView {
         return memoryCard
     }
 
-    /// 磁盘卡：读写双色曲线（共坐标系）+ 容量条 + 读写速率
+    /// 磁盘卡：卡头繁忙度微条 + 读写双色曲线（共坐标系）+ 容量条 + 读写速率与 IOPS
     func makeDiskCard() -> NSView {
-        diskCard.toolTip = "读/写速率为 1 秒采样差分（系统未提供时显示「—」）；两条曲线共用同一纵轴；"
-            + "容量条为已用 / 总量"
-        let ratesRow = NSStackView(views: [diskReadLabel, MenuPanelLabel.spacer(), diskWriteLabel])
+        // 繁忙度峰值随历史刷新补进说明（见 updateDiskBusyTip），此处给基础口径
+        diskCard.toolTip = SystemPaneTip.disk(busyPeakPercent: nil)
+        // IOPS 虚线用的灰阶口径集中在 SystemPaneStyle，避免与样式表各写一份
+        diskSparkline.primaryOverlayColor = SystemPaneStyle.iopsPrimary
+        diskSparkline.secondaryOverlayColor = SystemPaneStyle.iopsSecondary
+        let busyRow = NSStackView(views: [diskBusyLabel, diskBusyTrack])
+        busyRow.orientation = .horizontal
+        busyRow.alignment = .centerY
+        busyRow.spacing = 4
+        diskBusyTrack.setContentHuggingPriority(.required, for: .horizontal)
+        diskBusyTrack.widthAnchor.constraint(equalToConstant: 22).isActive = true
+        diskCard.setHeaderAccessory(busyRow)
+
+        let ratesRow = NSStackView(views: [diskReadIOPSLabel, diskReadLabel,
+                                           MenuPanelLabel.spacer(),
+                                           diskWriteIOPSLabel, diskWriteLabel])
         ratesRow.orientation = .horizontal
-        ratesRow.alignment = .centerY
-        ratesRow.spacing = 8
-        diskReadLabel.setContentHuggingPriority(.required, for: .horizontal)
-        diskWriteLabel.setContentHuggingPriority(.required, for: .horizontal)
+        ratesRow.alignment = .firstBaseline
+        ratesRow.spacing = 4
+        for label in [diskReadIOPSLabel, diskReadLabel, diskWriteIOPSLabel, diskWriteLabel] {
+            label.setContentHuggingPriority(.required, for: .horizontal)
+        }
 
         let content = NSStackView(views: [diskSparkline, diskCapacityTrack, ratesRow])
         content.orientation = .vertical
@@ -121,9 +127,7 @@ extension SystemPaneView {
 
     /// 温度卡：CPU 温度 hero（>85°C 警示色）+ GPU 温度 / 功耗
     func makeThermalCard() -> NSView {
-        thermalCard.toolTip = "温度取自 SMC 传感器；CPU 超过 85°C 转入警示色。"
-            + "右侧「GPU — · —」依次是 GPU 温度、整机功耗：本机两者都取不到（Apple Silicon 上"
-            + "GPU 温度与整机功耗未暴露 SMC 键），因此都显示「—」；风扇转速同样不可得，不单列"
+        thermalCard.toolTip = SystemPaneTip.thermal
         let row = NSStackView(views: [thermalValueLabel, thermalUnitLabel,
                                       MenuPanelLabel.spacer(), thermalDetailLabel])
         row.orientation = .horizontal

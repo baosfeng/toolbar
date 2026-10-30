@@ -46,6 +46,23 @@ enum SystemPaneFormat {
         SystemMetricsFormatting.byteRateText(value)
     }
 
+    /// 每秒操作数（IOPS）— 纯数值 + 单位，nil 显示「—」（首帧无基线，不显示 0）
+    static func iops(_ value: Double?) -> String {
+        guard let value, value.isFinite else { return placeholder }
+        return String(format: "%.0f op/s", max(0, value))
+    }
+
+    /// 容量（GB，1 位小数，不带单位）— 内存四段数值行用，单位写在卡片 toolTip
+    static func gigabytes(_ value: UInt64) -> String {
+        String(format: "%.1f", Double(value) / 1_073_741_824)
+    }
+
+    /// 0...1 比例原值（进度条用）；nil 或非有限值返回 0
+    static func unitFraction(_ value: Double?) -> Double {
+        guard let value, value.isFinite else { return 0 }
+        return min(max(value, 0), 1)
+    }
+
     /// 温度数值（不含度符号，单位由独立标签显示）
     static func temperatureNumber(_ celsius: Double?) -> String {
         guard let celsius, celsius.isFinite else { return placeholder }
@@ -145,6 +162,8 @@ final class SystemCardView: NSView {
     /// 内容区（各卡向此追加行）
     private let contentStack = NSStackView()
     private let trailingLabel: NSTextField
+    /// 卡头第三槽（图例 / 徽标等附属件），位于标题与右侧补充之间
+    private let headerAccessorySlot = NSStackView()
 
     init(title: String, trailing: String = "") {
         trailingLabel = MenuPanelLabel.text(trailing,
@@ -155,10 +174,14 @@ final class SystemCardView: NSView {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
 
-        let header = NSStackView(views: [titleLabel, MenuPanelLabel.spacer(), trailingLabel])
+        headerAccessorySlot.orientation = .horizontal
+        headerAccessorySlot.alignment = .centerY
+        headerAccessorySlot.spacing = 4
+        let header = NSStackView(views: [titleLabel, headerAccessorySlot,
+                                         MenuPanelLabel.spacer(), trailingLabel])
         header.orientation = .horizontal
         header.alignment = .centerY
-        header.spacing = 6
+        header.spacing = 5
 
         contentStack.orientation = .vertical
         contentStack.alignment = .leading
@@ -201,5 +224,16 @@ final class SystemCardView: NSView {
     /// 更新右侧补充文案
     func updateTrailing(_ text: String) {
         trailingLabel.stringValue = text
+    }
+
+    /// 在卡头装入附属件（图例 / 状态徽标）——与标题同行，不新增行高
+    ///
+    /// 位置在标题之后、弹性占位之前；重复调用替换上一件，避免同一槽位堆叠。
+    func setHeaderAccessory(_ view: NSView) {
+        for existing in headerAccessorySlot.arrangedSubviews {
+            headerAccessorySlot.removeArrangedSubview(existing)
+            existing.removeFromSuperview()
+        }
+        headerAccessorySlot.addArrangedSubview(view)
     }
 }

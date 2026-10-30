@@ -39,7 +39,7 @@ public final class SystemMonitorPreferences: Sendable {
 
     // MARK: 面板显示项
 
-    /// 面板是否显示某项；未设置时按默认值（温度默认关闭）
+    /// 面板是否显示某项；未设置时按默认值（五项全部默认开启，含温度：走 IOHID 读取，取不到按 nil 降级）
     public func isPanelItemVisible(_ item: PanelItem) -> Bool {
         let key = Key.panelPrefix + item.rawValue
         guard storage.object(forKey: key) != nil else {

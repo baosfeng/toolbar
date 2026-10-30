@@ -38,9 +38,13 @@ enum SnapshotFixtures {
     ///
     /// - Parameters:
     ///   - gpu: 传 nil 构造「GPU 不可用」降级态；默认给利用率与已用显存（本机无显存总量）
+    ///   - pressure: 内存压力等级；警告 / 紧张会点亮堆叠条内描边，用于核对压力态表达
     static func systemSnapshot(gpu: GPUSnapshot? = GPUSnapshot(utilization: 0.41,
                                                                memoryUsed: 1_600_000_000,
-                                                               memoryTotal: nil)) -> SystemMetricsSnapshot {
+                                                               memoryTotal: nil),
+                               pressure: MemoryPressureLevel = .normal) -> SystemMetricsSnapshot {
+        // user + system 必须等于 total：卡头用户态由 total − system 现算，
+        // 夹具若自相矛盾会让取证图看着对、口径却错
         SystemMetricsSnapshot(
             cpu: CPUSnapshot(totalUsage: 0.37,
                              perCore: [0.12, 0.08, 0.62, 0.71, 0.44, 0.55, 0.38, 0.66, 0.29, 0.51],
@@ -49,30 +53,48 @@ enum SnapshotFixtures {
                              userUsage: 0.22,
                              systemUsage: 0.15),
             gpu: gpu,
-            memory: MemorySnapshot(used: 11_200_000_000,
-                                   total: 16_000_000_000,
-                                   pressure: .normal,
-                                   swapUsed: 512_000_000,
+            // 四段按 16 GiB 物理内存的比例给：内核 3.6 / 活跃 6.4 / 压缩 1.2 / 空闲 4.8（GiB）；
+            // used 必须等于前三段之和，否则卡片会显示「四段之和 ≠ 已用」（口径自相矛盾）
+            memory: MemorySnapshot(used: 12_025_908_428,
+                                   total: 17_179_869_184,
+                                   pressure: pressure,
+                                   swapUsed: 0,
                                    swapTotal: 2_000_000_000,
-                                   compressed: 1_400_000_000),
+                                   compressed: 1_288_490_188,
+                                   active: 6_871_947_674,
+                                   wired: 3_865_470_566,
+                                   inactive: 1_610_612_736),
+            // IOPS / 繁忙度给「高 IOPS、低字节」的小文件随机 IO 量级（最容易被吞吐读数骗过去）
             disk: DiskSnapshot(used: 320_000_000_000,
                                total: 494_000_000_000,
                                readBytesPerSecond: 8_400_000,
-                               writeBytesPerSecond: 2_100_000),
+                               writeBytesPerSecond: 2_100_000,
+                               readIOPS: 128,
+                               writeIOPS: 41,
+                               busyFraction: 0.12),
             // GPU 温度 / 功耗 / 风扇本机恒不可得，默认只给 CPU 温度（与实机一致）
             thermal: ThermalSnapshot(cpuTemperatureCelsius: 56)
         )
     }
 
-    /// 系统页各曲线示意数据（CPU / GPU / 内存为 0...1 比例，磁盘为字节/秒）
-    static func systemHistories() -> (cpu: [Double], gpu: [Double], memory: [Double],
-                                      diskRead: [Double], diskWrite: [Double]) {
+    /// 系统页各曲线示意数据（CPU / GPU / 内存为 0...1 比例，磁盘速率为字节/秒，IOPS 为次/秒）
+    ///
+    /// CPU 系统态序列与总量同相位但恒小于总量：叠加带厚度即系统态占比，
+    /// 若两条各自独立随机会出现「带比总量还高」的假读数。
+    static func systemHistories() -> (cpu: [Double], cpuSystem: [Double], gpu: [Double],
+                                      memory: [Double], diskRead: [Double], diskWrite: [Double],
+                                      diskReadIOPS: [Double], diskWriteIOPS: [Double]) {
         let cpu = history(base: 0.16, amplitude: 0.42).map { min(1, $0) }
+        // 系统态占比与快照卡头同口径（15% ÷ 37% ≈ 0.41），图例与带厚才对得上
+        let cpuSystem = cpu.map { $0 * 0.41 }
         let gpu = history(base: 0.10, amplitude: 0.35).map { min(1, $0) }
         let memory = history(base: 0.52, amplitude: 0.16).map { min(1, $0) }
         let read = history(base: 2_000_000, amplitude: 9_000_000)
         let write = history(base: 600_000, amplitude: 3_000_000)
-        return (cpu, gpu, memory, read, write)
+        // IOPS 与速率同相位（同一批 IO 的两面），量级按对数刻度可辨
+        let readIOPS = history(base: 90, amplitude: 260).map { max(0, $0) }
+        let writeIOPS = history(base: 30, amplitude: 110).map { max(0, $0) }
+        return (cpu, cpuSystem, gpu, memory, read, write, readIOPS, writeIOPS)
     }
 
     /// 活跃进程示意数据（进程名真实 → 可验证 NSWorkspace 真实图标解析）

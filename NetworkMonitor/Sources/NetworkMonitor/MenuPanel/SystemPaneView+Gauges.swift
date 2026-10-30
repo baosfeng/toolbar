@@ -195,14 +195,19 @@ final class SystemRingView: NSView {
 
 // MARK: - 堆叠条
 
-/// 分段堆叠条 — 按 `total` 归一化；圆角裁剪保证首尾圆润，段间不额外留缝
+/// 分段堆叠条 — 按 `total` 归一化；圆角裁剪保证首尾圆润，段间留 1pt 缝便于分段识别
+///
+/// 内存卡用四段：wired / active / compressed 三段实色 + free 段传 `NSColor.clear`
+/// （留空露出轨道底色，即「空闲」），四段之和等于物理内存总量。
+/// 压力态（警告 / 紧张）额外给整条轨道 1pt 内描边：只靠卡头徽标时，
+/// 视线落在条形上根本看不出「紧张」，08 冻结版就是这么表达的。
 final class SystemStackedBarView: NSView {
 
     /// 单个分段
     struct Segment {
         /// 分段数值（与 `total` 同单位）
         let value: Double
-        /// 分段颜色（语义色 + alpha）
+        /// 分段颜色（语义色 + alpha；传 `.clear` 表示该段留空）
         let color: NSColor
     }
 
@@ -218,7 +223,18 @@ final class SystemStackedBarView: NSView {
         }
     }
 
-    init(height: CGFloat = 8) {
+    /// 压力态轨道描边级别（normal 不描边）
+    var pressureLevel: SystemPressureDotView.Level = .normal {
+        didSet {
+            guard pressureLevel != oldValue else { return }
+            needsDisplay = true
+        }
+    }
+
+    /// 段间缝隙（0 = 紧贴）
+    private static let segmentGap: CGFloat = 1
+
+    init(height: CGFloat = 9) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         heightAnchor.constraint(equalToConstant: height).isActive = true
@@ -232,21 +248,49 @@ final class SystemStackedBarView: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        let radius = bounds.height / 2
-        let clipPath = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
+        let clipPath = NSBezierPath(roundedRect: bounds, xRadius: 2, yRadius: 2)
         clipPath.addClip()
         MenuPanelStyle.trackColor.setFill()
         bounds.fill()
 
-        guard total > 0, total.isFinite else { return }
+        guard total > 0, total.isFinite else {
+            drawPressureStroke()
+            return
+        }
+        // 段间缝隙从可用宽度里扣：否则累计间隙会把最后一段挤出可视区
+        let visible = segments.filter { $0.value.isFinite && $0.value > 0 }
+        guard !visible.isEmpty else {
+            drawPressureStroke()
+            return
+        }
+        let usable = max(0, bounds.width - Self.segmentGap * CGFloat(visible.count - 1))
         var x = bounds.minX
-        for segment in segments {
-            let ratio = segment.value.isFinite ? min(1, max(0, segment.value / total)) : 0
-            let width = bounds.width * CGFloat(ratio)
-            guard width > 0 else { continue }
+        for segment in visible {
+            let ratio = min(1, max(0, segment.value / total))
+            let width = usable * CGFloat(ratio)
             segment.color.setFill()
             NSRect(x: x, y: bounds.minY, width: width, height: bounds.height).fill()
-            x += width
+            x += width + Self.segmentGap
+        }
+        drawPressureStroke()
+    }
+
+    /// 压力态内描边 — 1pt 沿轨道内侧，不遮四段色块（内缩半线宽避免被裁切）
+    private func drawPressureStroke() {
+        guard let color = pressureStrokeColor else { return }
+        let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2)
+        path.lineWidth = 1
+        color.setStroke()
+        path.stroke()
+    }
+
+    /// 压力等级 → 描边色（正常 / 未知不描边，语义与卡头圆点一致）
+    private var pressureStrokeColor: NSColor? {
+        switch pressureLevel {
+        case .warning: return .systemYellow
+        case .critical: return .systemRed
+        case .normal, .unknown: return nil
         }
     }
 }

@@ -29,6 +29,8 @@ final class SystemPaneView: MenuPanelPaneView {
     let cpuCard = SystemCardView(title: "CPU")
     let cpuArea = SystemAreaChartView()
     let coreGrid = SystemCoreBarGridView()
+    // 卡头双图例（用户态 / 系统态）：与标题同行，不占新增行高
+    let cpuSplit = SystemUsageSplitView()
 
     // MARK: GPU 卡
 
@@ -46,9 +48,8 @@ final class SystemPaneView: MenuPanelPaneView {
     let memoryCard = SystemCardView(title: "内存")
     let memoryBar = SystemStackedBarView()
     let pressureDot = SystemPressureDotView()
-    let memorySwapLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
-                                              font: MenuPanelStyle.smallValueFont,
-                                              color: MenuPanelStyle.secondaryText)
+    // 四段数值行（内核对齐原型「单行四段 + 换出量」，不另起一行）
+    let memorySplit = SystemMemorySplitView()
 
     // MARK: 磁盘卡
 
@@ -57,12 +58,24 @@ final class SystemPaneView: MenuPanelPaneView {
     let diskCapacityTrack = MenuPanelTrackView(fillColor: MenuPanelStyle.accentColor)
     // 速率文字用高对比灰阶（accent / 橙作 9pt 文字在浅色下只有 3.4:1 / 2.0:1）；
     // 读 / 写 的颜色区分改由曲线承担（读 accent、写橙）
-    let diskReadLabel = MenuPanelLabel.text("读 " + SystemPaneFormat.placeholder,
+    let diskReadLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                             font: MenuPanelStyle.smallValueFont,
                                             color: MenuPanelStyle.secondaryText)
-    let diskWriteLabel = MenuPanelLabel.text("写 " + SystemPaneFormat.placeholder,
+    let diskWriteLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
                                              font: MenuPanelStyle.smallValueFont,
                                              color: MenuPanelStyle.secondaryText)
+    // IOPS 是速率之外的次要编码：9pt 三级灰（不承担颜色区分，颜色留给曲线）
+    let diskReadIOPSLabel = MenuPanelLabel.text("读 " + SystemPaneFormat.placeholder,
+                                                font: MenuPanelStyle.smallValueFont,
+                                                color: MenuPanelStyle.tertiaryText)
+    let diskWriteIOPSLabel = MenuPanelLabel.text("写 " + SystemPaneFormat.placeholder,
+                                                 font: MenuPanelStyle.smallValueFont,
+                                                 color: MenuPanelStyle.tertiaryText)
+    // 卡头繁忙度微条：22pt 宽的细条 + 「忙 xx%」，配色沿用磁盘语义橙（原型 --disk-w）
+    let diskBusyLabel = MenuPanelLabel.text("忙 " + SystemPaneFormat.placeholder,
+                                            font: MenuPanelStyle.smallValueFont,
+                                            color: MenuPanelStyle.tertiaryText)
+    let diskBusyTrack = MenuPanelTrackView(fillColor: .systemOrange)
 
     // MARK: 温度卡
 
@@ -129,15 +142,24 @@ final class SystemPaneView: MenuPanelPaneView {
     }
 
     /// 注入各图表历史 — 未传入的序列保持原样
+    ///
+    /// CPU 两段必须同时注入才算「双序列」：只给 `cpu` 时面积图退回单序列画法
+    /// （叠加层长度不等会被忽略，曲线照常显示，不会错位成假曲线）。
     func updateHistories(cpu: [Double]? = nil,
+                         cpuSystem: [Double]? = nil,
                          gpu: [Double]? = nil,
                          memory: [Double]? = nil,
                          diskRead: [Double]? = nil,
-                         diskWrite: [Double]? = nil) {
+                         diskWrite: [Double]? = nil,
+                         diskReadIOPS: [Double]? = nil,
+                         diskWriteIOPS: [Double]? = nil) {
         if let cpu {
             let points = SystemChartDrawing.sanitized(cpu)
             cpuTile.update(history: points)
             cpuArea.values = points
+        }
+        if let cpuSystem {
+            cpuArea.overlayValues = SystemChartDrawing.sanitized(cpuSystem)
         }
         if let gpu {
             let points = SystemChartDrawing.sanitized(gpu)
@@ -152,6 +174,12 @@ final class SystemPaneView: MenuPanelPaneView {
         }
         if let diskWrite {
             diskSparkline.secondaryValues = SystemChartDrawing.sanitized(diskWrite)
+        }
+        if let diskReadIOPS {
+            diskSparkline.primaryOverlayValues = SystemChartDrawing.sanitized(diskReadIOPS)
+        }
+        if let diskWriteIOPS {
+            diskSparkline.secondaryOverlayValues = SystemChartDrawing.sanitized(diskWriteIOPS)
         }
     }
 
