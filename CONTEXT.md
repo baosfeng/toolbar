@@ -15,6 +15,9 @@ NetworkMonitor / macMonitor — macOS 菜单栏应用。本文档定义项目术
 | **用量聚合** | Open Design `/billing/usage` 顶层 `summary` + `totalCount` 为全范围汇总（与分页 `limit` 无关） | 明细列表 |
 | **Token 用量** | DSH 会话事件流中 `assistant/message` 的 `usage` 聚合（未缓存输入 / 输出 / 缓存读），按 Asia/Shanghai 分桶 | token 统计、消耗量 |
 | **会话去重** | 同一会话目录的 v0/v3/v4 多版本文件按内容键（time + model + 四项计数）合并；`seq` 跨版本会重启，不可作键 | 去重、合并 |
+| **系统指标快照** | `SystemMetricsSnapshot`（timestamp + cpu/gpu/memory/disk/thermal 全可选）：某项不可得就 nil，UI 显示「—」，不隐藏整卡 | 状态对象、监控数据 |
+| **首帧基线** | 差分类指标（CPU 利用率、磁盘读写速率、GPU 利用率）首帧只建基线、返回 nil 而非 0，第二次起才有值 | 预热、初始化 |
+| **P/E 核顺序** | 每核利用率下标 **E 核在前、P 核在后**（实测 `ioreg cluster-type`），分组一律走 `splitCores` | 大小核、异构核 |
 
 ## 关键事实（易错点）
 
@@ -23,3 +26,5 @@ NetworkMonitor / macMonitor — macOS 菜单栏应用。本文档定义项目术
 - `NetworkMonitorCore` 禁止 import AppKit；依赖方向 App → Core
 - 测试：`swift run --disable-sandbox --build-system native TestRunner`，内存 SQLite，无 XCTest
 - Open Design 额度接口只认浏览器 Cookie（`__Secure-better-auth.session_token`），Bearer 一律 401；用量接口只接受最近 7 天窗口（超窗或终点在未来都 400 `invalid_workspace_usage_time_range`），**汇总必须读顶层 `summary` / `totalCount`，不要翻页**
+- 系统监控：CPU 功耗恒为 0（不可得）、风扇转速在 Apple Silicon 不可得，UI 用「—」表达，**不填假值**
+- 磁盘速率必须按 `IORegistryEntryGetRegistryEntryID` 配对（按数组索引会串号出负速率）；内存页大小用 `host_page_size()` 动态取（Apple Silicon 16KiB / Intel 4KiB）

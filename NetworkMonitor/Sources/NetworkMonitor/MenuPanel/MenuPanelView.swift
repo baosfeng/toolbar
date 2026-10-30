@@ -24,7 +24,7 @@ protocol MenuPanelViewDelegate: AnyObject {
 
 // MARK: - 面板根视图
 
-/// 菜单栏面板根视图 — 顶部细分段三 tab + 互斥内容区
+/// 菜单栏面板根视图 — 顶部细分段六 tab + 互斥内容区
 ///
 /// 背景是**不透明**的 `NSColor.windowBackgroundColor`（跟随系统外观），不再叠 NSVisualEffectView 材质：
 /// 真实 popover 合成下 `.popover` 材质会把背景压成中灰，与语义文字色对比度不足（实机截图打回）。
@@ -32,7 +32,7 @@ protocol MenuPanelViewDelegate: AnyObject {
 /// 内容区包在 `NSScrollView` 里：高度仍 clamp ≤520pt，但内容超出（进程变多 / 字体放大 / 多语言）
 /// 时改为垂直滚动而不是被裁掉；隐式滚动条（overlay + autohides）。
 /// 键盘：`←/→` 切页、`Tab`/`↑`/`↓` 在可点击行间移动、`Return`/`Space` 触发、
-/// `1/2/3` 直接切页、`Esc` 收起、`⌘Q` 退出、`⌘,` 打开统一设置窗口。
+/// `1...N` 直接切页（N = 分段数）、`Esc` 收起、`⌘Q` 退出、`⌘,` 打开统一设置窗口。
 final class MenuPanelView: NSView {
 
     weak var delegate: MenuPanelViewDelegate?
@@ -45,6 +45,7 @@ final class MenuPanelView: NSView {
     let transferPane = TransferPaneView()
     let billingPane = BillingPaneView()
     let tokenPane = TokenPaneView()
+    let systemPane = SystemPaneView()
 
     /// 开机自启动当前状态（设置菜单勾选态，由控制器同步）
     var launchAtStartupEnabled = false
@@ -72,6 +73,7 @@ final class MenuPanelView: NSView {
         paneStack.addArrangedSubview(transferPane)
         paneStack.addArrangedSubview(billingPane)
         paneStack.addArrangedSubview(tokenPane)
+        paneStack.addArrangedSubview(systemPane)
         paneStack.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.hasVerticalScroller = true
@@ -117,7 +119,7 @@ final class MenuPanelView: NSView {
         tabBar.widthAnchor.constraint(equalTo: headerStack.widthAnchor, constant: -32).isActive = true
         scrollView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         // 各页都撑满面板内容宽度（NSStackView 的 leading 对齐不会自动拉伸子视图）
-        for pane in [networkPane, clipboardPane, transferPane, billingPane, tokenPane] {
+        for pane in [networkPane, clipboardPane, transferPane, billingPane, tokenPane, systemPane] {
             pane.widthAnchor.constraint(equalTo: paneStack.widthAnchor).isActive = true
         }
 
@@ -208,6 +210,7 @@ final class MenuPanelView: NSView {
         transferPane.isHidden = currentTab != .transfer
         billingPane.isHidden = currentTab != .credits
         tokenPane.isHidden = currentTab != .token
+        systemPane.isHidden = currentTab != .system
         tabBar.selected = currentTab
     }
 
@@ -219,51 +222,14 @@ final class MenuPanelView: NSView {
         case .transfer: return transferPane
         case .credits: return billingPane
         case .token: return tokenPane
+        case .system: return systemPane
         }
     }
 
     // MARK: - 数据更新（由控制器调用）
-
-    /// 实时速率（1 秒）
-    func updateSpeeds(down: Double, up: Double, downHistory: [Double], upHistory: [Double]) {
-        networkPane.updateSpeeds(down: down, up: up, downHistory: downHistory, upHistory: upHistory)
-    }
-
-    /// 今日流量 + 近 6 日柱状图（5 秒）
-    func updateTraffic(todayRx: UInt64, todayTx: UInt64,
-                       dailyBars: [MenuPanelMetrics.DailyTrafficBar]) {
-        networkPane.updateTraffic(todayRx: todayRx, todayTx: todayTx, dailyBars: dailyBars)
-        delegate?.menuPanelViewDidChangeContent(self)
-    }
-
-    /// 活跃进程 Top5（5 秒）
-    func updateProcesses(_ processes: [ProcessNetUsage]) {
-        networkPane.updateProcesses(processes)
-        delegate?.menuPanelViewDidChangeContent(self)
-    }
-
-    /// 剪贴板最近条目（事件驱动 + 打开面板时强制刷新）
-    func updateClipboardItems(_ items: [ClipboardItem]) {
-        clipboardPane.update(items: items)
-        setFocus(index: nil)
-        delegate?.menuPanelViewDidChangeContent(self)
-    }
-
-    /// 额度页快照（状态管理器回调）
-    func updateBilling(_ snapshot: BillingMonitor.Snapshot, notifySize: Bool = true) {
-        billingPane.update(snapshot)
-        if notifySize {
-            delegate?.menuPanelViewDidChangeContent(self)
-        }
-    }
-
-    /// Token 页快照（索引事件回调）
-    func updateToken(_ snapshot: HarnessUsageSnapshot, notifySize: Bool = true) {
-        tokenPane.update(snapshot)
-        if notifySize {
-            delegate?.menuPanelViewDidChangeContent(self)
-        }
-    }
+    //
+    // 各分页的数据转发已拆到 `MenuPanelView+DataUpdates.swift`：
+    // 主文件贴近单文件 15 KiB 上限，接入系统页前先行拆分。
 
     /// 清除键盘焦点（面板收起时调用）
     func resetKeyboardFocus() {

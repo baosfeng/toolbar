@@ -44,13 +44,24 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     private let monitor: any NetworkMonitoringService
     private let processMonitor: any ProcessNetworkMonitoringService
     private let trafficTracker: any TrafficTrackingService
-    private let repository: any ClipboardRepository
+    // 放宽为 internal：数据源绑定扩展（+DataSources）的剪贴板刷新要读
+    let repository: any ClipboardRepository
     let paster: ClipboardPaster
     let transferController: TransferController?
     /// 额度页状态管理器（nil = 未装配计费链路）
     let billingMonitor: BillingMonitor?
     /// Token 页数据服务（nil = 未装配 DSH 索引链路）
     let harnessUsage: (any HarnessUsageServicing)?
+    /// 系统指标采样服务（nil = 未装配系统监控链路）
+    // 放宽为 internal：系统页刷新扩展（MenuPanelController+SystemMetrics）要读
+    let systemMonitor: (any SystemMonitoringService)?
+    /// 系统监控偏好（采样周期 / 面板显示项）
+    let systemPreferences: SystemMonitorPreferences?
+    /// 系统指标历史（60 点环形缓冲，1 秒采样）
+    // 不使用 private(set)：系统页刷新扩展跨文件 append
+    var systemHistory = SystemMetricsHistory()
+    /// 上次系统页视图刷新时间（扩展里读写，故为 internal）
+    var lastSystemRefresh: Date = .distantPast
     let storage: any KeyValueStorage
     let logger: LoggingService
     /// 开机自启动开关（与设置页共用同一份 SMAppService 逻辑）
@@ -78,7 +89,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
 #endif
     /// 最近一次收起时间 — 用于吞掉「点击状态栏按钮先触发 transient 收起、再触发按钮动作」的重复开合
     private var lastCloseDate: Date = .distantPast
-    nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
+    // 放宽为 internal：数据源绑定扩展（+DataSources）负责注册 / 读取
+    nonisolated(unsafe) var clipboardObserver: NSObjectProtocol?
     // 放宽为 internal：数据绑定扩展要注册 / 移除
     nonisolated(unsafe) var harnessObserver: NSObjectProtocol?
 
@@ -92,6 +104,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
          transferController: TransferController? = nil,
          billingMonitor: BillingMonitor? = nil,
          harnessUsage: (any HarnessUsageServicing)? = nil,
+         systemMonitor: (any SystemMonitoringService)? = nil,
+         systemPreferences: SystemMonitorPreferences? = nil,
          storage: any KeyValueStorage = AppContext.shared.storage,
          logger: LoggingService = AppContext.shared.logger) {
         self.monitor = networkMonitor
@@ -102,6 +116,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         self.transferController = transferController
         self.billingMonitor = billingMonitor
         self.harnessUsage = harnessUsage
+        self.systemMonitor = systemMonitor
+        self.systemPreferences = systemPreferences
         self.storage = storage
         self.logger = logger
         super.init()
@@ -158,31 +174,6 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         }
     }
 
-    /// Token 页刷新：先渲染已有快照，再后台按需索引（首轮索引不阻塞面板）
-    func refreshToken() {
-        guard let harnessUsage else { return }
-        content.updateToken(harnessUsage.snapshot(), notifySize: popover.isShown)
-        harnessUsage.refreshIfNeeded()
-    }
-
-    /// 强制重建 Token 索引（点刷新按钮）
-    func rebuildTokenIndex() {
-        harnessUsage?.rebuildIndex()
-    }
-
-    private func observeClipboardChanges() {
-        clipboardObserver = NotificationCenter.default.addObserver(
-            forName: AppEvents.clipboardChanged, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                // 面板收起时不做渲染，下次打开会强制全量刷新
-                guard self.popover.isShown else { return }
-                self.refreshClipboard()
-            }
-        }
-    }
-
     // MARK: - 显示 / 收起
 
     /// 状态栏按钮点击入口：已展开则收起，否则在按钮下方展开
@@ -228,6 +219,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         billingMonitor?.refresh()
         guard popover.isShown else { return }
         sampleHistory()
+        // 系统页：每秒推进历史，视图按 5 秒节流刷新（内部再判一次展开态，重复无害）
+        systemTick()
         content.updateSpeeds(down: max(monitor.downloadSpeed, 0),
                              up: max(monitor.uploadSpeed, 0),
                              downHistory: downHistory,
@@ -248,6 +241,9 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
                              upHistory: upHistory)
         refreshMidFrequency()
         refreshClipboard()
+        // 系统页：打开面板立即采一帧再渲染（首帧 CPU/磁盘速率为 nil，显示「—」）
+        systemMonitor?.poll()
+        refreshSystem()
         // 额度页：打开面板强制刷新一次（monitor 内部处理未配置/退避）
         billingMonitor?.refresh(force: true)
         // Token 页：先用库里已有快照渲染，再触发后台增量索引（不阻塞面板）
@@ -270,17 +266,6 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         content.launchAtStartupEnabled = isLaunchAtStartupSaved
         // 额度：中频分支 5 秒调用一次，monitor 内部 60 秒节流，不会打满 provider 限流
         billingMonitor?.refresh()
-    }
-
-    /// 剪贴板刷新：仓储按时间倒序取最近 5 条
-    private func refreshClipboard() {
-#if DEBUG
-        if forceEmptyDataForEvidence {
-            content.updateClipboardItems([])
-            return
-        }
-#endif
-        content.updateClipboardItems(repository.fetchClipboardItems(kind: nil, limit: 5))
     }
 
 #if DEBUG

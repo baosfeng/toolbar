@@ -41,6 +41,8 @@ extension AppCoordinator {
                 }
                 return SettingsTransferPane(service: service, logger: self.logger)
             },
+            // 系统监控：偏好走 Core 的 SystemMonitorPreferences（与面板共用同一实现）
+            .system: { SettingsSystemPane(preferences: SystemMonitorPreferences()) },
             .about: { SettingsAboutPane() },
         ]
         return SettingsWindow(factories: factories, logger: logger)

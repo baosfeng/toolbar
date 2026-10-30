@@ -45,6 +45,7 @@ runClipboardRelativeTimeTests()
 
 // MARK: - 菜单面板取数口径
 runMenuPanelMetricsTests()
+runSystemMetricsTests()
 
 // MARK: - 局域网文件互传
 runTransferTests()

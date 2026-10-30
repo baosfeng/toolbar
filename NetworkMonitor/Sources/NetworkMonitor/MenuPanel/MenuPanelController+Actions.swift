@@ -76,6 +76,11 @@ extension MenuPanelController: MenuPanelViewDelegate {
         if view.currentTab == .token {
             harnessUsage?.refreshIfNeeded()
         }
+        // 切到系统页：立即采一帧再渲染，避免看到上一次打开时的旧值
+        if view.currentTab == .system {
+            systemMonitor?.poll()
+            refreshSystem()
+        }
     }
 
     func menuPanelViewDidRequestClose(_ view: MenuPanelView) {

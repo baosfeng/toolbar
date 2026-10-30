@@ -26,6 +26,8 @@ public final class AppCoordinator {
     private var trafficPersistenceTimer: Timer?
     /// DSH Token 统计服务（会话扫描 + SQLite 索引 + 快照）
     private var harnessUsageService: (any HarnessUsageServicing)?
+    /// 系统指标监控服务（装配细节见 AppCoordinator+SystemMonitor）
+    private(set) var systemMonitor: (any SystemMonitoringService)?
 
     // MARK: - 剪贴板历史
 
@@ -135,6 +137,10 @@ public final class AppCoordinator {
         let harnessUsage = HarnessUsageService(scanner: harnessScanner, store: databaseManager, logger: logger)
         harnessUsageService = harnessUsage
 
+        // 6d. 系统监控链路（CPU / GPU / 内存 / 磁盘 / 温度；采样由菜单栏 1 秒链驱动）
+        let systemContext = makeSystemMonitor()
+        systemMonitor = systemContext.monitor
+
         // 7. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
         let manager = MenuBarManager(
             networkMonitor: networkMonitor,
@@ -144,7 +150,9 @@ public final class AppCoordinator {
             paster: clipboardPaster,
             transferController: transfer,
             billingMonitor: billingMonitor,
-            harnessUsage: harnessUsage
+            harnessUsage: harnessUsage,
+            systemMonitor: systemContext.monitor,
+            systemPreferences: systemContext.preferences
         )
         manager.onOpenClipboardHistory = { [weak self] in self?.clipboardPanel.toggle() }
         manager.onOpenSettings = { [weak self] section in self?.settingsWindow?.show(section: section) }

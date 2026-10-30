@@ -61,6 +61,7 @@ enum MenuPanelEvidence {
         case "network": return .network
         case "clipboard": return .clipboard
         case "token": return .token
+        case "system": return .system
         default: return nil
         }
     }

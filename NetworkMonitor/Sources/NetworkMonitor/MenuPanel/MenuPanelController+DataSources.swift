@@ -30,4 +30,45 @@ extension MenuPanelController {
             }
         }
     }
+
+    // MARK: - 剪贴板
+
+    /// 注册剪贴板变更通知（从主文件搬来：主文件贴近 15 KiB 上限）
+    func observeClipboardChanges() {
+        clipboardObserver = NotificationCenter.default.addObserver(
+            forName: AppEvents.clipboardChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // 面板收起时不做渲染，下次打开会强制全量刷新
+                guard self.popover.isShown else { return }
+                self.refreshClipboard()
+            }
+        }
+    }
+
+    /// 剪贴板刷新：仓储按时间倒序取最近 5 条
+    func refreshClipboard() {
+#if DEBUG
+        if forceEmptyDataForEvidence {
+            content.updateClipboardItems([])
+            return
+        }
+#endif
+        content.updateClipboardItems(repository.fetchClipboardItems(kind: nil, limit: 5))
+    }
+
+    // MARK: - Token
+
+    /// Token 页刷新：先渲染已有快照，再后台按需索引（首轮索引不阻塞面板）
+    func refreshToken() {
+        guard let harnessUsage else { return }
+        content.updateToken(harnessUsage.snapshot(), notifySize: popover.isShown)
+        harnessUsage.refreshIfNeeded()
+    }
+
+    /// 强制重建 Token 索引（点刷新按钮）
+    func rebuildTokenIndex() {
+        harnessUsage?.rebuildIndex()
+    }
 }

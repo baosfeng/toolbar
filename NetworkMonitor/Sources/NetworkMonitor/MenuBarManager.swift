@@ -6,7 +6,7 @@ import NetworkMonitorCore
 /// 菜单栏 UI 总控制器 — 状态栏网速显示 + 下拉面板生命周期
 ///
 /// 状态栏只显示 ↑↓ 网速（`StatusBarView`）；点击按钮展开 `MenuPanelController` 的
-/// NSPopover 自定义面板（网络 / 剪贴板 / 系统三页），不再使用 NSMenu。
+/// NSPopover 自定义面板（网络 / 剪贴板 / 传送 / 额度 / Token / 系统六页），不再使用 NSMenu。
 @MainActor
 final class MenuBarManager: NSObject {
 
@@ -15,6 +15,11 @@ final class MenuBarManager: NSObject {
     private let processMonitor: any ProcessNetworkMonitoringService
     private let panel: MenuPanelController
     private let logger: LoggingService
+    /// 系统指标采样服务（nil = 未装配；采样频率跟随偏好周期）
+    private let systemMonitor: (any SystemMonitoringService)?
+    /// 系统指标采样周期（秒）— 由偏好给出，1 秒链按此节流
+    private let systemSampleInterval: TimeInterval
+    private var lastSystemPoll: Date = .distantPast
     private var timer: Timer?
 
     /// 剪贴板历史面板入口（由组合根装配）
@@ -32,9 +37,14 @@ final class MenuBarManager: NSObject {
          transferController: TransferController? = nil,
          billingMonitor: BillingMonitor? = nil,
          harnessUsage: (any HarnessUsageServicing)? = nil,
+         systemMonitor: (any SystemMonitoringService)? = nil,
+         systemPreferences: SystemMonitorPreferences? = nil,
          logger: LoggingService = AppContext.shared.logger) {
         self.monitor = networkMonitor
         self.processMonitor = processMonitor
+        self.systemMonitor = systemMonitor
+        self.systemSampleInterval = systemPreferences?.sampleInterval
+            ?? SystemMonitorPreferences.defaultSampleInterval
         self.logger = logger
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.panel = MenuPanelController(networkMonitor: networkMonitor,
@@ -45,6 +55,8 @@ final class MenuBarManager: NSObject {
                                          transferController: transferController,
                                          billingMonitor: billingMonitor,
                                          harnessUsage: harnessUsage,
+                                         systemMonitor: systemMonitor,
+                                         systemPreferences: systemPreferences,
                                          logger: logger)
         super.init()
 
@@ -127,6 +139,12 @@ final class MenuBarManager: NSObject {
             statusItem.button?.attributedTitle = title
         }
 
+        // 系统指标采样：按偏好周期节流（poll 内部防重入，采集在后台串行队列执行）
+        let now = Date()
+        if now.timeIntervalSince(lastSystemPoll) >= systemSampleInterval {
+            lastSystemPoll = now
+            systemMonitor?.poll()
+        }
         // 进程采样（内部 3 秒节流 + 后台队列执行，不阻塞主线程）
         processMonitor.poll()
         // 面板自身按 1 秒 / 5 秒分层刷新（收起时内部直接返回）

@@ -2,13 +2,14 @@ import AppKit
 
 // MARK: - 面板分页枚举
 
-/// 面板四个分页
+/// 面板分页（顺序即数字键 1...N 与 ←/→ 循环顺序）
 enum MenuPanelTab: Int, CaseIterable {
     case network
     case clipboard
     case transfer
     case credits
     case token
+    case system
 
     /// 分段标签标题
     var title: String {
@@ -18,6 +19,7 @@ enum MenuPanelTab: Int, CaseIterable {
         case .transfer: return "传送"
         case .credits: return "额度"
         case .token: return "Token"
+        case .system: return "系统"
         }
     }
 
@@ -29,6 +31,8 @@ enum MenuPanelTab: Int, CaseIterable {
         case .transfer: return "paperplane"
         case .credits: return "creditcard"
         case .token: return "chart.bar.xaxis"
+        // macOS 14+（SF Symbols 5）可用：实测本机可解析，解析失败时仅少一个图标
+        case .system: return "gauge.with.dots.needle.67percent"
         }
     }
 }
@@ -104,9 +108,11 @@ final class MenuTabBarView: NSView {
 
     /// 分段内容布局：字体、图标尺寸、间距、标题宽度
     ///
-    /// 五段后每段约 52.8pt（264 / 5），12pt 字 + 12pt 图标的「剪贴板」会越界：
-    /// 统一降到 11pt 字 / 10pt 图标 / 3pt 间距，再按可用宽度把图标与间距压到 0，
-    /// 仍不够时退一级字号。返回的 titleSize 为最终字体下的测量值。
+    /// 六段后每段 44pt（264 / 6）、可用 37pt（再扣分段内边距）：
+    /// 「系统」两字 11pt 实测 21.87pt，带 10pt 图标总宽 34.87pt，完整不截断；
+    /// 「剪贴板」「Token」等长标签会越界，先把图标按剩余宽度压缩，
+    /// 压到 5pt 以下已不可辨认时干脆隐藏图标、只留居中文字（避免「残影」），
+    /// 仍不够时退到 10pt 字号。返回的 titleSize 为最终字体下的测量值。
     private func layout(tab: MenuPanelTab,
                         isSelected: Bool,
                         availableWidth: CGFloat) -> (font: NSFont, iconSize: CGFloat, gap: CGFloat, titleSize: NSSize) {
@@ -119,7 +125,9 @@ final class MenuTabBarView: NSView {
         var gap: CGFloat = 3
         var contentWidth = iconSize + gap + titleSize.width
         if contentWidth > availableWidth {
-            iconSize = max(0, availableWidth - titleSize.width - 2)
+            let squeezed = max(0, availableWidth - titleSize.width - 2)
+            // 5pt 以下的图标已不可辨认，隐藏它让文字居中，仍完整可读
+            iconSize = squeezed >= 5 ? squeezed : 0
             gap = iconSize > 0 ? 2 : 0
             contentWidth = iconSize + gap + titleSize.width
         }
@@ -153,7 +161,7 @@ final class MenuTabBarView: NSView {
     }
 
 #if DEBUG
-    /// 快照自证专用：五段标题在各自可用宽度下的实测内容宽度（pt）
+    /// 快照自证专用：各段标题在各自可用宽度下的实测内容宽度（pt）
     static func segmentMetrics() -> [(title: String, content: CGFloat, available: CGFloat)] {
         let barWidth = MenuPanelStyle.contentWidth - 32
         let segmentWidth = barWidth / CGFloat(MenuPanelTab.allCases.count)
