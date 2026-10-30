@@ -15,9 +15,12 @@ NetworkMonitor / macMonitor — macOS 菜单栏应用。本文档定义项目术
 | **用量聚合** | Open Design `/billing/usage` 顶层 `summary` + `totalCount` 为全范围汇总（与分页 `limit` 无关） | 明细列表 |
 | **Token 用量** | DSH 会话事件流中 `assistant/message` 的 `usage` 聚合（未缓存输入 / 输出 / 缓存读），按 Asia/Shanghai 分桶 | token 统计、消耗量 |
 | **会话去重** | 同一会话目录的 v0/v3/v4 多版本文件按内容键（time + model + 四项计数）合并；`seq` 跨版本会重启，不可作键 | 去重、合并 |
-| **系统指标快照** | `SystemMetricsSnapshot`（timestamp + cpu/gpu/memory/disk/thermal 全可选）：某项不可得就 nil，UI 显示「—」，不隐藏整卡 | 状态对象、监控数据 |
-| **首帧基线** | 差分类指标（CPU 利用率、磁盘读写速率、GPU 利用率）首帧只建基线、返回 nil 而非 0，第二次起才有值 | 预热、初始化 |
+| **系统指标快照** | `SystemMetricsSnapshot`（timestamp + cpu/gpu/memory/disk/thermal/load/processes/battery 全可选）：某项不可得就 nil，UI 显示「—」，不隐藏整卡 | 状态对象、监控数据 |
+| **首帧基线** | 差分类指标（CPU 利用率、磁盘读写速率 / IOPS / 繁忙度、进程 CPU%、GPU 功耗）首帧只建基线、返回 nil 而非 0，第二次起才有值 | 预热、初始化 |
 | **P/E 核顺序** | 每核利用率下标 **E 核在前、P 核在后**（实测 `ioreg cluster-type`），分组一律走 `splitCores` | 大小核、异构核 |
+| **sqrt 绝对刻度** | 进程 CPU 榜条形长度 `min(1, sqrt(cpuPercent) × 13 / 100)`，满条 = 100% = 占满一个核。**不是榜首归一化**：榜首跳变会让所有条联动缩放（实测同一条 15.77% 的进度在 26.2–197.1pt 间摆动，波动 170.8pt；绝对刻度下恒 51.6pt，波动 0） | 相对刻度、按最大值归一化 |
+| **首屏预算** | `maxHeight = 520pt` 下的信息优先级分配，不是「塞进一屏」。首屏必须完整看到四联 + CPU + GPU + 压力（含 Top-3）+ 内存，磁盘与状态带可滚动 | 一屏显示、压缩排版 |
+| **估算功耗** | 状态带「估功耗」= IOReport `Energy Model` 的 `GPU Energy` 累加器差分（单位 nJ），是估算不是功耗计读数；CPU 功耗恒 0 无法合成整机功耗 | 功耗、整机功率 |
 
 ## 关键事实（易错点）
 
@@ -26,5 +29,7 @@ NetworkMonitor / macMonitor — macOS 菜单栏应用。本文档定义项目术
 - `NetworkMonitorCore` 禁止 import AppKit；依赖方向 App → Core
 - 测试：`swift run --disable-sandbox --build-system native TestRunner`，内存 SQLite，无 XCTest
 - Open Design 额度接口只认浏览器 Cookie（`__Secure-better-auth.session_token`），Bearer 一律 401；用量接口只接受最近 7 天窗口（超窗或终点在未来都 400 `invalid_workspace_usage_time_range`），**汇总必须读顶层 `summary` / `totalCount`，不要翻页**
-- 系统监控：CPU 功耗恒为 0（不可得）、风扇转速在 Apple Silicon 不可得，UI 用「—」表达，**不填假值**
+- 系统监控：CPU 功耗恒为 0（不可得）、风扇转速在 Apple Silicon 不可得，UI 用「—」表达，**不填假值**；恒不可得项还有 CPU 频率绝对值、GPU 独立温度、电池健康度百分比、Wi-Fi SSID/BSSID，一律不出该项、不留空位
 - 磁盘速率必须按 `IORegistryEntryGetRegistryEntryID` 配对（按数组索引会串号出负速率）；内存页大小用 `host_page_size()` 动态取（Apple Silicon 16KiB / Intel 4KiB）
+- **进程 CPU% 的时基是 mach ticks 不是纳秒**：`proc_pidinfo(PROC_PIDTASKINFO)` 的 `pti_total_user/system` 单位是 tick，Apple Silicon `mach_timebase_info = 125/3`（1 tick ≈ 41.67 ns）。按纳秒直接换算会**系统性偏小 41.67 倍**（3 线程自旋实测误算 7.2% vs 正确 298.0%）。nsPerTick 必须运行时读取，禁止硬编码（Intel 是 1/1）。详见 [进程 CPU 百分比时基换算](docs/踩坑/运行时/进程CPU百分比时基换算.md)
+- **IOReport 单位混排**：`Energy Model` 组同一批通道里混着 uJ / nJ / mJ；有值的 `GPU Energy` 是 **nJ**，恒为 0 的 `CPU Energy` 标的是 mJ。单位一律读通道自带 label 换算，**禁止硬编码量纲**（否则出「0.29 kW」这种荒谬读数）
