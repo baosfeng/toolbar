@@ -152,6 +152,96 @@ extension SystemPaneView {
         }
     }
 
+
+    // MARK: - 压力卡（v4）
+
+    /// 当前进程榜维度
+    var processMetric: SystemProcessListView.Metric {
+        get { processMetricStorage }
+        set { processMetricStorage = newValue }
+    }
+
+    /// 负载：三线图 + 卡头三值 + 核数参考线与量程
+    func updateLoad(_ snapshot: LoadSnapshot?) {
+        guard let snapshot else {
+            loadTile.update(value: SystemPaneFormat.placeholder, color: MenuPanelStyle.tertiaryText)
+            loadNumbers.update(short: nil, medium: nil, long: nil)
+            loadCard.updateTrailing(SystemPaneFormat.placeholder)
+            loadChart.coreCount = 0
+            loadChart.axisMaximum = 0
+            return
+        }
+        // 主数值取 1 分钟均值（最贴近「此刻压力」），单位由数值自身表达（非百分比）
+        loadTile.update(value: String(format: "%.2f", max(0, snapshot.load1)),
+                        color: MenuPanelStyle.accentColor)
+        loadNumbers.update(short: snapshot.load1, medium: snapshot.load5, long: snapshot.load15)
+        // 卡头已有三枚负载数值 + 图例，右侧只留「/10」这种极短核数标记（「核」字进 toolTip）
+        loadCard.updateTrailing(snapshot.coreCount > 0 ? "/\(snapshot.coreCount)"
+                                : SystemPaneFormat.placeholder)
+        loadChart.coreCount = max(0, snapshot.coreCount)
+        refreshLoadAxis()
+        loadCard.toolTip = SystemPaneTip.load(load: snapshot)
+    }
+
+    /// 按当前三序列峰值与核数重算纵轴（cap = max(核数 × 1.2, 峰值 × 1.15)）
+    func refreshLoadAxis() {
+        let peak = (loadChart.shortValues + loadChart.mediumValues + loadChart.longValues).max() ?? 0
+        loadChart.axisMaximum = SystemLoadChartView.axisMaximum(coreCount: loadChart.coreCount,
+                                                                peak: peak)
+    }
+
+    /// 进程榜：按当前维度排序并渲染 Top-3
+    func updateProcesses(_ snapshot: ProcessResourceSnapshot?, memoryTotal: UInt64?) {
+        processesSnapshot = snapshot
+        processesMemoryTotal = memoryTotal
+        renderProcessList()
+    }
+
+    /// 按当前维度重绘进程榜（榜单切换与数据刷新共用同一入口，避免两处口径分叉）
+    func renderProcessList() {
+        let metric = processMetric
+        processMetricLabel.stringValue = metric.title
+        processMetricLabel.toolTip = SystemPaneTip.processMetric(metric)
+        guard let snapshot = processesSnapshot else {
+            processList.update([], unavailableTip: SystemPaneTip.processUnavailable)
+            return
+        }
+        let source = metric == .cpu ? snapshot.topCPU : snapshot.topMemory
+        let rows = source.prefix(3).map { usage -> SystemProcessListView.Row in
+            switch metric {
+            case .cpu:
+                return SystemProcessListView.Row(
+                    name: usage.name,
+                    fraction: SystemProcessListView.cpuBarFraction(usage.cpuPercent),
+                    valueText: SystemProcessListView.cpuValueText(usage.cpuPercent),
+                    isOver: usage.cpuPercent > 100,
+                    tip: SystemPaneTip.processRow(usage: usage, metric: .cpu,
+                                                  memoryTotal: processesMemoryTotal))
+            case .memory:
+                return SystemProcessListView.Row(
+                    name: usage.name,
+                    fraction: SystemProcessListView.memoryBarFraction(
+                        residentBytes: usage.residentBytes, totalBytes: processesMemoryTotal ?? 0),
+                    valueText: SystemPaneFormat.bytes(usage.residentBytes),
+                    isOver: false,
+                    tip: SystemPaneTip.processRow(usage: usage, metric: .memory,
+                                                  memoryTotal: processesMemoryTotal))
+            }
+        }
+        guard !rows.isEmpty else {
+            processList.update([], unavailableTip: SystemPaneTip.processUnavailable)
+            return
+        }
+        processList.update(Array(rows), unavailableTip: SystemPaneTip.processUnavailable)
+    }
+
+    /// 电池：底部状态带（无电池机型 / 读取失败时显示「—」）
+    func updateBattery(_ snapshot: BatterySnapshot?) {
+        lastBatterySnapshot = snapshot
+        stateBand.updateBattery(snapshot)
+        stateBand.toolTip = SystemPaneTip.band(battery: snapshot, thermal: lastThermalSnapshot)
+    }
+
     /// 刷新磁盘卡说明里的「近 60 秒繁忙度峰值」— 由历史注入链路调用
     ///
     /// 界面只写当前值，峰值属于口径补充，进 toolTip；无历史（峰值 nil）时回到基础文案。
@@ -159,26 +249,14 @@ extension SystemPaneView {
         diskCard.toolTip = SystemPaneTip.disk(busyPeakPercent: busyPeakPercent)
     }
 
-    /// 温度：CPU hero（>85°C 警示色）+ GPU 温度 / 功耗
+    /// 温度与 GPU 功耗：底部状态带（温度卡在 v4 已下线）
+    ///
+    /// `powerWatts` 的语义已是 **GPU 功耗（估算）**，不是整机功耗；
+    /// 整机功耗不实现（CPU 功耗接口恒为 0，无法合成），故状态带只标「估功耗」。
     func updateThermal(_ snapshot: ThermalSnapshot?) {
-        guard let snapshot else {
-            thermalValueLabel.stringValue = SystemPaneFormat.placeholder
-            thermalValueLabel.textColor = MenuPanelStyle.tertiaryText
-            thermalDetailLabel.stringValue = SystemPaneFormat.thermalDetail(gpu: nil, power: nil)
-            return
-        }
-        let celsius = snapshot.cpuTemperatureCelsius
-        thermalValueLabel.stringValue = SystemPaneFormat.temperatureNumber(celsius)
-        if let celsius, celsius.isFinite, celsius > SystemPaneFormat.hotThreshold {
-            thermalValueLabel.textColor = NSColor.systemRed
-        } else if celsius == nil {
-            thermalValueLabel.textColor = MenuPanelStyle.tertiaryText
-        } else {
-            thermalValueLabel.textColor = .labelColor
-        }
-        thermalDetailLabel.stringValue = SystemPaneFormat.thermalDetail(
-            gpu: snapshot.gpuTemperatureCelsius,
-            power: snapshot.powerWatts
-        )
+        lastThermalSnapshot = snapshot
+        stateBand.updateTemperature(snapshot?.cpuTemperatureCelsius)
+        stateBand.updatePower(snapshot?.powerWatts)
+        stateBand.toolTip = SystemPaneTip.band(battery: lastBatterySnapshot, thermal: snapshot)
     }
 }

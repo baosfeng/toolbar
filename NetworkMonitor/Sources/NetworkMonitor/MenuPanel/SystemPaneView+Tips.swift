@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorCore
 
 // MARK: - 系统页卡片 toolTip 文案
 
@@ -41,8 +42,96 @@ enum SystemPaneTip {
         return base + "；近 60 秒繁忙度峰值 \(busyPeakPercent)%"
     }
 
-    /// 温度卡：温度来自 IOHID（非 SMC）+ GPU 温度 / 功耗 / 风扇不可得
-    static let thermal = "温度取自从 IOHIDEventSystemClient 读到的事件字段（非 SMC 键）；"
-        + "CPU（SoC）超过 85°C 转入警示色。右侧依次是 GPU 温度、功耗：Apple Silicon 上两者都取不到"
-        + "（未暴露对应 IOHID 字段），因此显示「—」；风扇转速同样不可得，不单列"
+    // MARK: v4 压力卡
+
+    /// 压力卡：负载口径 + 量程 + 进程榜口径（有负载快照时补核数与热压力）
+    static func load(load snapshot: LoadSnapshot? = nil) -> String {
+        let base = "压力 = 就绪队列多长（上半）+ 谁在吃 CPU（下半）。"
+            + "负载三线为 1 / 5 / 15 分钟指数均值（getloadavg，非百分比而是就绪队列长度）；"
+            + "虚线为核数参考位，按 核数 / 纵轴上限 的真实比例画——三线越过虚线即「有进程在排队」，"
+            + "此时 CPU% 仍可能不高（它只反映已占用时间，看不到排队）。"
+            + "纵轴不是固定 0–100%：上限 = max(核数 × 1.2, 近 60 秒峰值 × 1.15)，"
+            + "下限用核数避免低负载把噪声放大成满画布，上限用峰值让三线用满高度。"
+            + "进程榜取 proc_pidinfo 全量遍历（约 1.3ms/次），CPU% 为 1 秒差分，单进程可 >100%（多线程合法）；"
+            + "条形为 sqrt 绝对刻度（满条 = 100% = 占满一个核），只取决于该进程自身 CPU%，不随榜首联动"
+        guard let snapshot else { return base }
+        var detail = base + "。本帧核数 \(max(0, snapshot.coreCount))"
+        if snapshot.thermalState != .unknown {
+            detail += "，热压力 \(thermalStateText(snapshot.thermalState))"
+        }
+        if snapshot.isLowPowerModeEnabled {
+            detail += "，低电量模式已开启（系统会主动降频）"
+        }
+        return detail
+    }
+
+    /// 热压力等级 → 界面用词
+    private static func thermalStateText(_ state: ThermalStateLevel) -> String {
+        switch state {
+        case .nominal: return "正常"
+        case .fair: return "轻微"
+        case .serious: return "严重"
+        case .critical: return "临界"
+        case .unknown: return "未知"
+        }
+    }
+
+    /// 榜单维度说明
+    static func processMetric(_ metric: SystemProcessListView.Metric) -> String {
+        switch metric {
+        case .cpu:
+            return "CPU 榜 · 按 CPU 占用降序 · 1 秒差分（proc_pidinfo）。单进程可 >100%（多线程合法，"
+                + "如实显示原值不 clamp，超 100% 转琥珀）；条形为 sqrt 绝对刻度，满条 = 占满一个核"
+        case .memory:
+            return "内存榜 · 按常驻内存（RSS）降序；条形为 常驻 / 物理内存 的线性占比"
+        }
+    }
+
+    /// 切换按钮
+    static let processToggle = "切换榜单维度：CPU 占用降序 / 常驻内存降序"
+
+    /// 进程榜不可得
+    static let processUnavailable = "进程读数不可得 · 首帧差分需要两个采样点，"
+        + "或 proc_pidinfo 全部返回 -1（权限 / 僵尸进程）；本机实测多数进程有差分值，属正常现象"
+
+    /// 单行进程说明
+    static func processRow(usage: ProcessResourceUsage,
+                           metric: SystemProcessListView.Metric,
+                           memoryTotal: UInt64?) -> String {
+        switch metric {
+        case .cpu:
+            return "\(usage.name) · pid \(usage.pid) · CPU \(String(format: "%.2f", usage.cpuPercent))%"
+                + "（多线程可 >100%，满条即一个核）；常驻内存 \(SystemPaneFormat.bytes(usage.residentBytes))"
+        case .memory:
+            let totalText = memoryTotal.map { SystemPaneFormat.bytes($0) } ?? SystemPaneFormat.placeholder
+            return "\(usage.name) · pid \(usage.pid) · 常驻内存 \(SystemPaneFormat.bytes(usage.residentBytes))"
+                + " / 物理内存 \(totalText)；当前 CPU \(String(format: "%.1f", usage.cpuPercent))%"
+        }
+    }
+
+    // MARK: v4 底部状态带
+
+    /// 状态带：温度来源 + 电池口径 + 估算功耗 + 不可得项
+    static func band(battery: BatterySnapshot?, thermal: ThermalSnapshot?) -> String {
+        var parts = ["SoC 温度取自从 IOHIDEventSystemClient 读到的事件字段（非 SMC 键，超过 85°C 转警示色）"]
+        if let battery {
+            var batteryText = "电池电量来自 IOPSGetPowerSourceDescription 的 Current Capacity"
+            if let cycles = battery.cycleCount {
+                batteryText += "，循环次数 \(cycles) / 1000（AppleSmartBattery CycleCount / DesignCycleCount9C）"
+            }
+            batteryText += "；健康度百分比严格不可得（51 个属性里既无 BatteryHealth 也无 DesignCapacity），故只给循环次数"
+            parts.append(batteryText)
+            if let watts = battery.adapterWatts {
+                parts.append(String(format: "外接电源适配器标称 %.0f W", watts))
+            }
+        } else {
+            parts.append("电池读数不可得（本机可能无电池或 AppleSmartBattery 未暴露），显示「—」")
+        }
+        parts.append("「估功耗」为 GPU 功耗估算值（IOReport Energy Model 的 GPU Energy 累加器，单位 nJ ÷ 1e9 ÷ 窗口秒数），非精确功耗计读数；CPU 功耗恒为 0，故不合成整机功耗")
+        parts.append("GPU 独立温度与风扇转速完全不可得，不出该项")
+        if let thermal, thermal.isEmpty {
+            parts.append("本帧温度读数不可得")
+        }
+        return parts.joined(separator: "；")
+    }
 }

@@ -4,15 +4,58 @@ import AppKit
 
 extension SystemPaneView {
 
-    /// 顶部三联：CPU / GPU / 内存 等宽小格（(296 - 8) / 3 = 96pt）
+    /// 顶部四联：CPU / GPU / 内存 / 负载 等宽小格（(296 - 12) / 4 = 71pt）
+    ///
+    /// 四格比三联窄，主数值字号随之下调（见 SystemHeroTileView.compactValueFont），
+    /// 行高按原型 v4 收一档，省下的高度留给首屏的压力卡。
     func makeHeroRow() -> NSView {
-        let row = NSStackView(views: [cpuTile, gpuTile, memoryTile])
+        let row = NSStackView(views: [cpuTile, gpuTile, memoryTile, loadTile])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 4
         row.distribution = .fillEqually
-        row.heightAnchor.constraint(equalToConstant: 64).isActive = true
+        row.heightAnchor.constraint(equalToConstant: 54).isActive = true
         return row
+    }
+
+    /// 压力卡：上半负载三线（含核数参考虚线），下半进程 Top-3 横向条形
+    ///
+    /// 负载是「就绪队列多长」、进程榜是「谁在吃 CPU」，两者合起来才叫压力，
+    /// 故同卡上下排布；拆成两张卡会把首屏挤爆。
+    func makeLoadCard() -> NSView {
+        loadCard.toolTip = SystemPaneTip.load()
+        loadCard.setHeaderAccessory(loadNumbers)
+
+        let headRow = NSStackView(views: [processMetricLabel,
+                                          MenuPanelLabel.spacer(),
+                                          processToggleButton])
+        headRow.orientation = .horizontal
+        headRow.alignment = .centerY
+        headRow.spacing = 4
+        processToggleButton.target = self
+        processToggleButton.action = #selector(toggleProcessMetric)
+        processToggleButton.isBordered = false
+        processToggleButton.font = SystemPaneStyle.microFont
+        processToggleButton.contentTintColor = MenuPanelStyle.accentColor
+        processToggleButton.setButtonType(.momentaryChange)
+        processToggleButton.setAccessibilityLabel("切换进程榜维度")
+        processToggleButton.toolTip = SystemPaneTip.processToggle
+
+        let content = NSStackView(views: [loadChart, headRow, processList])
+        content.orientation = .vertical
+        content.alignment = .leading
+        content.spacing = 4
+        for subview in content.arrangedSubviews {
+            subview.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        }
+        loadCard.addContent(content)
+        return loadCard
+    }
+
+    /// 在 CPU 榜 / 内存榜之间切换并立即重绘
+    @objc func toggleProcessMetric() {
+        processMetric = (processMetric == .cpu) ? .memory : .cpu
+        renderProcessList()
     }
 
     /// CPU 卡：左 60 秒叠加面积图 + 右每核柱阵（柱阵不写字，悬停出核号与占比）
@@ -118,23 +161,10 @@ extension SystemPaneView {
         return diskCard
     }
 
-    /// 显示 / 隐藏温度卡（设置页开关驱动；隐藏后不占面板高度）
+    /// 显示 / 隐藏状态带里的温度段（设置页 PanelItem.thermal 开关的新语义）
+    ///
+    /// 温度卡在 v4 已下线：开关不再控制整张卡，而是控制底部状态带里的温度读数。
     func setShowsThermalCard(_ shows: Bool) {
-        let shouldHide = !shows
-        guard thermalCard.isHidden != shouldHide else { return }
-        thermalCard.isHidden = shouldHide
-    }
-
-    /// 温度卡：CPU 温度 hero（>85°C 警示色）+ GPU 温度 / 功耗
-    func makeThermalCard() -> NSView {
-        thermalCard.toolTip = SystemPaneTip.thermal
-        let row = NSStackView(views: [thermalValueLabel, thermalUnitLabel,
-                                      MenuPanelLabel.spacer(), thermalDetailLabel])
-        row.orientation = .horizontal
-        row.alignment = .lastBaseline
-        row.spacing = 3
-        thermalDetailLabel.setContentHuggingPriority(.required, for: .horizontal)
-        thermalCard.addContent(row)
-        return thermalCard
+        stateBand.setShowsTemperature(shows)
     }
 }

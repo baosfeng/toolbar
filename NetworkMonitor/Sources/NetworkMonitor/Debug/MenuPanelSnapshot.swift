@@ -76,6 +76,10 @@ enum MenuPanelSnapshot {
                 let url = directory.appendingPathComponent("menu-\(tab.fileNameSuffix)-\(suffix).png")
                 render(view: panel, size: size, appearanceName: appearance, to: url)
             }
+            // 系统页内容高于 520pt 视口：另出一张「滚到底」，让底部状态带可核验
+            if tab == .system, needed > MenuPanelStyle.maxHeight {
+                captureSystemScrolledBottom(directory: directory, items: items)
+            }
         }
 
         // 2. 额度页补充状态：未配置凭据 / 查询失败 + 遗留计划限额（浅色 + 深色）
@@ -99,6 +103,20 @@ enum MenuPanelSnapshot {
         SettingsSnapshot.capture(directory: directory, settings: settings)
 
         logger.info("快照完成：目录=\(directory.path)")
+    }
+
+    /// 系统页「滚到底」取证：底部状态带（温度 / 电池环 / 估功耗）只在滚动后可见，
+    /// 首屏截图必然看不到它，故单独出一张
+    private static func captureSystemScrolledBottom(directory: URL, items: [ClipboardItem]) {
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let suffix = appearance == .aqua ? "light" : "dark"
+            let panel = makeMenuPanel(tab: .system, items: items)
+            let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
+            render(view: panel, size: size, appearanceName: appearance,
+                   to: directory.appendingPathComponent("menu-system-bottom-\(suffix).png")) { view in
+                (view as? MenuPanelView)?.scrollToBottomForSnapshot()
+            }
+        }
     }
 
     /// 超高内容自证：把进程数拉到 12（内容 > 520pt），截「视口顶部」与「滚到底部」两张图，

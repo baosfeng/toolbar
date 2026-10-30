@@ -7,15 +7,16 @@ import NetworkMonitorCore
 ///
 /// 偏好一律走 Core 的 `SystemMonitorPreferences`（禁止直读 UserDefaults）：
 /// 采样周期在组合根按该值构造采样服务，修改后重启应用生效；
-/// 温度卡开关在面板每次渲染时读取，切回面板即生效。
+/// 温度开关在面板每次渲染时读取，切回面板即生效（v4 起控制底部状态带的温度段，不再是独立卡片）。
 final class SettingsSystemPane: SettingsPaneView {
 
     private let preferences: SystemMonitorPreferences
 
     private let intervalRow = SettingsRowView(title: "采样周期",
                                               subtitle: "系统指标采样间隔，修改后重启应用生效")
-    private let thermalRow = SettingsRowView(title: "面板显示温度卡",
-                                             subtitle: "温度来自 SMC 私有接口，默认关闭")
+    // v4 起温度卡已下线：温度并进底部状态带，开关语义随之变成「状态带里的温度是否显示」
+    private let thermalRow = SettingsRowView(title: "显示 SoC 温度",
+                                             subtitle: "温度读数走 IOHID 事件字段，显示在面板底部状态带，默认开启")
     private let intervalControl = NSPopUpButton(frame: .zero, pullsDown: false)
     private let thermalSwitch = NSSwitch()
 
@@ -40,7 +41,7 @@ final class SettingsSystemPane: SettingsPaneView {
 
         thermalSwitch.target = self
         thermalSwitch.action = #selector(thermalChanged)
-        thermalSwitch.setAccessibilityLabel("面板显示温度卡")
+        thermalSwitch.setAccessibilityLabel("显示 SoC 温度")
 
         intervalRow.trailingStack.addArrangedSubview(intervalControl)
         thermalRow.trailingStack.addArrangedSubview(thermalSwitch)
@@ -78,6 +79,6 @@ final class SettingsSystemPane: SettingsPaneView {
     @objc private func thermalChanged() {
         let visible = thermalSwitch.state == .on
         preferences.setPanelItemVisible(visible, for: .thermal)
-        thermalRow.update(subtitle: visible ? "面板会显示温度卡" : "面板不显示温度卡")
+        thermalRow.update(subtitle: visible ? "状态带会显示 SoC 温度" : "状态带不显示温度")
     }
 }

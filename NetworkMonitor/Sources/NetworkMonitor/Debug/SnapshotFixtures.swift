@@ -39,10 +39,22 @@ enum SnapshotFixtures {
     /// - Parameters:
     ///   - gpu: 传 nil 构造「GPU 不可用」降级态；默认给利用率与已用显存（本机无显存总量）
     ///   - pressure: 内存压力等级；警告 / 紧张会点亮堆叠条内描边，用于核对压力态表达
+    ///   - load: 负载快照；nil 用于核对「负载 + 进程榜」整块降级
+    ///   - battery: 电池快照；nil 用于核对无电池 / 电池降级态
     static func systemSnapshot(gpu: GPUSnapshot? = GPUSnapshot(utilization: 0.41,
                                                                memoryUsed: 1_600_000_000,
                                                                memoryTotal: nil),
-                               pressure: MemoryPressureLevel = .normal) -> SystemMetricsSnapshot {
+                               pressure: MemoryPressureLevel = .normal,
+                               load: LoadSnapshot? = LoadSnapshot(load1: 5.27,
+                                                                  load5: 5.51,
+                                                                  load15: 6.65,
+                                                                  coreCount: 10),
+                               battery: BatterySnapshot? = BatterySnapshot(percentage: 0.80,
+                                                                           isCharging: false,
+                                                                           isOnAC: true,
+                                                                           cycleCount: 89),
+                               processes: ProcessResourceSnapshot? = nil,
+                               showsProcesses: Bool = true) -> SystemMetricsSnapshot {
         // user + system 必须等于 total：卡头用户态由 total − system 现算，
         // 夹具若自相矛盾会让取证图看着对、口径却错
         SystemMetricsSnapshot(
@@ -72,9 +84,50 @@ enum SnapshotFixtures {
                                readIOPS: 128,
                                writeIOPS: 41,
                                busyFraction: 0.12),
-            // GPU 温度 / 功耗 / 风扇本机恒不可得，默认只给 CPU 温度（与实机一致）
-            thermal: ThermalSnapshot(cpuTemperatureCelsius: 56)
+            // GPU 温度不可得，只给 CPU 温度（与实机一致）；powerWatts 语义为 GPU 功耗（估算）
+            thermal: ThermalSnapshot(cpuTemperatureCelsius: 50, powerWatts: 0.13),
+            load: load,
+            // 显式开关而非「nil 就补默认值」：noproc 取证态要的正是「进程榜整块不可得」，
+            // 用 nil 判定会把降级态又补回默认数据，取证图与满数据态一模一样（踩过）
+            processes: showsProcesses ? (processes ?? defaultProcesses()) : nil,
+            battery: battery
         )
+    }
+
+    /// 进程榜示意数据 — CPU% 覆盖「超 100% 多线程 / 常态榜首 / 碎进程」三档，
+    /// 用于核对 sqrt 绝对刻度：条长只由自身 CPU% 决定，与榜首是谁无关。
+    static func defaultProcesses() -> ProcessResourceSnapshot {
+        let topCPU = [
+            ProcessResourceUsage(pid: 431, name: "qemu-system-aar", cpuPercent: 27.6,
+                                 residentBytes: 2_400_000_000),
+            ProcessResourceUsage(pid: 918, name: "WindowServer", cpuPercent: 22.9,
+                                 residentBytes: 1_100_000_000),
+            ProcessResourceUsage(pid: 2261, name: "Helper", cpuPercent: 19.4,
+                                 residentBytes: 340_000_000),
+            ProcessResourceUsage(pid: 77, name: "mds_stores", cpuPercent: 3.1,
+                                 residentBytes: 88_000_000),
+            ProcessResourceUsage(pid: 1502, name: "Terminal", cpuPercent: 0.9,
+                                 residentBytes: 210_000_000),
+        ]
+        let topMemory = [
+            ProcessResourceUsage(pid: 431, name: "qemu-system-aar", cpuPercent: 27.6,
+                                 residentBytes: 6_400_000_000),
+            ProcessResourceUsage(pid: 918, name: "WindowServer", cpuPercent: 22.9,
+                                 residentBytes: 1_900_000_000),
+            ProcessResourceUsage(pid: 2261, name: "Xcode", cpuPercent: 8.2,
+                                 residentBytes: 1_500_000_000),
+            ProcessResourceUsage(pid: 77, name: "Safari", cpuPercent: 3.1,
+                                 residentBytes: 900_000_000),
+            ProcessResourceUsage(pid: 1502, name: "Terminal", cpuPercent: 0.9,
+                                 residentBytes: 210_000_000),
+        ]
+        return ProcessResourceSnapshot(topCPU: topCPU, topMemory: topMemory, scannedCount: 512)
+    }
+
+    /// 高负载示意：三线远超核数（10），配合 thermalState = critical 核对「排队」表达
+    static func highLoadSnapshot() -> LoadSnapshot {
+        LoadSnapshot(load1: 78.4, load5: 64.2, load15: 41.7,
+                     coreCount: 10, thermalState: .critical)
     }
 
     /// 系统页各曲线示意数据（CPU / GPU / 内存为 0...1 比例，磁盘速率为字节/秒，IOPS 为次/秒）
@@ -83,7 +136,9 @@ enum SnapshotFixtures {
     /// 若两条各自独立随机会出现「带比总量还高」的假读数。
     static func systemHistories() -> (cpu: [Double], cpuSystem: [Double], gpu: [Double],
                                       memory: [Double], diskRead: [Double], diskWrite: [Double],
-                                      diskReadIOPS: [Double], diskWriteIOPS: [Double]) {
+                                      diskReadIOPS: [Double], diskWriteIOPS: [Double],
+                                      loadShort: [Double], loadMedium: [Double],
+                                      loadLong: [Double]) {
         let cpu = history(base: 0.16, amplitude: 0.42).map { min(1, $0) }
         // 系统态占比与快照卡头同口径（15% ÷ 37% ≈ 0.41），图例与带厚才对得上
         let cpuSystem = cpu.map { $0 * 0.41 }
@@ -94,7 +149,13 @@ enum SnapshotFixtures {
         // IOPS 与速率同相位（同一批 IO 的两面），量级按对数刻度可辨
         let readIOPS = history(base: 90, amplitude: 260).map { max(0, $0) }
         let writeIOPS = history(base: 30, amplitude: 110).map { max(0, $0) }
-        return (cpu, cpuSystem, gpu, memory, read, write, readIOPS, writeIOPS)
+        // 负载三线围核数（10）上下抖动：1m 抖得最凶、15m 最平（长窗口天然滞后），
+        // 让三线既越过参考虚线又留有回落区间——「越过即排队」的表达才看得见
+        let load1 = history(base: 8.5, amplitude: 7.0)
+        let load5 = history(base: 7.6, amplitude: 3.4)
+        let load15 = history(base: 6.6, amplitude: 1.6)
+        return (cpu, cpuSystem, gpu, memory, read, write, readIOPS, writeIOPS,
+                load1, load5, load15)
     }
 
     /// 活跃进程示意数据（进程名真实 → 可验证 NSWorkspace 真实图标解析）

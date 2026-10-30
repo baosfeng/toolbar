@@ -98,11 +98,15 @@ final class SystemHeroTileView: NSView {
     private let sparkline: SystemSparklineView
     private let captionLabel: NSTextField
 
+    /// 三联 → 四联后的主数值字号：四格等分后每格只有约 71pt 宽，
+    /// 沿用 26pt 会在「100%」这类三位数时挤掉单位，故降到 20pt（原型 v4 约 19–21pt）。
+    static let compactValueFont = NSFont.monospacedDigitSystemFont(ofSize: 20, weight: .semibold)
+
     // 默认值用 NSColor 自带语义色而非 MenuPanelStyle：默认参数表达式在
     // 非隔离上下文求值，直接引用 @MainActor 属性会被 Swift 6 拒绝（实测编译错误）
-    init(label: String, lineColor: NSColor = .controlAccentColor) {
+    init(label: String, lineColor: NSColor = .controlAccentColor, showsSparkline: Bool = true) {
         valueLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
-                                        font: MenuPanelStyle.heroFont,
+                                        font: Self.compactValueFont,
                                         color: MenuPanelStyle.tertiaryText)
         sparkline = SystemSparklineView(lineColor: lineColor, height: 12)
         captionLabel = MenuPanelLabel.text(label,
@@ -113,8 +117,13 @@ final class SystemHeroTileView: NSView {
         wantsLayer = true
         valueLabel.alignment = .center
         captionLabel.alignment = .center
+        // 无曲线的格子（负载）：数值与标签直接居中，不留空轨道
+        sparkline.isHidden = !showsSparkline
 
-        let stack = NSStackView(views: [valueLabel, sparkline, captionLabel])
+        let arranged: [NSView] = showsSparkline
+            ? [valueLabel, sparkline, captionLabel]
+            : [valueLabel, captionLabel]
+        let stack = NSStackView(views: arranged)
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 1
@@ -124,8 +133,10 @@ final class SystemHeroTileView: NSView {
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            sparkline.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
+        if showsSparkline {
+            sparkline.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
         setAccessibilityRole(.group)
         setAccessibilityLabel(label)
     }

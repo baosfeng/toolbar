@@ -50,13 +50,16 @@ extension MenuPanelController {
             diskRead: historyValues { $0.disk?.readBytesPerSecond },
             diskWrite: historyValues { $0.disk?.writeBytesPerSecond },
             diskReadIOPS: historyValues { $0.disk?.readIOPS },
-            diskWriteIOPS: historyValues { $0.disk?.writeIOPS }
+            diskWriteIOPS: historyValues { $0.disk?.writeIOPS },
+            loadShort: historyValues { $0.load?.load1 },
+            loadMedium: historyValues { $0.load?.load5 },
+            loadLong: historyValues { $0.load?.load15 }
         )
         content.systemPane.updateDiskBusyTip(busyPeakPercent: diskBusy.max().map {
             Int(($0 * 100).rounded())
         })
-        // 温度卡显隐由设置页开关驱动（偏好默认开启：Core 的 defaultVisibleItems 含温度，
-        // 温度走 IOHID 读取，取不到按 nil 降级，不影响其余卡片）
+        // 温度段显隐由设置页开关驱动（v4 起温度卡已下线，开关语义变成
+        // 「底部状态带里的温度是否显示」；偏好默认开启，取不到按 nil 降级）
         if let systemPreferences {
             content.systemPane.setShowsThermalCard(systemPreferences.isPanelItemVisible(.thermal))
         }

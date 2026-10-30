@@ -3,7 +3,7 @@ import NetworkMonitorCore
 
 // MARK: - 系统页
 
-/// 系统页 — 顶部 CPU / GPU / 内存三联 + CPU、GPU、内存、磁盘、温度五张卡
+/// 系统页 — 顶部 CPU / GPU / 内存 / 负载四联 + CPU、GPU、压力、内存、磁盘五张卡 + 底部状态带
 ///
 /// 密度优先：界面只保留数值、单位与 ≤4 字标签；所有口径说明（采样方式、不可用原因）
 /// 都写在卡片 `toolTip` 里，不占版面。
@@ -16,13 +16,16 @@ final class SystemPaneView: MenuPanelPaneView {
     // 属性为 internal（默认）：拆出的 SystemPaneView+Cards.swift 跨文件装配，
     // 同模块内无其他调用方。
 
-    // MARK: 顶部三联
+    // MARK: 顶部四联
 
-    // 配色只用项目主题单色系：CPU / GPU 走 accent 蓝的明度层级，内存走灰阶（不引入紫 / 青）
+    // 配色只用项目主题单色系：CPU / GPU / 负载走 accent 蓝的明度层级，内存走灰阶（不引入紫 / 青）
     let cpuTile = SystemHeroTileView(label: "CPU", lineColor: MenuPanelStyle.accentColor)
     let gpuTile = SystemHeroTileView(label: "GPU",
                                      lineColor: MenuPanelStyle.accentColor.withAlphaComponent(0.85))
     let memoryTile = SystemHeroTileView(label: "内存", lineColor: MenuPanelStyle.secondaryText)
+    // 负载是就绪队列长度（非百分比），单位由数值自身表达，不画迷你曲线
+    let loadTile = SystemHeroTileView(label: "负载", lineColor: SystemPaneStyle.loadMedium,
+                                      showsSparkline: false)
 
     // MARK: CPU 卡
 
@@ -77,17 +80,19 @@ final class SystemPaneView: MenuPanelPaneView {
                                             color: MenuPanelStyle.tertiaryText)
     let diskBusyTrack = MenuPanelTrackView(fillColor: .systemOrange)
 
-    // MARK: 温度卡
+    // MARK: 压力卡（负载三线 + 进程榜）
 
-    let thermalCard = SystemCardView(title: "温度")
-    let thermalValueLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
-                                                font: MenuPanelStyle.heroFont,
-                                                color: MenuPanelStyle.tertiaryText)
-    let thermalUnitLabel = MenuPanelLabel.text("°C", font: MenuPanelStyle.heroUnitFont,
-                                               color: MenuPanelStyle.secondaryText)
-    let thermalDetailLabel = MenuPanelLabel.text(SystemPaneFormat.thermalDetail(gpu: nil, power: nil),
-                                                 font: MenuPanelStyle.smallValueFont,
-                                                 color: MenuPanelStyle.secondaryText)
+    let loadCard = SystemCardView(title: "压力")
+    let loadChart = SystemLoadChartView()
+    let loadNumbers = SystemLoadNumbersView()
+    let processList = SystemProcessListView()
+    let processMetricLabel = MenuPanelLabel.text("CPU 榜", font: SystemPaneStyle.microFont,
+                                                 color: MenuPanelStyle.tertiaryText)
+    let processToggleButton = NSButton(title: "切", target: nil, action: nil)
+
+    // MARK: 底部状态带（原温度卡下线后的形态）
+
+    let stateBand = SystemStateBandView()
 
     // MARK: - 初始化
 
@@ -111,9 +116,11 @@ final class SystemPaneView: MenuPanelPaneView {
         stack.addArrangedSubview(makeHeroRow())
         stack.addArrangedSubview(makeCPUCard())
         stack.addArrangedSubview(makeGPUCard())
+        // 压力卡排在 GPU 之后：520pt 首屏要完整装下它（含 Top-3 进程）
+        stack.addArrangedSubview(makeLoadCard())
         stack.addArrangedSubview(makeMemoryCard())
         stack.addArrangedSubview(makeDiskCard())
-        stack.addArrangedSubview(makeThermalCard())
+        stack.addArrangedSubview(stateBand)
         for subview in stack.arrangedSubviews {
             subview.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
@@ -129,9 +136,12 @@ final class SystemPaneView: MenuPanelPaneView {
     func update(snapshot: SystemMetricsSnapshot?) {
         updateCPU(snapshot?.cpu)
         updateGPU(snapshot?.gpu)
+        updateLoad(snapshot?.load)
+        updateProcesses(snapshot?.processes, memoryTotal: snapshot?.memory?.total)
         updateMemory(snapshot?.memory)
         updateDisk(snapshot?.disk)
         updateThermal(snapshot?.thermal)
+        updateBattery(snapshot?.battery)
     }
 
     // MARK: - 曲线历史（由控制器注入）
@@ -152,7 +162,10 @@ final class SystemPaneView: MenuPanelPaneView {
                          diskRead: [Double]? = nil,
                          diskWrite: [Double]? = nil,
                          diskReadIOPS: [Double]? = nil,
-                         diskWriteIOPS: [Double]? = nil) {
+                         diskWriteIOPS: [Double]? = nil,
+                         loadShort: [Double]? = nil,
+                         loadMedium: [Double]? = nil,
+                         loadLong: [Double]? = nil) {
         if let cpu {
             let points = SystemChartDrawing.sanitized(cpu)
             cpuTile.update(history: points)
@@ -180,6 +193,18 @@ final class SystemPaneView: MenuPanelPaneView {
         }
         if let diskWriteIOPS {
             diskSparkline.secondaryOverlayValues = SystemChartDrawing.sanitized(diskWriteIOPS)
+        }
+        if let loadShort {
+            loadChart.shortValues = SystemChartDrawing.sanitized(loadShort)
+        }
+        if let loadMedium {
+            loadChart.mediumValues = SystemChartDrawing.sanitized(loadMedium)
+        }
+        if let loadLong {
+            loadChart.longValues = SystemChartDrawing.sanitized(loadLong)
+        }
+        if loadShort != nil || loadMedium != nil || loadLong != nil {
+            refreshLoadAxis()
         }
     }
 
@@ -216,6 +241,15 @@ final class SystemPaneView: MenuPanelPaneView {
         }
         return cores
     }
+
+    /// 进程榜当前维度（CPU 榜 / 内存榜）— internal 供 +Cards 与 +Metrics 共用
+    var processMetricStorage: SystemProcessListView.Metric = .cpu
+    /// 最近一次进程快照与物理内存总量（榜单切换时无需等下一帧）
+    var processesSnapshot: ProcessResourceSnapshot?
+    var processesMemoryTotal: UInt64?
+    /// 最近一次温度与电池快照（状态带 toolTip 需要把两者口径合并成一段说明）
+    var lastThermalSnapshot: ThermalSnapshot?
+    var lastBatterySnapshot: BatterySnapshot?
 
     /// Core 压力枚举 → 徽标级别（未知按正常显示，避免整条消失）
     func pressureLevel(_ pressure: MemoryPressureLevel) -> SystemPressureDotView.Level {
