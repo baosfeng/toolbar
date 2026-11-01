@@ -63,9 +63,9 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <key>CFBundleName</key>
     <string>NetworkMonitor</string>
     <key>CFBundleVersion</key>
-    <string>9</string>
+    <string>10</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.11.1</string>
+    <string>1.11.2</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSUIElement</key>
