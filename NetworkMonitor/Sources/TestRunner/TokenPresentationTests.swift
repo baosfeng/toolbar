@@ -159,11 +159,64 @@ private func testPaneModelMake() {
     print("✅ Token 展示模型装配（make 可见性 / 页头 / 趋势固定 14 天）works")
 }
 
+// MARK: - 主图图例（项数与形态一致）
+
+private func testBucketLegend() {
+    let stack = TokenDerive.bucketLegend(range: .today, total: sampleCurrent, prev: samplePrevious,
+                                        hourScope: .today, hourView: .stack, metric: .total)
+    assertEqual(stack.count, 4, "堆叠态图例：三段 + 累计基准")
+    assertEqual(stack.map { $0.title }, ["缓存读", "未缓存", "输出", "累计"], "堆叠态图例顺序")
+
+    let stackWeek = TokenDerive.bucketLegend(range: .d7, total: sampleCurrent, prev: samplePrevious,
+                                             hourScope: .today, hourView: .stack, metric: .total)
+    assertEqual(stackWeek.count, 3, "按天范围没有累计基准项")
+    assertEqual(stackWeek.last?.title, "输出", "按天范围末项是输出")
+
+    let compare = TokenDerive.bucketLegend(range: .today, total: sampleCurrent, prev: samplePrevious,
+                                           hourScope: .today, hourView: .compare, metric: .total)
+    assertEqual(compare.count, 2, "对比态图例只有本周期 / 对照两项")
+    assertEqual(compare.map { $0.title }, ["今日", "昨日"], "对比态图例标题")
+    assertEqual(compare.map { $0.value }, ["6K", "3K"], "对比态图例数值取总 tok")
+
+    let compareRequest = TokenDerive.bucketLegend(range: .today, total: sampleCurrent, prev: samplePrevious,
+                                                  hourScope: .today, hourView: .compare, metric: .request)
+    assertEqual(compareRequest.count, 2, "对比态切请求数后仍是两项")
+    assertEqual(compareRequest.first?.title, "今日", "对比态请求数首项仍为本周期标题")
+
+    let request = TokenDerive.bucketLegend(range: .today, total: sampleCurrent, prev: samplePrevious,
+                                           hourScope: .today, hourView: .stack, metric: .request)
+    assertEqual(request.count, 2, "请求数态图例：本周期请求 + 对照请求")
+    assertEqual(request.first?.title, "今日 请求", "请求数态首项带「请求」")
+    assertEqual(request.first?.value, "240", "请求数态首项取 request")
+
+    let noCompare = TokenDerive.bucketLegend(range: .d30, total: sampleCurrent, prev: samplePrevious,
+                                             hourScope: .today, hourView: .compare, metric: .total)
+    assertEqual(noCompare.count, 3, "近 30 天没有对照窗口，退回三段图例")
+    print("✅ 主图图例项数与形态一致（堆叠 3/4、请求 2、对比 2）works")
+}
+
+// MARK: - 分布行可跨目标构造（provide package init）
+
+private func testDistroRowInit() {
+    let row = TokenDistroRow(rank: 2, name: "deepseek-v4.1-flash", provider: "ollama",
+                             sub: "provider ollama · 占 20.3% · 命中 97.9%",
+                             amount: "3.37B", share: 0.203, colorIndex: 1)
+    assertEqual(row.rank, 2, "分布行序号")
+    assertEqual(row.name, "deepseek-v4.1-flash", "分布行名称")
+    assertEqual(row.provider, "ollama", "分布行 provider")
+    assertEqual(row.amount, "3.37B", "分布行数值")
+    assertEqual(row.share, 0.203, "分布行占比")
+    assertEqual(row.colorIndex, 1, "分布行取色序号")
+    print("✅ 分布行 package 初始化器可用（跨目标取证构造）works")
+}
+
 func runTokenPresentationTests() {
     print("\n🧪 Testing Token 页展示层（Hero / 分布 / 状态带 / 格式化 / 模型装配）...")
     testHeroAndCompare()
     testDistroRowsAndStateBand()
     testTokenFormatting()
     testPaneModelMake()
+    testBucketLegend()
+    testDistroRowInit()
     print("✅ Token 页展示层 works")
 }

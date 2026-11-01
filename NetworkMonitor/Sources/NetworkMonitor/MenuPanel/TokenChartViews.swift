@@ -7,7 +7,7 @@ import NetworkMonitorCore
 
 /// 主图：三段堆叠柱 / 请求数柱 / 本周期 vs 上一周期双折线 + 累计虚线
 ///
-/// 口径：柱高按当前序列最大值归一；对比态不画柱，只画两条折线（实线本周期、虚线对照），
+/// 口径：柱高按当前序列的单桶峰值归一（堆叠取 total、请求数取 request）；对比态不画柱，只画两条折线（实线本周期、虚线对照），
 /// 视觉按原型 `.cumlay` 的 cmpA / cmpB；每列可点开二级页（点击按 x 命中，点击区覆盖整列）。
 final class TokenBarsView: NSView {
 
@@ -60,9 +60,16 @@ final class TokenBarsView: NSView {
         needsDisplay = true
     }
 
-    /// 对比值：请求数取 request，三段取总 tok
+    /// 对比值（仅对比态用）：请求数取 request，三段取总 tok
     private func pairValue(_ bucket: TokenBucket) -> Int {
         pairMetric == .request ? bucket.request : bucket.total
+    }
+
+    /// 对比态本周期线色（请求数用 requestColor、三段总量用 uncachedColor）
+    ///
+    /// 图例取色走这里，保证「图例色块 = 折线颜色」。
+    var lineColor: NSColor {
+        pairMetric == .request ? TokenPaneStyle.requestColor : TokenPaneStyle.uncachedColor
     }
 
     // MARK: 绘制
@@ -72,11 +79,7 @@ final class TokenBarsView: NSView {
         let count = buckets.count
         let gap: CGFloat = 2
         let columnWidth = max(1, (bounds.width - gap * CGFloat(count - 1)) / CGFloat(count))
-        // 对比态按两条序列各自峰值归一（原型 cmpA / cmpB 的 scCmp = max(本期峰, 对照峰)），
-        // 柱态沿用既有求和基准不动（堆叠态与请求数态本轮冻结）
-        let base = shape == .pair ? max(seriesPeak(buckets), seriesPeak(previous), 1)
-                                  : max(metricPeak(buckets), 1)
-        let scale = max(scaleMax ?? base, 1)
+        let scale = resolvedScale()
 
         if shape == .pair {
             // 对比态不画柱（原型 #hBars 直接隐藏），整幅只有两条折线
@@ -166,7 +169,7 @@ final class TokenBarsView: NSView {
         currentPath.lineWidth = 1.6
         currentPath.lineJoinStyle = .round
         currentPath.lineCapStyle = .round
-        (pairMetric == .request ? TokenPaneStyle.requestColor : TokenPaneStyle.uncachedColor).setStroke()
+        lineColor.setStroke()
         currentPath.stroke()
     }
 
@@ -185,9 +188,32 @@ final class TokenBarsView: NSView {
         path.stroke()
     }
 
-    /// 柱态归一基准（既有口径：序列求和，非序列峰值——本轮不改）
-    private func metricPeak(_ list: [TokenBucket]) -> Int {
-        list.reduce(0) { $0 + pairValue($1) }
+    /// 单桶绘图值：堆叠态 = 三段之和（total）、请求数态 = 请求数、对比态 = 对比指标
+    ///
+    /// 与柱高 / 折线的画法同源：柱高按这个值归一，不能再另算一套口径。
+    private func barValue(_ bucket: TokenBucket) -> Int {
+        switch shape {
+        case .stack: return bucket.total
+        case .request: return bucket.request
+        case .pair: return pairValue(bucket)
+        }
+    }
+
+    /// 柱态归一基准 = 单桶峰值（不是序列求和：求和会把 24 根柱压成一个量级的零头）
+    private func columnPeak(_ list: [TokenBucket]) -> Int {
+        list.reduce(0) { Swift.max($0, barValue($1)) }
+    }
+
+    /// 实际归一化基准 = 显式 scaleMax，否则按形态取基准
+    ///
+    /// 柱态（堆叠 / 请求数）取单桶峰值；对比态取两条序列的峰值（原型 cmpA / cmpB 的 scCmp）。
+    private func resolvedScale() -> Int {
+        let base: Int
+        switch shape {
+        case .stack, .request: base = max(columnPeak(buckets), 1)
+        case .pair: base = max(seriesPeak(buckets), seriesPeak(previous), 1)
+        }
+        return max(scaleMax ?? base, 1)
     }
 
     /// 折线态归一基准：序列峰值
@@ -210,3 +236,33 @@ final class TokenBarsView: NSView {
         if onSelect != nil { addCursorRect(bounds, cursor: .pointingHand) }
     }
 }
+
+#if DEBUG
+extension TokenBarsView {
+
+    /// 快照自证（仅 DEBUG）：归一化基准 / 绘图区高度 / 每列柱高（pt）
+    ///
+    /// 柱高算式与 drawColumns 共用 resolvedScale() 与 barValue()，两处口径不会漂移。
+    func columnMetricsForSnapshot()
+        -> (shape: String, scale: Int, plotHeight: CGFloat,
+            columns: [(index: Int, value: Int, height: CGFloat)]) {
+        layoutSubtreeIfNeeded()
+        let scale = resolvedScale()
+        let plotHeight = bounds.height
+        let columns = buckets.indices.map { index -> (index: Int, value: Int, height: CGFloat) in
+            let value = barValue(buckets[index])
+            return (index, value, CGFloat(Double(value) / Double(scale) * Double(plotHeight)))
+        }
+        return (shapeName, scale, plotHeight, columns)
+    }
+
+    /// 形态名（供度量文本标记）
+    private var shapeName: String {
+        switch shape {
+        case .stack: return "stack"
+        case .request: return "request"
+        case .pair: return "pair"
+        }
+    }
+}
+#endif

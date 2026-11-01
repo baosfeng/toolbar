@@ -35,8 +35,10 @@ extension TokenPaneView {
         hourMeta.stringValue = model.bucketMeta
         hourAction.update(title: "切：" + (metric == .total ? "请求数" : "总量"))
 
+        // 对比态只在今日/近 7 天成立（近 30 天没有对照窗口），与 Core 的 bucketLegend 口径同条件
+        let comparing = hourView == .compare && range != .d30
         let shape: TokenBarsView.Shape
-        if hourView == .compare, range != .d30 {
+        if comparing {
             shape = .pair
         } else {
             shape = metric == .request ? .request : .stack
@@ -49,7 +51,8 @@ extension TokenPaneView {
                         pairMetric: metric == .request ? .request : .output,
                         accessibility: model.bucketTitle + "，每根柱可点开该时段详情")
         hourAxis.update(labels: axisLabels(for: model))
-        hourLegend.update(items: legendItems(for: model))
+        hourLegend.update(items: legendItems(for: model, comparing: comparing,
+                                             lineColor: hourBars.lineColor))
 
         trendTitle.stringValue = model.trendTitle
         trendMeta.stringValue = model.trendMeta
@@ -64,9 +67,9 @@ extension TokenPaneView {
                          text: model.hitText,
                          accessibility: "缓存命中率 " + model.hitText + "%")
         cacheLegend.update(items: [
-            (color: Optional(TokenPaneStyle.cacheColor), title: "缓存读", value: model.cacheReadText),
-            (color: Optional(TokenPaneStyle.uncachedColor), title: "未缓存", value: model.uncachedText),
-            (color: nil, title: model.hitBucketText, value: ""),
+            TokenLegendItem(color: TokenPaneStyle.cacheColor, title: "缓存读", value: model.cacheReadText),
+            TokenLegendItem(color: TokenPaneStyle.uncachedColor, title: "未缓存", value: model.uncachedText),
+            TokenLegendItem(color: nil, title: model.hitBucketText, value: "", dashed: true),
         ])
 
         projectMeta.stringValue = model.projectMeta
@@ -116,15 +119,34 @@ extension TokenPaneView {
         }
     }
 
-    /// 图例：只保留三条实体项
+    /// 图例：项数与当前形态一致，取色 / 线型与图上的画法同源
     ///
-    /// 字号提到 10pt 后第四项（累计基准）会把 296pt 宽度撑破，而「累计 776M」已在卡头 meta 里，
-    /// 虚线本身照画（showsCumulative），信息不减。
-    private func legendItems(for model: TokenPaneModel) -> [(color: NSColor?, title: String, value: String)] {
+    /// - 对比态：两项（本周期实线 + 对照虚线），不再套三段堆叠色；
+    /// - 请求数态：柱只有 requestColor 一种色，第二项是昨日对照数（虚线色块）；
+    /// - 堆叠态：缓存读 / 未缓存 / 输出三条实体项——字号提到 10pt 后第四项（累计基准）
+    ///   会把 296pt 宽度撑破，而「累计 776M」已在卡头 meta 里，虚线本身照画，信息不减。
+    private func legendItems(for model: TokenPaneModel, comparing: Bool,
+                             lineColor: NSColor) -> [TokenLegendItem] {
+        if comparing {
+            return model.bucketLegend.prefix(2).enumerated().map { index, item in
+                index == 0
+                    ? TokenLegendItem(color: lineColor, title: item.title, value: item.value)
+                    : TokenLegendItem(color: TokenPaneStyle.ghostColor, title: item.title,
+                                      value: item.value, dashed: true)
+            }
+        }
+        if metric == .request {
+            return model.bucketLegend.enumerated().map { index, item in
+                index == 0
+                    ? TokenLegendItem(color: TokenPaneStyle.requestColor, title: item.title, value: item.value)
+                    : TokenLegendItem(color: TokenPaneStyle.ghostColor, title: item.title,
+                                      value: item.value, dashed: true)
+            }
+        }
         let palette: [NSColor] = [TokenPaneStyle.cacheStackFill, TokenPaneStyle.uncachedColor,
                                   TokenPaneStyle.outputColor]
         return model.bucketLegend.prefix(palette.count).enumerated().map { index, item in
-            (color: palette[index], title: item.title, value: item.value)
+            TokenLegendItem(color: palette[index], title: item.title, value: item.value)
         }
     }
 

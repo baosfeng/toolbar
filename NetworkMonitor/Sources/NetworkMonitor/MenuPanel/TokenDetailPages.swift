@@ -279,9 +279,11 @@ final class TokenDetailPaneView: NSView {
         return head
     }
 
+    /// 键值行；stacked = 标题与数值分两行排（用于「标题 + 长说明」单行放不下的卡）
     func keyRow(_ title: String, _ value: String,
-                color: NSColor = TokenPaneStyle.secondaryText) -> NSView {
-        let row = TokenKeyRowView()
+                color: NSColor = TokenPaneStyle.secondaryText,
+                stacked: Bool = false) -> NSView {
+        let row = TokenKeyRowView(stacked: stacked)
         row.update(title: title, value: value, color: color)
         return row
     }

@@ -160,6 +160,19 @@ package struct TokenDistroRow {
     package let amount: String
     package let share: Double
     package let colorIndex: Int
+
+    /// 显式 package 初始化器：自动生成的逐成员初始化器只有 internal，
+    /// 跨目标（NetworkMonitor 的 DEBUG 取证）构造不了，所以手写一份
+    package init(rank: Int, name: String, provider: String, sub: String,
+                 amount: String, share: Double, colorIndex: Int) {
+        self.rank = rank
+        self.name = name
+        self.provider = provider
+        self.sub = sub
+        self.amount = amount
+        self.share = share
+        self.colorIndex = colorIndex
+    }
 }
 
 /// 底状态带的一格

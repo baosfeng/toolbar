@@ -180,6 +180,10 @@ enum TokenPaneSnapshot {
         if let tokenSnapshot {
             captureDistroRows(directory: directory, snapshot: tokenSnapshot)
         }
+        if let tokenSnapshot {
+            writeBarMetrics(directory: directory, snapshot: tokenSnapshot)
+            writeKeyRowMetrics(directory: directory, snapshot: tokenSnapshot)
+        }
         writeSegmentMetrics(directory: directory)
         AppContext.shared.logger.info("Token 快照：补充状态完成（加载 / 空 / 不可用 / 滚到底 / 分段宽度实测）")
     }

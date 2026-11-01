@@ -89,26 +89,15 @@ final class TokenDistroRowView: NSView {
         // 用「文字区宽度 vs 纯文本宽度」判定截断：NSTextField 的 cell 内边距会把
         // intrinsicContentSize 撑大 4pt，拿 frame 宽度直接比会漏判「刚好差 2pt」的省略。
         let nameFrame = nameLabel.convert(nameLabel.bounds, to: reference)
-        return (Self.textArea(nameLabel),
-                Self.textWidth(nameLabel.stringValue, font: nameLabel.font),
+        return (snapshotTextArea(nameLabel),
+                snapshotTextWidth(nameLabel.stringValue, font: nameLabel.font),
                 nameLabel.stringValue,
                 valueLabel.stringValue,
                 bounds.width,
                 bounds.height,
                 nameFrame.height,
-                Self.textArea(valueLabel),
-                Self.textWidth(valueLabel.stringValue, font: valueLabel.font))
-    }
-
-    /// 标签的可绘制文字宽度（去掉 cell 内边距）
-    private static func textArea(_ label: NSTextField) -> CGFloat {
-        label.cell?.drawingRect(forBounds: label.bounds).width ?? label.bounds.width
-    }
-
-    /// 完整显示所需文字宽度（按当前字体量纯文本）
-    private static func textWidth(_ text: String, font: NSFont?) -> CGFloat {
-        let size = (text as NSString).size(withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 10.5)])
-        return (size.width * 100).rounded(.up) / 100
+                snapshotTextArea(valueLabel),
+                snapshotTextWidth(valueLabel.stringValue, font: valueLabel.font))
     }
 #endif
 }
@@ -164,25 +153,46 @@ final class TokenCompareRowView: NSView {
 }
 
 /// 二级页键值行（左标签 + 右数值，可着色）
+///
+/// 两种排法，行高与字体都取自 TokenPaneStyle，不另立样式：
+/// - 单行（默认）：标题按自身宽度定宽、数值吃掉剩余宽度并尾部省略；
+/// - 堆叠（stacked）：标题独占第一行，数值整行铺开在第二行（字号降一级、颜色由调用点给），
+///   用于「标题 + 长说明」都放不下的场景——单行放不下时不该让标题或数值任一方被切。
 final class TokenKeyRowView: NSView {
 
     private let titleLabel: NSTextField
     private let valueLabel: NSTextField
 
-    init() {
+    init(stacked: Bool = false) {
         titleLabel = MenuPanelLabel.text("", font: TokenPaneStyle.keyRowTitleFont,
                                          color: TokenPaneStyle.tertiaryText)
         valueLabel = MenuPanelLabel.text("", font: TokenPaneStyle.keyRowValueFont,
                                          color: TokenPaneStyle.secondaryText)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        valueLabel.alignment = .right
-        valueLabel.setContentHuggingPriority(.required, for: .horizontal)
+        // 标题优先完整显示：标题按自身文字宽度定宽（不参与压缩），数值吃掉剩余宽度并尾部省略。
+        // 反例（改前）：「按模型」页用超长 value（provider + 占比 + 命中率）时，
+        // 值列挤压标题，标题只剩 "deeps…"；改用堆叠排法后两行各自完整。
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.usesSingleLineMode = true
+        titleLabel.setContentHuggingPriority(.required, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.defaultHigh + 1, for: .horizontal)
+        valueLabel.lineBreakMode = .byTruncatingTail
+        valueLabel.usesSingleLineMode = true
+        valueLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        valueLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        if stacked {
+            // 第二行是附属说明（provider + 占比 + 命中率），字号降一级，左对齐整行铺开
+            valueLabel.font = TokenPaneStyle.noteFont
+            valueLabel.alignment = .left
+        } else {
+            valueLabel.alignment = .right
+        }
 
-        let stack = NSStackView(views: [titleLabel, MenuPanelLabel.spacer(), valueLabel])
-        stack.orientation = .horizontal
-        stack.alignment = .firstBaseline
-        stack.spacing = 4
+        let stack = NSStackView(views: [titleLabel, valueLabel])
+        stack.orientation = stacked ? .vertical : .horizontal
+        stack.alignment = stacked ? .leading : .firstBaseline
+        stack.spacing = stacked ? 0 : 6
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -191,6 +201,12 @@ final class TokenKeyRowView: NSView {
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        if stacked {
+            // 堆叠行沿用分布行的高（TokenPaneStyle.distroRowHeight），块内行高一致
+            heightAnchor.constraint(equalToConstant: TokenPaneStyle.distroRowHeight).isActive = true
+            titleLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+            valueLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
         setAccessibilityRole(.staticText)
     }
 
@@ -203,130 +219,39 @@ final class TokenKeyRowView: NSView {
         valueLabel.textColor = color
         setAccessibilityLabel(title + " " + value)
     }
+
+#if DEBUG
+    /// 快照自证：标题 / 数值的可用与所需宽度（needed > available 即截断）
+    ///
+    /// titleHeight > rowHeight 即标题被压行；rowWidth 用于复算可用宽度。
+    func metricsForSnapshot(in reference: NSView)
+        -> (title: String, titleAvailable: CGFloat, titleNeeded: CGFloat,
+            value: String, valueAvailable: CGFloat, valueNeeded: CGFloat,
+            rowWidth: CGFloat, rowHeight: CGFloat, titleHeight: CGFloat) {
+        layoutSubtreeIfNeeded()
+        let titleFrame = titleLabel.convert(titleLabel.bounds, to: reference)
+        return (titleLabel.stringValue,
+                snapshotTextArea(titleLabel),
+                snapshotTextWidth(titleLabel.stringValue, font: titleLabel.font),
+                valueLabel.stringValue,
+                snapshotTextArea(valueLabel),
+                snapshotTextWidth(valueLabel.stringValue, font: valueLabel.font),
+                bounds.width,
+                bounds.height,
+                titleFrame.height)
+    }
+#endif
 }
 
-/// 图例行：色块 + 标题 + 数值
-final class TokenLegendRowView: NSView {
-
-    private let stack = NSStackView()
-
-    init() {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = 5
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            heightAnchor.constraint(equalToConstant: 13),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    /// items 为（色、标题、数值）；色为 nil 时画虚线色块（累计基准）
-    func update(items: [(color: NSColor?, title: String, value: String)]) {
-        for view in stack.arrangedSubviews {
-            stack.removeArrangedSubview(view)
-            view.removeFromSuperview()
-        }
-        for item in items {
-            let swatch = TokenSwatch(color: item.color)
-            stack.addArrangedSubview(swatch)
-            stack.addArrangedSubview(MenuPanelLabel.text(item.title,
-                                                         font: TokenPaneStyle.legendFont,
-                                                         color: TokenPaneStyle.tertiaryText))
-            if !item.value.isEmpty {
-                stack.addArrangedSubview(MenuPanelLabel.text(item.value,
-                                                             font: TokenPaneStyle.legendValueFont,
-                                                             color: TokenPaneStyle.secondaryText))
-            }
-        }
-        setAccessibilityLabel(items.map { $0.title + " " + $0.value }.joined(separator: "，"))
-    }
+#if DEBUG
+/// 标签的可绘制文字宽度（去掉 cell 内边距）
+fileprivate func snapshotTextArea(_ label: NSTextField) -> CGFloat {
+    label.cell?.drawingRect(forBounds: label.bounds).width ?? label.bounds.width
 }
 
-/// 图例小色块（虚线态画成一条短划线）
-final class TokenSwatch: NSView {
-
-    private let color: NSColor?
-
-    init(color: NSColor?) {
-        self.color = color
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: color == nil ? 9 : 6),
-            heightAnchor.constraint(equalToConstant: color == nil ? 1 : 6),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let color else {
-            let path = NSBezierPath()
-            path.move(to: NSPoint(x: bounds.minX, y: bounds.midY))
-            path.line(to: NSPoint(x: bounds.maxX, y: bounds.midY))
-            path.lineWidth = 1.4
-            path.setLineDash([2.4, 2], count: 2, phase: 0)
-            TokenPaneStyle.secondaryText.withAlphaComponent(0.55).setStroke()
-            path.stroke()
-            return
-        }
-        color.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 1.5, yRadius: 1.5).fill()
-    }
+/// 完整显示所需文字宽度（按当前字体量纯文本）
+fileprivate func snapshotTextWidth(_ text: String, font: NSFont?) -> CGFloat {
+    let size = (text as NSString).size(withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 10.5)])
+    return (size.width * 100).rounded(.up) / 100
 }
-
-/// 坐标轴行（等宽分列，8 / 24 个刻度都能对齐）
-final class TokenAxisView: NSView {
-
-    private let stack = NSStackView()
-    private var labels: [String] = []
-
-    init() {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.distribution = .fillEqually
-        stack.spacing = 2
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            heightAnchor.constraint(equalToConstant: 10),
-        ])
-        setAccessibilityRole(.staticText)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    func update(labels: [String]) {
-        guard labels != self.labels else { return }
-        self.labels = labels
-        for view in stack.arrangedSubviews {
-            stack.removeArrangedSubview(view)
-            view.removeFromSuperview()
-        }
-        for label in labels {
-            let field = MenuPanelLabel.text(label, font: TokenPaneStyle.axisFont,
-                                            color: TokenPaneStyle.tertiaryText)
-            field.alignment = .center
-            field.lineBreakMode = .byClipping
-            stack.addArrangedSubview(field)
-        }
-    }
-}
+#endif

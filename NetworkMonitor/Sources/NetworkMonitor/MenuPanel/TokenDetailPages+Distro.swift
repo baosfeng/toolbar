@@ -142,8 +142,10 @@ extension TokenDetailPaneView {
             listCard.setRows([head("模型", meta: "tok · 占比 · provider")] + listRows)
         }
 
+        // 单行放不下「模型名 107.3pt + provider/占比/命中率 227.9pt + 间距」（卡内实宽 278pt），
+        // 逐行改堆叠排法：模型名一行、说明一行，两行各自完整（文案仍取 Core 的 row.sub，不改口径）
         let subRows: [NSView] = rows.prefix(3).map { row in
-            keyRow(row.name, row.sub)
+            keyRow(row.name, row.sub, color: TokenPaneStyle.tertiaryText, stacked: true)
         }
         let subCard = TokenBoxView()
         subCard.setRows([head("命中率与 provider", meta: "累计")] + subRows)
@@ -158,7 +160,7 @@ extension TokenDetailPaneView {
 
     private func legend(_ items: [(String, NSColor, String)]) -> NSView {
         let row = TokenLegendRowView()
-        row.update(items: items.map { (color: Optional($0.1), title: $0.0, value: $0.2) })
+        row.update(items: items.map { TokenLegendItem(color: $0.1, title: $0.0, value: $0.2) })
         return row
     }
 
