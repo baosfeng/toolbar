@@ -1,143 +1,123 @@
 import AppKit
 import NetworkMonitorCore
 
-// MARK: - Token 页
+// MARK: - Token 页（定稿原型 final-定稿.html 的 Swift 实现）
 
 /// Token 消耗页 —— 菜单面板第 5 个 tab
 ///
-/// 数据由 `HarnessUsageSnapshot` 注入（`update(_:)`），本视图不直接访问数据库或索引服务：
-/// 打开面板时由控制器触发后台 `refreshIfNeeded()`，先渲染已有快照，索引完成靠
-/// `AppEvents.harnessUsageChanged` 事件刷新。
-/// 分区自上而下：hero 合计 + 环比 → 24 小时堆叠柱 → 三项分卡 → 复用率 / 请求数
-/// → 按天趋势 → 模型分布 → 项目分布 → 本周 / 累计 → 页脚口径。
-/// 下半部分四个区块可折叠（用户新增需求，见 `TokenCollapsibleSection`）。
-/// 成员可见性：布局装配拆到 `TokenPaneView+Layout.swift`，相关属性由 private 放宽为 internal。
+/// 数据由 HarnessUsageSnapshot 注入（update），本视图不直接访问数据库或索引服务。
+/// 版式对齐定稿原型：四族卡（sparkline + 同比）→ 小时/按天主图（今日/昨日、堆叠/对比、
+/// 累计虚线、每根柱可点）→ 天趋势（固定 14 天）→ 缓存命中环 → 项目/模型双栏 →
+/// 今日 vs 昨日对比条 → 状态带。任一密度块可点进面板内覆盖式二级页（共六个）。
+/// 成员可见性：布局装配在 TokenPaneView+Layout.swift，渲染在 +Render.swift，
+/// 二级页在 TokenDetailPages*.swift。
 final class TokenPaneView: MenuPanelPaneView {
 
     // MARK: - 回调
 
-    /// 点刷新（强制重新索引）
     var onRefresh: (() -> Void)?
-    /// 内容高度变化（切换范围 / 索引状态影响布局）
     var onContentChanged: (() -> Void)?
 
     // MARK: - 交互状态
 
     private(set) var range: TokenRange = .today
-    private(set) var hourMode: TokenHourMode = .today
+    private(set) var hourScope: TokenHourScope = .today
+    private(set) var hourView: TokenHourView = .stack
+    private(set) var metric: TokenChartMetric = .total
     private(set) var trendMode: TokenTrendMode = .stack
+    /// 当前打开的二级页（nil = 主面板）
+    private(set) var detailKind: TokenDetailKind?
+    private(set) var selection: TokenBucketSelection?
 
     // MARK: - 数据
 
-    private var snapshot: HarnessUsageSnapshot?
+    /// 最近一帧快照（渲染 / 二级页共用，跨文件访问故为 internal）
+    var snapshot: HarnessUsageSnapshot?
+    var lastModel: TokenPaneModel?
 
-    // MARK: - 页头
+    // MARK: - 页头与范围
 
     let rangeControl = TokenSegmentedControl(titles: TokenRange.allCases.map { $0.title })
     let refreshRow = TokenIconButtonRow(symbolName: "arrow.clockwise")
     let indexLabel = MenuPanelLabel.text("", font: TokenPaneStyle.metaFont,
-                                                 color: TokenPaneStyle.secondaryText)
+                                        color: TokenPaneStyle.tertiaryText)
+    let hostLabel = MenuPanelLabel.text("", font: TokenPaneStyle.pageHeadFont,
+                                        color: TokenPaneStyle.secondaryText)
 
     // MARK: - 分区
 
-    /// 折叠态持久化（注入；默认取全局存储，组合根可覆盖）
-    let storage: any KeyValueStorage
-    let hero = TokenHeroView()
-    let hourChart = TokenHourlyChartView()
-    lazy var hourHeader = TokenSectionHeaderView(title: "按小时", trailing: hourModeControl)
-    let hourModeControl = TokenSegmentedControl(titles: TokenHourMode.allCases.map { $0.title })
-    /// 与小时图左侧刻度区（40pt）对齐，避免 00/06 标签相对柱子左移
-    let hourAxis = TokenAxisRowView(labels: ["00", "06", "12", "18", "23"], leadingInset: 40)
-    let hourLegend = TokenLegendView(items: [
-        TokenLegendItem(title: "缓存读", color: TokenPaneStyle.cacheColor),
-        TokenLegendItem(title: "输出", color: TokenPaneStyle.outputColor),
-        TokenLegendItem(title: "未缓存输入", color: TokenPaneStyle.inputColor),
-        TokenLegendItem(title: "昨日同期", color: TokenPaneStyle.ghostColor),
-    ])
-    let chips = TokenChipRowView()
-    let reuseChart = TokenSparklineView()
-    lazy var reuseCard = TokenMiniCardView(title: "缓存复用率", chart: reuseChart)
-    let requestChart = TokenRequestBarsView()
-    lazy var requestCard = TokenMiniCardView(title: "请求数", chart: requestChart)
-    let trendChart = TokenTrendChartView()
-    let trendModeControl = TokenSegmentedControl(titles: TokenTrendMode.allCases.map { $0.title })
-    let trendAxis = TokenAxisRowView(labels: ["", "", ""])
-    let trendLegend = TokenLegendView(items: [
-        TokenLegendItem(title: "缓存读", color: TokenPaneStyle.cacheColor),
-        TokenLegendItem(title: "输出", color: TokenPaneStyle.outputColor),
-        TokenLegendItem(title: "未缓存输入", color: TokenPaneStyle.inputColor),
-        TokenLegendItem(title: "斜纹 = 无会话", color: nil),
-    ])
-    let donut = TokenDonutView()
-    let modelList = TokenModelListView()
-    let projectList = TokenProjectListView()
-    let summary = TokenSummaryView()
-    let footer = TokenFooterView()
+    /// 首屏 Hero（当前范围三项合计 + 较昨日 + 实时）
+    let heroView = TokenHeroView()
+    lazy var familyCards = TokenMetric.allCases.map { metric in
+        TokenFamilyCardView(metric: metric, onClick: {})
+    }
+    let hourCard = TokenCardRow(height: 88, background: TokenPaneStyle.cardFill)
+    let hourTitle = MenuPanelLabel.text("", font: TokenPaneStyle.cardHeadTitleFont,
+                                        color: TokenPaneStyle.secondaryText)
+    let hourMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
+                                       color: TokenPaneStyle.tertiaryText)
+    let hourAction = TokenTextButton(title: "切：请求数")
+    let daySegment = TokenSegmentedControl(titles: TokenHourScope.allCases.map { $0.title })
+    /// 主图形态切换（堆叠 / 对比）——收成单按钮，省掉第二个分段控件的宽度
+    let viewAction = TokenTextButton(title: "切：对比")
+    let hourBars = TokenBarsView()
+    let hourAxis = TokenAxisView()
+    let hourLegend = TokenLegendRowView()
 
-    /// 按天趋势（默认折叠）
-    lazy var trendSection = TokenCollapsibleSection(
-        title: "按天",
-        trailing: trendModeControl,
-        content: trendBody,
-        storage: storage,
-        storageKey: "token.section.trend")
+    let trendCard = TokenCardRow(height: 38, background: TokenPaneStyle.cardFill)
+    let trendTitle = MenuPanelLabel.text("天趋势 · 固定 14 天", font: TokenPaneStyle.cardHeadTitleFont,
+                                         color: TokenPaneStyle.secondaryText)
+    let trendMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
+                                        color: TokenPaneStyle.tertiaryText)
+    let trendAction = TokenTextButton(title: "切：分线")
+    let trendSpark = TokenSparkView(height: TokenPaneStyle.trendHeight,
+                                    stroke: TokenPaneStyle.uncachedColor,
+                                    fill: TokenPaneStyle.uncachedColor)
 
-    /// 模型分布（默认折叠）
-    lazy var modelSection = TokenCollapsibleSection(
-        title: "按模型",
-        content: modelBody,
-        storage: storage,
-        storageKey: "token.section.model")
+    let cacheCard = TokenCardRow(height: 54, background: TokenPaneStyle.cardFill)
+    let cacheRing = TokenRingView()
+    let cacheMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
+                                        color: TokenPaneStyle.tertiaryText)
+    let cacheLegend = TokenLegendRowView()
 
-    /// 项目分布（默认折叠）
-    lazy var projectSection = TokenCollapsibleSection(
-        title: "按项目",
-        content: projectList,
-        storage: storage,
-        storageKey: "token.section.project")
+    let projectCard = TokenCardRow(height: 111, background: TokenPaneStyle.cardFill)
+    let modelCard = TokenCardRow(height: 111, background: TokenPaneStyle.cardFill)
+    let projectBar = TokenStackBarView()
+    let modelBar = TokenStackBarView()
+    lazy var projectRows = (0..<3).map { _ in TokenDistroRowView() }
+    lazy var modelRows = (0..<3).map { _ in TokenDistroRowView() }
+    let projectMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
+                                          color: TokenPaneStyle.tertiaryText)
+    let modelMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
+                                        color: TokenPaneStyle.tertiaryText)
 
-    /// 本周 / 累计（默认折叠）
-    lazy var totalsSection = TokenCollapsibleSection(
-        title: "本周 / 累计",
-        content: summary,
-        storage: storage,
-        storageKey: "token.section.totals")
+    let compareCard = TokenCardRow(height: 50, background: TokenPaneStyle.cardFill)
+    let compareTotal = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
+                                           color: TokenPaneStyle.tertiaryText)
+    let compareDelta = MenuPanelLabel.text("", font: TokenPaneStyle.yoyFont,
+                                           color: TokenPaneStyle.warnInk)
+    let compareCurrentRow = TokenCompareRowView()
+    let comparePreviousRow = TokenCompareRowView()
 
-    /// 按天趋势正文（图表 + 坐标 + 图例）
-    lazy var trendBody: NSStackView = {
-        let stack = NSStackView(views: [trendChart, trendAxis, trendLegend])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 4
-        pinWidth([trendChart, trendAxis, trendLegend], to: stack)
-        return stack
-    }()
+    let stateBand = TokenStateBandView()
 
-    /// 模型分布正文（环形图 + 清单）
-    lazy var modelBody: NSView = {
-        donut.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            donut.widthAnchor.constraint(equalToConstant: TokenPaneStyle.donutSize),
-            donut.heightAnchor.constraint(equalToConstant: TokenPaneStyle.donutSize),
-        ])
-        let row = NSStackView(views: [donut, modelList])
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 9
-        return row
-    }()
+    /// 二级页容器（覆盖在主面板之上，同一 Pane 内切换）
+    let detailPane = TokenDetailPaneView()
 
     // MARK: - 状态页
 
     let dataStack = NSStackView()
+    /// 四族卡矩阵容器（2×2）
+    let familyGrid = NSStackView()
+    /// 页头下方的内容起点（buildHeader 里赋值为范围条底边）
+    var contentTopAnchor: NSLayoutYAxisAnchor?
     let loadingView = TokenLoadingView()
     lazy var emptyView = TokenEmptyView(onRetry: { [weak self] in self?.onRefresh?() })
     let unavailableView = TokenUnavailableView()
 
     // MARK: - 初始化
 
-    init(storage: any KeyValueStorage = AppContext.shared.storage) {
-        self.storage = storage
+    init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         buildHeader()
@@ -151,93 +131,27 @@ final class TokenPaneView: MenuPanelPaneView {
     // MARK: - 键盘可达
 
     override var focusableRows: [MenuPanelRow] {
+        guard detailKind == nil else { return [] }
         var rows: [MenuPanelRow] = [refreshRow]
         rows.append(contentsOf: rangeControl.focusableRows)
         if !dataStack.isHidden {
-            rows.append(contentsOf: hourModeControl.focusableRows)
-            rows.append(contentsOf: trendModeControl.focusableRows)
-            rows.append(trendSection.headerRow)
-            rows.append(modelSection.headerRow)
-            rows.append(projectSection.headerRow)
-            rows.append(totalsSection.headerRow)
+            rows.append(contentsOf: daySegment.focusableRows)
+            rows.append(contentsOf: familyCards)
+            rows.append(hourCard)
+            rows.append(trendCard)
+            rows.append(cacheCard)
+            rows.append(projectCard)
+            rows.append(modelCard)
         }
         if !emptyView.isHidden { rows.append(emptyView.retryRow) }
         return rows
     }
 
-#if DEBUG
-    /// 快照自证专用（仅 DEBUG）：切换范围 / 小时对比 / 趋势形态，覆盖多组界面状态
-    func applyStateForSnapshot(range: TokenRange, hourMode: TokenHourMode, trendMode: TokenTrendMode) {
-        self.range = range
-        self.hourMode = hourMode
-        self.trendMode = trendMode
-        rangeControl.select(range.rawValue, notify: false)
-        hourModeControl.select(hourMode.rawValue, notify: false)
-        trendModeControl.select(trendMode.rawValue, notify: false)
-        if let snapshot {
-            applyState()
-        }
-    }
-#endif
-
-#if DEBUG
-    /// 快照自证专用（仅 DEBUG）：展开全部折叠区块（不写持久化）
-    func expandAllSectionsForSnapshot() {
-        for section in [trendSection, modelSection, projectSection, totalsSection] {
-            section.setExpandedForSnapshot(true)
-        }
-    }
-
-    /// 快照自证专用（仅 DEBUG）：关键区块在页面坐标系中的 frame，用于与原型几何逐项对照
-    func layoutMetricsForSnapshot() -> [(name: String, frame: NSRect)] {
-        layoutSubtreeIfNeeded()
-        let items: [(String, NSView)] = [
-            ("hero", hero), ("hourChart", hourChart), ("chips", chips),
-            ("reuseCard", reuseCard), ("requestCard", requestCard),
-            ("trendChart", trendChart), ("donut", donut), ("modelList", modelList),
-            ("projectList", projectList), ("summary", summary), ("footer", footer),
-        ]
-        return items.map { ($0.0, $0.1.convert($0.1.bounds, to: self)) }
-    }
-#endif
-
     // MARK: - 数据更新
 
-    /// 应用最新快照（控制器 / 事件回调转发）
     func update(_ snapshot: HarnessUsageSnapshot) {
         self.snapshot = snapshot
         applyState()
-    }
-
-    // MARK: - 装配
-
-    /// 页头下方的内容起点（buildHeader 里赋值为页头底边）
-    var contentTopAnchor: NSLayoutYAxisAnchor?
-
-    /// 把一组视图的宽度钉到容器宽度（图表视图无固有宽度，必须显式约束）
-    func pinWidth(_ views: [NSView], to container: NSView) {
-        for view in views {
-            view.widthAnchor.constraint(equalTo: container.widthAnchor).isActive = true
-        }
-    }
-
-    private func wireActions() {
-        refreshRow.onClick = { [weak self] in self?.onRefresh?() }
-        rangeControl.onSelect = { [weak self] index in
-            guard let self, let value = TokenRange(rawValue: index) else { return }
-            self.range = value
-            self.render()
-        }
-        hourModeControl.onSelect = { [weak self] index in
-            guard let self, let value = TokenHourMode(rawValue: index) else { return }
-            self.hourMode = value
-            self.render()
-        }
-        trendModeControl.onSelect = { [weak self] index in
-            guard let self, let value = TokenTrendMode(rawValue: index) else { return }
-            self.trendMode = value
-            self.render()
-        }
     }
 
     // MARK: - 状态切换
@@ -259,6 +173,8 @@ final class TokenPaneView: MenuPanelPaneView {
             loadingView.isHidden = true
             emptyView.isHidden = true
             indexLabel.isHidden = true
+            detailPane.isHidden = true
+            detailKind = nil
             onContentChanged?()
             return
         }
@@ -270,16 +186,19 @@ final class TokenPaneView: MenuPanelPaneView {
             dataStack.isHidden = true
             emptyView.isHidden = true
             indexLabel.isHidden = true
+            detailPane.isHidden = true
+            detailKind = nil
             onContentChanged?()
             return
         }
 
         loadingView.isHidden = true
-        // 空态用状态页替换数据区，避免「全 0 图表 + 空态说明」同时出现
         dataStack.isHidden = empty
         emptyView.isHidden = !empty
         if empty {
             indexLabel.isHidden = true
+            detailPane.isHidden = true
+            detailKind = nil
             onContentChanged?()
             return
         }
@@ -290,42 +209,91 @@ final class TokenPaneView: MenuPanelPaneView {
         render()
     }
 
-    // MARK: - 渲染
+    // MARK: - 二级页
 
-    private func render() {
-        guard let snapshot else { return }
-        let model = TokenPaneModel.make(snapshot: snapshot, range: range, hourMode: hourMode)
-        let todayKey = HarnessTokenTimeWindow.dayKey(for: Date())
-
-        hero.update(model)
-
-        hourModeControl.select(hourMode.rawValue, notify: false)
-        hourChart.update(today: model.hourly,
-                        yesterday: model.yesterdayHourly,
-                        currentHour: model.currentHour,
-                        showsYesterday: hourMode == .compare)
-        hourHeader.updateMeta(model.hourNote)
-
-        chips.update(model.chips)
-        reuseCard.update(value: model.reuseValue, tag: "近 30 天 · 按天")
-        reuseChart.update(values: model.reuseSeries)
-        requestCard.update(value: model.requestValue, tag: model.requestTag)
-        requestChart.update(values: model.requestBars)
-
-        trendModeControl.select(trendMode.rawValue, notify: false)
-        trendSection.update(summary: model.trendSummary, expandedMeta: model.trendWindowLabel)
-        trendChart.update(cells: model.trend, todayKey: todayKey, mode: trendMode)
-        trendAxis.updateLabels(model.trendAxis)
-
-        modelSection.update(summary: model.modelSummary, expandedMeta: model.modelMeta)
-        projectSection.update(summary: model.projectSummary, expandedMeta: model.projectMeta)
-        totalsSection.update(summary: model.totalsSummary, expandedMeta: "")
-        donut.setCenterTitle("\(snapshot.daily.count) 天")
-        donut.update(slices: model.models.map { ($0.share, TokenPaneStyle.modelColor($0.colorIndex)) })
-        modelList.update(model.models)
-        projectList.update(model.projects)
-        summary.update(week: model.weekParts, total: model.totalParts)
-        footer.update(lines: model.footer)
+    func openDetail(_ kind: TokenDetailKind, selection: TokenBucketSelection? = nil) {
+        guard let snapshot, let model = lastModel else { return }
+        self.detailKind = kind
+        self.selection = selection
+        detailPane.update(kind: kind, model: model, snapshot: snapshot,
+                          selection: selection, hourScope: hourScope)
+        detailPane.isHidden = false
+        dataStack.isHidden = true
         onContentChanged?()
     }
+
+    func closeDetail() {
+        guard detailKind != nil else { return }
+        detailKind = nil
+        selection = nil
+        detailPane.isHidden = true
+        dataStack.isHidden = false
+        render()
+    }
+
+    // MARK: - 动作
+
+    private func wireActions() {
+        refreshRow.onClick = { [weak self] in self?.onRefresh?() }
+        rangeControl.onSelect = { [weak self] index in
+            guard let self, let value = TokenRange(rawValue: index) else { return }
+            self.range = value
+            self.render()
+        }
+        daySegment.onSelect = { [weak self] index in
+            guard let self, let value = TokenHourScope(rawValue: index) else { return }
+            self.hourScope = value
+            self.render()
+        }
+        viewAction.onClick = { [weak self] in
+            guard let self else { return }
+            self.hourView = self.hourView == .stack ? .compare : .stack
+            self.render()
+        }
+        hourAction.onClick = { [weak self] in
+            guard let self else { return }
+            self.metric = self.metric == .total ? .request : .total
+            self.render()
+        }
+        trendAction.onClick = { [weak self] in
+            guard let self else { return }
+            self.trendMode = self.trendMode == .stack ? .line : .stack
+            self.render()
+        }
+        for card in familyCards {
+            card.onClick = { [weak self] in self?.openDetail(.hourly) }
+        }
+        hourCard.onClick = { [weak self] in self?.openDetail(.hourly) }
+        hourBars.onSelect = { [weak self] index in
+            guard let self else { return }
+            self.openDetail(.bucket,
+                            selection: TokenBucketSelection(index: index,
+                                                           isHour: self.range == .today,
+                                                           scope: self.hourScope))
+        }
+        trendCard.onClick = { [weak self] in self?.openDetail(.trend) }
+        cacheCard.onClick = { [weak self] in self?.openDetail(.cache) }
+        projectCard.onClick = { [weak self] in self?.openDetail(.projects) }
+        modelCard.onClick = { [weak self] in self?.openDetail(.models) }
+        detailPane.onBack = { [weak self] in self?.closeDetail() }
+        detailPane.onSelectBucket = { [weak self] selection in
+            self?.openDetail(.bucket, selection: selection)
+        }
+    }
+
+#if DEBUG
+    /// 快照自证专用（仅 DEBUG）：切换范围 / 小时归属 / 趋势形态
+    func applyStateForSnapshot(range: TokenRange, hourScope: TokenHourScope, trendMode: TokenTrendMode) {
+        self.range = range
+        self.hourScope = hourScope
+        self.trendMode = trendMode
+        if snapshot != nil { render() }
+    }
+
+    /// 快照自证专用（仅 DEBUG）：打开指定二级页（取证用）
+    func openDetailForSnapshot(_ kind: TokenDetailKind, selection: TokenBucketSelection? = nil) {
+        openDetail(kind, selection: selection)
+    }
+
+#endif
 }

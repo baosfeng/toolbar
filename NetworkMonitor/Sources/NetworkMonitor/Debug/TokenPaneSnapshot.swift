@@ -72,7 +72,7 @@ enum TokenPaneSnapshot {
             let panel = MenuPanelView()
             panel.updateToken(tokenSnapshot, notifySize: false)
             panel.select(tab: .token)
-            panel.tokenPane.expandAllSectionsForSnapshot()
+            panel.tokenPane.openDetailForSnapshot(.hourly)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
             MenuPanelSnapshot.render(view: panel, size: size, appearanceName: .aqua,
                                      to: directory.appendingPathComponent("menu-token-expanded-light.png"),
@@ -99,7 +99,7 @@ enum TokenPaneSnapshot {
             let panel = MenuPanelView()
             panel.updateToken(tokenSnapshot, notifySize: false)
             panel.select(tab: .token)
-            panel.tokenPane.applyStateForSnapshot(range: .d7, hourMode: .compare, trendMode: .line)
+            panel.tokenPane.applyStateForSnapshot(range: .d7, hourScope: .yesterday, trendMode: .line)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
             MenuPanelSnapshot.render(view: panel, size: size, appearanceName: .aqua,
                                      to: directory.appendingPathComponent("menu-token-d7-line-light.png"),
@@ -108,11 +108,56 @@ enum TokenPaneSnapshot {
             })
         }
 
+        // 真实面板高度 320×520（Popover 实际可视高度）：首屏要一次看全
+        // Hero / 四族卡 / 24h 图 / 缓存环 / 项目 · 模型
+        if let tokenSnapshot {
+            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+                let name = appearance == .aqua ? "light" : "dark"
+                let panel = MenuPanelView()
+                panel.updateToken(tokenSnapshot, notifySize: false)
+                panel.select(tab: .token)
+                let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
+                MenuPanelSnapshot.render(view: panel, size: size, appearanceName: appearance,
+                                         to: directory.appendingPathComponent("menu-token-520-\(name).png"),
+                                         postLayout: { _ in })
+            }
+        }
+
+        // 定稿画布 320×600：主面板整幅（面板默认 clamp 520，这里按原型画布取证）
+        if let tokenSnapshot {
+            let panel = MenuPanelView()
+            panel.updateToken(tokenSnapshot, notifySize: false)
+            panel.select(tab: .token)
+            let size = NSSize(width: MenuPanelStyle.panelWidth, height: 600)
+            MenuPanelSnapshot.render(view: panel, size: size, appearanceName: .aqua,
+                                     to: directory.appendingPathComponent("menu-token-canvas600-light.png"),
+                                     postLayout: { _ in })
+            MenuPanelSnapshot.render(view: panel, size: size, appearanceName: .darkAqua,
+                                     to: directory.appendingPathComponent("menu-token-canvas600-dark.png"),
+                                     postLayout: { _ in })
+        }
+
+        // 二级页取证：六个页面 × （顶部 / 滚到底部）——证明内容不被裁切、能滚到最底
+        if let tokenSnapshot {
+            captureDetailPages(directory: directory, snapshot: tokenSnapshot)
+        }
+
+        // 小时卡取证：面板内容宽 296（320 面板）+ 更窄的 300 面板口径，证明不截断不重叠
+        if let tokenSnapshot {
+            captureHourCard(directory: directory, snapshot: tokenSnapshot,
+                            width: MenuPanelStyle.contentWidth, name: "menu-token-hourcard-320.png")
+            captureHourCard(directory: directory, snapshot: tokenSnapshot,
+                            width: 300 - MenuPanelStyle.inset * 2, name: "menu-token-hourcard-300.png")
+        }
+
         if let tokenSnapshot {
             writeChartData(directory: directory, snapshot: tokenSnapshot)
         }
         if let tokenSnapshot {
             writeLayoutMetrics(directory: directory, snapshot: tokenSnapshot)
+        }
+        if let tokenSnapshot {
+            writeReadabilityMetrics(directory: directory, snapshot: tokenSnapshot)
         }
         writeSegmentMetrics(directory: directory)
         AppContext.shared.logger.info("Token 快照：补充状态完成（加载 / 空 / 不可用 / 滚到底 / 分段宽度实测）")
