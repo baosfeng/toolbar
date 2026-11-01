@@ -36,14 +36,16 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
 
     // `content` / `paster` / `transferController` / `billingMonitor` / `storage` / `logger`
     // 由 `private` 放宽为 `internal`：拆出的 `MenuPanelController+Actions.swift` 跨文件访问，
-    // 同模块内无其他调用方；`popover` 与监控服务仍仅本文件使用，保持 private。
+    // 同模块内无其他调用方。
 
     // popover 放宽为 internal：数据绑定扩展（MenuPanelController+DataSources）要读 isShown
     let popover = NSPopover()
     let content = MenuPanelView()
-    private let monitor: any NetworkMonitoringService
-    private let processMonitor: any ProcessNetworkMonitoringService
-    private let trafficTracker: any TrafficTrackingService
+    // 以下三个监控服务由 private 放宽为 internal：打开 / 刷新链路已拆到
+    // MenuPanelController+Open.swift（速率、流量、进程采样），同模块内无其他调用方。
+    let monitor: any NetworkMonitoringService
+    let processMonitor: any ProcessNetworkMonitoringService
+    let trafficTracker: any TrafficTrackingService
     // 放宽为 internal：数据源绑定扩展（+DataSources）的剪贴板刷新要读
     let repository: any ClipboardRepository
     let paster: ClipboardPaster
@@ -76,19 +78,31 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
 
     // MARK: 状态
 
+    // 以下四项由 private 放宽为 internal：打开 / 刷新链路已拆到
+    // MenuPanelController+Open.swift（采样折线、中频节流），同模块内无其他调用方。
+
     /// 折线采样（60 个 1 秒点）
-    private var downHistory: [Double] = []
-    private var upHistory: [Double] = []
-    private static let maxHistory = 60
+    var downHistory: [Double] = []
+    var upHistory: [Double] = []
+    static let maxHistory = 60
     /// 中频刷新间隔
-    private static let midInterval: TimeInterval = 5.0
-    private var lastMidRefresh: Date = .distantPast
+    static let midInterval: TimeInterval = 5.0
+    var lastMidRefresh: Date = .distantPast
 #if DEBUG
     /// 取证专用（仅 DEBUG）：强制进程/剪贴板空态，用于核对空态字号
     var forceEmptyDataForEvidence = false
 #endif
     /// 最近一次收起时间 — 用于吞掉「点击状态栏按钮先触发 transient 收起、再触发按钮动作」的重复开合
-    private var lastCloseDate: Date = .distantPast
+    // 放宽为 internal：toggle / popoverDidClose 已拆到 MenuPanelController+Open.swift
+    var lastCloseDate: Date = .distantPast
+    /// 内容更新批处理深度（> 0 时尺寸重算只记账、不布局）
+    // 放宽为 internal：批处理开合与判定都在 MenuPanelController+Open.swift
+    var contentBatchDepth = 0
+    /// 批处理期间是否收到过强制尺寸重算请求
+    var contentBatchNeedsForceSize = false
+    /// 是否已做过启动预热（只做一次）
+    // 放宽为 internal：预热逻辑在 MenuPanelController+Open.swift
+    var hasPrewarmed = false
     // 放宽为 internal：数据源绑定扩展（+DataSources）负责注册 / 读取
     nonisolated(unsafe) var clipboardObserver: NSObjectProtocol?
     // 放宽为 internal：数据绑定扩展要注册 / 移除
@@ -172,152 +186,5 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
             guard let self else { return }
             self.content.delegate?.menuPanelViewDidChangeContent(self.content)
         }
-    }
-
-    // MARK: - 显示 / 收起
-
-    /// 状态栏按钮点击入口：已展开则收起，否则在按钮下方展开
-    func toggle(relativeTo rect: NSRect, of view: NSView) {
-        if popover.isShown {
-            close()
-            return
-        }
-        // transient 行为下，点击状态栏按钮会先自动收起再触发按钮动作：
-        // 极短时间内的再次 toggle 视为「本次关闭」的续动作，不再重新展开。
-        guard Date().timeIntervalSince(lastCloseDate) > 0.25 else { return }
-        show(relativeTo: rect, of: view)
-    }
-
-    /// 展开面板并强制全量刷新
-    func show(relativeTo rect: NSRect, of view: NSView) {
-        // 【时序敏感】必须在 popover 成为 key window 之前同步记录目标 App，
-        // 否则 frontmost 会变成本 App，合成的 ⌘V 永远落回自己（见 ClipboardPaster 注释）。
-        paster.recordTargetApplication()
-        refreshAll()
-        popover.show(relativeTo: rect, of: view, preferredEdge: .minY)
-        updateContentSize(force: true)
-        if let window = popover.contentViewController?.view.window {
-            window.makeFirstResponder(content)
-        }
-    }
-
-    /// 收起面板
-    func close() {
-        guard popover.isShown else { return }
-        popover.performClose(nil)
-    }
-
-    /// 是否已展开
-    var isShown: Bool { popover.isShown }
-
-    // MARK: - 刷新
-
-    /// 每秒调用（由状态栏定时器驱动）：速率必刷，其余按 5 秒节流
-    func tick() {
-        // 计费刷新与面板是否展开无关：收起时也要拉余额做阈值提醒
-        // （60s 节流与 429 退避在 BillingMonitor 内部，这里每秒调用是安全的）
-        billingMonitor?.refresh()
-        guard popover.isShown else { return }
-        sampleHistory()
-        // 系统页：每秒推进历史，视图按 5 秒节流刷新（内部再判一次展开态，重复无害）
-        systemTick()
-        content.updateSpeeds(down: max(monitor.downloadSpeed, 0),
-                             up: max(monitor.uploadSpeed, 0),
-                             downHistory: downHistory,
-                             upHistory: upHistory)
-        let now = Date()
-        guard now.timeIntervalSince(lastMidRefresh) >= Self.midInterval else { return }
-        lastMidRefresh = now
-        refreshMidFrequency()
-    }
-
-    /// 全量刷新（面板打开时调用一次）
-    private func refreshAll() {
-        lastMidRefresh = Date()
-        sampleHistory()
-        content.updateSpeeds(down: max(monitor.downloadSpeed, 0),
-                             up: max(monitor.uploadSpeed, 0),
-                             downHistory: downHistory,
-                             upHistory: upHistory)
-        refreshMidFrequency()
-        refreshClipboard()
-        // 系统页：打开面板立即采一帧再渲染（首帧 CPU/磁盘速率为 nil，显示「—」）
-        systemMonitor?.poll()
-        refreshSystem()
-        // 额度页：打开面板强制刷新一次（monitor 内部处理未配置/退避）
-        billingMonitor?.refresh(force: true)
-        // Token 页：先用库里已有快照渲染，再触发后台增量索引（不阻塞面板）
-        refreshToken()
-        updateContentSize(force: true)
-    }
-
-    /// 中频刷新：今日流量 / 近 6 日柱状图 / 活跃进程 / 系统信息
-    private func refreshMidFrequency() {
-        trafficTracker.update()
-        let bars = MenuPanelMetrics.recentDays(entries: trafficTracker.weekEntries, limit: 6)
-        content.updateTraffic(todayRx: trafficTracker.todayRx,
-                              todayTx: trafficTracker.todayTx,
-                              dailyBars: bars)
-#if DEBUG
-        content.updateProcesses(forceEmptyDataForEvidence ? [] : processMonitor.processSpeeds)
-#else
-        content.updateProcesses(processMonitor.processSpeeds)
-#endif
-        content.launchAtStartupEnabled = isLaunchAtStartupSaved
-        // 额度：中频分支 5 秒调用一次，monitor 内部 60 秒节流，不会打满 provider 限流
-        billingMonitor?.refresh()
-    }
-
-#if DEBUG
-    /// 取证专用（仅 DEBUG）：强制 popover 内容与窗口外观（真实窗口渲染，非离屏缓存）
-    func forceAppearanceForEvidence(_ name: NSAppearance.Name) {
-        guard let appearance = NSAppearance(named: name) else { return }
-        NSApp.appearance = appearance
-        content.appearance = appearance
-        popover.contentViewController?.view.appearance = appearance
-        popover.contentViewController?.view.window?.appearance = appearance
-    }
-
-    /// 取证专用（仅 DEBUG）：切换展示分页
-    func selectTabForEvidence(_ tab: MenuPanelTab) {
-        content.select(tab: tab)
-        updateContentSize(force: true)
-    }
-
-    /// 取证专用（仅 DEBUG）：popover 真实窗口号与 frame（供 screencapture -l 用）
-    func evidenceWindow() -> (number: Int, frame: NSRect)? {
-        guard popover.isShown, let window = popover.contentViewController?.view.window else { return nil }
-        return (window.windowNumber, window.frame)
-    }
-#endif
-
-    /// 采样折线（仅面板展开时采样，避免无谓累积）
-    private func sampleHistory() {
-        downHistory.append(max(monitor.downloadSpeed, 0))
-        upHistory.append(max(monitor.uploadSpeed, 0))
-        if downHistory.count > Self.maxHistory { downHistory.removeFirst(downHistory.count - Self.maxHistory) }
-        if upHistory.count > Self.maxHistory { upHistory.removeFirst(upHistory.count - Self.maxHistory) }
-    }
-
-    /// 按内容自适应高度（≤ 520pt），高度变化时才调整 popover
-    ///
-    /// 内容高于 520pt 时不做硬截断：面板内部 NSScrollView 转为垂直滚动（隐式滚动条），
-    /// 因此进程数变多 / 字体放大 / 多语言换行时仍能看到全部内容。
-    ///
-    /// 非 private：动作扩展（`MenuPanelController+Actions.swift`）切换分页、自启动后需重算高度。
-    func updateContentSize(force: Bool = false) {
-        content.layoutSubtreeIfNeeded()
-        let needed = content.desiredContentHeight
-        let height = min(max(needed, 180), MenuPanelStyle.maxHeight)
-        guard force || abs(popover.contentSize.height - height) > 0.5 else { return }
-        popover.contentSize = NSSize(width: MenuPanelStyle.panelWidth, height: height)
-    }
-
-    // MARK: - NSPopoverDelegate
-
-    func popoverDidClose(_ notification: Notification) {
-        lastCloseDate = Date()
-        // 收起后清空键盘焦点，下次展开从第一行开始
-        content.resetKeyboardFocus()
     }
 }

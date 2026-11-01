@@ -17,11 +17,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let coordinator = AppCoordinator()
         self.coordinator = coordinator
         menuBarManager = coordinator.start()
+        // 启动后预热一次面板：NSPopover 的窗口 / 约束引擎 / 首帧绘制都在首次 show 时才建，
+        // 提前付掉这份一次性开销，首次点击不必再等 1 秒
+        menuBarManager?.schedulePrewarm()
 #if DEBUG
         // 仅 DEBUG：设置 NM_SNAPSHOT_DIR 时渲染面板快照并退出（见 MenuPanelSnapshot）
         MenuPanelSnapshot.runIfRequested(repository: coordinator.snapshotClipboardRepository,
                                           harness: coordinator.snapshotHarnessService,
                                           settings: coordinator.settingsWindow)
+        // 仅 DEBUG：--measure-panel-open 时逐阶段计时并退出（性能回归取证）
+        PanelOpenMeasure.runIfRequested(manager: menuBarManager)
         // 仅 DEBUG：NM_SHOW_PANEL=1 时走真实路径展开 popover 并保持打开（实机截图取证）
         MenuPanelEvidence.openIfRequested(manager: menuBarManager)
 #endif

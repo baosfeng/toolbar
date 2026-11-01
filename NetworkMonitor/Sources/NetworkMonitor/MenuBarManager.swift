@@ -110,7 +110,43 @@ final class MenuBarManager: NSObject {
     func forceEmptyForEvidence() {
         panel.forceEmptyDataForEvidence = true
     }
+
+    /// 测量专用（仅 DEBUG）：面板当前是否展开
+    var isPanelShownForMeasure: Bool { panel.isShown }
+
+    /// 测量专用（仅 DEBUG）：收起面板（关掉上一轮，准备下一次测量）
+    func closePanelForMeasure() {
+        panel.close()
+    }
+
+    /// 测量专用（仅 DEBUG）：popover 内容窗口（强制首帧落屏用）
+    func panelWindowForMeasure() -> NSWindow? {
+        panel.measurePanelWindow()
+    }
+
+    /// 测量专用（仅 DEBUG）：popover 当前内容尺寸（核对高度是否已按内容订好）
+    var panelContentSizeForMeasure: NSSize { panel.popover.contentSize }
 #endif
+
+    // MARK: - 预热
+
+    /// 启动后预热一次面板（把首次打开的一次性窗口 / 布局开销提前付掉）
+    ///
+    /// 延后 1.2 秒：等定时器、首轮采样、Token 索引启动稳定，避免和启动路径抢主线程。
+    func schedulePrewarm() {
+        // 性能测量模式由测量器自己控制预热时序，这里不抢跑（否则「首次打开」那一轮测不准）
+        guard !PanelOpenProbe.requested else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            self?.prewarmPanel()
+        }
+    }
+
+    /// 预热面板（内部保证只做一次、已展开时跳过）
+    func prewarmPanel() {
+        guard let button = statusItem.button else { return }
+        panel.prewarmPanelIfNeeded(relativeTo: button.bounds, of: button)
+    }
 
     // MARK: - 定时器
 
