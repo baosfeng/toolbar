@@ -83,6 +83,10 @@ runHarnessTokenHourlyTests()
 // MARK: - Token tab 展示口径（范围窗口 / 缺省小时 / 环比 / 空态）
 runTokenPaneTests()
 
+// MARK: - Token 页展示层（下沉到 Core 的派生计算 / 格式化 / 模型装配）
+runTokenDeriveTests()
+runTokenPresentationTests()
+
 // MARK: - 截图选区几何（多屏 / Retina / 归一化）
 runSnipGeometryTests()
 

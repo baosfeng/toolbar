@@ -1,79 +1,9 @@
 import Foundation
-import NetworkMonitorCore
 
-// MARK: - Token 页派生计算（从 TokenPaneModel.make 抽出：单文件体积门禁要求）
-
-/// 所有「范围 / 桶 / 占比 / 同比 / 分布」的派生计算集中在这里，视图层只排版
-enum TokenDerive {
-
-    // MARK: - 桶序列
-
-    /// 今日 00–23 共 24 桶（缺省小时补 0 桶，标签 i 时）
-    static func todayBuckets(_ snapshot: HarnessUsageSnapshot) -> [TokenBucket] {
-        hourlyBuckets(snapshot.todayHourly)
-    }
-
-    /// 昨日 00–23 共 24 桶
-    static func yesterdayBuckets(_ snapshot: HarnessUsageSnapshot) -> [TokenBucket] {
-        hourlyBuckets(snapshot.yesterdayHourly)
-    }
-
-    /// 最近 N 天（含今日）按天桶；无数据日补 0 桶并保留日期标签
-    static func dailyBuckets(_ snapshot: HarnessUsageSnapshot, days: Int) -> [TokenBucket] {
-        let map = dayMap(snapshot)
-        let lastDay = HarnessTokenTimeWindow.dayKey(for: Date())
-        return TokenFormat.dayKeys(lastDay: lastDay, days: days).map { key in
-            TokenBucket(label: TokenFormatting.mmdd(key), usage: map[key])
-        }
-    }
-
-    /// 上一周期按天桶（7 / 30 天窗口的对照；索引只回溯 33 天时可能为空）
-    static func previousDailyBuckets(_ snapshot: HarnessUsageSnapshot, days: Int) -> [TokenBucket] {
-        let map = dayMap(snapshot)
-        let lastDay = HarnessTokenTimeWindow.dayKey(for: Date())
-        let anchor = TokenFormat.dayKey(offsetDays: -days, from: lastDay)
-        return TokenFormat.dayKeys(lastDay: anchor, days: days).map { key in
-            TokenBucket(label: TokenFormatting.mmdd(key), usage: map[key])
-        }
-    }
-
-    static func sum(_ buckets: [TokenBucket]) -> TokenBucket {
-        var uncached = 0, output = 0, cache = 0, request = 0
-        for bucket in buckets {
-            uncached += bucket.uncached
-            output += bucket.output
-            cache += bucket.cache
-            request += bucket.request
-        }
-        return TokenBucket(label: "", uncached: uncached, output: output, cache: cache, request: request)
-    }
-
-    static func totalTokens(_ bucket: TokenBucket) -> Int { bucket.total }
-
-    /// 当前指标在该序列上的总量（总量取三段相加，请求数取请求数）
-    static func metricTotal(_ buckets: [TokenBucket], metric: TokenChartMetric) -> Int {
-        metric == .total ? sum(buckets).total : sum(buckets).request
-    }
-
-    /// 累计序列（虚线基准用）
-    static func cumulative(_ buckets: [TokenBucket], metric: TokenChartMetric) -> [Double] {
-        var running = 0.0
-        return buckets.map { bucket in
-            running += Double(metric == .total ? bucket.total : bucket.request)
-            return running
-        }
-    }
-
-    /// 命中率 0…1：缓存读 ÷（缓存读 + 未缓存输入），输出不进分母
-    static func hitRate(_ bucket: TokenBucket) -> Double {
-        let denominator = bucket.cache + bucket.uncached
-        guard denominator > 0 else { return 0 }
-        return Double(bucket.cache) / Double(denominator)
-    }
-
+extension TokenDerive {
     // MARK: - 分族卡
 
-    static func familyCards(range: TokenRange,
+    package static func familyCards(range: TokenRange,
                             buckets: [TokenBucket],
                             prevBuckets: [TokenBucket],
                             total: TokenBucket,
@@ -109,7 +39,7 @@ enum TokenDerive {
     }
 
     /// 首屏 Hero：当前范围三项合计 + 较昨日（或上一周期）+ 实时时间
-    static func hero(range: TokenRange, current: TokenBucket, previous: TokenBucket, clock: String) -> TokenHero {
+    package static func hero(range: TokenRange, current: TokenBucket, previous: TokenBucket, clock: String) -> TokenHero {
         let split = TokenFormatting.splitTokens(current.total)
         let delta = TokenFormatting.delta(current: current.total, previous: previous.total)
         let other = range == .today ? "昨日" : "上期"
@@ -122,7 +52,7 @@ enum TokenDerive {
                          clock: "实时 " + clock)
     }
 
-    static func metricValue(_ bucket: TokenBucket, metric: TokenMetric) -> Int {
+    package static func metricValue(_ bucket: TokenBucket, metric: TokenMetric) -> Int {
         switch metric {
         case .uncached: return bucket.uncached
         case .output: return bucket.output
@@ -133,7 +63,7 @@ enum TokenDerive {
 
     // MARK: - 主图标题 / 说明 / 图例
 
-    static func bucketTitle(range: TokenRange, hourScope: TokenHourScope, hourView: TokenHourView) -> String {
+    package static func bucketTitle(range: TokenRange, hourScope: TokenHourScope, hourView: TokenHourView) -> String {
         guard range == .today else { return range == .d7 ? "近 7 天 · 按天" : "近 30 天 · 按天" }
         if hourView == .compare {
             return hourScope.title + " 对比 " + hourScope.otherTitle + " · 24 桶"
@@ -141,7 +71,7 @@ enum TokenDerive {
         return hourScope.title + " · 按小时 24 桶"
     }
 
-    static func bucketMeta(range: TokenRange,
+    package static func bucketMeta(range: TokenRange,
                            buckets: [TokenBucket],
                            prev: [TokenBucket],
                            hourScope: TokenHourScope,
@@ -164,7 +94,7 @@ enum TokenDerive {
         return "累计 " + format(totalForDisplay(buckets, metric: metric))
     }
 
-    static func bucketLegend(range: TokenRange,
+    package static func bucketLegend(range: TokenRange,
                              total: TokenBucket,
                              prev: TokenBucket,
                              hourScope: TokenHourScope,
@@ -190,13 +120,13 @@ enum TokenDerive {
         return items
     }
 
-    static func totalForDisplay(_ buckets: [TokenBucket], metric: TokenChartMetric) -> Int {
+    package static func totalForDisplay(_ buckets: [TokenBucket], metric: TokenChartMetric) -> Int {
         let bucket = sum(buckets)
         return metric == .total ? bucket.total : bucket.request
     }
 
     /// 峰值桶（按总 tok 计）
-    static func peakBucket(_ buckets: [TokenBucket], metric: TokenMetric = .uncached) -> (index: Int, bucket: TokenBucket) {
+    package static func peakBucket(_ buckets: [TokenBucket], metric: TokenMetric = .uncached) -> (index: Int, bucket: TokenBucket) {
         var best = 0
         for index in buckets.indices where metricIndex(buckets[index]) > metricIndex(buckets[max(best, 0)]) {
             best = index
@@ -204,17 +134,17 @@ enum TokenDerive {
         return (best, buckets.isEmpty ? .empty : buckets[best])
     }
 
-    static func metricIndex(_ bucket: TokenBucket) -> Int { bucket.total }
+    package static func metricIndex(_ bucket: TokenBucket) -> Int { bucket.total }
 
     // MARK: - 天趋势 / 分布 / 对比 / 状态带
 
-    static func trendMeta(_ snapshot: HarnessUsageSnapshot) -> String {
+    package static func trendMeta(_ snapshot: HarnessUsageSnapshot) -> String {
         let buckets = dailyBuckets(snapshot, days: 14)
         let total = sum(buckets).total
         return "不随范围 · 日均 " + TokenFormatting.tokens(Int(Double(total) / 14.0))
     }
 
-    static func projectRows(_ snapshot: HarnessUsageSnapshot) -> [TokenDistroRow] {
+    package static func projectRows(_ snapshot: HarnessUsageSnapshot) -> [TokenDistroRow] {
         let total = snapshot.projects.reduce(0) { $0 + $1.usage.totalTokens }
         return snapshot.projects.enumerated().map { index, item in
             let tokens = item.usage.totalTokens
@@ -229,7 +159,7 @@ enum TokenDerive {
         }
     }
 
-    static func modelRows(_ snapshot: HarnessUsageSnapshot) -> [TokenDistroRow] {
+    package static func modelRows(_ snapshot: HarnessUsageSnapshot) -> [TokenDistroRow] {
         let total = snapshot.models.reduce(0) { $0 + $1.usage.totalTokens }
         return snapshot.models.enumerated().map { index, item in
             let tokens = item.usage.totalTokens
@@ -248,7 +178,7 @@ enum TokenDerive {
         }
     }
 
-    static func compare(_ snapshot: HarnessUsageSnapshot,
+    package static func compare(_ snapshot: HarnessUsageSnapshot,
                         current: TokenBucket,
                         previous: TokenBucket,
                         range: TokenRange) -> TokenPaneModel.TokenCompare? {
@@ -269,7 +199,7 @@ enum TokenDerive {
             deltaUp: delta?.up ?? true)
     }
 
-    static func stateBand(_ snapshot: HarnessUsageSnapshot,
+    package static func stateBand(_ snapshot: HarnessUsageSnapshot,
                           range: TokenRange,
                           buckets: [TokenBucket],
                           previous: TokenBucket,
@@ -284,20 +214,5 @@ enum TokenDerive {
             TokenStateItem(title: "昨", value: TokenFormatting.tokens(previous.total), tone: .accent),
             TokenStateItem(title: "缓存", value: TokenFormatting.tokens(current.cache), tone: .cache),
         ]
-    }
-
-    // MARK: - 内部
-
-    private static func hourlyBuckets(_ slots: [HarnessHourlyUsage]) -> [TokenBucket] {
-        (0..<24).map { hour in
-            let usage = slots.first(where: { $0.hour == hour })?.usage
-            return TokenBucket(label: "\(hour)时", usage: usage)
-        }
-    }
-
-    private static func dayMap(_ snapshot: HarnessUsageSnapshot) -> [String: HarnessTokenUsage] {
-        snapshot.daily.reduce(into: [String: HarnessTokenUsage]()) { result, item in
-            result[item.day] = item.usage
-        }
     }
 }
