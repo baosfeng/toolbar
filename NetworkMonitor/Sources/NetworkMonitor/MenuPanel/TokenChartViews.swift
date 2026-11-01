@@ -1,12 +1,14 @@
 import AppKit
 import NetworkMonitorCore
 
-// MARK: - Token 页图表视图（柱 / 折线 / 环 / 分布条 / 坐标轴）
+// MARK: - Token 主图（三段堆叠柱 / 请求数柱 / 双折线对比 + 累计虚线）
+//
+// 小图表（走势 / 迷你柱 / 命中率环 / 分布条）见 TokenMiniChartViews.swift。
 
-/// 主图：三段堆叠柱 / 请求数柱 / 双列对比柱 + 累计虚线
+/// 主图：三段堆叠柱 / 请求数柱 / 本周期 vs 上一周期双折线 + 累计虚线
 ///
-/// 口径：柱高按当前序列最大值归一；对比态画本周期与上一周期两条折线；
-/// 每根柱可点开二级页（点击按 x 命中，点击区覆盖整列）。
+/// 口径：柱高按当前序列最大值归一；对比态不画柱，只画两条折线（实线本周期、虚线对照），
+/// 视觉按原型 `.cumlay` 的 cmpA / cmpB；每列可点开二级页（点击按 x 命中，点击区覆盖整列）。
 final class TokenBarsView: NSView {
 
     /// 柱形态
@@ -70,28 +72,34 @@ final class TokenBarsView: NSView {
         let count = buckets.count
         let gap: CGFloat = 2
         let columnWidth = max(1, (bounds.width - gap * CGFloat(count - 1)) / CGFloat(count))
-        let peakValue = max(metricPeak(buckets), 1)
-        let previousPeak = max(metricPeak(previous), 1)
-        let scale = max(scaleMax ?? (shape == .pair ? max(peakValue, previousPeak) : peakValue), 1)
+        // 对比态按两条序列各自峰值归一（原型 cmpA / cmpB 的 scCmp = max(本期峰, 对照峰)），
+        // 柱态沿用既有求和基准不动（堆叠态与请求数态本轮冻结）
+        let base = shape == .pair ? max(seriesPeak(buckets), seriesPeak(previous), 1)
+                                  : max(metricPeak(buckets), 1)
+        let scale = max(scaleMax ?? base, 1)
 
-        for index in buckets.indices {
-            let x = bounds.minX + CGFloat(index) * (columnWidth + gap)
-            let column = NSRect(x: x, y: bounds.minY, width: columnWidth, height: bounds.height)
-            switch shape {
-            case .stack:
-                drawStack(bucket: buckets[index], scale: scale, in: column)
-            case .request:
-                drawRequest(bucket: buckets[index], scale: scale, in: column)
-            case .pair:
-                drawPair(current: buckets[index],
-                         previous: index < previous.count ? previous[index] : .empty,
-                         scale: scale,
-                         in: column)
-            }
+        if shape == .pair {
+            // 对比态不画柱（原型 #hBars 直接隐藏），整幅只有两条折线
+            drawPairLines(gap: gap, columnWidth: columnWidth, count: count, scale: scale)
+        } else {
+            drawColumns(gap: gap, columnWidth: columnWidth, scale: scale)
         }
 
         if showsCumulative, cumulative.count == count {
             drawCumulative(columnWidth: columnWidth, gap: gap, count: count)
+        }
+    }
+
+    /// 逐列画柱（堆叠 / 请求数两态共用）
+    private func drawColumns(gap: CGFloat, columnWidth: CGFloat, scale: Int) {
+        for index in buckets.indices {
+            let x = bounds.minX + CGFloat(index) * (columnWidth + gap)
+            let column = NSRect(x: x, y: bounds.minY, width: columnWidth, height: bounds.height)
+            if shape == .stack {
+                drawStack(bucket: buckets[index], scale: scale, in: column)
+            } else {
+                drawRequest(bucket: buckets[index], scale: scale, in: column)
+            }
         }
     }
 
@@ -121,31 +129,45 @@ final class TokenBarsView: NSView {
         NSBezierPath(rect: rect).fill()
     }
 
-    private func drawPair(current: TokenBucket, previous: TokenBucket, scale: Int, in column: NSRect) {
-        let pairGap: CGFloat = 1
-        let width = max(1, (column.width - pairGap) / 2)
-        let currentRect = NSRect(x: column.minX, y: column.minY, width: width, height: column.height)
-        let previousRect = NSRect(x: column.minX + width + pairGap, y: column.minY,
-                                  width: width, height: column.height)
-        TokenPaneStyle.trackColor.setFill()
-        NSBezierPath(roundedRect: currentRect, xRadius: 2, yRadius: 2).fill()
-        TokenPaneStyle.rowAltFill.setFill()
-        NSBezierPath(roundedRect: previousRect, xRadius: 2, yRadius: 2).fill()
+    /// 对比态折线：本周期实线 1.6pt、对照虚线 1.2pt（3 / 2.4 段，0.9 透明）
+    ///
+    /// 视觉取自原型 `.cumlay .cmpA / .cmpB`：点在列中心、两条线共用同一归一化基准；
+    /// 颜色沿用既有语义色——请求数用 requestColor、三段总量用 uncachedColor，对照固定 ghostColor。
+    private func drawPairLines(gap: CGFloat, columnWidth: CGFloat, count: Int, scale: Int) {
+        let inset = TokenPaneStyle.pairLineInset
+        let plotHeight = max(1, bounds.height - inset * 2)
 
-        let currentValue = pairValue(current)
-        let previousValue = pairValue(previous)
-        if currentValue > 0 {
-            let height = Double(currentValue) / Double(scale) * Double(column.height)
-            TokenPaneStyle.requestColor.setFill()
-            NSBezierPath(rect: NSRect(x: currentRect.minX, y: currentRect.minY,
-                                      width: currentRect.width, height: CGFloat(height))).fill()
+        func path(_ values: [TokenBucket]) -> NSBezierPath {
+            let line = NSBezierPath()
+            for index in 0..<count {
+                let value = index < values.count ? pairValue(values[index]) : 0
+                let x = bounds.minX + (CGFloat(index) + 0.5) * (columnWidth + gap)
+                let ratio = min(1, max(0, Double(value) / Double(scale)))
+                let y = bounds.minY + inset + CGFloat(ratio) * plotHeight
+                if index == 0 {
+                    line.move(to: NSPoint(x: x, y: y))
+                } else {
+                    line.line(to: NSPoint(x: x, y: y))
+                }
+            }
+            return line
         }
-        if previousValue > 0 {
-            let height = Double(previousValue) / Double(scale) * Double(column.height)
-            TokenPaneStyle.ghostColor.setFill()
-            NSBezierPath(rect: NSRect(x: previousRect.minX, y: previousRect.minY,
-                                      width: previousRect.width, height: CGFloat(height))).fill()
-        }
+
+        // 对照线先画（在下层），本周期线压在上面
+        let previousPath = path(previous)
+        previousPath.lineWidth = 1.2
+        previousPath.lineJoinStyle = .round
+        previousPath.lineCapStyle = .round
+        previousPath.setLineDash([3, 2.4], count: 2, phase: 0)
+        TokenPaneStyle.ghostColor.withAlphaComponent(0.9).setStroke()
+        previousPath.stroke()
+
+        let currentPath = path(buckets)
+        currentPath.lineWidth = 1.6
+        currentPath.lineJoinStyle = .round
+        currentPath.lineCapStyle = .round
+        (pairMetric == .request ? TokenPaneStyle.requestColor : TokenPaneStyle.uncachedColor).setStroke()
+        currentPath.stroke()
     }
 
     private func drawCumulative(columnWidth: CGFloat, gap: CGFloat, count: Int) {
@@ -163,8 +185,14 @@ final class TokenBarsView: NSView {
         path.stroke()
     }
 
+    /// 柱态归一基准（既有口径：序列求和，非序列峰值——本轮不改）
     private func metricPeak(_ list: [TokenBucket]) -> Int {
         list.reduce(0) { $0 + pairValue($1) }
+    }
+
+    /// 折线态归一基准：序列峰值
+    private func seriesPeak(_ list: [TokenBucket]) -> Int {
+        list.reduce(0) { Swift.max($0, pairValue($1)) }
     }
 
     // MARK: 交互
@@ -180,197 +208,5 @@ final class TokenBarsView: NSView {
     override func resetCursorRects() {
         super.resetCursorRects()
         if onSelect != nil { addCursorRect(bounds, cursor: .pointingHand) }
-    }
-}
-
-/// sparkline / 面积折线（分族卡、天趋势卡、命中率走势共用）
-final class TokenSparkView: NSView {
-
-    private var values: [Double] = []
-    private var fill: NSColor?
-    private var stroke: NSColor = TokenPaneStyle.uncachedColor
-
-    init(height: CGFloat,
-         stroke: NSColor = TokenPaneStyle.uncachedColor,
-         fill: NSColor? = nil) {
-        self.stroke = stroke
-        self.fill = fill
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([heightAnchor.constraint(equalToConstant: height)])
-        setAccessibilityRole(.image)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    func update(values: [Double], accessibility: String) {
-        self.values = values
-        setAccessibilityLabel(accessibility)
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard values.count > 1 else { return }
-        let peak = max(values.max() ?? 1, 1)
-        let count = values.count
-        let line = NSBezierPath()
-        for index in values.indices {
-            let x = bounds.minX + CGFloat(index) / CGFloat(count - 1) * bounds.width
-            let y = bounds.minY + CGFloat(min(1, values[index] / peak)) * (bounds.height - 2) + 1
-            if index == 0 { line.move(to: NSPoint(x: x, y: y)) } else { line.line(to: NSPoint(x: x, y: y)) }
-        }
-        if let fill {
-            let area = line.copy() as? NSBezierPath ?? NSBezierPath()
-            area.line(to: NSPoint(x: bounds.maxX, y: bounds.minY))
-            area.line(to: NSPoint(x: bounds.minX, y: bounds.minY))
-            area.close()
-            fill.withAlphaComponent(0.55).setFill()
-            area.fill()
-        }
-        line.lineWidth = 1.4
-        line.lineJoinStyle = .round
-        stroke.setStroke()
-        line.stroke()
-    }
-}
-
-/// 迷你柱（请求数分族卡）
-final class TokenMiniBarsView: NSView {
-
-    private var values: [Double] = []
-
-    init(height: CGFloat) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([heightAnchor.constraint(equalToConstant: height)])
-        setAccessibilityRole(.image)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    func update(values: [Double], accessibility: String) {
-        self.values = values
-        setAccessibilityLabel(accessibility)
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard !values.isEmpty else { return }
-        let peak = max(values.max() ?? 1, 1)
-        let gap: CGFloat = 1
-        let width = max(1, (bounds.width - gap * CGFloat(values.count - 1)) / CGFloat(values.count))
-        for index in values.indices {
-            let height = max(1, CGFloat(values[index] / peak) * bounds.height)
-            let rect = NSRect(x: bounds.minX + CGFloat(index) * (width + gap),
-                              y: bounds.minY,
-                              width: width,
-                              height: height)
-            TokenPaneStyle.requestColor.withAlphaComponent(values[index] >= peak ? 1 : 0.85).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 1.5, yRadius: 1.5).fill()
-        }
-    }
-}
-
-/// 缓存命中率环（30pt，环宽 3.4pt，中心一位小数字）
-final class TokenRingView: NSView {
-
-    private var rate: Double = 0
-    private var centerText = "—"
-
-    init() {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: TokenPaneStyle.ringSize),
-            heightAnchor.constraint(equalToConstant: TokenPaneStyle.ringSize),
-        ])
-        setAccessibilityRole(.progressIndicator)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    func update(rate: Double, text: String, accessibility: String) {
-        self.rate = max(0, min(1, rate))
-        centerText = text
-        setAccessibilityLabel(accessibility)
-        setAccessibilityValue(Int(rate * 100))
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let inset = TokenPaneStyle.ringWidth / 2 + 0.5
-        let rect = bounds.insetBy(dx: inset, dy: inset)
-        let background = NSBezierPath(ovalIn: rect)
-        background.lineWidth = TokenPaneStyle.ringWidth
-        TokenPaneStyle.trackColor.setStroke()
-        background.stroke()
-
-        defer { drawCenterText() }
-        guard rate > 0 else { return }
-        let foreground = NSBezierPath()
-        foreground.appendArc(withCenter: NSPoint(x: bounds.midX, y: bounds.midY),
-                             radius: rect.width / 2,
-                             startAngle: 90,
-                             endAngle: 90 - CGFloat(rate) * 360,
-                             clockwise: true)
-        foreground.lineWidth = TokenPaneStyle.ringWidth
-        foreground.lineCapStyle = .round
-        TokenPaneStyle.cacheColor.setStroke()
-        foreground.stroke()
-    }
-
-    /// 环内数字用手绘居中（与 SystemRingView 同法）：
-    /// 用 NSTextField 贴中心点时，cell 自带内边距 + 单行 cell 顶对齐，实测「97.5」会偏上并溢出环。
-    private func drawCenterText() {
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: TokenPaneStyle.ringTextFont,
-            .foregroundColor: TokenPaneStyle.cacheInk,
-        ]
-        let size = (centerText as NSString).size(withAttributes: attributes)
-        (centerText as NSString).draw(at: NSPoint(x: bounds.midX - size.width / 2,
-                                                  y: bounds.midY - size.height / 2),
-                                      withAttributes: attributes)
-    }
-}
-
-/// 分布条（项目 / 模型占比，一次性画完所有段）
-final class TokenStackBarView: NSView {
-
-    private var shares: [Double] = []
-    private var colors: [NSColor] = []
-
-    init(height: CGFloat = TokenPaneStyle.stackBarHeight) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([heightAnchor.constraint(equalToConstant: height)])
-        setAccessibilityRole(.image)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    func update(shares: [Double], colors: [NSColor], accessibility: String) {
-        self.shares = shares
-        self.colors = colors
-        setAccessibilityLabel(accessibility)
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let radius = bounds.height / 2
-        TokenPaneStyle.trackColor.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
-        var offset = bounds.minX
-        for (index, share) in shares.enumerated() where share > 0 {
-            let width = CGFloat(share) * bounds.width
-            guard width > 0.5 else { continue }
-            let rect = NSRect(x: offset, y: bounds.minY, width: width, height: bounds.height)
-            colors[safe: index]?.setFill()
-            NSBezierPath(rect: rect).fill()
-            offset += width
-        }
     }
 }

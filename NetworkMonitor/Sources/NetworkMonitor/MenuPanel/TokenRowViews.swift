@@ -21,6 +21,9 @@ final class TokenDistroRowView: NSView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         nameLabel.lineBreakMode = .byTruncatingTail
+        // 单行强制：名称超长只走尾部省略，不允许回绕成两行（行高由 TokenPaneStyle 给死）
+        nameLabel.usesSingleLineMode = true
+        valueLabel.usesSingleLineMode = true
         nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         valueLabel.alignment = .right
         valueLabel.setContentHuggingPriority(.required, for: .horizontal)
@@ -53,7 +56,11 @@ final class TokenDistroRowView: NSView {
             stack.spacing = 8
             stack.addArrangedSubview(nameLabel)
             stack.addArrangedSubview(valueLabel)
-            valueLabel.widthAnchor.constraint(equalToConstant: TokenPaneStyle.distroValueWidth).isActive = true
+            // 数值按自身文字宽度铺开（下限 distroValueWidth），名称拿剩下的宽度并尾部省略。
+            // 原因：固定 44pt 时「3.37B · 20.4%」实测需要 75pt，每行数值都被截到「3.37B…」，
+            // 而名称只用到 143pt、行内还空着 87pt。数值不截断、名称在空间不足时才截断。
+            valueLabel.widthAnchor.constraint(
+                greaterThanOrEqualToConstant: TokenPaneStyle.distroValueWidth).isActive = true
         }
         setAccessibilityRole(.staticText)
     }
@@ -71,14 +78,37 @@ final class TokenDistroRowView: NSView {
     }
 
 #if DEBUG
-    /// 快照自证：名称标签的实到宽度 / 完整显示所需宽度（needed > available 即截断）
+    /// 快照自证：名称 / 数值标签的实到宽度与「完整显示所需宽度」（needed > available 即截断）
+    ///
+    /// 另给行宽 / 行高 / 名称实到高度：名称高过行高即「压行」，行宽用于复算可用宽度。
     func metricsForSnapshot(in reference: NSView)
-        -> (available: CGFloat, needed: CGFloat, text: String, value: String) {
+        -> (available: CGFloat, needed: CGFloat, text: String, value: String,
+            rowWidth: CGFloat, rowHeight: CGFloat, nameHeight: CGFloat,
+            valueAvailable: CGFloat, valueNeeded: CGFloat) {
         layoutSubtreeIfNeeded()
-        return (nameLabel.convert(nameLabel.bounds, to: reference).width,
-                nameLabel.intrinsicContentSize.width,
+        // 用「文字区宽度 vs 纯文本宽度」判定截断：NSTextField 的 cell 内边距会把
+        // intrinsicContentSize 撑大 4pt，拿 frame 宽度直接比会漏判「刚好差 2pt」的省略。
+        let nameFrame = nameLabel.convert(nameLabel.bounds, to: reference)
+        return (Self.textArea(nameLabel),
+                Self.textWidth(nameLabel.stringValue, font: nameLabel.font),
                 nameLabel.stringValue,
-                valueLabel.stringValue)
+                valueLabel.stringValue,
+                bounds.width,
+                bounds.height,
+                nameFrame.height,
+                Self.textArea(valueLabel),
+                Self.textWidth(valueLabel.stringValue, font: valueLabel.font))
+    }
+
+    /// 标签的可绘制文字宽度（去掉 cell 内边距）
+    private static func textArea(_ label: NSTextField) -> CGFloat {
+        label.cell?.drawingRect(forBounds: label.bounds).width ?? label.bounds.width
+    }
+
+    /// 完整显示所需文字宽度（按当前字体量纯文本）
+    private static func textWidth(_ text: String, font: NSFont?) -> CGFloat {
+        let size = (text as NSString).size(withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 10.5)])
+        return (size.width * 100).rounded(.up) / 100
     }
 #endif
 }

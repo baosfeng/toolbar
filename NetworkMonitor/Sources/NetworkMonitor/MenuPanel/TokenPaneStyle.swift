@@ -165,6 +165,8 @@ enum TokenPaneStyle {
     static let ringWidth: CGFloat = 3.6
     /// 分布条高度
     static let stackBarHeight: CGFloat = 7
+    /// 对比折线绘图区上下余量（1.6pt 描边不被裁半）
+    static let pairLineInset: CGFloat = 1.8
 
     // MARK: 首屏区块高度（320×520 面板预算：pane 可用 458pt）
 

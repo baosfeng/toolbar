@@ -282,11 +282,13 @@ final class TokenPaneView: MenuPanelPaneView {
     }
 
 #if DEBUG
-    /// 快照自证专用（仅 DEBUG）：切换范围 / 小时归属 / 趋势形态
-    func applyStateForSnapshot(range: TokenRange, hourScope: TokenHourScope, trendMode: TokenTrendMode) {
+    /// 快照自证专用（仅 DEBUG）：切换范围 / 小时归属 / 趋势形态 / 主图形态（堆叠·对比）
+    func applyStateForSnapshot(range: TokenRange, hourScope: TokenHourScope, trendMode: TokenTrendMode,
+                               hourView: TokenHourView? = nil) {
         self.range = range
         self.hourScope = hourScope
         self.trendMode = trendMode
+        if let hourView { self.hourView = hourView }
         if snapshot != nil { render() }
     }
 

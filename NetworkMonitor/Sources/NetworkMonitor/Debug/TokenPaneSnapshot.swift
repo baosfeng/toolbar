@@ -108,6 +108,24 @@ enum TokenPaneSnapshot {
             })
         }
 
+        // 交互状态：主图「对比」形态（本周期实线 / 对照虚线两条折线，主面板与二级页同源）
+        if let tokenSnapshot {
+            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+                let name = appearance == .aqua ? "light" : "dark"
+                let panel = MenuPanelView()
+                panel.updateToken(tokenSnapshot, notifySize: false)
+                panel.select(tab: .token)
+                panel.tokenPane.applyStateForSnapshot(range: .today, hourScope: .today,
+                                                      trendMode: .stack, hourView: .compare)
+                let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
+                MenuPanelSnapshot.render(view: panel, size: size, appearanceName: appearance,
+                                         to: directory.appendingPathComponent("menu-token-compare-" + name + ".png"),
+                                         postLayout: { view in
+                    (view as? MenuPanelView)?.scrollForSnapshot(fraction: 0.16)
+                })
+            }
+        }
+
         // 真实面板高度 320×520（Popover 实际可视高度）：首屏要一次看全
         // Hero / 四族卡 / 24h 图 / 缓存环 / 项目 · 模型
         if let tokenSnapshot {
@@ -158,6 +176,9 @@ enum TokenPaneSnapshot {
         }
         if let tokenSnapshot {
             writeReadabilityMetrics(directory: directory, snapshot: tokenSnapshot)
+        }
+        if let tokenSnapshot {
+            captureDistroRows(directory: directory, snapshot: tokenSnapshot)
         }
         writeSegmentMetrics(directory: directory)
         AppContext.shared.logger.info("Token 快照：补充状态完成（加载 / 空 / 不可用 / 滚到底 / 分段宽度实测）")
