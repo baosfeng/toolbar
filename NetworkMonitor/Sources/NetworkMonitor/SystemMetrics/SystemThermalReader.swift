@@ -20,15 +20,35 @@ final class SystemThermalReader: @unchecked Sendable {
 
     // MARK: 私有符号签名
 
+    // MARK: 所有权规则（CoreFoundation Copy 规则，本文件唯一出处）
+    //
+    // 名字带 Create / Copy 的符号返回的是 **调用方持有 +1** 的引用，必须自己归还，
+    // 否则每调用一次泄漏一个对象（CFRelease 在 Swift SDK 里被标 unavailable，
+    // 统一用 Unmanaged 归还：takeRetainedValue() 把 +1 交给 ARC，或 release() 显式归还）。
+    //
+    // - Create：IOHIDEventSystemClientCreate → 由 Session 长期持有（释放它会让服务指针悬空，实测 SIGSEGV）
+    // - Copy  ：CopyServices / CopyProperty 一次性，随 Session 持有或即刻归还
+    // - Copy  ：CopyEvent 每次 read() 每个传感器一次 → 必须在作用域内归还（原先的泄漏点）
     private typealias CreateFunction = @convention(c) (CFAllocator?) -> OpaquePointer?
     private typealias SetMatchingFunction = @convention(c) (OpaquePointer?, CFDictionary?) -> Void
-    private typealias CopyServicesFunction = @convention(c) (OpaquePointer?) -> CFArray?
-    private typealias CopyPropertyFunction = @convention(c) (OpaquePointer?, CFString?) -> UnsafeRawPointer?
-    private typealias CopyEventFunction = @convention(c) (OpaquePointer?, Int32, Int64, Int64) -> OpaquePointer?
-    private typealias GetFloatFunction = @convention(c) (OpaquePointer?, Int64) -> Double
+    private typealias CopyServicesFunction = @convention(c) (OpaquePointer?) -> Unmanaged<CFArray>?
+    private typealias CopyPropertyFunction = @convention(c) (OpaquePointer?, CFString?) -> Unmanaged<CFTypeRef>?
+    private typealias CopyEventFunction = @convention(c) (OpaquePointer?, Int32, Int64, Int64) -> Unmanaged<CFTypeRef>?
+    private typealias GetFloatFunction = @convention(c) (UnsafeRawPointer?, Int64) -> Double
 
     /// 初始化成功后缓存的可复用会话
     private struct Session {
+        /// IOHIDEventSystemClientCreate 返回的 +1 引用，随 Session 长期持有
+        ///
+        /// 为什么不能释放：sensors 里的服务指针由该系统客户端内部持有，
+        /// 释放客户端后继续使用服务指针会立即 SIGSEGV（实测 exit 139）。
+        /// 终生只有一个对象，不随 read() 增长。
+        let client: CFTypeRef
+        /// IOHIDEventSystemClientCopyServices 返回的 +1 引用，随 Session 长期持有
+        ///
+        /// 为什么不能释放：sensors 里的裸指针是从该数组取出的非持有借用，
+        /// 数组是它们的持有者；终生只有一个对象，不随 read() 增长。
+        let services: CFArray
         let sensors: [(name: String, service: OpaquePointer)]
         let copyEvent: CopyEventFunction
         let getFloatValue: GetFloatFunction
@@ -63,9 +83,16 @@ final class SystemThermalReader: @unchecked Sendable {
 
         var maxTemperature: Double?
         for sensor in session.sensors {
-            guard let event = session.copyEvent(sensor.service,
-                                                Self.temperatureEventType, 0, 0) else { continue }
-            let celsius = session.getFloatValue(event, Self.temperatureLevelField)
+            guard let event = session.copyEvent(sensor.service, Self.temperatureEventType, 0, 0) else {
+                continue
+            }
+            // Copy 规则：CopyEvent 让调用方持有 +1，必须归还。
+            // 用 defer 而不是在末尾 release：下面两个 guard 会提前 continue，
+            // 任一分支漏放都会退回到每秒泄漏一个 IOHIDEvent 的老问题。
+            defer { event.release() }
+            // 事件本体仍由 event 持有，这里只取裸指针给 C 函数用，不转移所有权
+            let celsius = session.getFloatValue(UnsafeRawPointer(event.toOpaque()),
+                                                Self.temperatureLevelField)
             guard celsius.isFinite, Self.validRange.contains(celsius) else { continue }
             if let current = maxTemperature {
                 maxTemperature = max(current, celsius)
@@ -97,21 +124,29 @@ final class SystemThermalReader: @unchecked Sendable {
               let getFloatValue = symbol(handle, "IOHIDEventGetFloatValue", as: GetFloatFunction.self) else {
             return .unavailable
         }
+        // Create 规则：+1 引用直接交给 CFTypeRef，ARC 在 Session 释放时归还
         guard let client = create(kCFAllocatorDefault) else { return .unavailable }
+        let clientRef = Unmanaged<CFTypeRef>.fromOpaque(UnsafeRawPointer(client)).takeRetainedValue()
 
         let matching: [String: Any] = ["PrimaryUsagePage": 0xff00, "PrimaryUsage": 5]
         setMatching(client, matching as CFDictionary)
-        guard let services = copyServices(client) else { return .unavailable }
+        // Copy 规则：+1 引用交给 ARC，同时保证 services 数组活到 Session 释放
+        guard let services = copyServices(client)?.takeRetainedValue() else { return .unavailable }
 
         var cached: [(name: String, service: OpaquePointer)] = []
         for index in 0..<CFArrayGetCount(services) {
             guard let raw = CFArrayGetValueAtIndex(services, index) else { continue }
+            // 服务指针是数组内的非持有借用，归属由 services 保证，这里不额外持有
             let service = OpaquePointer(raw)
             cached.append((sensorName(service, copyProperty: copyProperty), service))
         }
         let selected = selectedSensors(from: cached)
         guard !selected.isEmpty else { return .unavailable }
-        return .ready(Session(sensors: selected, copyEvent: copyEvent, getFloatValue: getFloatValue))
+        return .ready(Session(client: clientRef,
+                              services: services,
+                              sensors: selected,
+                              copyEvent: copyEvent,
+                              getFloatValue: getFloatValue))
     }
 
     /// dlopen IOKit（系统路径优先，其次可能的重定向路径）
@@ -129,9 +164,10 @@ final class SystemThermalReader: @unchecked Sendable {
     /// 传感器名字（IOHIDServiceClientCopyProperty "Product"）
     private static func sensorName(_ service: OpaquePointer,
                                    copyProperty: CopyPropertyFunction) -> String {
+        // Copy 规则：CopyProperty 返回 +1；转成 Swift String 后立刻归还，
+        // 不留裸 Objective-C 对象给 ARC 猜（那正是其它文件偶发段错误的来源）。
         guard let raw = copyProperty(service, "Product" as CFString) else { return "" }
-        let value = unsafeBitCast(raw, to: CFTypeRef.self)
-        return (value as? String) ?? ""
+        return raw.takeRetainedValue() as? String ?? ""
     }
 
     /// 只保留 2-4 个 SoC 温度传感器：PMU tdie 优先生效，其次 TP0s/TP1s 之类
