@@ -105,10 +105,71 @@ private func testHarnessScanResidencyBounded() {
     print("✅ 驻留有界 works")
 }
 
+// MARK: - 5. 病态超长单行（防 O(n²) 复发）
+//
+// 真实库里存在一行 14MB 的 tool/ptc-dispatch 事件（整份文件才 56MB）。
+// 曾经的写法每读到一块就把「已累积半行 + 整块」拼接后整体切分，
+// 于是一行跨几百块时产生 O(行长²) 次拷贝：实测该文件峰值 471MB，
+// 且加了块级 autoreleasepool 后反而涨到 763MB（池让中间 Data 更快释放，
+// 却掩盖了重复整条复制的本质）。改为增量追加后应回落到与单行长度成正比。
+
+private func testHarnessPathologicalLongLine() {
+    guard let zstd = harnessZstdPath() else {
+        print("⏭  跳过超长单行：无 zstd")
+        return
+    }
+    let directory = harnessTempDirectory()
+    defer { try? FileManager.default.removeItem(atPath: directory) }
+
+    let plainPath = directory + "/longline.jsonl"
+    let archivePath = directory + "/longline.v4.jsonl.zstd"
+    // 20MB 单行工具事件 + 少量正常行：行本身不含 usage/cwd，属于「预筛会跳过」的类别，
+    // 因此这条用例只考验流式切分，与 JSON 解析无关。
+    var buffer = #"{"type":"session","cwd":"/tmp/lab/longline"}"# + "\n"
+    buffer += "{\"type\":\"tool/ptc-dispatch\",\"data\":{\"content\":\""
+    buffer += String(repeating: "x", count: 20 * 1024 * 1024)
+    buffer += "\n"
+    buffer += harnessUsageLine(tsMs: 1_700_000_000_000, input: 1, output: 2) + "\n"
+    guard (try? buffer.write(toFile: plainPath, atomically: true, encoding: .utf8)) != nil,
+          harnessCompress(zstdPath: zstd, from: plainPath, to: archivePath) else {
+        harnessFail("超长单行：夹具准备失败")
+        return
+    }
+    buffer = ""
+
+    let scanner = HarnessSessionScanner(sessionsRoot: directory, streamer: HarnessZstdLineStreamer())
+    let file = HarnessSessionFile(path: archivePath, sessionID: "longline", size: 0, mtimeMs: 0, members: [archivePath])
+    // 必须用峰值采样线程：O(n²) 开销发生在扫描过程中，结束时读一次会漏掉瞬时峰值
+    let sampler = HarnessPeakSampler()
+    let baseline = harnessFootprintMB()
+    sampler.start()
+    do {
+        let result = try scanner.scan(file: file, isCancelled: { false }, onLinesRead: nil)
+        let peak = sampler.stop()
+        let delta = peak - baseline
+        print(String(format: "  超长单行 footprint baseline=%.1fMB peak=%.1fMB delta=+%.1fMB",
+                     baseline, peak, delta))
+        assertEqual(result.events.count, 1, "超长单行：仍解析出 1 条 usage")
+        // 阈值口径：修复后实测 +18MB（20MB 行体 + zstd 缓冲）；
+        // 退回「每块拼接整行」的 O(行长²) 写法后实测 +91MB（且已在真机 14MB 单行上见到 471→763MB）。
+        // 取 60MB：既能拦住 O(n²) 复发，又给不同 zstd/内存分配器留出余量。
+        if delta > 60 {
+            print("❌ 超长单行内存异常：delta=+\(String(format: "%.1f", delta))MB > 60MB —— 切分疑似退回 O(行长²)")
+            exit(1)
+        }
+        print("✅ 超长单行不退化 works")
+    } catch {
+        _ = sampler.stop()
+        harnessFail("超长单行：扫描失败 \(error)")
+    }
+}
+
 // MARK: - 测试入口
 
 func runHarnessStreamMemoryRegressionTests() {
     print("\n🧪 Testing Harness 扫描驻留有界...")
     testHarnessScanResidencyBounded()
     print("✅ Harness 扫描驻留有界 works")
+    print("\n🧪 Testing Harness 超长单行切分...")
+    testHarnessPathologicalLongLine()
 }

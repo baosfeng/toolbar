@@ -130,19 +130,32 @@ public struct HarnessZstdLineStreamer: HarnessLineStreaming {
                 let chunk = handle.availableData
                 if chunk.isEmpty { return .endOfStream }
                 totalBytes += chunk.count
-                var combined = carry
-                combined.append(chunk)
-                let endsWithNewline = combined.last == 0x0A
-                let parts = combined.split(separator: 0x0A, omittingEmptySubsequences: false)
-                let completeCount = endsWithNewline ? parts.count : max(0, parts.count - 1)
-                for index in 0..<completeCount {
-                    onLine(Data(parts[index]))
+                // 直接在块内扫描换行，不再每轮把「已累积半行 + 整块」拼接后整体切分。
+                // 旧写法在「一行跨多块」时是 O(行长²) 次拷贝：实测一个含 14MB 单行的会话
+                // 反复整条复制，峰值 857MB；改为增量追加后，拷贝量收敛到单行长度本身。
+                let endsWithNewline = chunk.last == 0x0A
+                var lineStart = chunk.startIndex
+                var index = chunk.startIndex
+                while index < chunk.endIndex {
+                    if chunk[index] == 0x0A {
+                        let segment = chunk[lineStart..<index]
+                        if carry.isEmpty {
+                            onLine(Data(segment))
+                        } else {
+                            carry.append(contentsOf: segment)
+                            onLine(carry)
+                            carry = Data()
+                        }
+                        lineStart = chunk.index(after: index)
+                    }
+                    index = chunk.index(after: index)
                 }
-                // 残留半行必须复制到池外：Data(parts[...]) 是 combined 的视图载体，
-                // 直接持有会把整块 combined 一直吊到下一轮，等于把块级驻留又拉回来。
-                carry = endsWithNewline || parts.isEmpty
-                    ? Data()
-                    : Data(parts[parts.count - 1])
+                if lineStart < chunk.endIndex {
+                    carry.append(contentsOf: chunk[lineStart..<chunk.endIndex])
+                }
+                // 保留既有语义：块恰以换行结尾时多产出一个尾随空行
+                // （旧实现 split(omittingEmptySubsequences: false) 的产物，已有测试固化）
+                if endsWithNewline { onLine(Data()) }
                 return .continueReading
             }
             if outcome == .endOfStream { break }
