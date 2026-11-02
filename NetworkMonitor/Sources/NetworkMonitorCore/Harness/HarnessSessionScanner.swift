@@ -157,19 +157,26 @@ public final class HarnessSessionScanner: @unchecked Sendable, HarnessSessionSca
             try streamer.streamLines(from: path, isCancelled: isCancelled) { line in
                 totalLines += 1
                 if totalLines % progressStride == 0 { onLinesRead?(totalLines) }
-                switch HarnessEventParser.parse(line: line) {
-                case .session(let sessionCwd):
-                    // 首行为准；后续重复 session 行忽略
-                    if cwd.isEmpty { cwd = sessionCwd }
-                case .message(let message):
-                    // 多版本文件可能包含同一段历史：按内容去重，避免重复计数
-                    if seenKeys.insert(Self.dedupeKey(message)).inserted {
-                        messages.append(message)
+                // 逐行兜底池：JSONSerialization 每行都会产生 NSString/NSNumber/NSDictionary 中间体，
+                // 不包池时它们要等到所在线程顶层池（整段 GCD 索引块结束）才释放，
+                // 于是驻留量随「已解析字节数」单调增长。这里保证按行回收，
+                // 使驻留量只与单行大小相关，与文件大小无关。
+                // 流式读取侧（HarnessZstdLineStreamer）另有块级池覆盖管道缓冲，两者互补。
+                autoreleasepool {
+                    switch HarnessEventParser.parse(line: line) {
+                    case .session(let sessionCwd):
+                        // 首行为准；后续重复 session 行忽略
+                        if cwd.isEmpty { cwd = sessionCwd }
+                    case .message(let message):
+                        // 多版本文件可能包含同一段历史：按内容去重，避免重复计数
+                        if seenKeys.insert(Self.dedupeKey(message)).inserted {
+                            messages.append(message)
+                        }
+                    case .ignored:
+                        ignoredLines += 1
+                    case .malformed:
+                        malformedLines += 1
                     }
-                case .ignored:
-                    ignoredLines += 1
-                case .malformed:
-                    malformedLines += 1
                 }
             }
         }

@@ -19,6 +19,14 @@ public struct HarnessZstdLineStreamer: HarnessLineStreaming {
     /// 单次读取块大小
     static let readChunkSize = 64 * 1024
 
+    /// 单轮读取的结果（用于跳出块级 autoreleasepool 后决定是否结束）
+    private enum BlockOutcome {
+        /// 读到数据，继续下一轮
+        case continueReading
+        /// 管道已关闭（读到空块）
+        case endOfStream
+    }
+
     public let availability: HarnessSourceAvailability
     /// 已定位到的可执行文件路径（不可用时为 nil）
     private let executablePath: String?
@@ -114,23 +122,30 @@ public struct HarnessZstdLineStreamer: HarnessLineStreaming {
                 cancelled = true
                 break
             }
-            let chunk = handle.availableData
-            if chunk.isEmpty { break }
-            totalBytes += chunk.count
-
-            var combined = carry
-            combined.append(chunk)
-            let endsWithNewline = combined.last == 0x0A
-            let parts = combined.split(separator: 0x0A, omittingEmptySubsequences: false)
-            let completeCount = endsWithNewline ? parts.count : max(0, parts.count - 1)
-            for index in 0..<completeCount {
-                onLine(Data(parts[index]))
+            // 一轮读取的全部中间体（NSData 块、拼接缓冲、切片）都纳入同一个池内回收。
+            // 关键：availableData 返回的块是自动释放对象，若只把 onLine 包进池，
+            // 这些块仍会挂到所在线程顶层池（GCD 块结束 / 主线程 runloop 才会清），
+            // 实测 86MB 解压数据会因此常驻 +83MB；块级池才能把它压到 +4MB。
+            let outcome: BlockOutcome = autoreleasepool {
+                let chunk = handle.availableData
+                if chunk.isEmpty { return .endOfStream }
+                totalBytes += chunk.count
+                var combined = carry
+                combined.append(chunk)
+                let endsWithNewline = combined.last == 0x0A
+                let parts = combined.split(separator: 0x0A, omittingEmptySubsequences: false)
+                let completeCount = endsWithNewline ? parts.count : max(0, parts.count - 1)
+                for index in 0..<completeCount {
+                    onLine(Data(parts[index]))
+                }
+                // 残留半行必须复制到池外：Data(parts[...]) 是 combined 的视图载体，
+                // 直接持有会把整块 combined 一直吊到下一轮，等于把块级驻留又拉回来。
+                carry = endsWithNewline || parts.isEmpty
+                    ? Data()
+                    : Data(parts[parts.count - 1])
+                return .continueReading
             }
-            if endsWithNewline || parts.isEmpty {
-                carry = Data()
-            } else {
-                carry = Data(parts[parts.count - 1])
-            }
+            if outcome == .endOfStream { break }
         }
 
         if !cancelled, !carry.isEmpty {

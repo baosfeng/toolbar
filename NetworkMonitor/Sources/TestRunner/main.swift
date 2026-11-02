@@ -81,8 +81,10 @@ runOpencodeGoBillingTests()
 
 // MARK: - DSH token 数据层（会话扫描 / 增量索引 / 聚合快照）
 runHarnessTokenTests()
+runHarnessStreamMemoryTests()
 runHarnessTokenIndexTests()
 runHarnessTokenHourlyTests()
+runHarnessStreamMemoryRegressionTests()
 
 // MARK: - Token tab 展示口径（范围窗口 / 缺省小时 / 环比 / 空态）
 runTokenPaneTests()
