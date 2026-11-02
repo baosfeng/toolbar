@@ -40,10 +40,17 @@ final class ClipboardCardView: NSView {
     /// 收藏星尺寸
     private static let starSize: CGFloat = 12
 
-    /// 缩略图缓存（原图按需懒加载，卡片只持有缩略图）
+    /// 缩略图缓存（卡片只持有缩略图，原图从不进缓存）
     ///
+    /// cost 口径：解码后像素字节数（宽 × 高 × 4），预算见 ClipboardImagePolicy.thumbnailCacheCostLimit（64MB）；
+    /// 同时限制条数，避免大量小图把条数堆到无界。
     /// internal：由 `ClipboardCardView+Resources.swift` 跨文件访问（Swift 扩展不能声明存储属性）。
-    static let thumbnailCache = NSCache<NSString, NSImage>()
+    static let thumbnailCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.totalCostLimit = ClipboardImagePolicy.thumbnailCacheCostLimit
+        cache.countLimit = ClipboardImagePolicy.thumbnailCacheCountLimit
+        return cache
+    }()
     /// 来源 App 图标缓存（internal 原因同上）
     static let iconCache = NSCache<NSString, NSImage>()
 
@@ -189,8 +196,31 @@ final class ClipboardCardView: NSView {
         } else {
             Self.symbolImage(named: "photo", color: .secondaryLabelColor, pointSize: 24)?
                 .draw(in: NSRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24))
+            // 原图拒绝落盘（像素超限 / 解码失败）时补一行原因，避免用户以为图片丢了
+            if item.imagePath == nil {
+                drawPlaceholderCaption(item.preview, in: body)
+            }
         }
         NSGraphicsContext.restoreGraphicsState()
+    }
+
+    /// 占位降级说明（单行居中、中间截断；空文案不绘制）
+    private func drawPlaceholderCaption(_ caption: String, in body: NSRect) {
+        let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, body.height > 60 else { return }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingMiddle
+        paragraph.alignment = .center
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 10),
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .paragraphStyle: paragraph
+        ]
+        let rect = NSRect(x: body.minX + 6,
+                          y: body.midY + 18,
+                          width: body.width - 12,
+                          height: 14)
+        (text as NSString).draw(in: rect, withAttributes: attributes)
     }
 
     /// 底部单行 meta：左「类型图标 + ⌘N + 收藏星」，右「相对时间 + 来源 App 图标」

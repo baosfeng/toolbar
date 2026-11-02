@@ -43,6 +43,10 @@ runClipboardUninitializedTests()
 runClipboardPanelMockTests()
 runClipboardRelativeTimeTests()
 
+// MARK: - 剪贴板：图片像素守卫与落盘（内存护栏）
+runClipboardImagePolicyTests()
+runClipboardImageStoreTests()
+
 // MARK: - 菜单面板取数口径
 runMenuPanelMetricsTests()
 runSystemMetricsTests()

@@ -171,6 +171,9 @@ final class PasteboardWatcher: ClipboardCaptureService {
     }
 
     /// 图片条目：多个 pasteboardItems 只取首个可解码项
+    ///
+    /// 像素守卫在落盘前判定：超限的图不写盘、不生成缩略图，只留一条带尺寸的占位记录
+    /// （卡片按 `imagePath == nil` 渲染占位符号，用户可见「超过像素上限，未保存原图」）。
     private func makeImageDraft(pasteboardItems: [NSPasteboardItem],
                                 bundleID: String?,
                                 appName: String?,
@@ -178,21 +181,35 @@ final class PasteboardWatcher: ClipboardCaptureService {
         for pasteboardItem in pasteboardItems {
             guard let representation = Self.imageRepresentation(of: pasteboardItem) else { continue }
             guard let contentHash = ClipboardContentHasher.prepareImageData(representation.data) else {
-                logger.debug("图片为空或超过上限，跳过落库")
+                logger.debug("图片为空或超过压缩字节上限，跳过落库")
                 continue
             }
-            guard let stored = ClipboardImageStore.store(data: representation.data,
-                                                         contentHash: contentHash,
-                                                         logger: logger) else { continue }
-            return ClipboardDraft(kind: .image,
-                                  contentHash: contentHash,
-                                  preview: "图片 \(stored.width)×\(stored.height)",
-                                  imagePath: stored.path,
-                                  imageWidth: stored.width,
-                                  imageHeight: stored.height,
-                                  sourceBundleID: bundleID,
-                                  sourceAppName: appName,
-                                  createdAt: now)
+            guard let outcome = ClipboardImageStore.store(data: representation.data,
+                                                          contentHash: contentHash,
+                                                          logger: logger) else { continue }
+            switch outcome {
+            case .stored(let stored):
+                return ClipboardDraft(kind: .image,
+                                      contentHash: contentHash,
+                                      preview: "图片 \(stored.width)×\(stored.height)",
+                                      imagePath: stored.path,
+                                      imageWidth: stored.width,
+                                      imageHeight: stored.height,
+                                      sourceBundleID: bundleID,
+                                      sourceAppName: appName,
+                                      createdAt: now)
+            case .rejected(let rejection):
+                // 占位降级：图太大（或不合法）时只记尺寸与提示，绝不落盘、不缓存
+                return ClipboardDraft(kind: .image,
+                                      contentHash: contentHash,
+                                      preview: rejection.placeholderPreview,
+                                      imagePath: nil,
+                                      imageWidth: rejection.width,
+                                      imageHeight: rejection.height,
+                                      sourceBundleID: bundleID,
+                                      sourceAppName: appName,
+                                      createdAt: now)
+            }
         }
         return nil
     }
@@ -202,100 +219,5 @@ final class PasteboardWatcher: ClipboardCaptureService {
         if let png = pasteboardItem.data(forType: .png) { return (png, true) }
         if let tiff = pasteboardItem.data(forType: .tiff) { return (tiff, false) }
         return nil
-    }
-}
-
-// MARK: - 图片落盘
-
-/// 图片落盘工具 — 原图与缩略图共用内容哈希命名
-///
-/// - 原图：~/Library/Application Support/macMonitor/clipboard/images/<hash>.png
-/// - 缩略图：<hash>_thumb.png（最长边 320，等比缩放）
-enum ClipboardImageStore {
-
-    /// 缩略图最长边
-    static let thumbnailMaxEdge: CGFloat = 320
-
-    /// 落盘结果
-    struct Stored {
-        /// 原图路径
-        let path: String
-        /// 像素宽
-        let width: Int
-        /// 像素高
-        let height: Int
-    }
-
-    /// 图片目录
-    static var directory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        return base.appendingPathComponent("macMonitor/clipboard/images", isDirectory: true)
-    }
-
-    /// 缩略图路径（卡片视图懒加载用）
-    static func thumbnailURL(for contentHash: String) -> URL {
-        directory.appendingPathComponent("\(contentHash)_thumb.png")
-    }
-
-    /// 原图落盘并生成缩略图
-    /// - Parameter data: 被选中表示的原始字节（PNG 或 TIFF）
-    static func store(data: Data, contentHash: String, logger: LoggingService) -> Stored? {
-        let directory = Self.directory
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let fileURL = directory.appendingPathComponent("\(contentHash).png")
-            try data.write(to: fileURL, options: .atomic)
-            guard let image = NSImage(contentsOf: fileURL) else {
-                logger.warning("剪贴板图片无法解码，已跳过：\(contentHash.prefix(8))")
-                return nil
-            }
-            let size = pixelSize(of: image)
-            writeThumbnail(image: image, to: thumbnailURL(for: contentHash), logger: logger)
-            return Stored(path: fileURL.path, width: Int(size.width), height: Int(size.height))
-        } catch {
-            logger.error("剪贴板图片落盘失败：\(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    /// 像素尺寸（优先取位图表示，避免受点/像素比影响）
-    private static func pixelSize(of image: NSImage) -> NSSize {
-        if let representation = image.representations.first,
-           representation.pixelsWide > 0, representation.pixelsHigh > 0 {
-            return NSSize(width: representation.pixelsWide, height: representation.pixelsHigh)
-        }
-        return image.size
-    }
-
-    /// 生成缩略图（最长边 320，等比缩放）
-    private static func writeThumbnail(image: NSImage, to url: URL, logger: LoggingService) {
-        guard let tiff = image.tiffRepresentation,
-              let source = NSBitmapImageRep(data: tiff) else { return }
-        let pixelWidth = CGFloat(max(source.pixelsWide, 1))
-        let pixelHeight = CGFloat(max(source.pixelsHigh, 1))
-        let scale = min(1, thumbnailMaxEdge / max(pixelWidth, pixelHeight))
-        let target = NSSize(width: max(1, (pixelWidth * scale).rounded()),
-                            height: max(1, (pixelHeight * scale).rounded()))
-        guard let thumbnail = NSBitmapImageRep(bitmapDataPlanes: nil,
-                                               pixelsWide: Int(target.width),
-                                               pixelsHigh: Int(target.height),
-                                               bitsPerSample: 8,
-                                               samplesPerPixel: 4,
-                                               hasAlpha: true,
-                                               isPlanar: false,
-                                               colorSpaceName: .deviceRGB,
-                                               bytesPerRow: 0,
-                                               bitsPerPixel: 0) else { return }
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: thumbnail)
-        image.draw(in: NSRect(origin: .zero, size: target), from: .zero, operation: .copy, fraction: 1)
-        NSGraphicsContext.restoreGraphicsState()
-        guard let png = thumbnail.representation(using: .png, properties: [:]) else { return }
-        do {
-            try png.write(to: url, options: .atomic)
-        } catch {
-            logger.warning("剪贴板缩略图写入失败：\(error.localizedDescription)")
-        }
     }
 }

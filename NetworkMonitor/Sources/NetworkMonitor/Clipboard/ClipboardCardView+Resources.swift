@@ -33,15 +33,27 @@ extension ClipboardCardView {
         return image.withSymbolConfiguration(configuration) ?? image
     }
 
-    /// 缩略图（懒加载 + 缓存）
+    /// 缩略图（懒加载 + 按解码字节计费的缓存）
+    ///
+    /// 只读 <hash>_thumb.png；缩略图缺失时用 ImageIO 从原图降采样补生成（内存与缩略图尺寸成正比）。
+    /// 禁止回退整张原图解码：那会把 60–300MB 位图常驻进缓存（本次修复的根因之一）。
     static func thumbnail(for item: ClipboardItem) -> NSImage? {
         let key = item.contentHash as NSString
         if let cached = thumbnailCache.object(forKey: key) { return cached }
-        let path = ClipboardImageStore.thumbnailURL(for: item.contentHash).path
-        guard let image = NSImage(contentsOfFile: path) ?? item.imagePath.flatMap({ NSImage(contentsOfFile: $0) }) else {
-            return nil
+        let url = ClipboardImageStore.thumbnailURL(for: item.contentHash)
+        var cgImage = ClipboardImageDecoder.thumbnail(fromFileAt: url.path)
+        if cgImage == nil, let imagePath = item.imagePath,
+           ClipboardImageStore.regenerateThumbnail(contentHash: item.contentHash,
+                                                    imagePath: imagePath,
+                                                    logger: AppContext.shared.logger) {
+            cgImage = ClipboardImageDecoder.thumbnail(fromFileAt: url.path)
         }
-        thumbnailCache.setObject(image, forKey: key)
+        guard let cgImage else { return nil }
+        let image = NSImage(cgImage: cgImage,
+                            size: NSSize(width: cgImage.width, height: cgImage.height))
+        // cost = 解码后像素字节数：缩略图正常 320×320×4 ≈ 400KB，64MB 预算约容 160 张
+        let cost = ClipboardImagePolicy.decodedBytes(width: cgImage.width, height: cgImage.height)
+        thumbnailCache.setObject(image, forKey: key, cost: cost)
         return image
     }
 

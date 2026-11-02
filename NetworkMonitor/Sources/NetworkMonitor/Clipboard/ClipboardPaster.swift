@@ -53,7 +53,7 @@ final class PasteboardWriter: ClipboardWriter {
         switch item.kind {
         case .image:
             guard let data = Self.pngData(at: item.imagePath) else {
-                logger.warning("图片条目写回失败：原图缺失或无法解码")
+                logger.warning("图片条目写回失败：原图缺失、无法解码或超过像素上限")
                 return false
             }
             let pasteboardItem = NSPasteboardItem()
@@ -116,11 +116,13 @@ final class PasteboardWriter: ClipboardWriter {
     }
 
     /// 读取落盘原图并转 PNG 字节
+    ///
+    /// 用 ImageIO 直读 CGImage：NSImage + tiffRepresentation 会把整张位图展开（12000×12000 实测峰值 2764MB），
+    /// ImageIO 走同一条解码管线但不产生 NSImage 中间态，且像素守卫会拒掉超大图（此时提示原图不可用）。
     private static func pngData(at path: String?) -> Data? {
-        guard let path, !path.isEmpty, let image = NSImage(contentsOfFile: path) else { return nil }
-        guard let tiff = image.tiffRepresentation,
-              let representation = NSBitmapImageRep(data: tiff) else { return nil }
-        return representation.representation(using: .png, properties: [:])
+        guard let path, !path.isEmpty,
+              let image = ClipboardImageDecoder.guardedCGImage(fromFileAt: path) else { return nil }
+        return ClipboardImageDecoder.pngData(from: image)
     }
 }
 
