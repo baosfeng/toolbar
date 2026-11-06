@@ -20,41 +20,51 @@ extension BillingPaneView {
     ///   - openDesign: 改用 Open Design 形态（credits 限额明细、无时间序列）
     ///   - opencodeGo: 追加 OpenCode Go 形态（三窗口、只查额度、其中一个窗口已限流）
     func injectPreview(configured: Bool = true, errorMessage: String? = nil,
-                       legacyLimits: Bool = false, legacyUsage: Bool = false,
-                       openDesign: Bool = false, opencodeGo: Bool = false) {
+                       legacyUsage: Bool = false, openDesign: Bool = false,
+                       opencodeGo: Bool = false, empty: Bool = false,
+                       singleProvider: Bool = false) {
         let now = Date()
-        // 聚合视图固定两块：Ollama + Open Design（后者未配置态也是真实常见形态）；
-        // OpenCode Go 只在对应取证档追加，避免默认快照被第三块撑高
+        // 数据层已过滤未配置 provider：这里构造的都是「可见」provider
         let ollama = Self.previewProvider(openDesign: false)
-        var states = [
+        if empty {
+            // 0 个可见 provider → 空态 + 「去设置配置」
+            update(BillingMonitor.Snapshot(states: []))
+            return
+        }
+        var states: [BillingMonitor.ProviderState] = [
             BillingMonitor.ProviderState(
                 descriptor: ollama,
                 range: .last24Hours,
-                isConfigured: configured,
-                balance: configured ? Self.previewOllamaBalance(now: now, legacy: legacyLimits) : nil,
-                usage: configured ? Self.previewOllamaUsage(endingAt: now, legacyOnly: legacyUsage) : nil,
-                lastUpdated: configured ? now : nil,
+                isConfigured: true,
+                balance: Self.previewOllamaBalance(now: now, legacy: legacyUsage && !openDesign),
+                usage: Self.previewOllamaUsage(endingAt: now, legacyOnly: legacyUsage),
+                lastUpdated: now,
                 isLoading: false,
-                errorMessage: configured ? errorMessage : nil),
+                errorMessage: errorMessage),
             // Open Design：无金额维度、额度是两条 credits 窗口、服务端不分桶
             BillingMonitor.ProviderState(
                 descriptor: Self.previewProvider(openDesign: true),
                 range: .last24Hours,
-                isConfigured: openDesign,
-                balance: openDesign ? Self.previewOpenDesignBalance(now: now) : nil,
-                usage: openDesign ? Self.previewOpenDesignUsage(endingAt: now) : nil,
-                lastUpdated: openDesign ? now : nil,
+                isConfigured: true,
+                balance: Self.previewOpenDesignBalance(now: now),
+                usage: Self.previewOpenDesignUsage(endingAt: now),
+                lastUpdated: now,
                 isLoading: false,
                 errorMessage: nil),
         ]
-        if opencodeGo {
-            states.append(Self.previewOpencodeGoState(now: now, isConfigured: configured))
+        // openDesign == false 时不追加 Open Design 卡（避免与「只显示 1 个 provider」混淆）
+        if empty { states = [] }
+        if opencodeGo && !singleProvider {
+            states.append(Self.previewOpencodeGoState(now: now))
         }
+        // 默认档只留 Ollama；Open Design 仅 openDesign 档追加（数据层契约下它必须已配置才可见）
+        if !openDesign {
+            states.removeAll { $0.descriptor.id == "open-design" }
+        }
+        if singleProvider { states = [states[0]] }
         update(BillingMonitor.Snapshot(states: states))
-        // 快照默认展开第一块，用于核对用量区（柱状图 / 模型行 / 范围按钮）；
-        // OpenCode Go 档没有用量区可展开，三块平铺以核对 1–3 列额度格
-        let expandedID: String? = opencodeGo ? nil : (configured ? ollama.id : nil)
-        expandForPreview(expandedID)
+        // 快照默认不展开（收起态是首屏主形态）；展开态由 captureCreditsExpanded 单独取景
+        expandForPreview(nil)
     }
 
     /// 示意 provider 描述符（字段与真实注册表一致，保证页头与文案走同一路径）
@@ -108,8 +118,7 @@ extension BillingPaneView {
     }
 
     /// OpenCode Go 示意状态：5 小时 / 每周 / 每月三窗口，只查额度（没有用量接口）
-    private static func previewOpencodeGoState(now: Date,
-                                               isConfigured: Bool) -> BillingMonitor.ProviderState {
+    private static func previewOpencodeGoState(now: Date) -> BillingMonitor.ProviderState {
         BillingMonitor.ProviderState(
             descriptor: BillingMonitor.ProviderDescriptor(
                 id: "opencode-go", displayName: "OpenCode Go", symbolName: "terminal",
@@ -117,11 +126,11 @@ extension BillingPaneView {
                 supportsUsage: false, supportsTimeSeries: false,
                 credentialPageURL: URL(string: "https://opencode.ai/")),
             range: .last24Hours,
-            isConfigured: isConfigured,
-            balance: isConfigured ? Self.previewOpencodeGoBalance(now: now) : nil,
+            isConfigured: true,
+            balance: Self.previewOpencodeGoBalance(now: now),
             // 没有用量接口：快照里也没有 usage，块内不出现摘要行与展开箭头
             usage: nil,
-            lastUpdated: isConfigured ? now : nil,
+            lastUpdated: now,
             isLoading: false,
             errorMessage: nil)
     }

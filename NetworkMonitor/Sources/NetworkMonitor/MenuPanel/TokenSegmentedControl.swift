@@ -46,7 +46,7 @@ final class TokenSegmentedControl: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        TokenPaneStyle.cardFill.setFill()
+        PaneCardStyle.cardFill.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
     }
 

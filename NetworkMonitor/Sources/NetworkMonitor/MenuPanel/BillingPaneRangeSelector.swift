@@ -78,7 +78,8 @@ final class BillingRangeSegmentedView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        MenuPanelStyle.subtleFill.setFill()
+        // 与 Token 页分段控件同一容器底（卡片实色面）
+        PaneCardStyle.cardFill.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
         super.draw(dirtyRect)
     }
@@ -125,7 +126,8 @@ final class BillingRangeButtonRow: MenuPanelRow {
 
     override func draw(_ dirtyRect: NSRect) {
         if isSelected {
-            BillingPaneStyle.accentSoft.setFill()
+            // 与 Token 页分段选中态同一底（前景 7%）——改前额度页用强调色 15%，两页一眼两套
+            PaneCardStyle.selectedFill.setFill()
             NSBezierPath(roundedRect: bounds, xRadius: 4, yRadius: 4).fill()
         }
         super.draw(dirtyRect)

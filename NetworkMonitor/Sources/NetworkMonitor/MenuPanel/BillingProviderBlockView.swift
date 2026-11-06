@@ -1,80 +1,72 @@
 import AppKit
 import NetworkMonitorCore
 
-// MARK: - provider 聚合块
+// MARK: - provider 卡（与 Token 分族卡同族）
 
-/// provider 聚合块 — 标题行 + 1–3 列额度 + 迷你趋势/摘要 + 可展开用量区
+/// provider 卡 —— 卡头（图标 + 名称 + 状态胶囊 + 时间 + 展开箭头）+ 1–3 额度格 + 迷你走势 + 展开区
 ///
-/// 收起态只占约 100pt：标题行、额度格（并排）、一行趋势与摘要；
-/// 点标题行就地展开该 provider 的完整柱状图与模型明细（同一时刻只允许一个展开）。
-/// 只查额度、没有用量接口的 provider（`supportsUsage == false`）整块更紧凑：
-/// 不显示摘要行、不显示展开箭头、标题行不响应点击。
+/// 与 Token 页的卡片同一套语言：`PaneCardBackgroundView` 底（实色面 / 9pt 圆角 / 7×4 内边距）、
+/// 卡头 13pt 行、卡内行距 2pt、卡间间距 4pt（由 `BillingPaneView` 的主栈给）。
+/// 状态用胶囊文字（正常 / 限流 / 出错 / 查询中），不再用 5pt 圆点。
 final class BillingProviderBlockView: NSView {
 
     // MARK: - 回调
 
-    /// 点标题行：展开 / 收起
+    /// 点卡头：展开 / 收起
     var onToggleExpand: (() -> Void)?
     /// 展开区内切换用量范围
     var onRangeChange: ((BillingRange) -> Void)?
-    /// 未配置态跳转到设置页配置凭据
+    /// 空态跳转设置（由 BillingPaneView 的 onOpenSettings 统一转出）
     var onOpenSettings: (() -> Void)?
     /// 错误条重试
     var onRetry: (() -> Void)?
 
     // MARK: - 子视图
 
-    /// 额度格最多列数（5 小时 / 每周 / 每月）
+    /// 额度格最多列数
     static let maxLimitColumns = BillingLimitLayout.maxColumns
 
-    private let card = MenuPanelCardView()
-    private let headerRow = MenuPanelRow(height: 16, onClick: nil)
+    private let card = PaneCardBackgroundView()
+    private let headerRow = MenuPanelRow(height: PaneCardStyle.cardHeadHeight, onClick: nil)
     private let iconView: NSImageView?
-    private let nameLabel = MenuPanelLabel.text("", font: BillingPaneStyle.blockNameFont,
-                                                color: .labelColor)
-    private let dotView = BillingStatusDotView()
-    private let timeLabel = MenuPanelLabel.text("", font: BillingPaneStyle.stampFont,
-                                                color: BillingPaneStyle.tertiaryText)
+    private let nameLabel = MenuPanelLabel.text("", font: PaneCardStyle.cardTitleFont,
+                                                color: PaneCardStyle.primaryText)
+    private let chip = BillingStatusChipView()
+    private let timeLabel = MenuPanelLabel.text("", font: PaneCardStyle.metaFont,
+                                                color: PaneCardStyle.tertiaryText)
     private let chevronView: NSImageView?
 
-    /// 额度格（预建 3 个复用，按 provider 实际窗口数显示前 N 个）
+    /// 额度格（预建 3 个复用）
     var limitCells: [BillingLimitCellView] = []
     private let limitsRow = NSStackView()
 
     let trendView = BillingMiniTrendView()
-    let summaryLabel = MenuPanelLabel.text("", font: BillingPaneStyle.cellTitleFont,
-                                           color: BillingPaneStyle.tertiaryText)
+    let summaryLabel = MenuPanelLabel.text("", font: PaneCardStyle.metaFont,
+                                           color: PaneCardStyle.tertiaryText)
     let summaryRow = NSStackView()
 
     let usageSection = BillingUsageSectionView()
     private let errorBanner = BillingErrorBannerView()
 
-    /// 未配置态的紧凑行（一行文案 +「去设置配置」按钮）
-    private let promptLabel = MenuPanelLabel.text("", font: BillingPaneStyle.cellTitleFont,
-                                                  color: BillingPaneStyle.tertiaryText)
-    private let settingsButtonRow = BillingPrimaryButtonRow(title: "去设置配置")
-    private let setupRow = NSStackView()
-    /// 该 provider 没有可展开的用量内容（只查额度的 provider）
+    /// 数据层契约：快照只含可见 provider（未配置 / 停用的不在里面），
+    /// 因此本视图不再有「未配置块」分支，也没有「去设置配置」行内按钮（入口在空态）。
     private var suppressesExpansion = false
 
-    /// 当前 provider id（回调时带上，避免控制器再维护一份映射）
     private(set) var providerID: String = ""
 
     // MARK: - 初始化
 
     init() {
-        iconView = MenuPanelLabel.symbol("creditcard", pointSize: 12,
-                                         color: MenuPanelStyle.accentColor)
-        chevronView = MenuPanelLabel.symbol("chevron.down", pointSize: 8,
-                                            color: BillingPaneStyle.tertiaryText)
+        iconView = MenuPanelLabel.symbol("creditcard", pointSize: 11, color: PaneCardStyle.accentText)
+        chevronView = MenuPanelLabel.symbol("chevron.down", pointSize: 8, color: PaneCardStyle.tertiaryText)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
         headerRow.contentStack.spacing = 5
         if let iconView { headerRow.contentStack.addArrangedSubview(iconView) }
         headerRow.contentStack.addArrangedSubview(nameLabel)
+        headerRow.contentStack.addArrangedSubview(chip)
         headerRow.contentStack.addArrangedSubview(MenuPanelLabel.spacer())
-        headerRow.contentStack.addArrangedSubview(dotView)
         headerRow.contentStack.addArrangedSubview(timeLabel)
         if let chevronView { headerRow.contentStack.addArrangedSubview(chevronView) }
         headerRow.onClick = { [weak self] in self?.onToggleExpand?() }
@@ -82,9 +74,8 @@ final class BillingProviderBlockView: NSView {
         limitCells = (0..<Self.maxLimitColumns).map { _ in BillingLimitCellView() }
         limitsRow.orientation = .horizontal
         limitsRow.distribution = .fillEqually
-        // 三列窄格可能出现「角标独占一行」，顶部对齐避免百分比基线随角标有无而漂移
         limitsRow.alignment = .top
-        limitsRow.spacing = 10
+        limitsRow.spacing = 6
         for (index, cell) in limitCells.enumerated() {
             limitsRow.addArrangedSubview(cell)
             cell.isHidden = index > 0
@@ -96,40 +87,33 @@ final class BillingProviderBlockView: NSView {
         summaryRow.addArrangedSubview(trendView)
         summaryRow.addArrangedSubview(summaryLabel)
         trendView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        trendView.widthAnchor.constraint(equalToConstant: PaneCardStyle.sparkWidth).isActive = true
+        trendView.heightAnchor.constraint(equalToConstant: PaneCardStyle.sparkHeight).isActive = true
         summaryLabel.setContentHuggingPriority(.required, for: .horizontal)
         summaryLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         usageSection.onRangeChange = { [weak self] range in self?.onRangeChange?(range) }
         errorBanner.onRetry = { [weak self] in self?.onRetry?() }
 
-        settingsButtonRow.setAccessibilityLabel("去设置配置额度 Provider")
-        settingsButtonRow.onClick = { [weak self] in self?.onOpenSettings?() }
-        setupRow.orientation = .horizontal
-        setupRow.alignment = .centerY
-        setupRow.spacing = 8
-        setupRow.addArrangedSubview(promptLabel)
-        setupRow.addArrangedSubview(MenuPanelLabel.spacer())
-        setupRow.addArrangedSubview(settingsButtonRow)
-
-        let body = NSStackView(views: [headerRow, limitsRow, summaryRow, setupRow,
+        let body = NSStackView(views: [headerRow, limitsRow, summaryRow,
                                        errorBanner, usageSection])
         body.orientation = .vertical
         body.alignment = .leading
-        body.spacing = 6
+        body.spacing = PaneCardStyle.rowSpacing
         body.translatesAutoresizingMaskIntoConstraints = false
 
         card.translatesAutoresizingMaskIntoConstraints = false
         addSubview(card)
-        card.addSubview(body)
+        card.contentView.addSubview(body)
         NSLayoutConstraint.activate([
             card.leadingAnchor.constraint(equalTo: leadingAnchor),
             card.trailingAnchor.constraint(equalTo: trailingAnchor),
             card.topAnchor.constraint(equalTo: topAnchor),
             card.bottomAnchor.constraint(equalTo: bottomAnchor),
-            body.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 9),
-            body.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -9),
-            body.topAnchor.constraint(equalTo: card.topAnchor, constant: 7),
-            body.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -8),
+            body.leadingAnchor.constraint(equalTo: card.contentView.leadingAnchor),
+            body.trailingAnchor.constraint(equalTo: card.contentView.trailingAnchor),
+            body.topAnchor.constraint(equalTo: card.contentView.topAnchor),
+            body.bottomAnchor.constraint(equalTo: card.contentView.bottomAnchor),
         ])
         for view in body.arrangedSubviews {
             view.widthAnchor.constraint(equalTo: body.widthAnchor).isActive = true
@@ -141,12 +125,9 @@ final class BillingProviderBlockView: NSView {
 
     // MARK: - 键盘可达
 
-    /// 键盘可达行：标题行 → 配置入口 / 配置输入 → 展开区范围按钮 → 重试
     var focusableRows: [MenuPanelRow] {
         var rows: [MenuPanelRow] = []
-        // 只查额度的 provider 标题行不可点，不进入焦点遍历（未配置态仍需点开凭据表单）
         if headerRow.isInteractive { rows.append(headerRow) }
-        if !setupRow.isHidden { rows.append(settingsButtonRow) }
         if !usageSection.isHidden { rows.append(contentsOf: usageSection.focusableRows) }
         if !errorBanner.isHidden { rows.append(errorBanner.retryButtonRow) }
         return rows
@@ -154,48 +135,31 @@ final class BillingProviderBlockView: NSView {
 
     // MARK: - 数据更新
 
-    /// 应用单个 provider 的状态
-    ///
-    /// - Parameters:
-    ///   - state: provider 状态快照
-    ///   - isExpanded: 是否处于展开态（展开态额外渲染用量区）
     func update(state: BillingMonitor.ProviderState, isExpanded: Bool) {
         providerID = state.descriptor.id
         let descriptor = state.descriptor
         let supportsUsage = descriptor.supportsUsage
         nameLabel.stringValue = descriptor.displayName
         if let iconView {
-            let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+            let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .regular)
             iconView.image = NSImage(systemSymbolName: descriptor.symbolName,
                                      accessibilityDescription: nil)?
                 .withSymbolConfiguration(config)
-            iconView.contentTintColor = MenuPanelStyle.accentColor
+            iconView.contentTintColor = PaneCardStyle.accentText
         }
 
-        dotView.kind = !state.isConfigured ? .idle : (state.errorMessage == nil ? .ok : .warn)
-        if state.isConfigured {
-            timeLabel.stringValue = state.lastUpdated.map(Self.stamp) ?? (state.isLoading ? "查询中" : "—")
-        } else {
-            timeLabel.stringValue = "未配置"
-        }
+        applyStatus(state)
+        timeLabel.stringValue = state.lastUpdated.map(Self.stamp)
+            ?? (state.isLoading ? "查询中" : "—")
 
-        limitsRow.isHidden = !state.isConfigured
-        summaryRow.isHidden = !state.isConfigured || !supportsUsage
-        // 未配置块只占一行：文案 +「去设置配置」（凭据输入统一收进设置窗口）
-        setupRow.isHidden = state.isConfigured
+        limitsRow.isHidden = false
+        summaryRow.isHidden = !supportsUsage
+        applyLimits(state.balance)
+        if supportsUsage { applySummary(state) }
 
-        if state.isConfigured {
-            applyLimits(state.balance)
-            if supportsUsage { applySummary(state) }
-        } else {
-            promptLabel.stringValue = "未配置凭据，无法查询额度"
-        }
-
-        // 能力位压住传入的展开态：没有用量接口就没有可展开内容
-        let expanded = isExpanded && state.isConfigured && supportsUsage
+        let expanded = isExpanded && supportsUsage
         usageSection.isHidden = !expanded
-        // 展开后用完整柱状图承载趋势，收起态的迷你趋势与摘要行随之隐藏，避免同一指标画两遍
-        summaryRow.isHidden = !state.isConfigured || expanded || !supportsUsage
+        summaryRow.isHidden = expanded || !supportsUsage
         if expanded {
             usageSection.update(usage: state.usage,
                                 range: state.range,
@@ -206,17 +170,16 @@ final class BillingProviderBlockView: NSView {
         chevronView?.image = NSImage(systemSymbolName: expanded ? "chevron.up" : "chevron.down",
                                      accessibilityDescription: nil)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 8, weight: .regular))
-        chevronView?.isHidden = !state.isConfigured || !supportsUsage
+        chevronView?.isHidden = !supportsUsage
 
-        // 只查额度 / 未配置的 provider 标题行不响应点击（配置入口在「去设置配置」）
-        suppressesExpansion = !state.isConfigured || !supportsUsage
+        suppressesExpansion = !supportsUsage
         if suppressesExpansion {
             headerRow.onClick = nil
         } else {
             headerRow.onClick = { [weak self] in self?.onToggleExpand?() }
         }
 
-        let showsError = state.isConfigured && state.errorMessage != nil
+        let showsError = state.errorMessage != nil
         errorBanner.isHidden = !showsError
         if let message = state.errorMessage, showsError { errorBanner.update(message: message) }
 
@@ -224,9 +187,22 @@ final class BillingProviderBlockView: NSView {
         invalidateIntrinsicContentSize()
     }
 
+    /// 状态胶囊：出错 > 限流 > 查询中 > 正常
+    private func applyStatus(_ state: BillingMonitor.ProviderState) {
+        if state.errorMessage != nil {
+            chip.update(kind: .error, text: "出错")
+        } else if let worst = state.balance?.percentLimits.map(\.remainingFraction).min(),
+                  worst < 0.2 {
+            chip.update(kind: .warn, text: "限流")
+        } else if state.isLoading {
+            chip.update(kind: .loading, text: "查询中")
+        } else {
+            chip.update(kind: .ok, text: "正常")
+        }
+    }
+
     // MARK: - 文案
 
-    /// 页头时间戳（HH:mm）
     private static let stampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -236,32 +212,4 @@ final class BillingProviderBlockView: NSView {
     }()
 
     static func stamp(_ date: Date) -> String { stampFormatter.string(from: date) }
-
-}
-
-// MARK: - 状态圆点
-
-/// provider 状态圆点 — 正常绿 / 异常橙 / 未配置灰
-final class BillingStatusDotView: NSView {
-
-    enum Kind {
-        case ok
-        case warn
-        case idle
-    }
-
-    var kind: Kind = .idle { didSet { needsDisplay = true } }
-
-    override var intrinsicContentSize: NSSize { NSSize(width: 5, height: 5) }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let color: NSColor
-        switch kind {
-        case .ok:   color = .systemGreen
-        case .warn: color = .systemOrange
-        case .idle: color = .tertiaryLabelColor
-        }
-        color.setFill()
-        NSBezierPath(ovalIn: bounds.insetBy(dx: 0, dy: 0)).fill()
-    }
 }

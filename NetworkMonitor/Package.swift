@@ -11,10 +11,16 @@ let package = Package(
         .target(
             name: "NetworkMonitorCore"
         ),
+        // 与 AppKit / Core 都无关的展示纯逻辑（Hero 派生、单位排版等），
+        // 让 TestRunner 能直接断言 UI 口径而不必 import 可执行 target。
+        .target(
+            name: "NetworkMonitorUI"
+        ),
         .executableTarget(
             name: "NetworkMonitor",
             dependencies: [
-                "NetworkMonitorCore"
+                "NetworkMonitorCore",
+                "NetworkMonitorUI"
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -29,7 +35,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "TestRunner",
-            dependencies: ["NetworkMonitorCore"]
+            dependencies: ["NetworkMonitorCore", "NetworkMonitorUI"]
         ),
     ],
     swiftLanguageModes: [.v6]

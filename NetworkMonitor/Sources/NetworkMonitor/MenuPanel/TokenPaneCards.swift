@@ -17,10 +17,10 @@ class TokenCardRow: MenuPanelRow {
 
     init(height: CGFloat,
          background: NSColor,
-         radius: CGFloat = TokenPaneStyle.cardRadius,
-         paddingX: CGFloat = TokenPaneStyle.cardPaddingX,
-         paddingY: CGFloat = TokenPaneStyle.cardPaddingY,
-         spacing: CGFloat = 2,
+         radius: CGFloat = PaneCardStyle.cardRadius,
+         paddingX: CGFloat = PaneCardStyle.cardPaddingX,
+         paddingY: CGFloat = PaneCardStyle.cardPaddingY,
+         spacing: CGFloat = PaneCardStyle.rowSpacing,
          onClick: (() -> Void)? = nil) {
         self.background = background
         self.radius = radius
@@ -97,10 +97,10 @@ final class TokenBoxView: NSView {
     private let paddingX: CGFloat
     private let paddingY: CGFloat
 
-    init(background: NSColor = TokenPaneStyle.cardFill,
-         radius: CGFloat = 9,
-         paddingX: CGFloat = 9,
-         paddingY: CGFloat = 7,
+    init(background: NSColor = PaneCardStyle.cardFill,
+         radius: CGFloat = PaneCardStyle.cardRadius,
+         paddingX: CGFloat = PaneCardStyle.boxPaddingX,
+         paddingY: CGFloat = PaneCardStyle.boxPaddingY,
          spacing: CGFloat = 5) {
         self.background = background
         self.radius = radius

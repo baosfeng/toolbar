@@ -12,18 +12,29 @@ import NetworkMonitorCore
 final class BillingPrimaryButtonRow: MenuPanelRow {
 
     private let titleLabel: NSTextField
-    private let buttonWidth: CGFloat
+    private var buttonWidth: CGFloat
+    private var widthConstraint: NSLayoutConstraint?
+    private static let font = NSFont.systemFont(ofSize: 11, weight: .semibold)
 
     init(title: String) {
-        let font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        titleLabel = MenuPanelLabel.text(title, font: font, color: .white)
-        buttonWidth = ceil((title as NSString).size(withAttributes: [.font: font]).width) + 20
+        titleLabel = MenuPanelLabel.text(title, font: Self.font, color: .white)
+        buttonWidth = ceil((title as NSString).size(withAttributes: [.font: Self.font]).width) + 20
         super.init(height: 26, onClick: nil)
         contentStack.addArrangedSubview(titleLabel)
         titleLabel.setContentHuggingPriority(.required, for: .horizontal)
         titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        widthAnchor.constraint(equalToConstant: buttonWidth).isActive = true
+        let constraint = widthAnchor.constraint(equalToConstant: buttonWidth)
+        constraint.isActive = true
+        widthConstraint = constraint
         setAccessibilityLabel(title)
+    }
+
+    /// 更新按钮文案（宽度随文字重算，选中态字重不变）
+    func update(title: String) {
+        titleLabel.stringValue = title
+        buttonWidth = ceil((title as NSString).size(withAttributes: [.font: Self.font]).width) + 20
+        widthConstraint?.constant = buttonWidth
+        invalidateIntrinsicContentSize()
     }
 
     @available(*, unavailable)

@@ -26,7 +26,7 @@ extension TokenPaneView {
             headRow.leadingAnchor.constraint(equalTo: leadingAnchor),
             headRow.trailingAnchor.constraint(equalTo: trailingAnchor),
             headRow.topAnchor.constraint(equalTo: topAnchor),
-            headRow.heightAnchor.constraint(equalToConstant: 22),
+            headRow.heightAnchor.constraint(equalToConstant: PaneCardStyle.pageHeadHeight),
         ])
         contentTopAnchor = headRow.bottomAnchor
     }
@@ -43,11 +43,11 @@ extension TokenPaneView {
         duoRow.orientation = .horizontal
         duoRow.alignment = .top
         duoRow.distribution = .fillEqually
-        duoRow.spacing = 5
+        duoRow.spacing = PaneCardStyle.cardSpacing
 
         dataStack.orientation = .vertical
         dataStack.alignment = .leading
-        dataStack.spacing = 2
+        dataStack.spacing = PaneCardStyle.cardSpacing
         // 顺序即首屏优先级：Hero → 四族卡 → 24h → 缓存环 → 项目/模型 必须在 520pt 内一次看全；
         // 天趋势 / 对比条 / 状态带是次要块，排在其后由面板滚动承载
         let sections: [NSView] = [heroView, familyGrid, hourCard, cacheCard,
@@ -99,11 +99,11 @@ extension TokenPaneView {
             row.orientation = .horizontal
             row.alignment = .top
             row.distribution = .fillEqually
-            row.spacing = 4
+            row.spacing = PaneCardStyle.cardSpacing
         }
         familyGrid.orientation = .vertical
         familyGrid.alignment = .leading
-        familyGrid.spacing = 4
+        familyGrid.spacing = PaneCardStyle.cardSpacing
         familyGrid.addArrangedSubview(topRow)
         familyGrid.addArrangedSubview(bottomRow)
         topRow.widthAnchor.constraint(equalTo: familyGrid.widthAnchor).isActive = true
