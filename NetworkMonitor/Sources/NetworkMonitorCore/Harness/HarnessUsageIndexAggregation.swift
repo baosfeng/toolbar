@@ -25,6 +25,9 @@ extension DatabaseManager {
                 daily: harnessDaily(db),
                 projects: harnessProjects(db),
                 models: harnessModels(db),
+                // 一次算三档（实测见文件末尾注释：合并成单条 SQL 只多约 20% 耗时，
+                // 远低于「切范围再查一次」的 40~200ms 往返，也让面板切范围零延迟）
+                windowed: harnessWindowedUsage(db, now: now),
                 indexedSessions: harnessScanCount(db),
                 todayHourly: harnessHourly(
                     db, fromMs: todayStart, toMs: todayStart + dayMs, maskAfterHour: currentHour
@@ -37,18 +40,27 @@ extension DatabaseManager {
     }
 
     /// 区间求和（fromMs 含、toMs 不含；nil 表示不限）
-    private func harnessSum(_ db: OpaquePointer, fromMs: Int64?, toMs: Int64?) -> HarnessTokenUsage {
+    ///
+    /// - Parameter onlyWithProject: 为真时只统计挂在项目下的事件（cwd 非空），
+    ///   用于「按项目」的占比分母 —— 分母必须包含全部项目行（含 TopN 之外的），
+    ///   但不能包含无法归属任何项目的事件，否则 sum(占比) 会小于 100%。
+    // internal：按范围聚合扩展（HarnessUsageWindowedAggregation.swift）复用同一求和实现
+    func harnessSum(_ db: OpaquePointer, fromMs: Int64?, toMs: Int64?,
+                    onlyWithProject: Bool = false) -> HarnessTokenUsage {
         var sql = """
         SELECT COUNT(*), COALESCE(SUM(uncached_in), 0), COALESCE(SUM(output), 0),
                COALESCE(SUM(cache_read), 0), COALESCE(SUM(cache_write), 0)
         FROM harness_token_event
         """
+        var conditions: [String] = []
+        if onlyWithProject { conditions.append("cwd <> ''") }
         switch (fromMs, toMs) {
-        case (.some, .some): sql += " WHERE ts_ms >= ? AND ts_ms < ?"
-        case (.some, .none): sql += " WHERE ts_ms >= ?"
-        case (.none, .some): sql += " WHERE ts_ms < ?"
+        case (.some, .some): conditions.append("ts_ms >= ? AND ts_ms < ?")
+        case (.some, .none): conditions.append("ts_ms >= ?")
+        case (.none, .some): conditions.append("ts_ms < ?")
         case (.none, .none): break
         }
+        if !conditions.isEmpty { sql += " WHERE " + conditions.joined(separator: " AND ") }
         sql += ";"
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }

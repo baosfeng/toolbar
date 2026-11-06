@@ -53,7 +53,7 @@ private func testDistroRowsAndStateBand() {
         HarnessModelUsage(provider: "", model: "local",
                           usage: HarnessTokenUsage(uncachedInput: 600, output: 0, cacheRead: 0, requestCount: 1)),
     ]
-    let rows = TokenDerive.modelRows(tokenSnapshot(models: models))
+    let rows = TokenDerive.modelRows(tokenSnapshot(models: models), window: .today)
     assertEqual(rows.count, 2, "两个模型两行")
     assertEqual(rows[0].rank, 1, "模型行序号")
     assertEqual(rows[0].amount, "400", "模型行用量缩写")
@@ -63,7 +63,7 @@ private func testDistroRowsAndStateBand() {
 
     let projects = [HarnessProjectUsage(path: "/tmp/a", displayName: "a", sessionCount: 3,
                                         usage: HarnessTokenUsage(uncachedInput: 100, output: 0, cacheRead: 100, requestCount: 1))]
-    let projectRow = TokenDerive.projectRows(tokenSnapshot(projects: projects)).first
+    let projectRow = TokenDerive.projectRows(tokenSnapshot(projects: projects), window: .today).first
     assertEqual(projectRow?.sub, "3 会话 · 占 100.0%", "项目行带会话数与占比")
     assertEqual(projectRow?.provider, "", "项目行不带 provider")
 

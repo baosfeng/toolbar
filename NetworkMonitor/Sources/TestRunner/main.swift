@@ -11,6 +11,12 @@ if CommandLine.arguments.contains("--harness-index") {
     exit(0)
 }
 
+// MARK: - 人工触发的单位对照表（改前 → 改后，不参与默认测试流程）
+if CommandLine.arguments.contains("--number-unit-table") {
+    runNumberUnitTable()
+    exit(0)
+}
+
 // MARK: - Core 纯函数：格式化与解析
 runCoreFormattingTests()
 
@@ -69,6 +75,12 @@ runScanTests()
 // MARK: - 计费额度（provider 抽象 + Ollama 响应解码）
 runBillingTests()
 
+// MARK: - 额度页可见性（未配置 provider 不占位）+ 同一 provider 唯一配置
+runBillingVisibilityTests()
+
+// MARK: - 数值单位（设置项 + 万/亿化简口径）
+runNumberUnitTests()
+
 // MARK: - 额度阈值提醒（5%/4%/3%/2%/1%）
 runBillingAlertTests()
 
@@ -92,6 +104,9 @@ runTokenPaneTests()
 // MARK: - Token 页展示层（下沉到 Core 的派生计算 / 格式化 / 模型装配）
 runTokenDeriveTests()
 runTokenPresentationTests()
+
+// MARK: - Token 页「按项目 / 按模型」随范围（与 Hero 同口径）
+runTokenRangeConsistencyTests()
 
 // MARK: - 截图选区几何（多屏 / Retina / 归一化）
 runSnipGeometryTests()

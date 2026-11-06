@@ -11,9 +11,14 @@ import NetworkMonitorCore
 ///
 /// 交互与原型一致：
 /// - 配置态显示「替换 / 清除」，未配置显示「配置凭据…」；右侧统一是启用开关
+/// - **同一 provider 只有一份配置**：已配置时不再提供「配置凭据…」入口，
+///   只能「替换」（覆盖唯一那条存储键）或「清除」；环境变量回退只作只读来源，不给清除
 /// - 行内编辑区展开时显示 Key 输入（已配置时占位文案带掩码）与「保存并查询 / 取消」
 /// - 清除走行内二次确认；编辑或确认展开时其余行降透明度并禁用，避免并发编辑
 /// - 页内每秒重算「上次查询 / 下次刷新倒计时」，异步查询结果无需手动刷新
+///
+/// 与额度页的关系：本页**展示全部已启用 provider**（含未配置的，用户必须有配置入口），
+/// 额度页只展示已配置的（判据在 Core 的 `BillingVisibilityRule`）。
 final class SettingsProvidersPane: SettingsPaneView {
 
     // MARK: - 依赖
@@ -75,23 +80,28 @@ final class SettingsProvidersPane: SettingsPaneView {
         }
         page.addCard(cadenceCard, sectionTitle: "刷新节奏（只读）")
 
-        page.addNote("Key 仅保存在本机偏好设置中，关闭开关不会删除凭据，可随时再打开。")
+        page.addNote("每个 Provider 只保留一份 Key（重复提交会覆盖）；关闭开关不会删除凭据，"
+                     + "未配置的 Provider 不会出现在额度页。")
         buildToast()
     }
 
     // MARK: - 刷新
 
     /// 每秒与切页时同步：状态点、错误文案、刷新倒计时都从 monitor 的实时状态重算
+    ///
+    /// 已配置与否、掩码、来源都取自 `credentialResolution`（Core 的唯一凭据入口）：
+    /// 同一 provider 只有一条生效凭据，本页显示的就是额度页实际查询用的那条。
     override func refresh() {
         let now = Date()
         var states: [String: BillingMonitor.ProviderState] = [:]
         for state in monitor.states { states[state.descriptor.id] = state }
         for provider in monitor.registry.all {
             guard let row = rows[provider.id] else { continue }
-            let credential = monitor.credentialStore.credential(for: provider.id)
+            let resolution = monitor.credentialStore.credentialResolution(for: provider.id)
             row.update(isEnabled: preferences.isEnabled(provider.id),
-                       isConfigured: credential != nil,
-                       credentialMask: credential.map(Self.mask),
+                       isConfigured: resolution.isConfigured,
+                       credentialMask: resolution.credential.map(Self.mask),
+                       credentialSource: resolution.source,
                        interval: BillingRefreshScheduler.interval(
                            providerMinimum: provider.minimumRefreshInterval),
                        state: states[provider.id],
@@ -126,8 +136,8 @@ final class SettingsProvidersPane: SettingsPaneView {
     private func save(_ key: String, providerID: String) {
         guard let row = rows[providerID] else { return }
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        let existing = monitor.credentialStore.credential(for: providerID)
-        guard let credential = trimmed.isEmpty ? existing : trimmed else {
+        let existing = monitor.credentialStore.credentialResolution(for: providerID)
+        guard let credential = trimmed.isEmpty ? existing.credential : trimmed else {
             row.showEditorMessage("请先填写 Key，再保存并查询。")
             return
         }
@@ -139,10 +149,11 @@ final class SettingsProvidersPane: SettingsPaneView {
             monitor.setProviderEnabled(true, providerID: providerID)
         }
         refresh()
-        showToast("已保存并查询")
+        // 空输入 = 沿用唯一那条已有凭据（同一 provider 不会因此多出第二份配置）
+        showToast(trimmed.isEmpty ? "已沿用原凭据并重新查询" : "已保存并查询")
     }
 
-    /// 清除凭据（开关保持原状：启用但未配置的 provider 继续留在额度页，点「去设置配置」）
+    /// 清除凭据（开关保持原状：该 provider 随即从额度页消失，本页仍保留配置入口）
     private func clear(providerID: String) {
         guard let row = rows[providerID] else { return }
         row.endConfirm()

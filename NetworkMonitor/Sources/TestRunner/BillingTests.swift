@@ -41,11 +41,24 @@ private func testBillingFormat() {
     assertEqual(formatCreditAmount(76_412), "76,412", "credits 千分位")
     assertEqual(formatCreditAmount(3.9), "3.9", "credits 小数原值")
 
+    // 额度页 token 数跟随设置页「数值单位」：默认自动档 → K/M/B（与 Token 页同一口径），
+    // 中文档 → 万/亿。这里注入隔离存储锁死档位，避免本机真实偏好（用户可能已切到中文）污染断言。
+    let originalStorage = AppContext.shared.storage
+    let isolatedStorage = InMemoryStorage()
+    AppContext.shared.configure(storage: isolatedStorage)
+    defer { AppContext.shared.configure(storage: originalStorage) }
+
     assertEqual(formatTokenCount(0), "0", "0 token")
-    assertEqual(formatTokenCount(9_999), "9999", "不足一万原样")
-    assertEqual(formatTokenCount(10_000), "1.0万", "整一万")
-    assertEqual(formatTokenCount(106_000), "10.6万", "十万级")
-    assertEqual(formatTokenCount(120_000_000), "1.2亿", "亿级")
+    assertEqual(formatTokenCount(9_999), "10K", "自动档：9999 → 10K（K 档 1 位小数进位）")
+    assertEqual(formatTokenCount(10_000), "10K", "整一万 → 10K（不再是 1.0万）")
+    assertEqual(formatTokenCount(106_000), "106K", "十万级 → 106K")
+    assertEqual(formatTokenCount(120_000_000), "120M", "亿级 → 120M")
+
+    // 显式切成中文档：同一批数值回到「万 / 亿」写法
+    NumberUnitPreferences(storage: isolatedStorage).setStyle(.chinese)
+    assertEqual(formatTokenCount(10_000), "1万", "中文档：整一万 → 1万")
+    assertEqual(formatTokenCount(106_000), "10.6万", "中文档：十万级 → 10.6万")
+    assertEqual(formatTokenCount(120_000_000), "1.2亿", "中文档：亿级 → 1.2亿")
 
     assertEqual(formatPercent(0.725), "72.5%", "比例不取整")
     // 回归：服务端返回 3.9% 时曾被取整成「4%」，额度页必须原样展示

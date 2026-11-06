@@ -29,6 +29,15 @@ package enum TokenRange: Int, CaseIterable {
     package var bucketCount: Int {
         self == .today ? 24 : days
     }
+
+    /// 对应的数据层窗口 —— 「按项目 / 按模型」按它取聚合（与 Hero / 四族卡同口径）
+    package var window: HarnessUsageWindow {
+        switch self {
+        case .today: return .today
+        case .d7: return .last7Days
+        case .d30: return .last30Days
+        }
+    }
 }
 
 /// 小时图看哪一天（真换数据，不是换标签）

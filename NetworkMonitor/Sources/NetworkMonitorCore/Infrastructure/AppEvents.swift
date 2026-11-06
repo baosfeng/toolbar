@@ -24,4 +24,12 @@ public enum AppEvents {
     public static func postHarnessUsageChanged() {
         NotificationCenter.default.post(name: harnessUsageChanged, object: nil)
     }
+
+    /// 数值单位风格已变化（设置页「数值单位」切换）— 订阅方应重渲染面板数值
+    public static let numberUnitStyleChanged = Notification.Name("AppEvents.numberUnitStyleChanged")
+
+    /// 发布数值单位变更通知（设置页在写存储之后调用）
+    public static func postNumberUnitStyleChanged() {
+        NotificationCenter.default.post(name: numberUnitStyleChanged, object: nil)
+    }
 }

@@ -8,23 +8,17 @@ import Foundation
 /// Token 页与数据层共用同一套缩写与日期窗口算法，避免 UI 各处重复实现。
 public enum TokenFormat {
 
-    /// 缩写数值：`1.2K` / `399.2M` / `10.1B`
+    /// 缩写数值：`1.2K` / `399.2M` / `10.1B`（单位风格切到中文时是 `1.2万` / `399.2万` / `10.1亿`）
     ///
     /// 口径与定稿原型一致：≥10 的 M/B 值保留 1 位小数（B 恒 2 位），其余保留 2 位，
     /// 末尾多余的 0 与小数点去掉（100.0M → 100M）。
+    ///
+    /// 单位风格由设置页「数值单位」决定（`NumberUnitPreferences`），化简规则收敛在
+    /// `NumberUnits.scale`，本函数只负责按既有口径把结果拼成字符串，签名保持不变。
     public static func abbreviated(_ value: Int) -> String {
+        // 负数原样返回（token 计数不应为负；口径与改造前一致，不做量级化简）
         if value < 0 { return String(value) }
-        if value >= 1_000_000_000 {
-            return trimmed(Double(value) / 1_000_000_000, decimals: 2) + "B"
-        }
-        if value >= 1_000_000 {
-            let millions = Double(value) / 1_000_000
-            return trimmed(millions, decimals: millions >= 10 ? 1 : 2) + "M"
-        }
-        if value >= 1_000 {
-            return trimmed(Double(value) / 1_000, decimals: 1) + "K"
-        }
-        return String(value)
+        return NumberUnits.scale(Double(value)).text
     }
 
     /// 千分位分组：`72,271`
@@ -69,14 +63,6 @@ public enum TokenFormat {
     }
 
     // MARK: - 内部
-
-    /// 去除小数末尾的 0 与孤立小数点
-    private static func trimmed(_ value: Double, decimals: Int) -> String {
-        var text = String(format: "%.\(decimals)f", value)
-        while text.hasSuffix("0") { text.removeLast() }
-        if text.hasSuffix(".") { text.removeLast() }
-        return text
-    }
 
     /// 固定 UTC 日历 —— 只做日期键平移，不含时区语义，避免夏令时影响天数
     private static func calendar() -> Calendar {

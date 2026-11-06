@@ -11,21 +11,18 @@ package enum TokenFormatting {
     }
 
     /// 浮点 tok 缩写（日均等中间量）
+    ///
+    /// 化简规则收敛在 `NumberUnits.scale`：设置页「数值单位」切到中文后，
+    /// 这里自动给出 `1.6亿` / `265万`，本页视图无需改代码。
     package static func abbreviated(_ value: Double) -> String {
-        let magnitude = abs(value)
-        if magnitude >= 1_000_000_000 { return trimmed(value / 1_000_000_000, decimals: 2) + "B" }
-        if magnitude >= 1_000_000 { return trimmed(value / 1_000_000, decimals: 2) + "M" }
-        if magnitude >= 1_000 { return trimmed(value / 1_000, decimals: 1) + "K" }
-        return String(Int(value.rounded()))
+        NumberUnits.scale(value).text
     }
 
-    /// 拆成「数值 + 单位」两段（分族卡的数字字号不同）
+    /// 拆成「数值 + 单位」两段（分族卡的数字字号不同；单位段带 " tok" 后缀）
     package static func splitTokens(_ value: Int) -> (number: String, unit: String) {
-        let text = tokens(value)
-        for suffix in ["B", "M", "K"] where text.hasSuffix(suffix) {
-            return (String(text.dropLast()), suffix + " tok")
-        }
-        return (text, "tok")
+        let scaled = NumberUnits.scale(Double(value))
+        guard let unit = scaled.unit else { return (scaled.number, "tok") }
+        return (scaled.number, unit + " tok")
     }
 
     /// 一位小数
@@ -67,11 +64,4 @@ package enum TokenFormatting {
         TokenFormat.mmdd(dayKey)
     }
 
-    /// 去掉多余尾零：1.50 → 1.5，10.00 → 10
-    private static func trimmed(_ value: Double, decimals: Int) -> String {
-        var text = String(format: "%.\(decimals)f", value)
-        while text.contains("."), text.hasSuffix("0") { text.removeLast() }
-        if text.hasSuffix(".") { text.removeLast() }
-        return text
-    }
 }

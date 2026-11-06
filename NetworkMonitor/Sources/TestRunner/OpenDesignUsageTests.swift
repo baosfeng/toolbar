@@ -68,8 +68,15 @@ private func testOpenDesignUsageDecoding() {
         assertEqual("\(String(describing: missingError))", "invalidResponse", "缺 summary 抛 invalidResponse")
     }
 
-    // token 展示形态：格式化函数对超大 token 走「亿」
-    assertEqual(formatTokenCount(2_112_637_440), "21.1亿", "缓存 token 缩写")
+    // token 展示形态：跟随设置页「数值单位」，默认自动档 → B
+    assertEqual(formatTokenCount(2_112_637_440), "2.11B", "缓存 token 缩写（自动档）")
+    // 切到中文档 → 亿（同一数值换单位写法，UI 不需要改代码）
+    let originalStorage = AppContext.shared.storage
+    let isolatedStorage = InMemoryStorage()
+    AppContext.shared.configure(storage: isolatedStorage)
+    defer { AppContext.shared.configure(storage: originalStorage) }
+    NumberUnitPreferences(storage: isolatedStorage).setStyle(.chinese)
+    assertEqual(formatTokenCount(2_112_637_440), "21.13亿", "缓存 token 缩写（中文档，2 位四舍五入）")
 }
 
 // MARK: - 查询窗口

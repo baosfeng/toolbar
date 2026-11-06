@@ -45,7 +45,8 @@ extension MenuPanelSnapshot {
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let name = appearance == .aqua ? "light" : "dark"
-                let url = directory.appendingPathComponent("menu-credits-\(item.suffix)-\(name).png")
+                let url = directory.appendingPathComponent(
+                    "menu-credits-\(item.suffix)\(unitFileSuffix)-\(name).png")
                 // 遗留计划快照额外强制悬停一根有数据的柱，用于 tooltip 取证
                 let hover: ((NSView) -> Void)? = item.legacyUsage ? { view in
                     (view as? MenuPanelView)?.billingPane.forceChartHoverForSnapshot(23)

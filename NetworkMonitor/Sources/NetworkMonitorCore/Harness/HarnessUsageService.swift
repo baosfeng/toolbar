@@ -296,6 +296,17 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
                 uncachedInput: aggregate.allTime.uncachedInput
             )
         )
+        // 按范围聚合在同一次查询里算好，这里按 TopN 裁剪后按窗口分发
+        var windowedProjects: [HarnessUsageWindow: [HarnessProjectUsage]] = [:]
+        var windowedModels: [HarnessUsageWindow: [HarnessModelUsage]] = [:]
+        var windowProjectTotals: [HarnessUsageWindow: HarnessTokenUsage] = [:]
+        var windowModelTotals: [HarnessUsageWindow: HarnessTokenUsage] = [:]
+        for item in aggregate.windowed {
+            windowedProjects[item.window] = Array(item.projects.prefix(Self.projectLimit))
+            windowedModels[item.window] = Array(item.models.prefix(Self.modelLimit))
+            windowProjectTotals[item.window] = item.projectTotals
+            windowModelTotals[item.window] = item.modelTotals
+        }
         return HarnessUsageSnapshot(
             totals: totals,
             daily: daily,
@@ -303,6 +314,10 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
             yesterdayHourly: aggregate.yesterdayHourly,
             projects: Array(aggregate.projects.prefix(Self.projectLimit)),
             models: Array(aggregate.models.prefix(Self.modelLimit)),
+            windowedProjects: windowedProjects,
+            windowedModels: windowedModels,
+            windowProjectTotals: windowProjectTotals,
+            windowModelTotals: windowModelTotals,
             indexedSessions: aggregate.indexedSessions,
             totalSessions: max(totalSessions, aggregate.indexedSessions),
             lastScanAt: lastScanAt,
@@ -324,6 +339,10 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
                 yesterdayHourly: cached.yesterdayHourly,
                 projects: cached.projects,
                 models: cached.models,
+                windowedProjects: cached.windowedProjects,
+                windowedModels: cached.windowedModels,
+                windowProjectTotals: cached.windowProjectTotals,
+                windowModelTotals: cached.windowModelTotals,
                 indexedSessions: cached.indexedSessions,
                 totalSessions: cached.totalSessions,
                 lastScanAt: cached.lastScanAt,
