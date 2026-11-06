@@ -5,127 +5,170 @@ import SQLite3
 
 /// 按范围的项目与模型聚合 —— 与累计口径各算一份，页面只取当前范围那份
 ///
-/// 性能实测（本机真实索引库 133,312 行，monitor.db，见交接文档）：
-/// - 三档分开查（今日 46ms + 7 天 80ms + 30 天 198ms / 模型同理）≈ 每轮 320ms+
-/// - **合并成单条 SQL 用 CASE WHEN 分窗口**：项目 82ms + 模型 104ms ≈ 186ms，
-///   只比现状（两条累计查询 178~250ms）略高，却换来「切范围零查询 + 与 Hero 同口径」。
-/// 因此三档一次算完并随快照缓存；不做按需惰性查。
+/// **性能实测（本机真实索引库 monitor.db / 133k 行，见交接文档）**：
+/// - 三档逐条查（今日 46ms + 近 7 天 80ms + 近 30 天 198ms）≈ 324ms/两表，切范围还要再查一次
+/// - **单条 CASE WHEN 分窗口（本文件采用的写法）**：项目 82ms + 模型 104ms ≈ 186ms，
+///   与改造前的两条累计查询（178~250ms）基本持平，换来「切范围零查询 + 与 Hero 同口径」
+/// - 结论：三档一次算完并随快照缓存（惰性查会让切范围多一次 40~200ms 往返且要处理异步）
+///
+/// 窗口嵌套（30 ⊃ 7 ⊃ 今日）因此可以让每条 SQL 只扫一遍事件表，用 CASE WHEN 把同一行
+/// 同时计入多个窗口，避免三倍扫描。
 extension DatabaseManager {
 
     /// 三档窗口的项目 / 模型聚合（顺序同 `HarnessUsageWindow.allCases`）
     func harnessWindowedUsage(_ db: OpaquePointer, now: Date) -> [HarnessWindowedUsage] {
         let windows = HarnessRangeWindows.allWindows(now: now)
+        let projectTable = mergedProjects(db, windows: windows)
+        let modelTable = mergedModels(db, windows: windows)
         return windows.map { entry in
-            HarnessWindowedUsage(
+            // 这里拿到的是**未裁剪**的全部行：分母用它们求和（含 TopN 之外，
+            // 但已排除 cwd 为空 / 无法归属项目的事件，所以 sum(占比) ≤ 100% 且不虚高）
+            let projects = sortedProjects(projectTable[entry.window] ?? [])
+            let models = sortedModels(modelTable[entry.window] ?? [])
+            return HarnessWindowedUsage(
                 window: entry.window,
-                projects: harnessProjects(db, window: entry.range),
-                models: harnessModels(db, window: entry.range),
-                projectTotals: harnessProjectTotals(db, window: entry.range),
-                modelTotals: harnessModelTotals(db, window: entry.range)
+                projects: projects,
+                models: models,
+                projectTotals: projects.reduce(HarnessTokenUsage()) { $0.adding($1.usage) },
+                modelTotals: models.reduce(HarnessTokenUsage()) { $0.adding($1.usage) }
             )
         }
     }
 
-    // MARK: - SQL
+    // MARK: - SQL（单条扫一遍，CASE WHEN 分窗口）
 
-    /// 窗口内的项目聚合（cwd 为空的事件不归属任何项目；按总 token 降序）
-    private func harnessProjects(_ db: OpaquePointer,
-                                 window: HarnessMsWindow) -> [HarnessProjectUsage] {
+    /// 每窗口选择列（顺序：未缓存 / 输出 / 缓存读 / 缓存写 / 请求数 + 可选会话去重）
+    ///
+    /// 请求数用 `SUM(... THEN 1 ELSE 0 END)` 而不是 `COUNT(*)`：
+    /// 聚合函数不能嵌在 `SUM(CASE ...)` 里（SQLite 会报 "misuse of aggregate function COUNT()"）。
+    private static func windowColumns(_ count: Int32, withSessions: Bool) -> String {
+        let fields = ["uncached_in", "output", "cache_read", "cache_write"]
+        var parts: [String] = []
+        for _ in 0..<count {
+            for field in fields {
+                parts.append("COALESCE(SUM(CASE WHEN ts_ms >= ? AND ts_ms < ? THEN \(field) ELSE 0 END), 0)")
+            }
+            parts.append("COALESCE(SUM(CASE WHEN ts_ms >= ? AND ts_ms < ? THEN 1 ELSE 0 END), 0)")
+            if withSessions {
+                parts.append("COUNT(DISTINCT CASE WHEN ts_ms >= ? AND ts_ms < ? THEN session_id END)")
+            }
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    /// 绑定按 SELECT 项出现顺序排列的窗口参数（每个窗口 6 组「from / to」× 窗口数）
+    private static func bindWindows(_ stmt: OpaquePointer,
+                                    windows: [(window: HarnessUsageWindow, range: HarnessMsWindow)],
+                                    withSessions: Bool) -> Int32 {
+        var index: Int32 = 1
+        for entry in windows {
+            let repeats = withSessions ? 6 : 5
+            for _ in 0..<repeats {
+                sqlite3_bind_int64(stmt, index, entry.range.fromMs)
+                sqlite3_bind_int64(stmt, index + 1, entry.range.toMs)
+                index += 2
+            }
+        }
+        return index
+    }
+
+    /// 项目三档合并查询（cwd 为空的事件不归属任何项目）
+    private func mergedProjects(_ db: OpaquePointer,
+                                windows: [(window: HarnessUsageWindow, range: HarnessMsWindow)])
+        -> [HarnessUsageWindow: [HarnessProjectUsage]] {
+        let columns = Self.windowColumns(Int32(windows.count), withSessions: true)
         let sql = """
-        SELECT cwd, COUNT(DISTINCT session_id), COALESCE(SUM(uncached_in), 0), COALESCE(SUM(output), 0),
-               COALESCE(SUM(cache_read), 0), COALESCE(SUM(cache_write), 0), COUNT(*)
+        SELECT cwd, \(columns)
         FROM harness_token_event
-        WHERE cwd <> '' AND ts_ms >= ? AND ts_ms < ?
-        GROUP BY cwd
-        ORDER BY (SUM(uncached_in) + SUM(output) + SUM(cache_read) + SUM(cache_write)) DESC, cwd ASC;
+        WHERE cwd <> ''
+        GROUP BY cwd;
         """
-        return queryProjects(db, sql: sql, window: window)
-    }
-
-    /// 窗口内的模型聚合
-    private func harnessModels(_ db: OpaquePointer,
-                               window: HarnessMsWindow) -> [HarnessModelUsage] {
-        let sql = """
-        SELECT provider, model, COALESCE(SUM(uncached_in), 0), COALESCE(SUM(output), 0),
-               COALESCE(SUM(cache_read), 0), COALESCE(SUM(cache_write), 0), COUNT(*)
-        FROM harness_token_event
-        WHERE ts_ms >= ? AND ts_ms < ?
-        GROUP BY provider, model
-        ORDER BY (SUM(uncached_in) + SUM(output) + SUM(cache_read) + SUM(cache_write)) DESC, model ASC;
-        """
-        return queryModels(db, sql: sql, window: window)
-    }
-
-    /// 窗口内全部项目的 token 合计（占比分母；不能用 TopN 行求和，否则占比虚高）
-    private func harnessProjectTotals(_ db: OpaquePointer,
-                                      window: HarnessMsWindow) -> HarnessTokenUsage {
-        harnessSum(db, fromMs: window.fromMs, toMs: window.toMs, onlyWithProject: true)
-    }
-
-    /// 窗口内全部模型的 token 合计（占比分母）
-    private func harnessModelTotals(_ db: OpaquePointer,
-                                    window: HarnessMsWindow) -> HarnessTokenUsage {
-        harnessSum(db, fromMs: window.fromMs, toMs: window.toMs)
-    }
-
-    // MARK: - 行解析
-
-    private func queryProjects(_ db: OpaquePointer, sql: String,
-                               window: HarnessMsWindow) -> [HarnessProjectUsage] {
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
-        guard prepareWindowed(db, sql: sql, stmt: &stmt, window: window,
-                              label: "按项目（范围）") else { return [] }
-        var result: [HarnessProjectUsage] = []
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logger.warning("Harness 项目窗口聚合准备失败: " + String(cString: sqlite3_errmsg(db)))
+            return [:]
+        }
+        guard let stmt else { return [:] }
+        _ = Self.bindWindows(stmt, windows: windows, withSessions: true)
+        var result: [HarnessUsageWindow: [HarnessProjectUsage]] = [:]
         while sqlite3_step(stmt) == SQLITE_ROW {
             guard let cwd = clipText(stmt, 0) else { continue }
-            result.append(HarnessProjectUsage(
-                path: cwd,
-                displayName: HarnessProjectNaming.displayName(forPath: cwd),
-                sessionCount: Int(sqlite3_column_int64(stmt, 1)),
-                usage: usageRow(stmt, offset: 2)
-            ))
+            for (offset, entry) in windows.enumerated() {
+                let base = Int32(1 + offset * 6)
+                result[entry.window, default: []].append(HarnessProjectUsage(
+                    path: cwd,
+                    displayName: HarnessProjectNaming.displayName(forPath: cwd),
+                    sessionCount: Int(sqlite3_column_int64(stmt, base + 5)),
+                    usage: HarnessTokenUsage(
+                        uncachedInput: Int(sqlite3_column_int64(stmt, base)),
+                        output: Int(sqlite3_column_int64(stmt, base + 1)),
+                        cacheRead: Int(sqlite3_column_int64(stmt, base + 2)),
+                        cacheWrite: Int(sqlite3_column_int64(stmt, base + 3)),
+                        requestCount: Int(sqlite3_column_int64(stmt, base + 4))
+                    )))
+            }
         }
         return result
     }
 
-    private func queryModels(_ db: OpaquePointer, sql: String,
-                             window: HarnessMsWindow) -> [HarnessModelUsage] {
+    /// 模型三档合并查询
+    private func mergedModels(_ db: OpaquePointer,
+                              windows: [(window: HarnessUsageWindow, range: HarnessMsWindow)])
+        -> [HarnessUsageWindow: [HarnessModelUsage]] {
+        let columns = Self.windowColumns(Int32(windows.count), withSessions: false)
+        let sql = """
+        SELECT provider, model, \(columns)
+        FROM harness_token_event
+        GROUP BY provider, model;
+        """
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
-        guard prepareWindowed(db, sql: sql, stmt: &stmt, window: window,
-                              label: "按模型（范围）") else { return [] }
-        var result: [HarnessModelUsage] = []
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logger.warning("Harness 模型窗口聚合准备失败: " + String(cString: sqlite3_errmsg(db)))
+            return [:]
+        }
+        guard let stmt else { return [:] }
+        _ = Self.bindWindows(stmt, windows: windows, withSessions: false)
+        var result: [HarnessUsageWindow: [HarnessModelUsage]] = [:]
         while sqlite3_step(stmt) == SQLITE_ROW {
-            result.append(HarnessModelUsage(
-                provider: clipText(stmt, 0) ?? "",
-                model: clipText(stmt, 1) ?? "",
-                usage: usageRow(stmt, offset: 2)
-            ))
+            for (offset, entry) in windows.enumerated() {
+                let base = Int32(2 + offset * 5)
+                result[entry.window, default: []].append(HarnessModelUsage(
+                    provider: clipText(stmt, 0) ?? "",
+                    model: clipText(stmt, 1) ?? "",
+                    usage: HarnessTokenUsage(
+                        uncachedInput: Int(sqlite3_column_int64(stmt, base)),
+                        output: Int(sqlite3_column_int64(stmt, base + 1)),
+                        cacheRead: Int(sqlite3_column_int64(stmt, base + 2)),
+                        cacheWrite: Int(sqlite3_column_int64(stmt, base + 3)),
+                        requestCount: Int(sqlite3_column_int64(stmt, base + 4))
+                    )))
+            }
         }
         return result
     }
 
-    /// 统一准备 + 绑定窗口参数（两条 SQL 形状一致：两个占位符依次为 from / to）
-    private func prepareWindowed(_ db: OpaquePointer, sql: String, stmt: inout OpaquePointer?,
-                                 window: HarnessMsWindow, label: String) -> Bool {
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            logger.warning("Harness \(label)聚合准备失败: " + String(cString: sqlite3_errmsg(db)))
-            return false
+    // MARK: - 排序
+
+    /// 按总 token 降序、并列按路径升序（与累计口径的 ORDER BY 一致）
+    ///
+    /// 先丢掉该窗口内零用量的行：CASE WHEN 会把「本窗口没有事件、别的窗口有」的项目
+    /// 也算出一行全 0，旧实现靠 WHERE ts_ms 过滤天然不会出现这种行。
+    private func sortedProjects(_ rows: [HarnessProjectUsage]) -> [HarnessProjectUsage] {
+        rows.filter { !$0.usage.isZero }.sorted { lhs, rhs in
+            lhs.usage.totalTokens == rhs.usage.totalTokens
+                ? lhs.path < rhs.path
+                : lhs.usage.totalTokens > rhs.usage.totalTokens
         }
-        sqlite3_bind_int64(stmt, 1, window.fromMs)
-        sqlite3_bind_int64(stmt, 2, window.toMs)
-        return true
     }
 
-    /// 从第 offset 列起读五项用量（顺序：未缓存 / 输出 / 缓存读 / 缓存写 / 请求数）
-    private func usageRow(_ stmt: OpaquePointer?, offset: Int32) -> HarnessTokenUsage {
-        HarnessTokenUsage(
-            uncachedInput: Int(sqlite3_column_int64(stmt, offset)),
-            output: Int(sqlite3_column_int64(stmt, offset + 1)),
-            cacheRead: Int(sqlite3_column_int64(stmt, offset + 2)),
-            cacheWrite: Int(sqlite3_column_int64(stmt, offset + 3)),
-            requestCount: Int(sqlite3_column_int64(stmt, offset + 4))
-        )
+    /// 按总 token 降序、并列按模型名升序（同样丢掉本窗口零用量的行）
+    private func sortedModels(_ rows: [HarnessModelUsage]) -> [HarnessModelUsage] {
+        rows.filter { !$0.usage.isZero }.sorted { lhs, rhs in
+            lhs.usage.totalTokens == rhs.usage.totalTokens
+                ? lhs.model < rhs.model
+                : lhs.usage.totalTokens > rhs.usage.totalTokens
+        }
     }
 }

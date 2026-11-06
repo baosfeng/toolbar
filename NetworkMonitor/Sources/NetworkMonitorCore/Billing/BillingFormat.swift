@@ -62,9 +62,32 @@ public func formatTokenCount(_ value: Int) -> String {
 ///
 /// 百分比按服务端返回值原样展示：3.74% 就是 "3.74%"，不取整成 "4%"。
 /// 只做 0...1 钳制（超界数据按满额 / 空额处理）。
+///
+/// 用途：无障碍朗读、日志摘要、明细等「需要精确值」的位置。
+/// 额度卡里的大号数字请用 `formatPercentCompact`（原值最多 6 位小数会把版式撑坏）。
 public func formatPercent(_ fraction: Double) -> String {
     let clamped = min(max(fraction, 0), 1)
     return formatExactNumber(clamped * 100) + "%"
+}
+
+/// 额度卡大号数字用的紧凑百分比（0...1 → "49.06%"）
+///
+/// 规则：
+/// - 0...1 钳制（超界按满额 / 空额处理，与 `formatPercent` 一致）
+/// - **最多 2 位小数并去尾零**：42.00 → "42%"、49.058667 → "49.06%"、99.686 → "99.69%"
+/// - NaN / ±inf 降级为「—」（不显示 "nan%"）
+///
+/// 为什么单独一个函数：服务端会返回 1 - 157/50000 这种长小数，
+/// 旧版 16pt 字号还能忍，卡内 19–24pt 时六位小数直接毁版式；
+/// `formatPercent` 保持原值展示不动，避免改掉日志与无障碍的口径。
+public func formatPercentCompact(_ fraction: Double) -> String {
+    guard fraction.isFinite else { return "—" }
+    let clamped = min(max(fraction, 0), 1)
+    let percent = clamped * 100
+    var text = String(format: "%.2f", percent)
+    while text.contains("."), text.hasSuffix("0") { text.removeLast() }
+    if text.hasSuffix(".") { text.removeLast() }
+    return text + "%"
 }
 
 /// 分桶时间标签

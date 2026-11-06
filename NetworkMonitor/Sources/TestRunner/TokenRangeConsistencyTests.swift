@@ -13,6 +13,10 @@ func runTokenRangeConsistencyTests() {
     testRangeWindowBoundaries()
     testProjectModelFollowRange()
     testShareDenominator()
+
+    print("\n🧪 Testing 窗口化聚合（真实 SQLite 内存库）...")
+    testWindowedAggregationInDatabase()
+    testWindowedAggregationPerformance()
 }
 
 // MARK: - 窗口边界
@@ -137,3 +141,97 @@ private func testShareDenominator() {
     assertEqual(TokenDerive.projectRows(missingWindow, window: .today).isEmpty, true,
                 "窗口缺数据时为空，不回落到别的窗口")
 }
+
+// MARK: - 窗口化聚合（真实库）
+
+/// 三档窗口的项目 / 模型聚合：数值、排序、占比分母、跨范围隔离
+private func testWindowedAggregationInDatabase() {
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    let store: any HarnessTokenRepository = db
+
+    // 今日 = 2026-11-06；造 4 天数据（今日 / 昨天 / 7 天内 / 30 天内 / 30 天外各一）
+    let now = harnessDate(2026, 11, 6, 20)
+    let events: [(day: Int, project: String, model: String, tokens: Int)] = [
+        (0, "/Users/me/IdeaProjects/alpha", "deepseek-v4", 1_000),
+        (0, "/Users/me/IdeaProjects/beta", "gpt-5", 500),
+        (1, "/Users/me/IdeaProjects/alpha", "deepseek-v4", 2_000),
+        (5, "/Users/me/IdeaProjects/gamma", "deepseek-v4", 3_000),
+        (20, "/Users/me/IdeaProjects/alpha", "deepseek-v4", 4_000),
+        (40, "/Users/me/IdeaProjects/alpha", "deepseek-v4", 9_000),   // 30 天外，任何窗口都不该出现
+    ]
+    for (index, item) in events.enumerated() {
+        let date = now.addingTimeInterval(-Double(item.day) * 86_400)
+        let tsMs = Int64((date.timeIntervalSince1970 * 1000).rounded())
+        let record = HarnessSessionScanRecord(path: "/stub/\(index)", sessionID: "s\(index)",
+                                              size: 1, mtimeMs: 1, scannedAt: 0)
+        _ = store.harnessReplaceSession(record: record, events: [
+            makeEvent(sessionID: "s\(index)", cwd: item.project, model: item.model, tsMs: tsMs,
+                      usage: HarnessTokenUsage(uncachedInput: item.tokens, requestCount: 1)),
+        ], cwd: item.project)
+    }
+
+    let aggregate = store.harnessAggregate(now: now)
+    let today = aggregate.windowed.first { $0.window == .today }
+    let d7 = aggregate.windowed.first { $0.window == .last7Days }
+    let d30 = aggregate.windowed.first { $0.window == .last30Days }
+    assertNotNil(today, "今日窗口存在")
+    assertNotNil(d7, "7 天窗口存在")
+    assertNotNil(d30, "30 天窗口存在")
+
+    // 今日：alpha 1000 + beta 500
+    assertEqual(today?.projects.count, 2, "今日 2 个项目")
+    assertEqual(today?.projects.first?.path.hasSuffix("alpha") ?? false, true, "今日榜首 alpha")
+    assertEqual(today?.projects.first?.usage.totalTokens, 1_000, "今日 alpha 1000 tok")
+    assertEqual(today?.projectTotals.totalTokens, 1_500, "今日项目合计 = 全部项目（alpha+beta）")
+    assertEqual(today?.models.count, 2, "今日 2 个模型")
+
+    // 7 天（今日往前 6 天，含昨天与第 5 天）：alpha 3000 + beta 500 + gamma 3000
+    assertEqual(d7?.projects.count, 3, "7 天 3 个项目")
+    assertEqual(d7?.projectTotals.totalTokens, 6_500, "7 天项目合计")
+    assertEqual(d7?.projects.first?.usage.totalTokens, 3_000, "7 天榜首并列时取较小者（alpha/gamma）")
+    assertEqual(d7?.projects.first?.path.hasSuffix("alpha") ?? false, true, "并列按路径升序，alpha 在前")
+    assertEqual(d7?.models.count, 2, "7 天 2 个模型")
+
+    // 30 天（含第 20 天，不含第 40 天）：alpha 7000 + beta 500 + gamma 3000
+    assertEqual(d30?.projects.count, 3, "30 天 3 个项目（30 天外的第 40 天不出现）")
+    assertEqual(d30?.projectTotals.totalTokens, 10_500, "30 天项目合计（排除 9000 的窗口外事件）")
+
+    // 一致性：项目合计 ≤ 该窗口 Hero 总量（Hero 口径 = 全部事件，含无法归属项目的事件）
+    assertEqual((today?.projectTotals.totalTokens ?? 0) <= aggregate.today.totalTokens, true,
+                "今日 sum(项目) ≤ Hero 总量")
+    assertEqual((d30?.projectTotals.totalTokens ?? 0) <= aggregate.allTime.totalTokens, true,
+                "30 天 sum(项目) ≤ 累计总量")
+
+    // 三档互不串数据：今日项目合计 < 7 天 < 30 天
+    assertEqual((today?.projectTotals.totalTokens ?? 0) < (d7?.projectTotals.totalTokens ?? 0), true,
+                "今日合计 < 7 天合计（不串数据）")
+    assertEqual((d7?.projectTotals.totalTokens ?? 0) < (d30?.projectTotals.totalTokens ?? 0), true,
+                "7 天合计 < 30 天合计")
+}
+
+/// 记录一次窗口化聚合耗时（回归护栏：库 133k 行时实测约 186ms，此后显著变慢要能看见）
+private func testWindowedAggregationPerformance() {
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    let store: any HarnessTokenRepository = db
+    let now = harnessDate(2026, 11, 6, 20)
+    // 造 2000 条事件（20 个项目 / 8 个模型 / 30 天）
+    for index in 0..<2_000 {
+        let tsMs = harnessTs(2026, 11, 6) - Int64(index % 30) * 86_400_000
+        let record = HarnessSessionScanRecord(path: "/stub/p\(index)", sessionID: "perf\(index)",
+                                              size: 1, mtimeMs: 1, scannedAt: 0)
+        _ = store.harnessReplaceSession(record: record, events: [
+            makeEvent(sessionID: "perf\(index)", cwd: "/Users/me/proj\(index % 20)",
+                      model: "model\(index % 8)", tsMs: tsMs,
+                      usage: HarnessTokenUsage(uncachedInput: 100, requestCount: 1)),
+        ], cwd: "/Users/me/proj\(index % 20)")
+    }
+    let start = Date()
+    let aggregate = store.harnessAggregate(now: now)
+    let elapsed = Date().timeIntervalSince(start)
+    assertEqual(aggregate.windowed.count, 3, "一次聚合产出三档窗口")
+    assertEqual(elapsed < 3.0, true, "2000 条事件的聚合在 3 秒内完成（实测 \(String(format: "%.1f", elapsed * 1000)) ms）")
+    print("   ⏱ 2000 事件 × 三档窗口化聚合：\(String(format: "%.1f", elapsed * 1000)) ms")
+}
+
