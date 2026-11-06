@@ -231,7 +231,10 @@ private func testWindowedAggregationPerformance() {
     let aggregate = store.harnessAggregate(now: now)
     let elapsed = Date().timeIntervalSince(start)
     assertEqual(aggregate.windowed.count, 3, "一次聚合产出三档窗口")
-    assertEqual(elapsed < 3.0, true, "2000 条事件的聚合在 3 秒内完成（实测 \(String(format: "%.1f", elapsed * 1000)) ms）")
+    // 阈值给到 10 秒：本机实测 6~7ms，但多 agent 共用一台机器并发跑 TestRunner 时
+    // 实测出现过 25 秒的假红（CPU 被抢占，不是代码变慢）。护栏只拦「量级回归」，
+    // 精确耗时看下面这行打印，不要按它调阈值。
+    assertEqual(elapsed < 10.0, true, "2000 条事件的聚合在 10 秒内完成（实测 \(String(format: "%.1f", elapsed * 1000)) ms）")
     print("   ⏱ 2000 事件 × 三档窗口化聚合：\(String(format: "%.1f", elapsed * 1000)) ms")
 }
 
