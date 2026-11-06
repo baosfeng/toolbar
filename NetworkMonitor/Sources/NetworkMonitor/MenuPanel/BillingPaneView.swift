@@ -143,10 +143,8 @@ final class BillingPaneView: MenuPanelPaneView {
         }
         guard hasProvider else {
             clearBlocks()
-            // 空态文案随原因分支（注册表全空 / 全部未配置 / 全部停用）。
-            // `emptyReason` 由数据层给；本分支尚未合入该字段，先走 .unknown，
-            // 合并行为分支后把这一行换成 `emptyView.update(reason: snapshot.emptyReason)`。
-            emptyView.update(reason: .unknown)
+            // 空态文案随数据层给的原因分支（无启用 provider / 有启用但全未配置）
+            emptyView.update(reason: Self.emptyReason(snapshot.emptyReason))
             return
         }
         syncBlocks(snapshot.states)
@@ -235,6 +233,18 @@ extension BillingPaneView {
 
     /// 当前数值单位档的展示文案（页脚状态带用）
     ///
-    /// 取值来自 Core 侧的数值单位设置；本分支该 API 未合入，先返回 nil（状态带跳过该项）。
-    static var unitLabel: String? { nil }
+    /// 取值来自 Core 的 `NumberUnitPreferences`（设置页「显示 › 数值单位」写入）。
+    static var unitLabel: String? { NumberUnitPreferences().style.title }
+
+    /// 数据层空态原因 → 视图文案原因
+    ///
+    /// 数据层只分两类（无启用 provider / 有启用但都没凭据），视图层文案多一类「注册表为空」的措辞；
+    /// 这里做唯一映射，别在视图里再判一遍。
+    static func emptyReason(_ reason: BillingMonitor.BillingEmptyReason?) -> BillingEmptyReason {
+        guard let reason else { return .unknown }
+        switch reason {
+        case .noEnabledProvider: return .allDisabled
+        case .noneConfigured:    return .allUnconfigured
+        }
+    }
 }
