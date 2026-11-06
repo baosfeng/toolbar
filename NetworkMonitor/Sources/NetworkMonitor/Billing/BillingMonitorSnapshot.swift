@@ -66,17 +66,57 @@ extension BillingMonitor {
         var errorMessage: String?
     }
 
-    /// 面板快照 — 全部 provider 状态（按注册顺序）
+    /// 面板快照 — **只含额度页可见的 provider**（按注册顺序）
+    ///
+    /// 「可见」= 已启用且已配置凭据（判据在 Core 的 `BillingVisibilityRule`）：
+    /// 用户要求「没有配置的需要隐藏」，所以未配置的 provider 根本不出现在 `states` 里，
+    /// 额度页视图不需要写任何过滤（视图层由视觉任务独占，判据必须留在数据层）。
+    /// 停用的 provider 更早一步就被 `BillingMonitor.rebuildStates` 排除。
     struct Snapshot {
+        /// 额度页要渲染的状态（已配置 + 已启用；空数组 = 整页空态）
         var states: [ProviderState]
+        /// 已启用（但可能未配置）的 provider 总数 —— 用于区分两种空态
+        var enabledProviderCount: Int = 0
 
-        /// 注册表为空（面板整页空态）
-        var hasNoProvider: Bool { states.isEmpty }
+        /// 整页空态的原因
+        var emptyReason: BillingEmptyReason? {
+            guard states.isEmpty else { return nil }
+            return enabledProviderCount == 0 ? .noEnabledProvider : .noneConfigured
+        }
+
+        /// 是否整页空态
+        var isEmpty: Bool { states.isEmpty }
 
         /// 按 id 取状态
         func state(for providerID: String) -> ProviderState? {
             states.first { $0.descriptor.id == providerID }
         }
+
+        /// 从全部已启用 provider 的状态构造额度页快照 —— **可见性过滤的唯一入口**
+        ///
+        /// 过滤规则来自 Core 的 `BillingVisibilityRule`（已启用 + 已配置才可见）。
+        /// 视图层不需要也不应该再写过滤：`MenuPanel` 由视觉改造任务独占，
+        /// 判据放在这里才能保证改视图不会把「隐藏未配置」这条行为改丢。
+        ///
+        /// - Parameters:
+        ///   - states: 全部已启用 provider 的运行时状态（可能含未配置的）
+        ///   - enabledProviderCount: 已启用 provider 总数（区分两种空态）
+        /// - Returns: 只保留可见那些，`enabledProviderCount` 原样记录
+        static func make(from states: [ProviderState], enabledProviderCount: Int) -> Snapshot {
+            Snapshot(states: BillingVisibilityRule.visibleEntries(
+                        states,
+                        isConfigured: { $0.isConfigured },
+                        isEnabled: { _ in true }),
+                     enabledProviderCount: enabledProviderCount)
+        }
+    }
+
+    /// 额度页空态分类 — 两类空态文案不同（第二类必须给「去设置配置」入口）
+    enum BillingEmptyReason: Equatable {
+        /// 一个启用的 provider 都没有（注册表为空 / 全部停用）：去设置页启用
+        case noEnabledProvider
+        /// 有启用的 provider 但都没有凭据：去设置页填 Key
+        case noneConfigured
     }
 
     /// 单个 provider 的一次并发拉取结果（跨 actor 传递用，`Sendable`）

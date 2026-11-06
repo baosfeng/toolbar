@@ -1,5 +1,48 @@
 import Foundation
 
+// MARK: - 计费凭据来源
+
+/// 凭据来源 — 同一 provider 只有一条生效凭据，来源必须是可枚举的其中之一
+///
+/// 契约（用户反馈「同一个 provider 不支持重复配置」的落地口径）：
+/// - 一个 provider id 对应**唯一**一个存储键 `billing.credential.<providerID>`，
+///   写入永远是覆盖（不存在「第二份配置」）；
+/// - 环境变量（`BILLING_<ID>_API_KEY` / provider 自定义键，如 `OLLAMA_API_KEY`）
+///   **只是回退**：只要存储里有值就以存储为准，环境变量不参与、也不会被合并；
+/// - 设置页显示的掩码与额度页实际查询用的凭据都取自 `credentialResolution`，
+///   两处不可能看到不同来源的「两个配置」。
+public enum BillingCredentialSource: String, Sendable, Equatable {
+    /// 来自本机偏好存储（用户在设置页填写的）
+    case stored
+    /// 来自环境变量回退（命令行调试用）
+    case environment
+    /// 未配置
+    case none
+}
+
+/// 凭据解析结果 — 生效凭据 + 来源 + 参与解析的键（设置页与日志用）
+public struct BillingCredentialResolution: Sendable, Equatable {
+    /// 生效凭据（nil = 未配置）
+    public let credential: String?
+    /// 生效来源
+    public let source: BillingCredentialSource
+    /// 唯一存储键
+    public let storageKey: String
+    /// 依次尝试的环境变量键（无命中时也返回，便于排查）
+    public let environmentKeys: [String]
+
+    public init(credential: String?, source: BillingCredentialSource,
+                storageKey: String, environmentKeys: [String]) {
+        self.credential = credential
+        self.source = source
+        self.storageKey = storageKey
+        self.environmentKeys = environmentKeys
+    }
+
+    /// 是否已配置（额度页可见性判据的输入）
+    public var isConfigured: Bool { credential != nil }
+}
+
 // MARK: - 计费凭据存储
 
 /// 计费凭据存储 — 按 provider id 读写 API Key
@@ -10,6 +53,21 @@ public protocol BillingCredentialStore: AnyObject, Sendable {
     func credential(for providerID: String) -> String?
     /// 写入凭据（nil 或空串 = 清除）
     func setCredential(_ credential: String?, for providerID: String)
+    /// 解析指定 provider 的生效凭据与其来源（同一 provider 只有一条）
+    func credentialResolution(for providerID: String) -> BillingCredentialResolution
+}
+
+extension BillingCredentialStore {
+    /// 默认实现：只能取到生效值，来源按「有值即视为存储」处理
+    ///
+    /// 真实实现（`PreferencesBillingCredentialStore`）会覆盖本方法并给出精确来源；
+    /// 提供默认实现是为了让替换实现（Keychain 等）不必一次性实现全部细节。
+    public func credentialResolution(for providerID: String) -> BillingCredentialResolution {
+        BillingCredentialResolution(credential: credential(for: providerID),
+                                    source: credential(for: providerID) == nil ? .none : .stored,
+                                    storageKey: PreferencesBillingCredentialStore.storageKey(for: providerID),
+                                    environmentKeys: [])
+    }
 }
 
 // MARK: - 默认实现（偏好存储 + 环境变量回退）
@@ -68,6 +126,30 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
             keys.insert(first, at: 0)
         }
         return keys
+    }
+
+    /// 生效凭据与其来源 —— 同一 provider 只有一条：存储优先，环境变量仅作回退
+    ///
+    /// 两者同时存在时**只返回存储里的那条**（不合并、不拼接），设置页掩码与额度页
+    /// 实际查询用的是同一个值，从根上排除「一个 provider 两个配置」。
+    public func credentialResolution(for providerID: String) -> BillingCredentialResolution {
+        let storageKey = Self.storageKey(for: providerID)
+        let keys = Self.environmentKeys(for: providerID, resolving: environmentKeyResolver)
+        if let stored = storage.string(forKey: storageKey),
+           !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return BillingCredentialResolution(credential: stored, source: .stored,
+                                               storageKey: storageKey, environmentKeys: keys)
+        }
+        // 环境变量回退：优先 provider 自定义键（如 Ollama 的 OLLAMA_API_KEY），
+        // 再试默认键（连字符转下划线，便于 export），最后兼容旧的带连字符键
+        for key in keys {
+            if let value = environment[key], !value.isEmpty {
+                return BillingCredentialResolution(credential: value, source: .environment,
+                                                   storageKey: storageKey, environmentKeys: keys)
+            }
+        }
+        return BillingCredentialResolution(credential: nil, source: .none,
+                                           storageKey: storageKey, environmentKeys: keys)
     }
 
     public func credential(for providerID: String) -> String? {

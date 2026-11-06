@@ -53,6 +53,7 @@ enum MenuPanelSnapshot {
     private static func captureAll(directory: URL, repository: (any ClipboardRepository)?,
                                    tokenSnapshot: HarnessUsageSnapshot?,
                                    settings: SettingsWindow?) {
+        prepareUnitStyleForSnapshot()
         let items = repository?.fetchClipboardItems(kind: nil, limit: 5) ?? []
         let stress = (ProcessInfo.processInfo.environment[stressEnvKey]?.isEmpty == false)
         let billingMock = (ProcessInfo.processInfo.environment[billingMockEnvKey]?.isEmpty == false)
@@ -73,7 +74,8 @@ enum MenuPanelSnapshot {
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let suffix = appearance == .aqua ? "light" : "dark"
-                let url = directory.appendingPathComponent("menu-\(tab.fileNameSuffix)-\(suffix).png")
+                let url = directory.appendingPathComponent(
+                    "menu-\(tab.fileNameSuffix)\(unitFileSuffix)-\(suffix).png")
                 render(view: panel, size: size, appearanceName: appearance, to: url)
             }
             // 系统页内容高于 520pt 视口：另出一张「滚到底」，让底部状态带可核验
@@ -87,6 +89,9 @@ enum MenuPanelSnapshot {
 
         // 2. 额度页补充状态：未配置凭据 / 查询失败 + 遗留计划限额（浅色 + 深色）
         captureCreditsStates(directory: directory)
+
+        // 2.5 额度页可见性取证：未配置 provider 不占位 / 全部未配置走空态
+        captureBillingVisibility(directory: directory)
 
         // 3. 超高内容自证：进程 12 个 → 内容高度 > 520pt，验证不裁切且可滚动
         if stress {
@@ -105,7 +110,7 @@ enum MenuPanelSnapshot {
         // 5. 统一设置窗口：6 页 × 深浅色（与原型同画布 760×540）
         SettingsSnapshot.capture(directory: directory, settings: settings)
 
-        logger.info("快照完成：目录=\(directory.path)")
+        logger.info("快照完成：目录=\(directory.path)，数值单位=\(unitStyle?.rawValue ?? "跟随偏好")")
     }
 
     /// 系统页「滚到底」取证：底部状态带（温度 / 电池环 / 估功耗）只在滚动后可见，

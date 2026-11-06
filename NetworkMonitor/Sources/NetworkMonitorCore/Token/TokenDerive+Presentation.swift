@@ -144,9 +144,15 @@ extension TokenDerive {
         return "不随范围 · 日均 " + TokenFormatting.tokens(Int(Double(total) / 14.0))
     }
 
-    package static func projectRows(_ snapshot: HarnessUsageSnapshot) -> [TokenDistroRow] {
-        let total = snapshot.projects.reduce(0) { $0 + $1.usage.totalTokens }
-        return snapshot.projects.enumerated().map { index, item in
+    /// 项目分布行 —— 跟随范围（`window` = 当前范围的数据窗口）
+    ///
+    /// 占比分母用**该窗口内全部项目**的合计（`windowProjectTotals`），不是 TopN 行求和：
+    /// 用裁剪后的行求和会让每一行的占比都虚高，加起来远超 100%。
+    package static func projectRows(_ snapshot: HarnessUsageSnapshot,
+                                    window: HarnessUsageWindow) -> [TokenDistroRow] {
+        let items = snapshot.windowedProjects[window] ?? []
+        let total = (snapshot.windowProjectTotals[window] ?? .zero).totalTokens
+        return items.enumerated().map { index, item in
             let tokens = item.usage.totalTokens
             let share = total > 0 ? Double(tokens) / Double(total) : 0
             return TokenDistroRow(rank: index + 1,
@@ -159,9 +165,12 @@ extension TokenDerive {
         }
     }
 
-    package static func modelRows(_ snapshot: HarnessUsageSnapshot) -> [TokenDistroRow] {
-        let total = snapshot.models.reduce(0) { $0 + $1.usage.totalTokens }
-        return snapshot.models.enumerated().map { index, item in
+    /// 模型分布行 —— 跟随范围；分母用该窗口内全部模型的合计
+    package static func modelRows(_ snapshot: HarnessUsageSnapshot,
+                                  window: HarnessUsageWindow) -> [TokenDistroRow] {
+        let items = snapshot.windowedModels[window] ?? []
+        let total = (snapshot.windowModelTotals[window] ?? .zero).totalTokens
+        return items.enumerated().map { index, item in
             let tokens = item.usage.totalTokens
             let share = total > 0 ? Double(tokens) / Double(total) : 0
             let rate = HarnessCacheHitRate.compute(cacheRead: item.usage.cacheRead,

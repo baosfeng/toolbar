@@ -13,15 +13,28 @@ func tokenSnapshot(todayHourly: [HarnessHourlyUsage] = HarnessHourlyUsage.emptyD
                    daily: [HarnessDailyUsage] = [],
                    projects: [HarnessProjectUsage] = [],
                    models: [HarnessModelUsage] = [],
+                   window: HarnessUsageWindow = .today,
+                   windowProjectTotals: HarnessTokenUsage? = nil,
+                   windowModelTotals: HarnessTokenUsage? = nil,
                    indexedSessions: Int = 0,
                    allTime: HarnessTokenUsage = .zero) -> HarnessUsageSnapshot {
-    HarnessUsageSnapshot(
+    // 按范围数据：默认只把 projects / models 放进指定窗口，分母按行求和不含裁剪
+    // （测试里行就是全集，与生产「分母含 TopN 之外」的语义一致）
+    let projectTotals = windowProjectTotals
+        ?? projects.reduce(HarnessTokenUsage()) { $0.adding($1.usage) }
+    let modelTotals = windowModelTotals
+        ?? models.reduce(HarnessTokenUsage()) { $0.adding($1.usage) }
+    return HarnessUsageSnapshot(
         totals: HarnessUsageTotals(today: .zero, thisWeek: .zero, allTime: allTime, cacheHitRate: nil),
         daily: daily,
         todayHourly: todayHourly,
         yesterdayHourly: yesterdayHourly,
         projects: projects,
         models: models,
+        windowedProjects: [window: projects],
+        windowedModels: [window: models],
+        windowProjectTotals: [window: projectTotals],
+        windowModelTotals: [window: modelTotals],
         indexedSessions: indexedSessions,
         totalSessions: indexedSessions,
         lastScanAt: nil,

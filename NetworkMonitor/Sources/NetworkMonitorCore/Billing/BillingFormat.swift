@@ -46,19 +46,16 @@ public func formatLimitUsage(used: Double?, limit: Double?, unit: String?) -> St
     return text + " " + unit
 }
 
-/// token 数量缩写（如 "10.6万" / "1360" / "1.2亿"）
+/// token 数量缩写（automatic：`106K` / `1.2B`；chinese：`10.6万` / `1.2亿`）
 ///
-/// 与菜单面板既有风格一致：≥1 万用「万」，≥1 亿用「亿」，保留 1 位小数。
+/// **迁移事实（勿当回归 bug 修回去）**：改造前额度页这里恒用「万 / 亿」（与 Token 页的
+/// K/M/B 各一套），本次按用户「两个页面数值口径要统一」的要求，改为跟随设置页的
+/// 「数值单位」偏好；默认档 automatic 下额度页的 token 会从 `10.6万` 变成 `106K`，
+/// 与 Token 页完全一致。切到中文档则整 App（含 Token 页）统一显示万 / 亿。
+///
+/// 口径收敛在 `NumberUnits.scale`；调用方（额度页视图）不需要改代码 —— 签名与返回形态不变。
 public func formatTokenCount(_ value: Int) -> String {
-    let absValue = abs(value)
-    switch absValue {
-    case 100_000_000...:
-        return String(format: "%.1f亿", Double(absValue) / 100_000_000)
-    case 10_000...:
-        return String(format: "%.1f万", Double(absValue) / 10_000)
-    default:
-        return String(absValue)
-    }
+    NumberUnits.scale(Double(value)).text
 }
 
 /// 剩余比例格式化（0...1 → "72.5%"）

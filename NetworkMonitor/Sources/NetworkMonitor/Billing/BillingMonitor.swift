@@ -317,9 +317,9 @@ final class BillingMonitor {
 
     // MARK: - 回调
 
-    /// 回调最新快照
+    /// 回调最新快照 —— 回调前按 Core 的可见性规则过滤（未配置者不占位）
     // 放宽为 internal：BillingMonitor+Providers 的启用开关扩展要发快照
     func emit() {
-        onUpdate?(Snapshot(states: states))
+        onUpdate?(Snapshot.make(from: states, enabledProviderCount: states.count))
     }
 }

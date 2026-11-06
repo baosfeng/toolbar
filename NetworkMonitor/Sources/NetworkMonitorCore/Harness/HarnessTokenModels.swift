@@ -194,10 +194,15 @@ public struct HarnessAggregate: Sendable, Equatable {
     public let thisWeek: HarnessTokenUsage
     /// 按天升序，仅包含有数据的日期（无会话的日期不补 0）
     public let daily: [HarnessDailyUsage]
-    /// 按总 token 降序
+    /// 累计口径的项目（按总 token 降序；保留给「累计」语义的旧调用方）
     public let projects: [HarnessProjectUsage]
-    /// 按总 token 降序
+    /// 累计口径的模型（按总 token 降序）
     public let models: [HarnessModelUsage]
+    /// 按范围（今日 / 近 7 天 / 近 30 天）的项目与模型聚合（顺序同 `HarnessUsageWindow.allCases`）
+    ///
+    /// 存在理由：Hero / 四族卡 / 24 桶都跟随范围，而项目与模型原先只有累计口径，
+    /// 同一屏两套口径导致「今日 340M」与「按项目 7.13B」差 20~30 倍。
+    public let windowed: [HarnessWindowedUsage]
     /// 已建立扫描记录的会话数
     public let indexedSessions: Int
     /// 今日按小时（24 槽，nil = 缺省）
@@ -207,7 +212,7 @@ public struct HarnessAggregate: Sendable, Equatable {
 
     public static let empty = HarnessAggregate(
         allTime: .zero, today: .zero, thisWeek: .zero,
-        daily: [], projects: [], models: [], indexedSessions: 0,
+        daily: [], projects: [], models: [], windowed: [], indexedSessions: 0,
         todayHourly: HarnessHourlyUsage.emptyDay(),
         yesterdayHourly: HarnessHourlyUsage.emptyDay()
     )
@@ -219,6 +224,7 @@ public struct HarnessAggregate: Sendable, Equatable {
         daily: [HarnessDailyUsage],
         projects: [HarnessProjectUsage],
         models: [HarnessModelUsage],
+        windowed: [HarnessWindowedUsage] = [],
         indexedSessions: Int,
         todayHourly: [HarnessHourlyUsage] = HarnessHourlyUsage.emptyDay(),
         yesterdayHourly: [HarnessHourlyUsage] = HarnessHourlyUsage.emptyDay()
@@ -229,6 +235,7 @@ public struct HarnessAggregate: Sendable, Equatable {
         self.daily = daily
         self.projects = projects
         self.models = models
+        self.windowed = windowed
         self.indexedSessions = indexedSessions
         self.todayHourly = todayHourly
         self.yesterdayHourly = yesterdayHourly
@@ -247,10 +254,18 @@ public struct HarnessUsageSnapshot: Sendable, Equatable {
     public let todayHourly: [HarnessHourlyUsage]
     /// 昨日 00-23 共 24 槽，供「今日 vs 昨日同期」对比
     public let yesterdayHourly: [HarnessHourlyUsage]
-    /// 项目 TopN
+    /// 项目 TopN（累计口径；`windowedProjects` 才是页面实际使用的那份）
     public let projects: [HarnessProjectUsage]
-    /// 模型 TopN
+    /// 模型 TopN（累计口径）
     public let models: [HarnessModelUsage]
+    /// 按范围的项目 TopN（键为窗口；页面按当前范围取用）
+    public let windowedProjects: [HarnessUsageWindow: [HarnessProjectUsage]]
+    /// 按范围的模型 TopN
+    public let windowedModels: [HarnessUsageWindow: [HarnessModelUsage]]
+    /// 按范围的占比分母（该窗口内全部项目 / 模型的 token 合计）
+    public let windowProjectTotals: [HarnessUsageWindow: HarnessTokenUsage]
+    /// 同上（模型）
+    public let windowModelTotals: [HarnessUsageWindow: HarnessTokenUsage]
     /// 已索引会话数
     public let indexedSessions: Int
     /// 发现到的会话文件总数
@@ -269,6 +284,10 @@ public struct HarnessUsageSnapshot: Sendable, Equatable {
         yesterdayHourly: [HarnessHourlyUsage] = HarnessHourlyUsage.emptyDay(),
         projects: [HarnessProjectUsage],
         models: [HarnessModelUsage],
+        windowedProjects: [HarnessUsageWindow: [HarnessProjectUsage]] = [:],
+        windowedModels: [HarnessUsageWindow: [HarnessModelUsage]] = [:],
+        windowProjectTotals: [HarnessUsageWindow: HarnessTokenUsage] = [:],
+        windowModelTotals: [HarnessUsageWindow: HarnessTokenUsage] = [:],
         indexedSessions: Int,
         totalSessions: Int,
         lastScanAt: Date?,
@@ -281,6 +300,10 @@ public struct HarnessUsageSnapshot: Sendable, Equatable {
         self.yesterdayHourly = yesterdayHourly
         self.projects = projects
         self.models = models
+        self.windowedProjects = windowedProjects
+        self.windowedModels = windowedModels
+        self.windowProjectTotals = windowProjectTotals
+        self.windowModelTotals = windowModelTotals
         self.indexedSessions = indexedSessions
         self.totalSessions = totalSessions
         self.lastScanAt = lastScanAt

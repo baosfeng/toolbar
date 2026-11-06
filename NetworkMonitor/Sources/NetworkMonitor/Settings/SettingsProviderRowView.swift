@@ -49,6 +49,8 @@ final class ProviderRowView: NSView {
     var isEnabled = true
     var isConfigured = false
     var credentialMask: String?
+    /// 生效凭据来源（存储 / 环境变量 / 未配置）— 状态行据此提示用户「另一个来源也有值」
+    var credentialSource: BillingCredentialSource = .none
     var interval: TimeInterval = BillingRefreshScheduler.minimumInterval
     var lastAttempt: Date?
     var lastUpdated: Date?
@@ -157,6 +159,7 @@ final class ProviderRowView: NSView {
     func update(isEnabled: Bool,
                 isConfigured: Bool,
                 credentialMask: String?,
+                credentialSource: BillingCredentialSource = .none,
                 interval: TimeInterval,
                 state: BillingMonitor.ProviderState?,
                 lastAttempt: Date?,
@@ -164,6 +167,7 @@ final class ProviderRowView: NSView {
         self.isEnabled = isEnabled
         self.isConfigured = isConfigured
         self.credentialMask = credentialMask
+        self.credentialSource = credentialSource
         self.interval = interval
         self.lastAttempt = lastAttempt
         lastUpdated = state?.lastUpdated
@@ -180,6 +184,8 @@ final class ProviderRowView: NSView {
     }
 
     func applyStatus() {
+        // 已配置时状态行带上来源：环境变量回退是「只读的一条」，用户据此知道改的是哪一份
+        let sourceNote = credentialSource == .environment ? "（环境变量）" : ""
         if !isEnabled {
             dotView.kind = .idle
             statusLabel.stringValue = isConfigured ? "已配置 · 已停用" : "未配置 · 已停用"
@@ -188,10 +194,10 @@ final class ProviderRowView: NSView {
             statusLabel.stringValue = "未配置 · 尚未填写 Key"
         } else if let errorMessage, !errorMessage.isEmpty {
             dotView.kind = .warn
-            statusLabel.stringValue = "已配置 · \(refreshText())"
+            statusLabel.stringValue = "已配置\(sourceNote) · \(refreshText())"
         } else {
             dotView.kind = .ok
-            statusLabel.stringValue = "已配置 · \(refreshText())"
+            statusLabel.stringValue = "已配置\(sourceNote) · \(refreshText())"
         }
         nameLabel.textColor = isEnabled ? .labelColor : .secondaryLabelColor
         tile.alphaValue = isEnabled ? 1 : 0.7
@@ -202,9 +208,11 @@ final class ProviderRowView: NSView {
 
     func applyControls() {
         toggle.state = isEnabled ? .on : .off
+        // 同一 provider 只允许一份配置：已配置时只给「替换 / 清除」，未配置才给「配置凭据…」。
+        // 环境变量回退不可从界面清除（那是 shell 里的东西），只给「替换」把存储中的凭据补上。
         let showsCredentialActions = isConfigured
         editButton.isHidden = !showsCredentialActions
-        clearButton.isHidden = !showsCredentialActions
+        clearButton.isHidden = !showsCredentialActions || credentialSource == .environment
         configButton.isHidden = showsCredentialActions
     }
 

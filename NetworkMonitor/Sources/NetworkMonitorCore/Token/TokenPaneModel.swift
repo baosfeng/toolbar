@@ -4,7 +4,8 @@ import Foundation
 ///
 /// 口径（与定稿原型逐条对齐）：
 /// - 四族卡 / 小时图 / 天趋势 / 缓存卡跟随范围；
-/// - 项目与模型**只有累计口径**，切范围不跟着变；
+/// - 项目与模型**跟随范围**（今日 / 近 7 天 / 近 30 天各一份聚合），与 Hero 同口径；
+///   用户反馈「上面的数据和下面的数据对不上（340M vs 7.13B）」就是两套口径造成的；
 /// - 按小时桶只有今日与昨日，历史日只给天粒度。
 package struct TokenPaneModel {
 
@@ -86,6 +87,10 @@ package struct TokenPaneModel {
         let currentTotal = range == .today ? todayTotal : TokenDerive.sum(TokenDerive.dailyBuckets(snapshot, days: range.days))
         let previousTotal = range == .today ? yesterdayTotal : TokenDerive.sum(TokenDerive.previousDailyBuckets(snapshot, days: range.days))
 
+        // 项目 / 模型跟随范围：与 Hero、四族卡取同一个窗口
+        let projectRows = TokenDerive.projectRows(snapshot, window: range.window)
+        let modelRows = TokenDerive.modelRows(snapshot, window: range.window)
+
         return TokenPaneModel(
             range: range,
             hostLabel: "DSH · \(snapshot.indexedSessions) 会话",
@@ -117,12 +122,12 @@ package struct TokenPaneModel {
             hitSeries: windowBuckets.map { TokenDerive.hitRate($0) * 100 },
             hitRateFraction: TokenDerive.hitRate(currentTotal),
             hitBucketText: range == .today ? "24 桶" : "\(range.days) 天",
-            projects: TokenDerive.projectRows(snapshot),
-            models: TokenDerive.modelRows(snapshot),
-            projectMeta: "累计 \(snapshot.projects.count) 个",
-            modelMeta: "累计 \(snapshot.models.count) 个",
-            projectCount: snapshot.projects.count,
-            modelCount: snapshot.models.count,
+            projects: projectRows,
+            models: modelRows,
+            projectMeta: "\(range.window.title) \(projectRows.count) 个",
+            modelMeta: "\(range.window.title) \(modelRows.count) 个",
+            projectCount: projectRows.count,
+            modelCount: modelRows.count,
             compare: TokenDerive.compare(snapshot, current: currentTotal, previous: previousTotal, range: range),
             stateBand: TokenDerive.stateBand(snapshot, range: range, buckets: windowBuckets,
                                              previous: previousTotal, current: currentTotal),
