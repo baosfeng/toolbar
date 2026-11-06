@@ -11,6 +11,9 @@ func runBillingTests() {
     print("\n🧪 Testing BillingFormat...")
     testBillingFormat()
 
+    print("\n🧪 Testing BillingFormatPercentCompact...")
+    testBillingFormatPercentCompact()
+
     print("\n🧪 Testing BillingModels...")
     testBillingModels()
 
@@ -203,3 +206,23 @@ private func testBillingLimitLayout() {
     assertEqual(BillingLimitLayout.inlineBadge("已限流"), "已限流 ·", "同行角标带间隔点")
     assertEqual(BillingLimitLayout.inlineBadge(""), " ·", "空角标只留间隔点（不会出现，防御）")
 }
+// MARK: - 紧凑百分比（额度卡大号数字）
+
+/// 0...1 钳制 + 最多 2 位小数去尾零 + NaN/inf 降级
+private func testBillingFormatPercentCompact() {
+    assertEqual(formatPercentCompact(0), "0%", "0 → 0%")
+    assertEqual(formatPercentCompact(0.05), "5%", "0.05 → 5%（去尾零）")
+    assertEqual(formatPercentCompact(0.42), "42%", "0.4200 → 42%")
+    assertEqual(formatPercentCompact(0.49058667), "49.06%", "长小数收到 2 位")
+    assertEqual(formatPercentCompact(0.99686), "99.69%", "99.686 四舍五入")
+    assertEqual(formatPercentCompact(0.725), "72.5%", "一位小数保留")
+    assertEqual(formatPercentCompact(1), "100%", "满额")
+    assertEqual(formatPercentCompact(1.5), "100%", "超界钳到 100%")
+    assertEqual(formatPercentCompact(-0.1), "0%", "负值钳到 0%")
+    assertEqual(formatPercentCompact(.nan), "—", "NaN 降级")
+    assertEqual(formatPercentCompact(.infinity), "—", "+inf 降级")
+    assertEqual(formatPercentCompact(-.infinity), "—", "-inf 降级")
+    // 原值口径不受影响：formatPercent 仍保留服务端精度（日志与无障碍继续用它）
+    assertEqual(formatPercent(0.49058667), "49.058667%", "formatPercent 原值展示不变")
+}
+
