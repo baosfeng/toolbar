@@ -66,6 +66,13 @@ runTransferTests()
 // MARK: - 扫码接收（二维码 + 浏览器直传）
 runScanTests()
 
+// MARK: - 额度页 / Token 页视觉口径（Hero 派生 / 数值单位分列 / 卡片排布）
+runBillingHeroLogicTests()
+runPaneValueFormattingTests()
+runPaneCardLayoutTests()
+runPaneValueSizingTests()
+runBillingEmptyStateLogicTests()
+
 // MARK: - 计费额度（provider 抽象 + Ollama 响应解码）
 runBillingTests()
 
