@@ -47,7 +47,7 @@ private enum TransferRetryScenario {
                                        configuration: configuration,
                                        pairing: PairingStore(storage: storage),
                                        logger: logger)
-        let port = try await receiver.start(portCandidates: [54_101, 54_102, 54_103],
+        let port = try await receiver.start(portCandidates: Self.portCandidates(),
                                             startDiscovery: false)
         do {
             try await exercise(receiverPort: Int(port), directory: directory,
@@ -57,6 +57,17 @@ private enum TransferRetryScenario {
             throw error
         }
         await receiver.stop()
+    }
+
+    /// 候选端口：随机基址 + 连续 16 个
+    ///
+    /// 原先写死 [54101, 54102, 54103]，实测会与本机无关进程撞车（VS Code 的代理连接
+    /// 占 54101、ApexCore 占 54102），导致门禁随机假红——测试失败但代码没坏。
+    /// 每次运行换一段随机区间，撞车概率降到可以忽略；仍留 16 个候选兜底。
+    static func portCandidates() -> [UInt16] {
+        // 避开系统保留区与常见开发端口，落在 20000–42000 的动态段
+        let base = UInt16.random(in: 20_000...42_000)
+        return (0..<16).map { base &+ UInt16($0) }
     }
 
     private static func exercise(receiverPort: Int, directory: URL,
