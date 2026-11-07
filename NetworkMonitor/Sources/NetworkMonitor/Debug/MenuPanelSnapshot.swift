@@ -6,10 +6,7 @@ import NetworkMonitorCore
 
 /// 菜单面板 / 剪贴板面板快照钩子 — **仅 DEBUG 编译**，release 构建完全不包含本文件
 ///
-/// 触发方式：
-/// ```
-/// NM_SNAPSHOT_DIR=/tmp/nm-shots .build/arm64-apple-macosx/debug/NetworkMonitor
-/// ```
+/// 触发：`NM_SNAPSHOT_DIR=/tmp/nm-shots <可执行>`
 /// 启动 700ms 后把菜单面板（三个 tab × 浅色/深色）与剪贴板面板渲染成 PNG，然后自行退出进程。
 ///
 /// 存在理由：本机终端没有辅助功能权限（`AXIsProcessTrusted == false`），CGEvent 点不到状态栏
@@ -107,7 +104,7 @@ enum MenuPanelSnapshot {
                    appearanceName: appearance, to: url)
         }
 
-        // 5. 统一设置窗口：6 页 × 深浅色（与原型同画布 760×540）
+        // 5. 统一设置窗口：7 页 × 深浅色（与原型同画布 760×540）
         SettingsSnapshot.capture(directory: directory, settings: settings)
 
         logger.info("快照完成：目录=\(directory.path)，数值单位=\(unitStyle?.rawValue ?? "跟随偏好")")

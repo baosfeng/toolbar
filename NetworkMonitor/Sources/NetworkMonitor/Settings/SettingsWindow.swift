@@ -49,6 +49,71 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     }
 
 #if DEBUG
+#if DEBUG
+    /// 快照自证（仅 DEBUG）：用一个全新窗口复现「用户第一次打开设置」的路径
+    ///
+    /// 与 `prepareForSnapshot` 的区别是**不做任何显式布局**，用来复现首次进入的版式问题。
+    func makeFreshForFirstOpenProbe() -> NSView? {
+        guard let factory = factories[.general] else { return nil }
+        let probeWindow = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsStyle.windowSize),
+                                   styleMask: [.titled, .closable, .miniaturizable],
+                                   backing: .buffered, defer: false)
+        let root = SettingsSurfaceView { SettingsStyle.pageBackground }
+        let sidebar = SettingsSurfaceView { .underPageBackgroundColor }
+        // 侧栏也要照实际样式填上，否则探针图会误导成「侧栏是空的」
+        let probeSidebarStack = NSStackView()
+        probeSidebarStack.orientation = .vertical
+        probeSidebarStack.alignment = .leading
+        probeSidebarStack.spacing = 2
+        probeSidebarStack.distribution = .fill
+        probeSidebarStack.translatesAutoresizingMaskIntoConstraints = false
+        for section in SettingsSection.allCases {
+            let item = SettingsSidebarItemView(section: section)
+            item.isSelected = (section == .general)
+            probeSidebarStack.addArrangedSubview(item)
+            item.widthAnchor.constraint(equalTo: probeSidebarStack.widthAnchor).isActive = true
+        }
+        sidebar.addSubview(probeSidebarStack)
+        NSLayoutConstraint.activate([
+            probeSidebarStack.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 8),
+            probeSidebarStack.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -8),
+            probeSidebarStack.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 12),
+        ])
+        let scroll = NSScrollView()
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.borderType = .noBorder
+        scroll.drawsBackground = false
+        let container = SettingsFlippedView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = container
+        let pane = factory()
+        pane.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(pane)
+        root.addSubview(sidebar)
+        root.addSubview(scroll)
+        NSLayoutConstraint.activate([
+            sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            sidebar.topAnchor.constraint(equalTo: root.topAnchor),
+            sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            sidebar.widthAnchor.constraint(equalToConstant: SettingsStyle.sidebarWidth),
+            scroll.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: root.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            container.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+            container.heightAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.heightAnchor),
+            pane.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: SettingsStyle.contentInset),
+            pane.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -SettingsStyle.contentInset),
+            pane.topAnchor.constraint(equalTo: container.topAnchor, constant: SettingsStyle.contentInset),
+            pane.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -SettingsStyle.contentInset),
+        ])
+        probeWindow.contentView = root
+        return root
+    }
+#endif
+
     /// 快照自证（仅 DEBUG）：切到指定分类并返回内容视图，供离屏渲染
     func prepareForSnapshot(_ section: SettingsSection) -> NSView? {
         // 上一次渲染把根视图借进了离屏容器并移除，这里先挂回去再切页

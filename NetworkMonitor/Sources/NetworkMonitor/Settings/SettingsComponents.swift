@@ -49,10 +49,16 @@ final class SettingsPageStack: NSStackView {
         orientation = .vertical
         alignment = .leading
         spacing = 0
+        // 必须显式 .fill：NSStackView 默认是 .gravityAreas，容器比内容高时
+        // 剩余空间会被均分到 gravity 区之间 —— 表现就是「标题在顶、卡片在底、
+        // 中间一大片空白」。首次打开设置页时容器高度先按视口撑满，
+        // 正好命中这个条件；第二次进入高度已被算准，所以「再进一次就好了」。
+        distribution = .fill
 
         contentStack.orientation = .vertical
         contentStack.alignment = .leading
         contentStack.spacing = 8
+        contentStack.distribution = .fill
         contentStack.translatesAutoresizingMaskIntoConstraints = false
 
         let title = MenuPanelLabel.text(section.title, font: SettingsStyle.pageTitleFont, color: .labelColor)
@@ -71,6 +77,14 @@ final class SettingsPageStack: NSStackView {
 
         addArrangedSubview(contentStack)
         contentStack.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
+
+        // 弹性尾部空白：把多余高度全部吸到最底部，内容始终贴顶
+        let tail = NSView()
+        tail.translatesAutoresizingMaskIntoConstraints = false
+        tail.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
+        tail.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .vertical)
+        addArrangedSubview(tail)
+        tail.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
     }
 
     @available(*, unavailable)
@@ -113,6 +127,8 @@ final class SettingsCardView: NSView {
         rows.orientation = .vertical
         rows.alignment = .leading
         rows.spacing = 0
+        // 行栈四边钉死卡片：默认 gravityAreas 会把多余高度分到行与行之间
+        rows.distribution = .fill
         rows.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rows)
         NSLayoutConstraint.activate([

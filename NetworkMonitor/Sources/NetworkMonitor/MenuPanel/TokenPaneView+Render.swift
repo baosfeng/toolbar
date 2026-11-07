@@ -20,6 +20,9 @@ extension TokenPaneView {
         lastModel = model
 
         hostLabel.stringValue = model.hostLabel
+        // 每次渲染都重设：NSTextField 的默认无障碍文案取自 stringValue，
+        // 只在装配时设一次会被后续赋值覆盖掉，读屏就听不到时区口径了
+        hostLabel.setAccessibilityLabel(model.hostLabel + "。" + TokenTimeZoneNote.text)
         heroView.update(hero: model.hero)
         rangeControl.select(range.rawValue, notify: false)
 

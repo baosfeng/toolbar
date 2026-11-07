@@ -16,6 +16,12 @@ extension TokenPaneView {
     /// 省下的 ~18pt 高度全部给首屏内容；范围分段与刷新仍是可键盘聚焦的行。
     func buildHeader() {
         hostLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // 时间口径必须写在界面上：自然日 / 自然周边界固定按 Asia/Shanghai 切分，
+        // 不跟随系统时区。用户把 Mac 时区改到别的地区后，「今日」与系统日历不是同一天，
+        // 而这个差异在界面上原本没有任何说明——工具提示与读屏标签都补上，
+        // 免得用户以为是统计错了（运行期数字不动，只把口径说清楚）。
+        hostLabel.toolTip = TokenTimeZoneNote.text
+        hostLabel.setAccessibilityLabel(TokenTimeZoneNote.text)
         let headRow = NSStackView(views: [hostLabel, MenuPanelLabel.spacer(), rangeControl, refreshRow])
         headRow.orientation = .horizontal
         headRow.alignment = .centerY

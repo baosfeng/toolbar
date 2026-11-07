@@ -37,6 +37,7 @@ final class TokenPaneView: MenuPanelPaneView {
 
     // MARK: - 页头与范围
 
+    /// 范围分段（口径说明见页头的时区提示：窗口边界按 Asia/Shanghai 切分）
     let rangeControl = TokenSegmentedControl(titles: TokenRange.allCases.map { $0.title })
     let refreshRow = TokenIconButtonRow(symbolName: "arrow.clockwise")
     let indexLabel = MenuPanelLabel.text("", font: TokenPaneStyle.metaFont,

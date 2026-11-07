@@ -15,6 +15,9 @@ extension SettingsClipboardPane {
         ignoredListStack.orientation = .vertical
         ignoredListStack.alignment = .leading
         ignoredListStack.spacing = 4
+        // 列表栈上下都钉在容器上：不显式 .fill 时 NSStackView 默认按 gravityAreas
+        // 把多余高度分到条目之间，行数少时会出现「行与行隔开一大截」
+        ignoredListStack.distribution = .fill
         ignoredListStack.translatesAutoresizingMaskIntoConstraints = false
 
         let listContainer = NSView()

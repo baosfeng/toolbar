@@ -38,6 +38,9 @@ runLogRedactionTests()
 // MARK: - 额度时间格式（跟随系统 12/24 小时制）
 runBillingTimeFormatTests()
 
+// MARK: - Token 时间口径说明（界面必须写明不跟随系统时区）
+runTokenTimeZoneNoteTests()
+
 // MARK: - 凭据存储安全性（默认实现不得删凭据 / 独立存储才搬迁）
 runCredentialStorageSafetyTests()
 runCredentialMigrationTests()
