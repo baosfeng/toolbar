@@ -87,6 +87,8 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
     private let environment: [String: String]
     /// 环境变量键名解析（按 provider 自定义；未注入时用默认规则）
     private let environmentKeyResolver: @Sendable (String) -> String
+    /// 日志（迁移这类一次性动作必须可观测）
+    private let logger: LoggingService?
 
     /// 存储键前缀（完整键：`billing.credential.<providerID>`）
     ///
@@ -96,12 +98,16 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
     public init(storage: any KeyValueStorage = AppContext.shared.storage,
                 secrets: (any SecretStorage)? = nil,
                 environment: [String: String] = ProcessInfo.processInfo.environment,
+                logger: LoggingService? = AppContext.shared.logger,
                 environmentKeyResolver: @escaping @Sendable (String) -> String = { providerID in
                     PreferencesBillingCredentialStore.defaultEnvironmentKey(for: providerID)
                 }) {
         self.storage = storage
-        self.secrets = secrets ?? KeychainSecretStore()
+        // 默认走偏好存储（不弹框、不阻塞主线程）；钥匙串需由组合根显式注入，
+        // 前提是签名身份稳定 —— 见 PreferencesSecretStore 的说明与实测记录
+        self.secrets = secrets ?? PreferencesSecretStore(storage: storage)
         self.environment = environment
+        self.logger = logger
         self.environmentKeyResolver = environmentKeyResolver
     }
 
@@ -179,6 +185,25 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
         secrets.setSecret(credential.trimmingCharacters(in: .whitespacesAndNewlines), forKey: key)
     }
 
+    /// 一次性搬迁遗留明文（启动时对全部已注册 provider 调一次）
+    ///
+    /// 惰性搬迁只在「读该 provider」时触发，用户不点开额度页就一直有明文留在
+    /// `~/Library/Preferences` 里。启动时按注册表全量走一遍，代价是每个 provider
+    /// 一次钥匙串查询，可忽略。
+    public func migrateLegacyPlaintext(for providerIDs: [String]) {
+        // 与偏好共用底层时没有「搬迁」这回事，直接跳过（否则会把凭据全删）
+        guard !secrets.sharesStorageWithPreferences else { return }
+        var moved: [String] = []
+        for providerID in providerIDs {
+            let key = Self.storageKey(for: providerID)
+            let hadPlaintext = storage.string(forKey: key) != nil
+            _ = storedCredential(for: providerID)
+            if hadPlaintext, storage.string(forKey: key) == nil { moved.append(providerID) }
+        }
+        // 迁移结果必须可见：否则「明文还在不在」只能靠肉眼翻 plist 才知道
+        logger?.info("凭据存储迁移完成：清理明文 \(moved.count) 项\(moved.isEmpty ? "" : "（\(moved.joined(separator: ", "))）")")
+    }
+
     /// 读取生效的存储凭据：钥匙串优先；读到旧版遗留的明文时**就地搬迁**并删除明文
     ///
     /// 搬迁是惰性的：只在用户下次打开额度页 / 设置页读到该 provider 时发生，
@@ -187,6 +212,11 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
         let key = Self.storageKey(for: providerID)
         if let secret = secrets.secret(forKey: key),
            !secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // 只有「秘密存储与偏好是两个地方」时才清理偏好里的旧明文；
+            // 共用同一份底层数据时，这里读到的那条就是偏好里那条，清掉等于删凭据
+            if !secrets.sharesStorageWithPreferences {
+                discardLegacyPlaintext(for: providerID)
+            }
             return secret
         }
         guard let legacy = storage.string(forKey: key),
@@ -197,5 +227,12 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
         secrets.setSecret(trimmed, forKey: key)
         storage.removeObject(forKey: key)
         return trimmed
+    }
+
+    /// 清掉偏好里可能残留的旧明文（幂等；非空时才调用 `removeObject`）
+    private func discardLegacyPlaintext(for providerID: String) {
+        let key = Self.storageKey(for: providerID)
+        guard storage.string(forKey: key) != nil else { return }
+        storage.removeObject(forKey: key)
     }
 }

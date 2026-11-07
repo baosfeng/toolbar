@@ -8,6 +8,14 @@ import Security
 /// 抽成协议的原因：单测不能往真实 Keychain 里写垃圾（会污染本机钥匙串，
 /// 也让测试互相干扰），测试注入内存实现即可。
 public protocol SecretStorage: AnyObject, Sendable {
+    /// 是否与偏好存储共用同一份底层数据
+    ///
+    /// 搬迁旧明文的前提是「秘密存储与偏好存储是两个地方」；共用时（`PreferencesSecretStore`）
+    /// 读到的「秘密」就是偏好里那条，再按搬迁逻辑删明文等于**把凭据删掉**。
+    ///
+    /// 必须是协议要求而不是扩展默认实现：实测扩展里的默认值**不进 witness table**，
+    /// 通过 `any SecretStorage` 调用会静态解析到默认 false，共用底层时照样走搬迁分支。
+    var sharesStorageWithPreferences: Bool { get }
     /// 读取（无则 nil）
     func secret(forKey key: String) -> String?
     /// 写入（nil = 删除）
@@ -34,6 +42,9 @@ public final class KeychainSecretStore: SecretStorage {
 
     /// 默认 service（与 App bundle id 保持一致，便于在钥匙串访问里辨认）
     public static let defaultService = "com.example.NetworkMonitor.billing"
+
+    /// 钥匙串与偏好是两个独立存储：旧明文可以安全搬迁
+    public var sharesStorageWithPreferences: Bool { false }
 
     public func secret(forKey key: String) -> String? {
         var query = baseQuery(forKey: key)
@@ -68,5 +79,38 @@ public final class KeychainSecretStore: SecretStorage {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: key]
+    }
+}
+// MARK: - 偏好存储实现（默认，不弹框）
+
+/// 偏好存储实现 — 把「秘密」写回 `KeyValueStorage`，行为与启用钥匙串前一致
+///
+/// **为什么默认不用钥匙串**（实测）：本项目用自签名证书（`NetworkMonitor Local Signing`）
+/// 或 ad-hoc 回落，**每次重建签名身份都会变**，而钥匙串 ACL 是按代码签名绑定的。
+/// 身份一变，`SecItemCopyMatching` 就会弹「NetworkMonitor 想要使用钥匙串中的机密信息」
+/// 并**阻塞调用线程**——实测菜单栏 App 启动即卡死在这个弹框上（`sample` 显示主线程停在
+/// `SecItemCopyMatching`）。在签名身份稳定（正式证书 / 公证分发）之前，钥匙串不能做默认。
+///
+/// 启用前提：配置稳定签名证书并确认 `codesign -d -r-` 的 designated requirement
+/// 不含 cdhash（`build-app.sh` 的 `assert_stable_signature` 会拦这一条），
+/// 再把组合根换成 `KeychainSecretStore`。
+public final class PreferencesSecretStore: SecretStorage {
+    private let storage: any KeyValueStorage
+
+    public init(storage: any KeyValueStorage) {
+        self.storage = storage
+    }
+
+    /// 与偏好共用同一份底层数据：读取时不能再按「搬迁明文」处理
+    public var sharesStorageWithPreferences: Bool { true }
+
+    public func secret(forKey key: String) -> String? { storage.string(forKey: key) }
+
+    public func setSecret(_ value: String?, forKey key: String) {
+        if let value {
+            storage.set(value, forKey: key)
+        } else {
+            storage.removeObject(forKey: key)
+        }
     }
 }

@@ -102,13 +102,24 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
     }
 
     /// 执行 PRAGMA 语句
+    /// 设置 PRAGMA
+    ///
+    /// 用 `sqlite3_step` 判定成败时必须同时接受 `SQLITE_ROW`：
+    /// `PRAGMA journal_mode = WAL` / `PRAGMA mmap_size = 0` 这类语句**会返回一行结果**，
+    /// step 返回 `SQLITE_ROW` 而不是 `SQLITE_DONE`。只认 DONE 会把「设置成功」
+    /// 记成失败（日志里那两条「another row available」就是这么来的），
+    /// 让真正失败的 PRAGMA 淹没在假告警里。
     private func applyPragma(_ name: String, value: String) {
         guard let db else { return }
         let sql = "PRAGMA \(name)=\(value);"
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
-              sqlite3_step(stmt) == SQLITE_DONE else {
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logger.warning("PRAGMA \(name) 准备失败: \(String(cString: sqlite3_errmsg(db)))")
+            return
+        }
+        let stepResult = sqlite3_step(stmt)
+        guard stepResult == SQLITE_DONE || stepResult == SQLITE_ROW else {
             logger.warning("PRAGMA \(name) 设置失败: \(String(cString: sqlite3_errmsg(db)))")
             return
         }

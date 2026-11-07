@@ -111,6 +111,8 @@ public final class AppCoordinator {
                 billingRegistry.provider(id: providerID)?.environmentCredentialKey
                     ?? PreferencesBillingCredentialStore.defaultEnvironmentKey(for: providerID)
             })
+        // 旧明文迁移：按注册表全量走一遍，不等用户点开某个 provider（详见该方法的说明）
+        billingCredentials.migrateLegacyPlaintext(for: billingRegistry.all.map(\.id))
         // 额度阈值提醒（5%/4%/3%/2%/1%）：应用启动时请求通知权限
         let billingAlerts = BillingAlertService(storage: AppContext.shared.storage, logger: logger)
         billingAlerts.requestAuthorizationIfNeeded()

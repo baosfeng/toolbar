@@ -38,6 +38,10 @@ runLogRedactionTests()
 // MARK: - 额度时间格式（跟随系统 12/24 小时制）
 runBillingTimeFormatTests()
 
+// MARK: - 凭据存储安全性（默认实现不得删凭据 / 独立存储才搬迁）
+runCredentialStorageSafetyTests()
+runCredentialMigrationTests()
+
 // MARK: - 剪贴板访问权限状态（文案 / 色调 / 跳转）
 runClipboardAccessTests()
 
