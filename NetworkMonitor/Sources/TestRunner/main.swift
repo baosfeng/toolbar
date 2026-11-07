@@ -38,6 +38,10 @@ runLogRedactionTests()
 // MARK: - 额度时间格式（跟随系统 12/24 小时制）
 runBillingTimeFormatTests()
 
+// MARK: - 本地加密凭据存储（密文落盘 / 历史明文就地加密 / 换机器降级）
+runEncryptedSecretStoreTests()
+runLocalKeyMaterialTests()
+
 // MARK: - Token 时间口径说明（界面必须写明不跟随系统时区）
 runTokenTimeZoneNoteTests()
 

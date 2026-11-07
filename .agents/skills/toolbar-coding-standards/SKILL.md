@@ -60,7 +60,7 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 
 ### 5. 基础设施注入
 - 禁止直读 `UserDefaults.standard`；用 `KeyValueStorage`（`AppContext.shared.storage` 或注入）
-- **凭据类内容禁止进 `KeyValueStorage`**：偏好 plist 是明文文件（本机任意进程、Time Machine 备份、`plutil -p` 都能读），API Key / session cookie 一律走 `SecretStorage`（默认真实实现是 `KeychainSecretStore`，测试注入 `InMemorySecretStorage`）
+- **凭据类内容禁止明文进 `KeyValueStorage`**：成对走 `SecretStorage`——默认实现是 `EncryptedSecretStore`（AES-GCM 密文落偏好，密钥 = 机器 UUID + 0600 随机密钥文件），测试注入 `InMemorySecretStorage`；不要用钥匙串做默认（自签名身份每次重建都变，ACL 弹框会阻塞主线程）
 - 汇率等可配置项走注入存储（`CurrencyConfig.shared` + `storageOverride`），测试用隔离 suite 不得污染全局
 
 ### 6. 事件驱动

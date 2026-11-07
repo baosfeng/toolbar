@@ -103,9 +103,10 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
                     PreferencesBillingCredentialStore.defaultEnvironmentKey(for: providerID)
                 }) {
         self.storage = storage
-        // 默认走偏好存储（不弹框、不阻塞主线程）；钥匙串需由组合根显式注入，
-        // 前提是签名身份稳定 —— 见 PreferencesSecretStore 的说明与实测记录
-        self.secrets = secrets ?? PreferencesSecretStore(storage: storage)
+        // 默认：本地加密后存偏好（AES-GCM，密钥 = 机器 UUID + 0600 随机密钥文件）。
+        // 不用钥匙串：自签名 / ad-hoc 每次重建身份都变，钥匙串 ACL 会弹授权框并
+        // 阻塞主线程把 App 卡死（实测）。加密挡的是明文外泄，挡不住同用户恶意进程。
+        self.secrets = secrets ?? EncryptedSecretStore(storage: storage)
         self.environment = environment
         self.logger = logger
         self.environmentKeyResolver = environmentKeyResolver

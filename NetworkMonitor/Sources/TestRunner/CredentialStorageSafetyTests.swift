@@ -15,10 +15,13 @@ func runCredentialStorageSafetyTests() {
     let store = PreferencesBillingCredentialStore(storage: storage, environment: [:])
     let key = PreferencesBillingCredentialStore.storageKey(for: "ollama")
 
-    // 默认实现：秘密与偏好共用底层，标记必须为 true（决定搬迁是否跳过）
+    // 默认实现：加密后与偏好共用底层，标记必须为 true（决定搬迁是否跳过）
     store.setCredential("sk-keep-me", for: "ollama")
     assertEqual(store.credential(for: "ollama"), "sk-keep-me", "写入后可读")
-    assertEqual(storage.string(forKey: key), "sk-keep-me", "默认实现凭据落在偏好存储")
+    let persisted = storage.string(forKey: key) ?? ""
+    assertEqual(persisted.hasPrefix(EncryptedSecretStore.ciphertextPrefix), true,
+                "默认实现写入的是密文")
+    assertEqual(persisted.contains("sk-keep-me"), false, "偏好里不留明文")
 
     // 多次读取不得删除（读路径曾把「读到的秘密」当遗留明文清掉）
     for _ in 0..<3 {
@@ -26,7 +29,7 @@ func runCredentialStorageSafetyTests() {
         assertEqual(store.credentialResolution(for: "ollama").credential, "sk-keep-me",
                     "解析结果同样不丢")
     }
-    assertEqual(storage.string(forKey: key), "sk-keep-me", "重复读取后存储里仍在")
+    assertEqual(storage.string(forKey: key) == persisted, true, "重复读取后密文不变")
 
     // 迁移入口在共用底层时必须无副作用
     store.migrateLegacyPlaintext(for: ["ollama", "open-design"])
