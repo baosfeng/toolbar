@@ -203,13 +203,6 @@ final class BillingProviderBlockView: NSView {
 
     // MARK: - 文案
 
-    private static let stampFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
-
-    static func stamp(_ date: Date) -> String { stampFormatter.string(from: date) }
+    /// 块头「最近刷新」时分：跟随系统 12/24 小时制（见 BillingTimeFormat）
+    static func stamp(_ date: Date) -> String { BillingTimeFormat.string(date) }
 }
