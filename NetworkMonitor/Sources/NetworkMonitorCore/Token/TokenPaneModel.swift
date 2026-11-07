@@ -49,6 +49,9 @@ package struct TokenPaneModel {
     package let projectCount: Int
     package let modelCount: Int
 
+    /// 「按项目 / 按模型」二级页的范围口径文案（Core 派生，视图只透传）
+    package let distroCopy: TokenDistroCopy
+
     /// 今日 vs 昨日同期（按天范围且取不到上一周期时为 nil，整卡隐藏，不编数）
     package let compare: TokenCompare?
     package let stateBand: [TokenStateItem]
@@ -90,6 +93,8 @@ package struct TokenPaneModel {
         // 项目 / 模型跟随范围：与 Hero、四族卡取同一个窗口
         let projectRows = TokenDerive.projectRows(snapshot, window: range.window)
         let modelRows = TokenDerive.modelRows(snapshot, window: range.window)
+        // 二级页文案与主面板同源派生，避免「上面跟随范围、下面写累计口径」再次分叉
+        let distroCopy = TokenDerive.distroCopy(range: range)
 
         return TokenPaneModel(
             range: range,
@@ -124,10 +129,11 @@ package struct TokenPaneModel {
             hitBucketText: range == .today ? "24 桶" : "\(range.days) 天",
             projects: projectRows,
             models: modelRows,
-            projectMeta: "\(range.window.title) \(projectRows.count) 个",
-            modelMeta: "\(range.window.title) \(modelRows.count) 个",
+            projectMeta: "\(distroCopy.rangeTitle) \(projectRows.count) 个",
+            modelMeta: "\(distroCopy.rangeTitle) \(modelRows.count) 个",
             projectCount: projectRows.count,
             modelCount: modelRows.count,
+            distroCopy: distroCopy,
             compare: TokenDerive.compare(snapshot, current: currentTotal, previous: previousTotal, range: range),
             stateBand: TokenDerive.stateBand(snapshot, range: range, buckets: windowBuckets,
                                              previous: previousTotal, current: currentTotal),

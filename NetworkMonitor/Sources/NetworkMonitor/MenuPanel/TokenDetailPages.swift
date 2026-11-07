@@ -24,14 +24,19 @@ enum TokenDetailKind: Int, CaseIterable {
         }
     }
 
-    /// 返回条右侧固定说明
-    var metaText: String {
+    /// 返回条右侧说明 —— 「按项目 / 按模型」跟随主面板范围，文案取 Core 的 TokenDistroCopy
+    ///
+    /// 这里不再写死「累计口径」：这句话曾与主面板已跟随范围的「按项目 / 按模型」卡直接冲突，
+    /// 用户看到上面是今日数据、下面写累计口径，反馈「上面的数据和下面的数据也对不上」。
+    /// 视图只做透传，文案本身在 Core（TokenDerive.distroCopy）里派生，TestRunner 可直接断言。
+    func metaText(for model: TokenPaneModel) -> String {
         switch self {
         case .hourly: return "00–23 时"
         case .bucket: return "单桶"
         case .trend: return "上限 33 天"
         case .cache: return "今日"
-        case .projects, .models: return "累计口径"
+        case .projects: return model.distroCopy.projectsCrumbMeta
+        case .models: return model.distroCopy.modelsCrumbMeta
         }
     }
 }
@@ -66,7 +71,9 @@ final class TokenDetailPaneView: NSView {
     let crumbLabel = MenuPanelLabel.text(TokenDetailKind.hourly.crumb,
                                          font: TokenPaneStyle.pageHeadFont,
                                          color: TokenPaneStyle.tertiaryText)
-    let metaLabel = MenuPanelLabel.text(TokenDetailKind.hourly.metaText,
+    /// 右侧说明初值留空：真实文案在 update(kind:model:…) 里按当前范围填，
+    /// 避免初始化时就写死一个可能过时的口径
+    let metaLabel = MenuPanelLabel.text("",
                                         font: TokenPaneStyle.metaNumberFont,
                                         color: TokenPaneStyle.tertiaryText)
     /// 页内容栈（滚动文档里的排列容器）
@@ -174,7 +181,7 @@ final class TokenDetailPaneView: NSView {
                 hourScope: TokenHourScope) {
         self.kind = kind
         crumbLabel.stringValue = kind.crumb
-        metaLabel.stringValue = kind.metaText
+        metaLabel.stringValue = kind.metaText(for: model)
         setAccessibilityLabel("Token 二级详情页 " + kind.crumb)
         let rows = buildRows(kind: kind, model: model, snapshot: snapshot,
                              selection: selection, hourScope: hourScope)

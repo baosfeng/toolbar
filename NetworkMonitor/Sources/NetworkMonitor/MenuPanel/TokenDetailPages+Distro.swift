@@ -77,12 +77,14 @@ extension TokenDetailPaneView {
     // MARK: 按项目
 
     func buildProjects(model: TokenPaneModel) -> [NSView] {
-        overrideCrumb("/ 按项目", meta: "累计口径")
+        // 文案全部来自 Core（TokenDistroCopy），本页只透传，不在这里拼口径字符串
+        let copy = model.distroCopy
+        overrideCrumb("/ 按项目", meta: copy.projectsCrumbMeta)
         let rows = model.projects
         let bar = TokenStackBarView(height: 8)
         bar.update(shares: rows.map { $0.share },
                    colors: rows.map { TokenPaneStyle.distroColor($0.colorIndex) },
-                   accessibility: "按项目累计占比条")
+                   accessibility: copy.projectsBarAccessibility)
         let barCard = TokenBoxView()
         barCard.setRows([
             bar,
@@ -110,20 +112,21 @@ extension TokenDetailPaneView {
         ])
 
         return [hero("\(model.projectCount)", unit: "个有记录的项目",
-                     sub: "累计 tok · 会话数 · 排名 · 项目维度只有累计口径，不能按今日/近 7 天过滤"),
+                     sub: copy.projectsHeroSub),
                 barCard, listCard, sessionCard,
-                note("口径：项目来自会话 cwd 归属，按内容键去重后累计；同一项目的多版本会话文件已合并。要「某项目今天用了多少」需要给索引加项目 × 天的二级聚合——现在没有，所以这里不画走势。")]
+                note(copy.projectsNote)]
     }
 
     // MARK: 按模型
 
     func buildModels(model: TokenPaneModel) -> [NSView] {
-        overrideCrumb("/ 按模型", meta: "累计口径")
+        let copy = model.distroCopy
+        overrideCrumb("/ 按模型", meta: copy.modelsCrumbMeta)
         let rows = model.models
         let bar = TokenStackBarView(height: 8)
         bar.update(shares: rows.map { $0.share },
                    colors: rows.map { TokenPaneStyle.distroColor($0.colorIndex + 1) },
-                   accessibility: "按模型累计占比条")
+                   accessibility: copy.modelsBarAccessibility)
         let barCard = TokenBoxView()
         barCard.setRows([
             bar,
@@ -148,12 +151,12 @@ extension TokenDetailPaneView {
             keyRow(row.name, row.sub, color: TokenPaneStyle.tertiaryText, stacked: true)
         }
         let subCard = TokenBoxView()
-        subCard.setRows([head("命中率与 provider", meta: "累计")] + subRows)
+        subCard.setRows([head("命中率与 provider", meta: copy.hitCardMeta)] + subRows)
 
         return [hero("\(model.modelCount)", unit: "个 provider+model",
-                     sub: "provider + model 二元组 · 累计 tok 与命中率"),
+                     sub: copy.modelsHeroSub),
                 barCard, listCard, subCard,
-                note("口径：模型维度同样只有累计口径；命中率按该模型的缓存读 ÷（缓存读 + 未缓存输入）逐模型算。同 provider 不同 model 分行，不合并。")]
+                note(copy.modelsNote)]
     }
 
     // MARK: 小组件

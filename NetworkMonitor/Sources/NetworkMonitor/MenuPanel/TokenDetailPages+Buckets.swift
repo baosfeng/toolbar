@@ -144,7 +144,7 @@ extension TokenDetailPaneView {
         return [hero(TokenFormatting.tokens(current.total), unit: "tok / 日",
                      sub: current.label + " · 日汇总 · 与前一日对比（仅天粒度）"),
                 splitCard, compareCard, extraCard,
-                note("口径：历史日仅天粒度——小时拆分只有今日与昨日可得，所以本页只给日汇总 + 与前一日对比，不画小时柱。项目与模型仍是累计口径，不随窗口变化。")]
+                note(TokenDistroCopy.dayBucketNote)]
     }
 
     /// 对比行：private 放宽为 internal（单桶页在 TokenDetailPages+Buckets.swift，跨文件访问需要）
