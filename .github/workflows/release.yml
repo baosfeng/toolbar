@@ -51,6 +51,24 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
+      # tag 与 App 内的 CFBundleShortVersionString 必须一致：发 v1.13.0 却忘改 plist 时
+      # Release 标题写 1.13.0、用户下载到的「关于」却显示 1.12.1，属于静默错版
+      # （版本号唯一真源是 build-app.sh 里的内联 Info.plist，仓库中没有独立模板）
+      - name: Version matches tag
+        working-directory: NetworkMonitor
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          [ -n "${INPUT_TAG:-}" ] && tag_version="${INPUT_TAG#v}"
+          plist_version=$(grep -A1 '<key>CFBundleShortVersionString</key>' Scripts/build-app.sh \
+            | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p' | head -1)
+          echo "tag=${tag_version} plist=${plist_version}"
+          if [ "${tag_version}" != "${plist_version}" ]; then
+            echo "::error::tag 与 build-app.sh 的 CFBundleShortVersionString ${plist_version} 不一致"
+            exit 1
+          fi
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+
       - name: Build, sign and package
         working-directory: NetworkMonitor
         env:
