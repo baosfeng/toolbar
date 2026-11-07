@@ -19,7 +19,8 @@
 |---|---|
 | 网络速度 | 菜单栏实时显示上下行速度；今日流量与近 6 日汇总（getifaddrs 差分 + TrafficTracker） |
 | 进程流量 | nettop 后台采样，进程级 Top 10 |
-| 额度查询 | Ollama（余额 + 用量）、Open Design（credits 窗口 + 工作区用量）；`BillingProvider` 协议 + 注册表，新增 provider 只需实现协议并注册 |
+| 额度查询 | Ollama（余额 + 用量）、Open Design（credits 窗口 + 工作区用量）、OpenCode Go（三窗口剩余）；只展示已配置的 provider；`BillingProvider` 协议 + 注册表，新增 provider 只需实现协议并注册 |
+| Token 用量 | DSH 会话事件流增量索引：今日 / 近 7 天 / 近 30 天同源口径、按小时与按天趋势、项目与模型分布（悬停看 provider 全名）、缓存复用率 |
 | 剪贴板历史 | 全局快捷键唤起面板、模糊搜索、Paste Stack 顺序粘贴、图片原图落盘 |
 | 局域网互传 | UDP 发现 + HTTP 传输 + 扫码接收 + PIN 配对，支持断点续传 |
 

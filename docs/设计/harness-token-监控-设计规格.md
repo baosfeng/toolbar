@@ -57,7 +57,7 @@
 | 索引与聚合 | `HarnessUsageIndexStore` / `HarnessUsageIndexAggregation` |
 | 门面 | `HarnessUsageService`（refreshIfNeeded / rebuildIndex / snapshot） |
 | 时间窗口 | `HarnessTokenTimeWindow`（今日/本周边界、小时索引） |
-| 格式化 | `NetworkMonitorCore/Infrastructure/TokenUsageFormatting.swift`（K/M/B 等纯函数，供 TestRunner 断言） |
+| 格式化 | `NetworkMonitorCore/Infrastructure/TokenUsageFormatting.swift` 与 `NumberUnitPreferences.swift`（量级化简纯函数，供 TestRunner 断言；档位跟随设置页「显示 › 数值单位」） |
 | UI | `MenuPanel/TokenPane*.swift`、`TokenHourlyChartView`、`TokenTrendChartView`、`TokenMiniCharts`、`TokenCollapsibleSection` |
 
 表：`harness_token_event(session_id, cwd, provider, model, ts_ms, uncached_in, output, cache_read, cache_write)` + `harness_session_scan(path, session_id, size, mtime_ms, scanned_at)`。
@@ -76,11 +76,16 @@
 
 原型定稿：`docs/设计/harness-token-监控-原型/`（c 版）与 `.open-design/harness-token-prototype/`。实现与原型的逐锚点对照见 `variants.md`，偏差报备 5 项（hero 高度、趋势图高度、项目清单高度、页脚高度、配色改用系统语义色）。
 
-折叠：hero 与按小时图常驻；按天 / 按模型 / 按项目 / 本周·累计默认折叠，折叠行给摘要（如「8 个模型 · deepseek-flash 占 30%」），状态走 `KeyValueStorage`（`token.section.*`）。
+首屏常驻：页头（范围分段）→ Hero → 四族卡 → 按小时 24 桶图 → 缓存命中率卡 → 按项目 / 按模型两张半宽卡 → 状态带。
+
+**范围一致性（三条线同源）**：范围分段（今日 / 近 7 天 / 近 30 天）是唯一口径源，Hero、四族卡、按项目、按模型、比较卡全部取同一个 `HarnessUsageWindow`；占比分母是该窗口内**全部**项目 / 模型的合计，不是列表 TopN 行的求和。二级页（按项目 / 按模型）的面包屑、Hero 副标题、说明卡文案由 `TokenDerive.distroCopy(range:)` 派生，视图只透传 —— 避免再出现「上面跟随范围、下面写累计口径」。
+
+**悬停文案**：296pt 宽放不下 provider 前缀，同名模型（如 ollama 与 open-design 各自的 deepseek-v4.1-flash）在主面板正文里完全一样，provider 只在悬停文案里给出。文案由 Core 的 `TokenDistroRow.tip` / `TokenDerive.stackBarTip` 生成，覆盖分布行、占比条、图例项，视图只负责塞进 `toolTip`。
 
 ## 已知限制
 
 - 依赖外部 `zstd` 二进制（优先 `/opt/homebrew/bin/zstd`，再查 PATH）；缺失时降级为明确的「数据源不可用」状态，不崩溃、不静默空数据。
 - `cacheWrite` 在当前数据源恒为 0（DSH 未上报非零值）。
-- 图表为 NSView + CoreGraphics 手绘（项目未引入 Charts 依赖），暂无 hover tooltip。
+- 「缓存命中」二级页三块各自固定口径（主数值今日、走势与均值 30 天、逐桶今日 24 桶），不随主面板范围切换 —— 与「按项目 / 按模型」跟随范围不同，是刻意的。
+- 图表为 NSView + CoreGraphics 手绘（项目未引入 Charts 依赖）：逐柱的数值不进 toolTip（24 列柱子面积太小），柱上信息走点击进入的二级页；分布行 / 占比条 / 图例有 tooltip。
 - 展开态高度用实测 `fittingSize`，后续往折叠区内加内容需回归高度。
