@@ -44,10 +44,11 @@ reasonix.toml
 # `!.open-design/08-prototype.html` 无法把子项重新包含回来（git 不会进入被排除的
 # 目录），实测 `git ls-files .open-design` 为 0，白名单形同虚设。
 .open-design/*
+# 只归档「决策链」（纯文本）+ 定稿原型这一个 html；
+# 过程截图（shots/，实测 2.9 MB）与其它轮次稿一律不入库——
+# 对外预览图已另存在 docs/设计/*/ 下，无需重复入库。
 !.open-design/08-prototype.html
 !.open-design/00-brief.md
 !.open-design/02-style.md
 !.open-design/04-rounds.md
 !.open-design/05-checklist.md
-!.open-design/design-system/
-!.open-design/shots/
