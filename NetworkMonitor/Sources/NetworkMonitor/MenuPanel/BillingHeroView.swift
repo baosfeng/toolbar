@@ -86,11 +86,14 @@ final class BillingHeroView: NSView {
         }
     }
 
-    /// 剩余比例 → 「数值段 + 单位段」两段排版（服务端原值，不取整）
+    /// 剩余比例 → 「数值段 + 单位段」两段排版（大号数字走紧凑档，最多 2 位小数）
     ///
     /// 百分比也一律走分列：数值 24pt、单位 `%` 11pt，与 Token 页 `187.11` + `M tok` 同一语法。
+    /// 用 `formatPercentCompact` 而不是 `formatPercent`：服务端会返回 `1 - 157/50000` 这种
+    /// 六位小数（实测 `99.686%` / `49.058667%`），24pt 下会把半张卡撑满、逼另一列降档；
+    /// 读屏与日志仍走 `formatPercent` 保留原值，只有这里的大号数字收紧凑。
     private func applyPercent(_ fraction: Double) {
-        let split = PaneValueFormatting.split(formatPercent(fraction))
+        let split = PaneValueFormatting.split(formatPercentCompact(fraction))
         valueLabel.stringValue = split.number
         unitLabel.stringValue = split.unit.isEmpty ? "%" : split.unit
     }

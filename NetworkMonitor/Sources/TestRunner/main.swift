@@ -78,6 +78,7 @@ runPaneValueFormattingTests()
 runPaneCardLayoutTests()
 runPaneValueSizingTests()
 runBillingEmptyStateLogicTests()
+runBillingPercentDisplayTests()
 
 // MARK: - 计费额度（provider 抽象 + Ollama 响应解码）
 runBillingTests()

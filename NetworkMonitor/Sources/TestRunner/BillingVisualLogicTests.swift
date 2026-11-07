@@ -1,4 +1,5 @@
 import Foundation
+import NetworkMonitorCore
 import NetworkMonitorUI
 
 // MARK: - 额度页 / Token 页视觉口径（纯函数断言）
@@ -151,4 +152,36 @@ func runBillingEmptyStateLogicTests() {
     // 三档标题互不相同（避免「换了原因看不出差别」）
     let titles = [registered.title, unconfigured.title, disabled.title]
     assertEqual(Set(titles).count, 3, "三档标题互不相同")
+}
+
+// MARK: - 额度卡大号百分比（紧凑档）
+
+/// 额度卡大号数字与 Token 页同一条排版线：最多 2 位小数、去尾零、非法值降级。
+///
+/// 服务端会返回 `1 - 157/50000` 这类长小数（实测 99.686% / 49.058667%），
+/// 19–24pt 下原值会把半张卡撑满；这一组断言锁住「卡内收紧凑、读屏仍保留原值」两条线。
+func runBillingPercentDisplayTests() {
+    print("\n🧪 Testing 额度卡百分比排版...")
+
+    // 分列后的数值段：大号数字实际渲染的就是这一段
+    func number(_ fraction: Double) -> String {
+        PaneValueFormatting.split(formatPercentCompact(fraction)).number
+    }
+    assertEqual(number(0.42000), "42", "42.00% 去尾零 → 42")
+    assertEqual(number(0.49058667), "49.06", "六位小数收到 2 位")
+    assertEqual(number(0.99686), "99.69", "99.686 四舍五入到 2 位")
+    assertEqual(number(0.95), "95", "整数百分比不补零")
+    assertEqual(number(1), "100", "满额")
+    assertEqual(PaneValueFormatting.split(formatPercentCompact(0.49058667)).unit, "%",
+                "单位段仍是 %（分列排版依赖它）")
+    assertEqual(number(.nan), "—", "NaN 降级为占位符，不出 nan%")
+
+    // 与精确档的关系：读屏与日志口径不变，长度明显更短
+    assertEqual(formatPercent(0.49058667), "49.058667%", "读屏口径仍为原值")
+    assertEqual(number(0.49058667).count < formatPercent(0.49058667).count, true,
+                "大号数字段比原值短（否则版式仍会被撑坏）")
+
+    // 长数值不会因此掉到最紧一档
+    assertEqual(PaneValueSizing.tier(forNumber: number(0.99686)), .regular,
+                "紧凑后 99.69 回到常规 19pt 档")
 }

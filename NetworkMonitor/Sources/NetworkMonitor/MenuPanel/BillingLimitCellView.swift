@@ -119,8 +119,11 @@ final class BillingLimitCellView: NSView {
     }
 
     /// 剩余比例 → 数值段 + 单位段（百分比也分列，与 Token 页数值语法一致）
+    ///
+    /// 卡内大号数字用 `formatPercentCompact`（最多 2 位小数、去尾零）：原值六位小数会把
+    /// 相邻格挤掉；无障碍文案在 `update(limit:)` 里仍用 `formatPercent` 保留精确值。
     private func applyPercent(_ fraction: Double) {
-        let split = PaneValueFormatting.split(formatPercent(fraction))
+        let split = PaneValueFormatting.split(formatPercentCompact(fraction))
         valueLabel.stringValue = split.number
         unitLabel.stringValue = split.unit
         applyValueTier(for: split.number)
