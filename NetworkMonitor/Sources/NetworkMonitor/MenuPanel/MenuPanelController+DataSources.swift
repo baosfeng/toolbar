@@ -31,6 +31,28 @@ extension MenuPanelController {
         }
     }
 
+    /// 数值单位切档回调：设置页写成偏好后发事件，这里立刻用当前快照重渲染两页数值
+    ///
+    /// 只重渲染、不重查：单位只是写法变化，Token 与额度数据都不变；
+    /// 面板收起时同样更新视图（下次打开即新写法），不触发布局与 popover 尺寸调整。
+    func bindNumberUnitStyle() {
+        unitObserver = NotificationCenter.default.addObserver(
+            forName: AppEvents.numberUnitStyleChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let harnessUsage = self.harnessUsage {
+                    self.content.updateToken(harnessUsage.snapshot(), notifySize: self.popover.isShown)
+                }
+                if let billingMonitor = self.billingMonitor {
+                    self.content.updateBilling(BillingMonitor.Snapshot.make(from: billingMonitor.states,
+                                                                           enabledProviderCount: billingMonitor.states.count),
+                                               notifySize: self.popover.isShown)
+                }
+            }
+        }
+    }
+
     // MARK: - 剪贴板
 
     /// 注册剪贴板变更通知（从主文件搬来：主文件贴近 15 KiB 上限）

@@ -107,6 +107,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     nonisolated(unsafe) var clipboardObserver: NSObjectProtocol?
     // 放宽为 internal：数据绑定扩展要注册 / 移除
     nonisolated(unsafe) var harnessObserver: NSObjectProtocol?
+    // 放宽为 internal：数据绑定扩展要注册 / 移除
+    nonisolated(unsafe) var unitObserver: NSObjectProtocol?
 
     // MARK: - 初始化
 
@@ -142,6 +144,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         observeClipboardChanges()
         bindBilling()
         bindHarnessUsage()
+        bindNumberUnitStyle()
     }
 
     nonisolated deinit {
@@ -150,6 +153,9 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         }
         if let harnessObserver {
             NotificationCenter.default.removeObserver(harnessObserver)
+        }
+        if let unitObserver {
+            NotificationCenter.default.removeObserver(unitObserver)
         }
     }
 

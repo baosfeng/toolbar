@@ -45,6 +45,19 @@ func runAppEventsTests() {
         NotificationCenter.default.removeObserver(observer)
         assertEqual(received, true, "clipboardChanged 事件已发布并接收")
 
+        // 数值单位切档事件：设置页写入偏好后发布，菜单面板靠它立刻重渲染两页数值
+        var unitReceived = false
+        let unitObserver = NotificationCenter.default.addObserver(
+            forName: AppEvents.numberUnitStyleChanged,
+            object: nil,
+            queue: nil
+        ) { _ in
+            unitReceived = true
+        }
+        AppEvents.postNumberUnitStyleChanged()
+        NotificationCenter.default.removeObserver(unitObserver)
+        assertEqual(unitReceived, true, "numberUnitStyleChanged 事件已发布并接收")
+
         print("✅ AppEvents 事件总线 works")
     }
 
