@@ -180,6 +180,10 @@ enum TokenPaneSnapshot {
         if let tokenSnapshot {
             captureDistroRows(directory: directory, snapshot: tokenSnapshot)
         }
+        // 悬停文案取证：同名模型的 provider 只存在于 toolTip 里，不落盘就无法复验
+        if let tokenSnapshot {
+            captureHoverTips(directory: directory, snapshot: tokenSnapshot)
+        }
         if let tokenSnapshot {
             writeBarMetrics(directory: directory, snapshot: tokenSnapshot)
             writeKeyRowMetrics(directory: directory, snapshot: tokenSnapshot)

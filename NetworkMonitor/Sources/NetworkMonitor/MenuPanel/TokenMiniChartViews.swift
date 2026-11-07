@@ -172,12 +172,23 @@ final class TokenStackBarView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    func update(shares: [Double], colors: [NSColor], accessibility: String) {
+    /// - Parameter tip: 整条悬停文案（逐段列出「provider/model 金额 · 占比」）。
+    ///
+    /// 条本身只有色块、没有任何文字，图例又被 296pt 宽截断成 "deepseek-v4.1-flash…"，
+    /// 悬停整条是唯一能看全「哪一段是哪个 provider 的哪个模型、多少钱、占比多少」的地方。
+    /// 文案由 Core 的 `TokenDerive.stackBarTip` 拼装，视图不自行拼字符串。
+    func update(shares: [Double], colors: [NSColor], accessibility: String, tip: String? = nil) {
         self.shares = shares
         self.colors = colors
         setAccessibilityLabel(accessibility)
+        toolTip = (tip?.isEmpty == false) ? tip : nil
         needsDisplay = true
     }
+
+#if DEBUG
+    /// 快照自证：当前挂上去的悬停文案
+    var toolTipForSnapshot: String { toolTip ?? "" }
+#endif
 
     override func draw(_ dirtyRect: NSRect) {
         let radius = bounds.height / 2

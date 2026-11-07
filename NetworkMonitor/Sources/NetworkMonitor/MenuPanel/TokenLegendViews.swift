@@ -10,12 +10,18 @@ struct TokenLegendItem {
     let title: String
     let value: String
     let dashed: Bool
+    /// 悬停文案（不带时退回「标题 + 数值」）
+    ///
+    /// 图例只有 296pt 可用宽，长模型名会被截成 "deepseek-v4.1-flash…"，
+    /// 全名与金额只能靠悬停看到；文案由 Core 的 TokenDistroRow.tip 直接给。
+    let tip: String
 
-    init(color: NSColor?, title: String, value: String, dashed: Bool = false) {
+    init(color: NSColor?, title: String, value: String, dashed: Bool = false, tip: String = "") {
         self.color = color
         self.title = title
         self.value = value
         self.dashed = dashed
+        self.tip = tip
     }
 }
 
@@ -55,16 +61,28 @@ final class TokenLegendRowView: NSView {
         }
         for item in items {
             let swatch = TokenSwatch(color: item.color, dashed: item.dashed)
+            let titleLabel = MenuPanelLabel.text(item.title,
+                                                 font: TokenPaneStyle.legendFont,
+                                                 color: TokenPaneStyle.tertiaryText)
             stack.addArrangedSubview(swatch)
-            stack.addArrangedSubview(MenuPanelLabel.text(item.title,
-                                                         font: TokenPaneStyle.legendFont,
-                                                         color: TokenPaneStyle.tertiaryText))
+            stack.addArrangedSubview(titleLabel)
+            // 悬停文案逐项挂在「色块 + 标题 + 数值」三件上：图例被截断时鼠标落到哪一段都能看全
+            let tip = item.tip.isEmpty ? item.title + " " + item.value : item.tip
+            swatch.toolTip = tip
+            titleLabel.toolTip = tip
             if !item.value.isEmpty {
-                stack.addArrangedSubview(MenuPanelLabel.text(item.value,
-                                                             font: TokenPaneStyle.legendValueFont,
-                                                             color: TokenPaneStyle.secondaryText))
+                let valueLabel = MenuPanelLabel.text(item.value,
+                                                     font: TokenPaneStyle.legendValueFont,
+                                                     color: TokenPaneStyle.secondaryText)
+                valueLabel.toolTip = tip
+                stack.addArrangedSubview(valueLabel)
             }
         }
+        // 整行也给一份逐项拼接的文案：鼠标落在项与项之间的空隙时仍有说明
+        let rowTip = items.map { item -> String in
+            item.tip.isEmpty ? item.title + " " + item.value : item.tip
+        }.joined(separator: "\n")
+        toolTip = rowTip.isEmpty ? nil : rowTip
         setAccessibilityLabel(items.map { $0.title + " " + $0.value }.joined(separator: "，"))
     }
 
@@ -73,7 +91,50 @@ final class TokenLegendRowView: NSView {
     func itemsForSnapshot() -> [(title: String, value: String, dashed: Bool)] {
         lastItems.map { ($0.title, $0.value, $0.dashed) }
     }
+
+    /// 快照自证：整行挂上去的悬停文案（逐项拼接）
+    var toolTipForSnapshot: String { toolTip ?? "" }
 #endif
+
+    /// 逐项补悬停文案（调用方拿到的是 Core 生成好的逐项文案，与 items 顺序一致）
+    ///
+    /// 用于「按项目 / 按模型」二级页：那里的图例项由别的文件构建，文案知识只在渲染层，
+    /// 因此构建完成后按项序补 tip，而不是在构建处再拼一份字符串。
+    func applyItemTips(_ tips: [String]) {
+        guard !tips.isEmpty else { return }
+        // 每个图例项在 stack 里占「色块 + 标题 (+ 数值)」若干个子视图，按项序分组后逐项覆盖
+        var itemIndex = 0
+        var pending: [NSView] = []
+        var applied: [String] = []
+        func flush() {
+            guard !pending.isEmpty else { return }
+            let tip = tips[safe: itemIndex] ?? ""
+            applyTip(tip, to: pending)
+            if !tip.isEmpty { applied.append(tip) }
+            itemIndex += 1
+            pending = []
+        }
+        for view in stack.arrangedSubviews {
+            guard view is NSTextField else {
+                // 色块标志新一项的开始：先把上一项收尾
+                flush()
+                pending = [view]
+                continue
+            }
+            pending.append(view)
+        }
+        flush()
+        // 整行也要换掉：update(items:) 只按「标题 + 数值」拼，不带 provider，
+        // 鼠标落在项间空隙时会退回到那条被截断的信息
+        let rowTip = applied.joined(separator: "\n")
+        if !rowTip.isEmpty { toolTip = rowTip }
+    }
+
+    /// 把一条文案挂到该项的色块 / 标题 / 数值上（空文案不覆盖已有说明）
+    private func applyTip(_ tip: String, to views: [NSView]) {
+        guard !tip.isEmpty else { return }
+        for view in views { view.toolTip = tip }
+    }
 }
 
 /// 图例小色块（虚线态画成一条短划线）

@@ -115,6 +115,9 @@ runTokenPresentationTests()
 // MARK: - Token 页「按项目 / 按模型」随范围（与 Hero 同口径）
 runTokenRangeConsistencyTests()
 
+// MARK: - Token 分布行 / 占比条悬停文案（同名模型的 provider 可辨识）
+runTokenHoverTipTests()
+
 // MARK: - 截图选区几何（多屏 / Retina / 归一化）
 runSnipGeometryTests()
 

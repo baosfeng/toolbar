@@ -161,7 +161,11 @@ extension TokenDerive {
                                   sub: "\(item.sessionCount) 会话 · 占 " + TokenFormatting.percent(share),
                                   amount: TokenFormatting.tokens(tokens),
                                   share: share,
-                                  colorIndex: index)
+                                  colorIndex: index,
+                                  tip: projectRowTip(name: item.displayName,
+                                                     sessionCount: item.sessionCount,
+                                                     amount: TokenFormatting.tokens(tokens),
+                                                     share: share))
         }
     }
 
@@ -183,8 +187,59 @@ extension TokenDerive {
                                       + " · 命中 " + TokenFormatting.percent(rate),
                                   amount: TokenFormatting.tokens(tokens),
                                   share: share,
-                                  colorIndex: index)
+                                  colorIndex: index,
+                                  tip: modelRowTip(name: item.model,
+                                                   provider: item.provider,
+                                                   amount: TokenFormatting.tokens(tokens),
+                                                   share: share,
+                                                   rate: rate))
         }
+    }
+
+    // MARK: - 悬停文案（toolTip）
+
+    /// 模型行悬停文案：第一行是 provider/model 全名（同名模型靠它区分），
+    /// 第二行给 provider、金额、占比、命中率。
+    ///
+    /// provider 为空时第一行只写模型名，第二行改写「会话未记录 provider」，
+    /// 不留「provider —」这种半句话（主面板行本身就没有 provider 列）。
+    package static func modelRowTip(name: String,
+                                    provider: String,
+                                    amount: String,
+                                    share: Double,
+                                    rate: Double) -> String {
+        let hasProvider = !provider.isEmpty && provider != name
+        let title = hasProvider ? provider + "/" + name : name
+        let sub = hasProvider
+            ? "provider " + provider
+            : "会话未记录 provider"
+        return title + "\n" + sub + " · " + amount + " tok · 占 "
+            + TokenFormatting.percent(share) + " · 命中 " + TokenFormatting.percent(rate)
+    }
+
+    /// 项目行悬停文案：项目名 + 会话数 + 金额 + 占比
+    package static func projectRowTip(name: String,
+                                      sessionCount: Int,
+                                      amount: String,
+                                      share: Double) -> String {
+        name + "\n" + String(sessionCount) + " 会话 · " + amount + " tok · 占 "
+            + TokenFormatting.percent(share)
+    }
+
+    /// 分布条整条悬停文案：逐段列出「provider/model 金额 · 占比」
+    ///
+    /// 图例与占比条在 296pt 宽里必然截断（deepseek-v4.1-flash…），整条悬停是唯一能看全的入口。
+    /// - Parameters:
+    ///   - rows: 占比条上实际画出的行（顺序与色块一致）
+    ///   - hiddenCount: 因条上只画前 N 段而被省略的行数；大于 0 时补一行说明，避免误以为「就这么多」
+    package static func stackBarTip(_ rows: [TokenDistroRow], hiddenCount: Int = 0) -> String {
+        var text = rows.map { row in
+            row.fullName + " " + row.amount + " tok · 占 " + TokenFormatting.percent(row.share)
+        }.joined(separator: "\n")
+        if hiddenCount > 0 {
+            text += "\n…另有 " + String(hiddenCount) + " 个未画在条上（见「按项目 / 按模型」二级页）"
+        }
+        return text
     }
 
     package static func compare(_ snapshot: HarnessUsageSnapshot,
