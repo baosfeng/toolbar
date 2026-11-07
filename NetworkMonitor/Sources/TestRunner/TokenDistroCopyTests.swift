@@ -105,7 +105,22 @@ func testDistroPageCopyFollowsRange() {
     assertEqual(d30.modelMeta, "\(d30.distroCopy.rangeTitle) \(d30.models.count) 个",
                 "主面板卡头与二级页文案同源（近 30 天）")
 
-    // 5) 单桶（历史日）详情页的说明也不再声称「项目与模型仍是累计口径」
+    // 5) 缓存命中页：说明必须与实现一致（逐桶取 todayBuckets，固定今日 24 桶）
+    let cacheNote = TokenDistroCopy.cacheNote
+    assertEqual(cacheNote.contains("逐桶命中率跟随主面板范围"), false,
+                "缓存命中页说明不再声称逐桶命中率跟随主面板范围（实现固定今日 24 桶）")
+    assertEqual(cacheNote.contains("不随主面板范围切换"), true,
+                "缓存命中页说明写清三块都不随主面板范围切换")
+    assertEqual(cacheNote.contains("逐桶命中率固定今日 24 桶"), true,
+                "缓存命中页说明与 todayBuckets 的实现一致")
+    assertEqual(cacheNote.contains("走势与均值固定 30 天"), true,
+                "缓存命中页说明写清走势与均值固定 30 天")
+    assertEqual(cacheNote.contains("主数值取今日"), true,
+                "缓存命中页说明写清主数值取今日")
+    assertEqual(cacheNote.contains("输出不进分母"), true,
+                "缓存命中页说明保留「输出不进分母」口径")
+
+    // 6) 单桶（历史日）详情页的说明也不再声称「项目与模型仍是累计口径」
     assertEqual(TokenDistroCopy.dayBucketNote.contains("累计"), false,
                 "历史日详情说明不再写「累计口径」")
     assertEqual(TokenDistroCopy.dayBucketNote.contains("跟随主面板范围"), true,

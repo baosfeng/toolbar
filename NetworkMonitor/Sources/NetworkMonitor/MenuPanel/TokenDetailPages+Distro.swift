@@ -71,7 +71,7 @@ extension TokenDetailPaneView {
         return [hero(String(format: "%.1f", rate), unit: "% · 今日命中",
                      sub: "缓存读 ÷（缓存读 + 未缓存输入）· 主数值固定「今日」口径，不随主面板范围切换；下面三块各自标口径"),
                 ringCard, trendCard, bucketCard, statCard,
-                note("口径：命中率只看「缓存读」与「未缓存输入」两项，输出不进分母（输出不可能被缓存）。主数值今日、走势与均值固定 30 天、逐桶命中率跟随主面板范围，不共用同一个数。没有单价表，所以不给金额折算。")]
+                note(TokenDistroCopy.cacheNote)]
     }
 
     // MARK: 按项目
