@@ -133,22 +133,50 @@ fi
 echo ""
 echo "📦 正在部署到 /Applications..."
 
+INSTALL_PATH="/Applications/${APP_NAME}.app"
+
 # 杀掉正在运行的应用
-RUNNING_PID=$(pgrep -f "${APP_NAME}" || true)
-if [ -n "$RUNNING_PID" ]; then
-    echo "   🛑 正在关闭正在运行的 ${APP_NAME}（PID: ${RUNNING_PID}）..."
-    kill "$RUNNING_PID" 2>/dev/null || true
-    sleep 1
-    # 确保进程已退出
-    if kill -0 "$RUNNING_PID" 2>/dev/null; then
+#
+# 判据只认「可执行文件绝对路径完全一致」：不能按 APP_NAME 做 pgrep -f 模糊匹配——
+# APP_NAME 与仓库目录同名，同机任何命令行含该串的进程（另一 agent 的 swift-build
+# --package-path .../NetworkMonitor/.build、编辑器语言服务等）都会被命中，而 kill
+# 收到多行 PID 会整条报错，被 || true 吞掉后脚本继续 rm -rf，旧实例存活、新版本静默不生效。
+# 更不能用 pgrep -x：同名用户级二进制（如 NetworkMonitor、macMonitor 的调试副本）也会被误杀。
+running_pids() {
+    pgrep -f "^${INSTALL_PATH}/Contents/MacOS/${APP_NAME}( |$)" || true
+}
+
+RUNNING_PIDS=$(running_pids)
+if [ -n "$RUNNING_PIDS" ]; then
+    echo "   🛑 正在关闭正在运行的 ${APP_NAME}（PID: $(printf '%s' "$RUNNING_PIDS" | tr '\n' ' ')）..."
+    # 逐个 PID 终止：整段多行字符串传给 kill 会报 "arguments must be process or job IDs"
+    while IFS= read -r pid; do
+        [ -n "$pid" ] || continue
+        kill "$pid" 2>/dev/null || true
+    done <<< "$RUNNING_PIDS"
+    for _ in 1 2 3 4 5; do
+        sleep 0.4
+        # 每轮重新查存活，而不是复用上一轮的 PID 列表（进程可能已退出并被复用）
+        [ -z "$(running_pids)" ] && break
+    done
+    SURVIVORS=$(running_pids)
+    if [ -n "$SURVIVORS" ]; then
         echo "   ⚠️  进程未退出，强制终止..."
-        kill -9 "$RUNNING_PID" 2>/dev/null || true
+        while IFS= read -r pid; do
+            [ -n "$pid" ] || continue
+            kill -9 "$pid" 2>/dev/null || true
+        done <<< "$SURVIVORS"
         sleep 0.5
+    fi
+    # 兜底：仍在运行则中止部署，否则下面 rm -rf 会删掉正在运行实例的包
+    REMAIN=$(running_pids)
+    if [ -n "$REMAIN" ]; then
+        echo "   ❌ 无法终止旧实例（PID: $(printf '%s' "$REMAIN" | tr '\n' ' ')），中止部署以免删除正在运行的包" >&2
+        exit 1
     fi
 fi
 
-# 删除旧的 /Applications 版本
-INSTALL_PATH="/Applications/${APP_NAME}.app"
+# 删除旧的 /Applications 版本（INSTALL_PATH 已在杀进程前定义）
 if [ -d "$INSTALL_PATH" ]; then
     echo "   🗑️  删除旧版本 ${INSTALL_PATH}..."
     rm -rf "$INSTALL_PATH"
