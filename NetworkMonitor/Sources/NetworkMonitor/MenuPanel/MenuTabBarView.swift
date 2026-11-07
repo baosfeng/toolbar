@@ -56,6 +56,7 @@ final class MenuTabBarView: NSView {
         didSet {
             guard selected != oldValue else { return }
             needsDisplay = true
+            setAccessibilityChildren(accessibilitySegmentElements())
         }
     }
 
@@ -71,6 +72,31 @@ final class MenuTabBarView: NSView {
         NSLayoutConstraint.activate([heightAnchor.constraint(equalToConstant: Self.barHeight)])
         setAccessibilityRole(.tabGroup)
         setAccessibilityLabel("面板分页")
+        // 六个分段全是自绘（draw + mouseDown 算 x 坐标），对辅助技术来说原本整条是空白：
+        // 只有一个「面板分页」组，听不出当前选中哪页，也没有任何切页方式。
+        // 这里补一组虚拟子元素：每段一个按钮，带「已选中」值，激活即切页。
+        setAccessibilityChildren(accessibilitySegmentElements())
+    }
+
+    /// 每个分段一个可激活的虚拟元素（不自绘子视图，避免改动现有绘制与命中逻辑）
+    private func accessibilitySegmentElements() -> [NSAccessibilityElement] {
+        let segmentWidth = bounds.width / CGFloat(MenuPanelTab.allCases.count)
+        return MenuPanelTab.allCases.enumerated().map { index, tab in
+            let element = MenuTabSegmentElement(onPress: { [weak self] in self?.activateSegment(at: index) })
+            element.setAccessibilityParent(self)
+            element.setAccessibilityRole(.button)
+            element.setAccessibilityTitle(tab.title)
+            element.setAccessibilityValue(tab == selected ? "已选中" : "")
+            element.setAccessibilityFrame(NSRect(x: CGFloat(index) * segmentWidth, y: 0,
+                                                 width: segmentWidth, height: bounds.height))
+            element.setAccessibilityIdentifier("panel-tab-\(tab.rawValue)")
+            return element
+        }
+    }
+
+    /// 切到指定分段（读屏激活 / 鼠标点击共用同一个入口）
+    func activateSegment(at index: Int) {
+        select(index: index)
     }
 
     @available(*, unavailable)
@@ -235,5 +261,22 @@ final class MenuTabBarView: NSView {
         guard let tab = MenuPanelTab(rawValue: index) else { return }
         selected = tab
         onSelect?(tab)
+    }
+}
+
+// MARK: - 分段的可激活虚拟元素
+
+/// 自绘分段的读屏元素：NSAccessibilityElement 本身不能点，这里把激活转发给分段条
+private final class MenuTabSegmentElement: NSAccessibilityElement {
+    private let onPress: () -> Void
+
+    init(onPress: @escaping () -> Void) {
+        self.onPress = onPress
+        super.init()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onPress()
+        return true
     }
 }

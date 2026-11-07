@@ -86,6 +86,20 @@ final class TokenDetailPaneView: NSView {
     /// 占位高度：显示时激活，让本页撑满面板可视高度上限；隐藏时停用，主面板高度照旧
     private var paneHeightConstraint: NSLayoutConstraint?
 
+    /// 二级页的键盘焦点入口：只有返回按钮
+    ///
+    /// 二级页内容全是自绘卡片，没有可聚焦行；把返回按钮交给面板根视图的
+    /// 焦点遍历，键盘用户才能 Tab 到「‹ Token」并回车返回。
+    var focusableRows: [MenuPanelRow] { [backRow] }
+
+    /// 返回按钮的行包装：复用面板行基类，从而继承焦点环、Enter/空格与读屏激活
+    private lazy var backRow: MenuPanelRow = {
+        let row = MenuPanelRow(height: 20) { [weak self] in self?.handleBack() }
+        row.contentStack.addArrangedSubview(backButton)
+        row.setAccessibilityLabel("返回 Token 主面板")
+        return row
+    }()
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
@@ -98,7 +112,9 @@ final class TokenDetailPaneView: NSView {
         crumbLabel.lineBreakMode = .byTruncatingTail
         crumbLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let bar = NSStackView(views: [backButton, crumbLabel, MenuPanelLabel.spacer(), metaLabel])
+        // 返回按钮装进可聚焦行后整体放进返回条：一个视图只能有一个父视图，
+        // 若同时挂在 bar 与 row 上，先加入 bar 的那个会被移走，返回条就空了
+        let bar = NSStackView(views: [backRow, crumbLabel, MenuPanelLabel.spacer(), metaLabel])
         bar.orientation = .horizontal
         bar.alignment = .centerY
         bar.spacing = 5
@@ -253,102 +269,9 @@ final class TokenDetailPaneView: NSView {
         case .models: return buildModels(model: model)
         }
     }
-
-    // MARK: - 组件
-
-    func hero(_ value: String, unit: String, sub: String) -> NSView {
-        let valueLabel = MenuPanelLabel.text(value, font: TokenPaneStyle.heroFont,
-                                             color: TokenPaneStyle.secondaryText)
-        let unitLabel = MenuPanelLabel.text(unit, font: TokenPaneStyle.heroUnitFont,
-                                            color: TokenPaneStyle.tertiaryText)
-        let row = NSStackView(views: [valueLabel, unitLabel])
-        row.orientation = .horizontal
-        row.alignment = .lastBaseline
-        row.spacing = 3
-        row.setAccessibilityLabel(value + " " + unit)
-
-        let subLabel = MenuPanelLabel.text(sub, font: TokenPaneStyle.noteFont,
-                                           color: TokenPaneStyle.tertiaryText)
-        subLabel.lineBreakMode = .byWordWrapping
-        subLabel.maximumNumberOfLines = 0
-        subLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        let stack = NSStackView(views: [row, subLabel])
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 3
-        subLabel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        return stack
-    }
-
-    func head(_ title: String, meta: String) -> NSView {
-        let head = TokenCardHead(title: title)
-        head.update(meta: meta)
-        return head
-    }
-
-    /// 键值行；stacked = 标题与数值分两行排（用于「标题 + 长说明」单行放不下的卡）
-    func keyRow(_ title: String, _ value: String,
-                color: NSColor = TokenPaneStyle.secondaryText,
-                stacked: Bool = false) -> NSView {
-        let row = TokenKeyRowView(stacked: stacked)
-        row.update(title: title, value: value, color: color)
-        return row
-    }
-
-    func axisView(_ labels: [String]) -> NSView {
-        let axis = TokenAxisView()
-        axis.update(labels: labels)
-        return axis
-    }
-
-    /// 两列键值栅格（按行优先填两列）
-    func twoColumn(_ rows: [NSView]) -> NSView {
-        var left: [NSView] = []
-        var right: [NSView] = []
-        for (index, row) in rows.enumerated() {
-            if index % 2 == 0 { left.append(row) } else { right.append(row) }
-        }
-        func column(_ views: [NSView]) -> NSStackView {
-            let stack = NSStackView(views: views)
-            stack.orientation = .vertical
-            stack.alignment = .leading
-            stack.spacing = 5
-            for view in views { view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
-            return stack
-        }
-        let stack = NSStackView(views: [column(left), column(right)])
-        stack.orientation = .horizontal
-        stack.alignment = .top
-        stack.distribution = .fillEqually
-        stack.spacing = 10
-        return stack
-    }
-
-    func note(_ text: String) -> NSView {
-        let card = TokenBoxView()
-        let noteView = TokenNoteView()
-        noteView.update(text)
-        card.setRows([noteView])
-        return card
-    }
-
-    func splitShares(_ bucket: TokenBucket) -> [Double] {
-        guard bucket.total > 0 else { return [0, 0, 0] }
-        return [Double(bucket.cache) / Double(bucket.total),
-                Double(bucket.uncached) / Double(bucket.total),
-                Double(bucket.output) / Double(bucket.total)]
-    }
-
-    /// 返回条被页面改写时同步面包屑与右侧说明
-    func overrideCrumb(_ text: String, meta: String) {
-        crumbLabel.stringValue = text
-        metaLabel.stringValue = meta
-    }
 }
 
 /// 二级页滚动文档 — flipped，保证作为 NSScrollView.documentView 时初始停在顶部
 private final class TokenDetailDocumentStack: NSStackView {
     override var isFlipped: Bool { true }
 }
-

@@ -8,7 +8,9 @@ import AppKit
 /// 绘制高亮 + 焦点环，`activate()` 执行与鼠标点击相同的动作。
 class MenuPanelRow: NSView {
     /// 点击回调；nil 表示纯展示行（不参与键盘焦点遍历）
-    var onClick: (() -> Void)?
+    var onClick: (() -> Void)? {
+        didSet { setAccessibilityRole(isInteractive ? .button : .group) }
+    }
 
     /// 水平内容容器（子类向其中追加排列视图）
     let contentStack = NSStackView()
@@ -44,6 +46,21 @@ class MenuPanelRow: NSView {
 
     /// 是否可点击（决定是否进入键盘焦点遍历与显示手型光标）
     var isInteractive: Bool { onClick != nil }
+
+    /// 角色必须随可点击性变化：面板里绝大多数可点元素都继承自本类
+    /// （剪贴板条目、传送设备与任务、额度卡头、Token 卡片与「全部」表头），
+    /// 原先只设了 label 没设 role，读屏能听到文案却按不动（VO-Space 无反应）。
+    override func setAccessibilityLabel(_ accessibilityLabel: String?) {
+        super.setAccessibilityLabel(accessibilityLabel)
+        setAccessibilityRole(isInteractive ? .button : .group)
+    }
+
+    /// 读屏激活：与鼠标点击、键盘 Enter 走同一个 activate()
+    override func accessibilityPerformPress() -> Bool {
+        guard isInteractive else { return false }
+        activate()
+        return true
+    }
 
     /// 设置键盘聚焦态
     func setKeyboardFocused(_ focused: Bool) {
