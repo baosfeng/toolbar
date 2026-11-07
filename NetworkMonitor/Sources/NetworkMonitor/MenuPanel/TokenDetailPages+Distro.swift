@@ -84,11 +84,13 @@ extension TokenDetailPaneView {
         let bar = TokenStackBarView(height: 8)
         bar.update(shares: rows.map { $0.share },
                    colors: rows.map { TokenPaneStyle.distroColor($0.colorIndex) },
-                   accessibility: copy.projectsBarAccessibility)
+                   accessibility: copy.projectsBarAccessibility,
+                   tip: TokenDerive.stackBarTip(rows))
         let barCard = TokenBoxView()
         barCard.setRows([
             bar,
-            legend(rows.prefix(3).map { ($0.name, TokenPaneStyle.distroColor($0.colorIndex), $0.amount) }),
+            legend(Array(rows.prefix(3)),
+                   colors: rows.prefix(3).map { TokenPaneStyle.distroColor($0.colorIndex) }),
         ])
 
         let listRows: [NSView] = rows.map { row in
@@ -126,11 +128,13 @@ extension TokenDetailPaneView {
         let bar = TokenStackBarView(height: 8)
         bar.update(shares: rows.map { $0.share },
                    colors: rows.map { TokenPaneStyle.distroColor($0.colorIndex + 1) },
-                   accessibility: copy.modelsBarAccessibility)
+                   accessibility: copy.modelsBarAccessibility,
+                   tip: TokenDerive.stackBarTip(rows))
         let barCard = TokenBoxView()
         barCard.setRows([
             bar,
-            legend(rows.prefix(3).map { ($0.name, TokenPaneStyle.distroColor($0.colorIndex + 1), $0.amount) }),
+            legend(Array(rows.prefix(3)),
+                   colors: rows.prefix(3).map { TokenPaneStyle.distroColor($0.colorIndex + 1) }),
         ])
 
         let listRows: [NSView] = rows.map { row in
@@ -161,10 +165,18 @@ extension TokenDetailPaneView {
 
     // MARK: 小组件
 
-    private func legend(_ items: [(String, NSColor, String)]) -> NSView {
-        let row = TokenLegendRowView()
-        row.update(items: items.map { TokenLegendItem(color: $0.1, title: $0.0, value: $0.2) })
-        return row
+    /// 图例（色块 + 标题 + 数值）
+    ///
+    /// 296pt 宽里长模型名必然被截断，全名与 provider 只能靠悬停看到；
+    /// 这里直接把同一个分布行的 `row.tip` 挂到对应图例项上，
+    /// 不依赖渲染层事后遍历子树补文案（那条路径会漏掉重渲染后的新项）。
+    private func legend(_ rows: [TokenDistroRow], colors: [NSColor]) -> NSView {
+        let view = TokenLegendRowView()
+        view.update(items: rows.enumerated().map { index, row in
+            TokenLegendItem(color: colors[safe: index], title: row.name,
+                            value: row.amount, tip: row.tip)
+        })
+        return view
     }
 
     /// 从「会话 38 · 占 41.2%」这类说明里取会话数

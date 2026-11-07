@@ -154,8 +154,8 @@ final class BillingPaneView: MenuPanelPaneView {
         stateBand.update(items: [
             (key: "Provider", value: "\(snapshot.states.count)"),
             (key: "最近刷新", value: stamp),
-            // 单位档由 Core 侧设置提供；该 API 尚未合入本分支，先给 nil（状态带自动跳过），
-            // 合并行为分支后在这里接上（视图不改排版，只换取值来源）。
+            // 单位档取自 Core 的 NumberUnitPreferences（设置页「显示 › 数值单位」写入），
+            // 视图只透传文案，不参与判断当前档位。
             (key: "单位", value: Self.unitLabel),
         ])
         for state in snapshot.states {

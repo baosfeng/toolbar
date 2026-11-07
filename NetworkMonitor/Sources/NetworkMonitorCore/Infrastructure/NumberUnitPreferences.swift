@@ -23,7 +23,7 @@ public enum NumberUnitStyle: String, CaseIterable, Sendable, Equatable {
     /// 切换后的说明文案（设置页副标题，给出当前档的真实写法示例）
     public var detailText: String {
         switch self {
-        case .automatic: return "当前用 K / M / B（本次改动前全部页面就是这个口径）"
+        case .automatic: return "当前用 K / M / B（默认档：1.6M、225.2K、2.11B）"
         case .chinese:   return "当前用万 / 亿：159,590,000 → 1.6亿、2,650,000 → 265万"
         }
     }

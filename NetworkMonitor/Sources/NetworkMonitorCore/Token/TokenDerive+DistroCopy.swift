@@ -68,8 +68,10 @@ extension TokenDerive {
             modelsNote: "口径：模型维度同样跟随主面板范围（" + title + "）；"
                 + "占比分母是该窗口内全部模型的合计。命中率按该模型的缓存读 "
                 + "÷（缓存读 + 未缓存输入）逐模型算。同 provider 不同 model 分行，不合并。",
-            projectsBarAccessibility: "按项目 " + title + " 占比条",
-            modelsBarAccessibility: "按模型 " + title + " 占比条",
+            // 占比条读屏文案唯一来源是 TokenDistroDimension（主面板与二级页共用同一句），
+            // 这里只是转手，避免两处各写一份「按项目 X 占比条」而逐渐漂移
+            projectsBarAccessibility: TokenDistroDimension.projects.barAccessibility(range: range),
+            modelsBarAccessibility: TokenDistroDimension.models.barAccessibility(range: range),
             hitCardMeta: title
         )
     }

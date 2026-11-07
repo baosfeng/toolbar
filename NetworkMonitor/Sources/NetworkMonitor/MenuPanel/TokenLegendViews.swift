@@ -96,45 +96,6 @@ final class TokenLegendRowView: NSView {
     var toolTipForSnapshot: String { toolTip ?? "" }
 #endif
 
-    /// 逐项补悬停文案（调用方拿到的是 Core 生成好的逐项文案，与 items 顺序一致）
-    ///
-    /// 用于「按项目 / 按模型」二级页：那里的图例项由别的文件构建，文案知识只在渲染层，
-    /// 因此构建完成后按项序补 tip，而不是在构建处再拼一份字符串。
-    func applyItemTips(_ tips: [String]) {
-        guard !tips.isEmpty else { return }
-        // 每个图例项在 stack 里占「色块 + 标题 (+ 数值)」若干个子视图，按项序分组后逐项覆盖
-        var itemIndex = 0
-        var pending: [NSView] = []
-        var applied: [String] = []
-        func flush() {
-            guard !pending.isEmpty else { return }
-            let tip = tips[safe: itemIndex] ?? ""
-            applyTip(tip, to: pending)
-            if !tip.isEmpty { applied.append(tip) }
-            itemIndex += 1
-            pending = []
-        }
-        for view in stack.arrangedSubviews {
-            guard view is NSTextField else {
-                // 色块标志新一项的开始：先把上一项收尾
-                flush()
-                pending = [view]
-                continue
-            }
-            pending.append(view)
-        }
-        flush()
-        // 整行也要换掉：update(items:) 只按「标题 + 数值」拼，不带 provider，
-        // 鼠标落在项间空隙时会退回到那条被截断的信息
-        let rowTip = applied.joined(separator: "\n")
-        if !rowTip.isEmpty { toolTip = rowTip }
-    }
-
-    /// 把一条文案挂到该项的色块 / 标题 / 数值上（空文案不覆盖已有说明）
-    private func applyTip(_ tip: String, to views: [NSView]) {
-        guard !tip.isEmpty else { return }
-        for view in views { view.toolTip = tip }
-    }
 }
 
 /// 图例小色块（虚线态画成一条短划线）
