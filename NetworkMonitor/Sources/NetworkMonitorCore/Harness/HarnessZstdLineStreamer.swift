@@ -183,7 +183,7 @@ public struct HarnessZstdLineStreamer: HarnessLineStreaming {
                     reason: "zstd 退出码 " + String(process.terminationStatus)
                 )
             }
-            logger.warning("zstd 非零退出（" + String(process.terminationStatus) + "），已保留可解析内容: " + path)
+            logger.warning("zstd 非零退出（" + String(process.terminationStatus) + "），已保留可解析内容: " + LogRedaction.path(path))
         }
     }
 }

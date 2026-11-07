@@ -155,7 +155,7 @@ extension DatabaseManager {
             logger.warning("剪贴板回读准备失败: \(String(cString: sqlite3_errmsg(db)))")
             return nil
         }
-        sqlite3_bind_text(stmt, 1, (contentHash as NSString).utf8String, -1, nil)
+        sqlite3_bind_text_copy(stmt, 1, contentHash)
         guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
         return clipItem(from: stmt)
     }

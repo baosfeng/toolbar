@@ -24,12 +24,12 @@ extension TransferService {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
             let detail = error.localizedDescription
-            logger.error("接收目录切换失败：\(directory.path) — \(detail)")
+            logger.error("接收目录切换失败：\(LogRedaction.path(directory.path)) — \(detail)")
             return .failure(.ioFailed(detail))
         }
         receiveDirectories.update(directory)
         preferences.receiveDirectoryPath = directory.path
-        logger.info("接收目录已切换：\(directory.path)")
+        logger.info("接收目录已切换：\(LogRedaction.path(directory.path))")
         return .success(directory)
     }
 

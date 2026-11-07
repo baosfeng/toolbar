@@ -132,6 +132,8 @@ final class WiFiSignalDotView: NSView {
         didSet {
             guard quality != oldValue else { return }
             needsDisplay = true
+            // 标签必须随档位更新：只设一次常量时，导航到圆点永远听不到强弱
+            setAccessibilityLabel("Wi-Fi 信号档位：" + WiFiLinkFormatting.qualityText(quality))
         }
     }
 
@@ -143,7 +145,8 @@ final class WiFiSignalDotView: NSView {
             heightAnchor.constraint(equalToConstant: diameter),
         ])
         setAccessibilityRole(.image)
-        setAccessibilityLabel("Wi-Fi 信号档位")
+        // 档位原本只靠颜色表达（色弱不可辨），读屏标签是常量，导航到圆点听不到强弱
+        setAccessibilityLabel("Wi-Fi 信号档位：" + WiFiLinkFormatting.qualityText(quality))
     }
 
     @available(*, unavailable)

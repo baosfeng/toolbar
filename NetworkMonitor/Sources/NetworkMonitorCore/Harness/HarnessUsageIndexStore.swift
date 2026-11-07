@@ -138,7 +138,7 @@ extension DatabaseManager: HarnessTokenRepository {
             logger.warning("Harness 事件删除准备失败: " + String(cString: sqlite3_errmsg(db)))
             return false
         }
-        sqlite3_bind_text(stmt, 1, (sessionID as NSString).utf8String, -1, nil)
+        sqlite3_bind_text_copy(stmt, 1, sessionID)
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             logger.warning("Harness 事件删除失败: " + String(cString: sqlite3_errmsg(db)))
             return false
@@ -164,10 +164,10 @@ extension DatabaseManager: HarnessTokenRepository {
             sqlite3_reset(stmt)
             sqlite3_clear_bindings(stmt)
             let cwd = event.cwd.isEmpty ? fallbackCwd : event.cwd
-            sqlite3_bind_text(stmt, 1, (event.sessionID as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(stmt, 2, (cwd as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(stmt, 3, (event.provider as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(stmt, 4, (event.model as NSString).utf8String, -1, nil)
+            sqlite3_bind_text_copy(stmt, 1, event.sessionID)
+            sqlite3_bind_text_copy(stmt, 2, cwd)
+            sqlite3_bind_text_copy(stmt, 3, event.provider)
+            sqlite3_bind_text_copy(stmt, 4, event.model)
             sqlite3_bind_int64(stmt, 5, event.tsMs)
             sqlite3_bind_int64(stmt, 6, Int64(event.usage.uncachedInput))
             sqlite3_bind_int64(stmt, 7, Int64(event.usage.output))
@@ -196,8 +196,8 @@ extension DatabaseManager: HarnessTokenRepository {
             logger.warning("Harness 扫描记录写入准备失败: " + String(cString: sqlite3_errmsg(db)))
             return false
         }
-        sqlite3_bind_text(stmt, 1, (record.path as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(stmt, 2, (record.sessionID as NSString).utf8String, -1, nil)
+        sqlite3_bind_text_copy(stmt, 1, record.path)
+        sqlite3_bind_text_copy(stmt, 2, record.sessionID)
         sqlite3_bind_int64(stmt, 3, record.size)
         sqlite3_bind_int64(stmt, 4, record.mtimeMs)
         sqlite3_bind_double(stmt, 5, record.scannedAt)

@@ -39,15 +39,20 @@ jobs:
       - name: File size gate
         run: bash NetworkMonitor/Scripts/check-file-size.sh
 
+      # 与发版脚本走同一条后端：release.yml 用 build-app.sh（默认 --build-system native），
+      # 本机文档与项目 skill 也强制 native。CI 原先只跑默认后端，等于两条路径各自
+      # 只验证一半——CI 绿不代表本机能打出的包能发。
       - name: Build (debug)
         working-directory: NetworkMonitor
-        run: swift build --disable-sandbox
+        run: swift build --disable-sandbox --build-system native
 
       # release 构建单独跑一遍：生产方法误放进 DEBUG 块时只有这一步会红
       - name: Build (release)
         working-directory: NetworkMonitor
-        run: swift build -c release --disable-sandbox
+        run: swift build -c release --disable-sandbox --build-system native
 
       - name: Test
         working-directory: NetworkMonitor
-        run: swift run --disable-sandbox TestRunner
+        run: swift run --disable-sandbox --build-system native TestRunner
+
+

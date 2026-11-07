@@ -212,14 +212,14 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
             } catch {
                 // 单文件失败只跳过该文件，不影响整体；不写扫描记录，下一轮会重试
                 failedFiles += 1
-                logger.warning("Harness 会话文件解析失败，已跳过: " + file.path + " — " + String(describing: error))
+                logger.warning("Harness 会话文件解析失败，已跳过: " + LogRedaction.path(file.path) + " — " + String(describing: error))
                 continue
             }
 
             let record = HarnessSessionScanRecord(file: file, scannedAt: nowProvider().timeIntervalSince1970)
             if !store.harnessReplaceSession(record: record, events: result.events, cwd: result.cwd) {
                 failedFiles += 1
-                logger.warning("Harness 会话落库失败: " + file.path)
+                logger.warning("Harness 会话落库失败: " + LogRedaction.path(file.path))
             }
             completed += 1
             totalEvents += result.events.count

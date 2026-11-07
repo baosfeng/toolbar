@@ -171,7 +171,7 @@ public actor TransferService: TransferRouteHandling {
         for deviceId in pairing.pairedDeviceIds() {
             registry.setPaired(true, deviceId: deviceId)
         }
-        logger.info("传输服务已启动：HTTP \(port)，收件目录 \(receiveDirectory.path)")
+        logger.info("传输服务已启动：HTTP \(port)，收件目录 \(LogRedaction.path(receiveDirectory.path))")
         notifySessions()
         return port
     }
@@ -247,7 +247,8 @@ public actor TransferService: TransferRouteHandling {
         if decision.accepted {
             logger.info("offer 免确认放行（\(decision.reason.rawValue)）：\(request.senderDeviceId)")
         } else if let pin = context.pin, let expiry = context.pinExpiresAt {
-            logger.info("收到未配对 offer（\(request.senderDeviceId)），PIN \(pin) 有效期至 \(expiry)")
+            // PIN 是配对凭据：日志全量 public，写入等于把凭据交给任何本机进程
+            logger.info("收到未配对 offer（\(request.senderDeviceId)），PIN \(LogRedaction.pin(pin)) 有效期至 \(expiry)")
         }
         notifySessions()
 

@@ -131,7 +131,9 @@ final class TokenPaneView: MenuPanelPaneView {
     // MARK: - 键盘可达
 
     override var focusableRows: [MenuPanelRow] {
-        guard detailKind == nil else { return [] }
+        // 二级页打开时只留返回入口：原先这里返回空数组，键盘用户进得去出不来，
+        // 只能靠 Esc（而 Esc 又会把整个面板收起）
+        guard detailKind == nil else { return detailPane.focusableRows }
         var rows: [MenuPanelRow] = [refreshRow]
         rows.append(contentsOf: rangeControl.focusableRows)
         if !dataStack.isHidden {
@@ -196,15 +198,31 @@ final class TokenPaneView: MenuPanelPaneView {
         dataStack.isHidden = empty
         emptyView.isHidden = !empty
         if empty {
+            // 失败态也要落到这一支（没有缓存数据时 empty 必然为 true）：
+            // 之前它显示的是「还没有可统计的会话」，把「索引坏了」说成「你没数据」
+            if case .failed(let message) = snapshot.indexingState {
+                emptyView.update(reason: message)
+            } else {
+                emptyView.update(reason: nil)
+            }
             indexLabel.isHidden = true
             detailPane.isHidden = true
             detailKind = nil
             onContentChanged?()
             return
         }
-        indexLabel.isHidden = !indexing
-        if indexing, let progress {
-            indexLabel.stringValue = "索引中 \(progress.completedFiles)/\(progress.totalFiles) · 完成后自动刷新"
+        // 有数据但索引失败：保留数据，同时把失败原因挂到索引标签上，不让错误静默
+        if case .failed(let message) = snapshot.indexingState {
+            indexLabel.isHidden = false
+            indexLabel.stringValue = "索引失败：\(message)"
+        }
+        if case .failed = snapshot.indexingState {
+            // 已在上方设置失败文案
+        } else {
+            indexLabel.isHidden = !indexing
+            if indexing, let progress {
+                indexLabel.stringValue = "索引中 \(progress.completedFiles)/\(progress.totalFiles) · 完成后自动刷新"
+            }
         }
         render()
     }
@@ -221,6 +239,9 @@ final class TokenPaneView: MenuPanelPaneView {
         dataStack.isHidden = true
         onContentChanged?()
     }
+
+    /// 是否正处在二级页（面板根视图据此把 Esc 解释为「返回」而不是「收起面板」）
+    var isShowingDetail: Bool { detailKind != nil }
 
     func closeDetail() {
         guard detailKind != nil else { return }

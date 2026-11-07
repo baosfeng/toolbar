@@ -165,14 +165,10 @@ final class BillingLimitCellView: NSView {
         return base + " " + badge
     }
 
-    /// 重置时间：当天只给时分，跨天补日期
+    /// 重置时间：当天只给时分，跨天补日期；时分跟随系统 12/24 小时制
     static func resetText(_ date: Date?) -> String {
         guard let date else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = Calendar.current.isDateInToday(date) ? "HH:mm 重置" : "M/d HH:mm 重置"
-        return formatter.string(from: date)
+        return BillingTimeFormat.reset(date)
     }
 
     /// 剩余比例 → 告警级别（<20% 红、<50% 橙）

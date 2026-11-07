@@ -81,11 +81,22 @@ final class TokenSkeletonView: NSView {
 /// 空态 —— 没有任何可统计的会话
 final class TokenEmptyView: NSView {
 
+    /// 默认空态文案（索引正常但确实还没有会话）
+    private static let defaultTitle = "还没有可统计的会话"
+    private static let defaultNote = "运行一次 DSH 会话后，这里会出现 token 消耗。\n数据来自 ~/.dsh/sessions 下的会话日志。"
+
     /// 「重新扫描」按钮行（键盘可达）
     let retryRow: MenuPanelRow
+    private let titleLabel: NSTextField
+    private let noteLabel: NSTextField
 
     init(onRetry: @escaping () -> Void) {
         retryRow = MenuPanelRow(height: 24, onClick: onRetry)
+        // 标题与说明在 super.init 之前建好：失败态要复用同一套视图换文案，
+        // 而不是再叠一个几乎一样的「失败态」视图
+        titleLabel = MenuPanelLabel.text(Self.defaultTitle, font: TokenPaneStyle.stateBodyFont,
+                                         color: TokenPaneStyle.secondaryText)
+        noteLabel = NSTextField(labelWithString: Self.defaultNote)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         retryRow.contentStack.spacing = 0
@@ -96,9 +107,8 @@ final class TokenEmptyView: NSView {
         retryRow.contentStack.addArrangedSubview(retryLabel)
         retryRow.setAccessibilityLabel("重新扫描 DSH 会话")
 
-        let title = MenuPanelLabel.text("还没有可统计的会话", font: TokenPaneStyle.stateBodyFont,
-                                        color: TokenPaneStyle.secondaryText)
-        let note = NSTextField(labelWithString: "运行一次 DSH 会话后，这里会出现 token 消耗。\n数据来自 ~/.dsh/sessions 下的会话日志。")
+        let title = titleLabel
+        let note = noteLabel
         note.font = TokenPaneStyle.stateNoteFont
         note.textColor = TokenPaneStyle.tertiaryText
         note.alignment = .center
@@ -122,6 +132,23 @@ final class TokenEmptyView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
+
+    /// 切换空态文案：`reason` 非空表示「索引失败」而不是「还没有数据」
+    ///
+    /// 失败态曾经完全落到空态这一支，用户看到「还没有可统计的会话」，
+    /// 而真实原因是索引不可用（数据库未就绪 / zstd 缺失 / 扫描抛错），
+    /// 界面既不显示原因也没有区分「坏了」与「没数据」。
+    func update(reason: String?) {
+        guard let reason, !reason.isEmpty else {
+            titleLabel.stringValue = Self.defaultTitle
+            noteLabel.stringValue = Self.defaultNote
+            retryRow.setAccessibilityLabel("重新扫描 DSH 会话")
+            return
+        }
+        titleLabel.stringValue = "Token 索引失败"
+        noteLabel.stringValue = reason + "\n可点「重新扫描」重试。"
+        retryRow.setAccessibilityLabel("重新扫描 DSH 会话（上次失败：" + reason + "）")
+    }
 }
 
 /// 数据源不可用态（zstd 缺失 / 会话目录缺失）

@@ -150,7 +150,9 @@ final class BillingPaneView: MenuPanelPaneView {
         syncBlocks(snapshot.states)
         let stamp = Self.latestStamp(snapshot.states)
         timeLabel.stringValue = stamp
-        heroView.update(hero: Self.hero(from: snapshot.states), clock: "实时 " + stamp)
+        // 还没成功刷新过时不拼「实时 —」：那是把「不可得」写成了半句话
+        heroView.update(hero: Self.hero(from: snapshot.states),
+                        clock: stamp == "—" ? "尚未刷新" : "实时 " + stamp)
         stateBand.update(items: [
             (key: "Provider", value: "\(snapshot.states.count)"),
             (key: "最近刷新", value: stamp),

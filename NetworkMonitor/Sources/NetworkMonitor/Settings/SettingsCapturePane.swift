@@ -234,7 +234,7 @@ final class SettingsCapturePane: SettingsPaneView {
             == SnipFileNaming.quickSaveDirectory().standardizedFileURL
         SnipSaveDirectory.setCustomDirectory(isDefault ? nil : url, storage: storage)
         refreshQuickSaveDirectory()
-        logger.info("快速保存目录已切换：\(url.path)")
+        logger.info("快速保存目录已切换：\(LogRedaction.path(url.path))")
     }
 
     @objc private func openQuickSaveFolder() {

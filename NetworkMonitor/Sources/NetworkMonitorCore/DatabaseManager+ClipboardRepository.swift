@@ -42,14 +42,14 @@ extension DatabaseManager: ClipboardRepository {
                 logger.warning("剪贴板写入准备失败: \(String(cString: sqlite3_errmsg(db)))")
                 return nil
             }
-            sqlite3_bind_text(stmt, 1, (newID as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(stmt, 2, (draft.kind.rawValue as NSString).utf8String, -1, nil)
+            sqlite3_bind_text_copy(stmt, 1, newID)
+            sqlite3_bind_text_copy(stmt, 2, draft.kind.rawValue)
             sqlite3_bind_text_or_null(stmt, 3, draft.text)
-            sqlite3_bind_text(stmt, 4, (preview as NSString).utf8String, -1, nil)
+            sqlite3_bind_text_copy(stmt, 4, preview)
             sqlite3_bind_text_or_null(stmt, 5, draft.imagePath)
             clipBindIntOrNull(stmt, 6, draft.imageWidth)
             clipBindIntOrNull(stmt, 7, draft.imageHeight)
-            sqlite3_bind_text(stmt, 8, (draft.contentHash as NSString).utf8String, -1, nil)
+            sqlite3_bind_text_copy(stmt, 8, draft.contentHash)
             sqlite3_bind_text_or_null(stmt, 9, draft.sourceBundleID)
             sqlite3_bind_text_or_null(stmt, 10, draft.sourceAppName)
             sqlite3_bind_double(stmt, 11, draft.createdAt.timeIntervalSince1970)
@@ -75,7 +75,7 @@ extension DatabaseManager: ClipboardRepository {
                 logger.warning("剪贴板查询准备失败: \(String(cString: sqlite3_errmsg(db)))")
                 return nil
             }
-            sqlite3_bind_text(stmt, 1, (key as NSString).utf8String, -1, nil)
+            sqlite3_bind_text_copy(stmt, 1, key)
             guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
             return clipItem(from: stmt)
         }
@@ -96,7 +96,7 @@ extension DatabaseManager: ClipboardRepository {
             }
             var index: Int32 = 1
             if let kind {
-                sqlite3_bind_text(stmt, index, (kind.rawValue as NSString).utf8String, -1, nil)
+                sqlite3_bind_text_copy(stmt, index, kind.rawValue)
                 index += 1
             }
             sqlite3_bind_int(stmt, index, Int32(limit))
@@ -117,7 +117,7 @@ extension DatabaseManager: ClipboardRepository {
                 return []
             }
             if let kind {
-                sqlite3_bind_text(stmt, 1, (kind.rawValue as NSString).utf8String, -1, nil)
+                sqlite3_bind_text_copy(stmt, 1, kind.rawValue)
             }
             return clipItems(from: stmt)
         }
@@ -170,7 +170,7 @@ extension DatabaseManager: ClipboardRepository {
             } else {
                 sqlite3_bind_null(stmt, 2)
             }
-            sqlite3_bind_text(stmt, 3, (key as NSString).utf8String, -1, nil)
+            sqlite3_bind_text_copy(stmt, 3, key)
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 logger.warning("剪贴板收藏更新失败: \(String(cString: sqlite3_errmsg(db)))")
                 return false
@@ -189,7 +189,7 @@ extension DatabaseManager: ClipboardRepository {
                 logger.warning("剪贴板删除准备失败: \(String(cString: sqlite3_errmsg(db)))")
                 return false
             }
-            sqlite3_bind_text(stmt, 1, (key as NSString).utf8String, -1, nil)
+            sqlite3_bind_text_copy(stmt, 1, key)
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 logger.warning("剪贴板删除失败: \(String(cString: sqlite3_errmsg(db)))")
                 return false
@@ -240,7 +240,7 @@ extension DatabaseManager: ClipboardRepository {
                 sqlite3_reset(stmt)
                 sqlite3_clear_bindings(stmt)
                 sqlite3_bind_int(stmt, 1, Int32(offset + 1))
-                sqlite3_bind_text(stmt, 2, (id.uuidString.uppercased() as NSString).utf8String, -1, nil)
+                sqlite3_bind_text_copy(stmt, 2, id.uuidString.uppercased())
                 guard sqlite3_step(stmt) == SQLITE_DONE else {
                     clipExec(db, "ROLLBACK")
                     logger.warning("剪贴板栈重排失败: \(String(cString: sqlite3_errmsg(db)))")

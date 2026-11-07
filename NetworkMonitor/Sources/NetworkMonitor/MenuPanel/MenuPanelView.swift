@@ -56,7 +56,8 @@ final class MenuPanelView: NSView {
     private let paneStack = MenuPanelDocumentStack()
     private(set) var currentTab: MenuPanelTab = .network
     /// 当前键盘聚焦下标（行在前、卡片在后；nil = 未聚焦任何元素）
-    private var focusedIndex: Int?
+    /// 键盘焦点下标（行与卡片共享；键盘处理拆在 MenuPanelView+Keyboard.swift，故为 internal）
+    var focusedIndex: Int?
 
     // MARK: - 初始化
 
@@ -206,7 +207,8 @@ final class MenuPanelView: NSView {
     }
 
     /// 相邻分页切换（←/→ 时使用，循环）
-    private func switchTab(by delta: Int) {
+    /// 左右方向键切页（键盘处理在 MenuPanelView+Keyboard.swift，故为 internal）
+    func switchTab(by delta: Int) {
         let all = MenuPanelTab.allCases
         let count = all.count
         guard let index = all.firstIndex(of: currentTab) else { return }
@@ -226,7 +228,8 @@ final class MenuPanelView: NSView {
     }
 
     /// 当前页
-    private var activePane: MenuPanelPaneView {
+    /// 当前可见分页（键盘遍历在 MenuPanelView+Keyboard.swift，故为 internal）
+    var activePane: MenuPanelPaneView {
         switch currentTab {
         case .network: return networkPane
         case .clipboard: return clipboardPane
@@ -250,101 +253,6 @@ final class MenuPanelView: NSView {
     /// 剪贴板页行内提示
     func showClipboardHint(_ message: String) {
         clipboardPane.showHint(message)
-    }
-
-    // MARK: - 键盘可达
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func keyDown(with event: NSEvent) {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let characters = event.charactersIgnoringModifiers?.lowercased() ?? ""
-
-        if flags.contains(.command) {
-            switch characters {
-            case "q": delegate?.menuPanelViewDidRequestQuit(self)
-            case ",": delegate?.menuPanelViewDidRequestSettings(self, section: nil)
-            default: super.keyDown(with: event)
-            }
-            return
-        }
-
-        switch Int(event.keyCode) {
-        case 53:  // Esc：系统页详情先返回首屏，否则收起面板
-            if currentTab == .system, systemPane.isShowingDetail {
-                systemPane.showOverview()
-            } else {
-                delegate?.menuPanelViewDidRequestClose(self)
-            }
-        case 48:  // Tab
-            moveFocus(by: flags.contains(.shift) ? -1 : 1)
-        case 126:  // ↑
-            moveFocus(by: -1)
-        case 125:  // ↓
-            moveFocus(by: 1)
-        case 123:  // ←
-            switchTab(by: -1)
-        case 124:  // →
-            switchTab(by: 1)
-        case 36, 49, 76:  // Return / Space / 小键盘 Enter
-            activateFocusedTarget()
-        default:
-            if let number = Int(characters), number >= 1, number <= MenuPanelTab.allCases.count,
-               let tab = MenuPanelTab(rawValue: number - 1) {
-                select(tab: tab)
-                return
-            }
-            super.keyDown(with: event)
-        }
-    }
-
-    /// 在可点击元素之间移动键盘焦点（行在前、卡片在后；循环）
-    private func moveFocus(by delta: Int) {
-        let count = activePane.focusableRows.count + activePane.focusableCards.count
-        guard count > 0 else { return }
-        let next: Int
-        if let current = focusedIndex {
-            next = ((current + delta) % count + count) % count
-        } else {
-            next = delta >= 0 ? 0 : count - 1
-        }
-        setFocus(index: next)
-    }
-
-    /// 设置聚焦元素（nil 清除；行与卡片共享一条焦序遍历）
-    private func setFocus(index: Int?) {
-        let rows = activePane.focusableRows
-        let cards = activePane.focusableCards
-        let count = rows.count + cards.count
-        let validIndex = index.flatMap { (0..<count).contains($0) ? $0 : nil }
-        for (rowIndex, row) in rows.enumerated() {
-            row.setKeyboardFocused(rowIndex == validIndex)
-        }
-        for (cardIndex, card) in cards.enumerated() {
-            card.setCardKeyboardFocused(rows.count + cardIndex == validIndex)
-        }
-        focusedIndex = validIndex
-    }
-
-    /// 触发当前聚焦元素（与点击同路径）
-    private func activateFocusedTarget() {
-        guard let index = focusedIndex else { return }
-        let rows = activePane.focusableRows
-        let cards = activePane.focusableCards
-        if rows.indices.contains(index) {
-            rows[index].activate()
-        } else if cards.indices.contains(index - rows.count) {
-            cards[index - rows.count].activateCard()
-        }
-    }
-
-    /// 把键盘焦点还给指定卡片（从系统页详情返回时）
-    func focus(card: SystemCardView) {
-        let rows = activePane.focusableRows
-        guard let index = activePane.focusableCards.firstIndex(where: { $0 === card }) else {
-            return
-        }
-        setFocus(index: rows.count + index)
     }
 
     /// 内容滚动回顶部（进出系统页详情时都从顶部开始读）

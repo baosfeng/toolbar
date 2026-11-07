@@ -9,8 +9,9 @@ description: 本项目（toolbar/NetworkMonitor）专属编码规范：架构原
 
 ## 项目速览
 
-- Swift 6.3（swiftLanguageModes: [.v6]），SwiftPM 三目标：
+- Swift 6.3（swiftLanguageModes: [.v6]），SwiftPM 四目标：
   - `NetworkMonitorCore`（库，**禁止 import AppKit**）— 领域协议、数据库、统计、模型、事件分发、格式化
+  - `NetworkMonitorUI`（库，与 AppKit / Core 都无关）— 只放展示纯逻辑（Hero 派生、单位排版等），让 TestRunner 能直接断言 UI 口径而不必 import 可执行 target
   - `NetworkMonitor`（可执行）— UI、Hook 监听器、事件处理器、监控实现（AppKit 仅限此目标）
   - `TestRunner`（可执行）— 手写断言测试（本机无 Xcode SDK，不用 XCTest）
 - 构建：`cd NetworkMonitor && swift build --disable-sandbox --build-system native`（本机只有 Command Line Tools，默认后端初始化即失败，统一追加该参数）
@@ -59,6 +60,7 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 
 ### 5. 基础设施注入
 - 禁止直读 `UserDefaults.standard`；用 `KeyValueStorage`（`AppContext.shared.storage` 或注入）
+- **凭据类内容禁止进 `KeyValueStorage`**：偏好 plist 是明文文件（本机任意进程、Time Machine 备份、`plutil -p` 都能读），API Key / session cookie 一律走 `SecretStorage`（默认真实实现是 `KeychainSecretStore`，测试注入 `InMemorySecretStorage`）
 - 汇率等可配置项走注入存储（`CurrencyConfig.shared` + `storageOverride`），测试用隔离 suite 不得污染全局
 
 ### 6. 事件驱动
