@@ -62,15 +62,18 @@ private func testSingleConfigurationContract() {
 
     // 2) 凭据：同一 provider 只有一条存储键，写入永远是覆盖
     let storage = InMemoryStorage()
-    let store = PreferencesBillingCredentialStore(storage: storage, environment: [:])
+    let secrets = InMemorySecretStorage()
+    let store = PreferencesBillingCredentialStore(storage: storage, secrets: secrets, environment: [:])
     store.setCredential("sk-first", for: "ollama")
     store.setCredential("sk-second", for: "ollama")
     assertEqual(store.credential(for: "ollama"), "sk-second", "重复写入是替换，不留第二份")
-    assertEqual(storage.string(forKey: PreferencesBillingCredentialStore.storageKey(for: "ollama")),
-                "sk-second", "唯一存储键 billing.credential.<id>")
+    assertEqual(secrets.secret(forKey: PreferencesBillingCredentialStore.storageKey(for: "ollama")),
+                "sk-second", "唯一存储键 billing.credential.<id> 落在秘密存储")
+    assertEqual(secrets.values.count, 1, "同一 provider 在钥匙串里只有一条记录")
 
     // 3) 来源优先级：存储优先，环境变量仅回退，绝不出现「两个来源的配置」
     let envOnly = PreferencesBillingCredentialStore(storage: InMemoryStorage(),
+                                                    secrets: InMemorySecretStorage(),
                                                     environment: ["BILLING_OLLAMA_API_KEY": "env-key"])
     let envResolution = envOnly.credentialResolution(for: "ollama")
     assertEqual(envResolution.source, .environment, "只有环境变量时来源为 environment")
@@ -79,6 +82,7 @@ private func testSingleConfigurationContract() {
     let mixedStorage = InMemoryStorage()
     mixedStorage.set("stored-key", forKey: PreferencesBillingCredentialStore.storageKey(for: "ollama"))
     let mixed = PreferencesBillingCredentialStore(storage: mixedStorage,
+                                                  secrets: InMemorySecretStorage(),
                                                   environment: ["BILLING_OLLAMA_API_KEY": "env-key"])
     let mixedResolution = mixed.credentialResolution(for: "ollama")
     assertEqual(mixedResolution.credential, "stored-key", "两者都有时以存储为准")
@@ -87,7 +91,8 @@ private func testSingleConfigurationContract() {
                 "credential() 与 credentialResolution() 取同一个值（不会出现两套配置）")
 
     // 4) 未配置：来源 none，isConfigured 为 false（额度页据此隐藏）
-    let empty = PreferencesBillingCredentialStore(storage: InMemoryStorage(), environment: [:])
+    let empty = PreferencesBillingCredentialStore(storage: InMemoryStorage(),
+                                                  secrets: InMemorySecretStorage(), environment: [:])
     assertEqual(empty.credentialResolution(for: "open-design").source, .none, "未配置来源 none")
     assertEqual(empty.credentialResolution(for: "open-design").isConfigured, false, "未配置不可见")
     assertNotNil(empty.credentialResolution(for: "open-design").storageKey, "解析结果带唯一存储键")

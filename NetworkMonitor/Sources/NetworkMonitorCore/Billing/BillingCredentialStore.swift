@@ -82,19 +82,25 @@ extension BillingCredentialStore {
 /// 这样形如 `opencode-go` 的复合 id 也能被 shell `export`。
 public final class PreferencesBillingCredentialStore: BillingCredentialStore {
     private let storage: any KeyValueStorage
+    /// 凭据真正的落点：默认登录钥匙串（偏好存储只保留「迁移前遗留的明文」用于一次性搬迁）
+    private let secrets: any SecretStorage
     private let environment: [String: String]
     /// 环境变量键名解析（按 provider 自定义；未注入时用默认规则）
     private let environmentKeyResolver: @Sendable (String) -> String
 
     /// 存储键前缀（完整键：`billing.credential.<providerID>`）
+    ///
+    /// 该键现在只用于两件事：钥匙串里的 account 名，以及搬迁旧明文时的偏好键名。
     public static let keyPrefix = "billing.credential."
 
     public init(storage: any KeyValueStorage = AppContext.shared.storage,
+                secrets: (any SecretStorage)? = nil,
                 environment: [String: String] = ProcessInfo.processInfo.environment,
                 environmentKeyResolver: @escaping @Sendable (String) -> String = { providerID in
                     PreferencesBillingCredentialStore.defaultEnvironmentKey(for: providerID)
                 }) {
         self.storage = storage
+        self.secrets = secrets ?? KeychainSecretStore()
         self.environment = environment
         self.environmentKeyResolver = environmentKeyResolver
     }
@@ -135,8 +141,7 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
     public func credentialResolution(for providerID: String) -> BillingCredentialResolution {
         let storageKey = Self.storageKey(for: providerID)
         let keys = Self.environmentKeys(for: providerID, resolving: environmentKeyResolver)
-        if let stored = storage.string(forKey: storageKey),
-           !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let stored = storedCredential(for: providerID) {
             return BillingCredentialResolution(credential: stored, source: .stored,
                                                storageKey: storageKey, environmentKeys: keys)
         }
@@ -153,12 +158,9 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
     }
 
     public func credential(for providerID: String) -> String? {
-        if let stored = storage.string(forKey: Self.storageKey(for: providerID)),
-           !stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let stored = storedCredential(for: providerID) {
             return stored
         }
-        // 环境变量回退：优先 provider 自定义键（如 Ollama 的 OLLAMA_API_KEY），
-        // 再试默认键（连字符转下划线，便于 export），最后兼容旧的带连字符键
         for key in Self.environmentKeys(for: providerID, resolving: environmentKeyResolver) {
             if let value = environment[key], !value.isEmpty { return value }
         }
@@ -167,10 +169,33 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
 
     public func setCredential(_ credential: String?, for providerID: String) {
         let key = Self.storageKey(for: providerID)
+        // 迁移遗留：旧版本把明文写在偏好里，写入/清除时都要连带清掉，
+        // 否则旧明文会一直留在 plist 里
+        storage.removeObject(forKey: key)
         guard let credential, !credential.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            storage.removeObject(forKey: key)
+            secrets.setSecret(nil, forKey: key)
             return
         }
-        storage.set(credential.trimmingCharacters(in: .whitespacesAndNewlines), forKey: key)
+        secrets.setSecret(credential.trimmingCharacters(in: .whitespacesAndNewlines), forKey: key)
+    }
+
+    /// 读取生效的存储凭据：钥匙串优先；读到旧版遗留的明文时**就地搬迁**并删除明文
+    ///
+    /// 搬迁是惰性的：只在用户下次打开额度页 / 设置页读到该 provider 时发生，
+    /// 不需要启动时全量扫描，也不会因为某个 provider 从没被访问而一直留明文。
+    private func storedCredential(for providerID: String) -> String? {
+        let key = Self.storageKey(for: providerID)
+        if let secret = secrets.secret(forKey: key),
+           !secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return secret
+        }
+        guard let legacy = storage.string(forKey: key),
+              !legacy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        let trimmed = legacy.trimmingCharacters(in: .whitespacesAndNewlines)
+        secrets.setSecret(trimmed, forKey: key)
+        storage.removeObject(forKey: key)
+        return trimmed
     }
 }

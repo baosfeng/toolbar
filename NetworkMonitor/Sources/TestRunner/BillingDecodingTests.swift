@@ -197,14 +197,17 @@ private func testProviderRegistry() {
 
 private func testCredentialStore() {
     let storage = BillingTestStorage()
-    let store = PreferencesBillingCredentialStore(storage: storage, environment: [:])
+    let secrets = InMemorySecretStorage()
+    let store = PreferencesBillingCredentialStore(storage: storage, secrets: secrets, environment: [:])
 
     assertEqual(store.credential(for: "ollama") == nil, true, "初始无凭据")
 
     store.setCredential("sk-abc", for: "ollama")
     assertEqual(store.credential(for: "ollama"), "sk-abc", "写入后可读")
-    assertEqual(storage.string(forKey: PreferencesBillingCredentialStore.storageKey(for: "ollama")),
-                "sk-abc", "写入偏好键")
+    assertEqual(secrets.secret(forKey: PreferencesBillingCredentialStore.storageKey(for: "ollama")),
+                "sk-abc", "凭据落在秘密存储（钥匙串），不落偏好")
+    assertEqual(storage.string(forKey: PreferencesBillingCredentialStore.storageKey(for: "ollama")) == nil,
+                true, "偏好里不留明文")
 
     // 首尾空白会被裁剪
     store.setCredential("  sk-def  ", for: "ollama")
@@ -218,6 +221,7 @@ private func testCredentialStore() {
 
     // 环境变量回退：环境变量存在且偏好为空时生效
     let envStore = PreferencesBillingCredentialStore(storage: BillingTestStorage(),
+                                                     secrets: InMemorySecretStorage(),
                                                      environment: ["BILLING_OLLAMA_API_KEY": "env-key"])
     assertEqual(envStore.credential(for: "ollama"), "env-key", "环境变量回退")
     assertEqual(envStore.credential(for: "openai") == nil, true, "其他 provider 无回退")
@@ -226,6 +230,7 @@ private func testCredentialStore() {
     let mixedStorage = BillingTestStorage()
     mixedStorage.set("stored-key", forKey: PreferencesBillingCredentialStore.storageKey(for: "ollama"))
     let mixedStore = PreferencesBillingCredentialStore(storage: mixedStorage,
+                                                       secrets: InMemorySecretStorage(),
                                                        environment: ["BILLING_OLLAMA_API_KEY": "env-key"])
     assertEqual(mixedStore.credential(for: "ollama"), "stored-key", "偏好优先于环境变量")
 }
