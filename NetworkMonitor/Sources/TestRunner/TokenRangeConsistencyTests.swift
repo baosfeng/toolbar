@@ -13,6 +13,7 @@ func runTokenRangeConsistencyTests() {
     testRangeWindowBoundaries()
     testProjectModelFollowRange()
     testShareDenominator()
+    testDistroPageCopyFollowsRange()
 
     print("\n🧪 Testing 窗口化聚合（真实 SQLite 内存库）...")
     testWindowedAggregationInDatabase()
@@ -237,4 +238,3 @@ private func testWindowedAggregationPerformance() {
     assertEqual(elapsed < 10.0, true, "2000 条事件的聚合在 10 秒内完成（实测 \(String(format: "%.1f", elapsed * 1000)) ms）")
     print("   ⏱ 2000 事件 × 三档窗口化聚合：\(String(format: "%.1f", elapsed * 1000)) ms")
 }
-
