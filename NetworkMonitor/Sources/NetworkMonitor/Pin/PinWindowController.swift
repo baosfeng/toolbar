@@ -219,7 +219,7 @@ final class PinWindowController {
         guard response == .OK, let url = panel.url else { return }
         do {
             try SnipFileWriter.writePNG(window.currentImage, to: url)
-            logger.info("贴图已保存：\(url.path)")
+            logger.info("贴图已保存：\(LogRedaction.path(url.path))")
         } catch {
             logger.error("贴图保存失败：\(error)")
         }

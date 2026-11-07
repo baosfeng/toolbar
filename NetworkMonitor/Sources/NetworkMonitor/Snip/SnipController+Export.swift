@@ -48,7 +48,7 @@ extension SnipController {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let url = directory.appendingPathComponent(SnipFileNaming.fileName(for: Date()))
             try SnipFileWriter.writePNG(image, to: url)
-            logger.info("已快速保存：\(url.path)")
+            logger.info("已快速保存：\(LogRedaction.path(url.path))")
             dismissOverlays()
         } catch {
             logger.error("快速保存失败：\(error)")
@@ -64,7 +64,7 @@ extension SnipController {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try SnipFileWriter.writePNG(image, to: url)
-            logger.info("已保存到：\(url.path)")
+            logger.info("已保存到：\(LogRedaction.path(url.path))")
         } catch {
             logger.error("保存失败：\(error)")
         }

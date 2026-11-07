@@ -77,7 +77,7 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
         applyPragma("journal_mode", value: "WAL")
 
         migrateIfNeeded()
-        logger.info("数据库已就绪: \(dbPath)")
+        logger.info("数据库已就绪: \(LogRedaction.path(dbPath))")
     }
 
     private func _openInMemory() {

@@ -18,9 +18,13 @@ public final class OSLogLogger: LoggingService {
     /// - Parameters:
     ///   - subsystem: OSLog subsystem 标识
     ///   - category: 日志分类
-    ///   - minLevel: 最低记录级别
+    ///   - minLevel: 最低记录级别（默认 `.info`，与类文档一致）
+    ///
+    /// 默认值一度是 `.debug`，与「生产只记 info 及以上」的注释相反：
+    /// 剪贴板采集、采样轮询这类高频 debug 日志会全部落盘，既放大日志体积，
+    /// 也放大 public 字段的内容暴露面。需要 debug 时在组合根显式传 `.debug`。
     public init(subsystem: String = defaultSubsystem, category: String = "General",
-                minLevel: LogLevel = .debug) {
+                minLevel: LogLevel = .info) {
         self.osLog = OSLog(subsystem: subsystem, category: category)
         self.minLevel = minLevel
     }
@@ -36,6 +40,8 @@ public final class OSLogLogger: LoggingService {
         case .error:   osLogType = .error
         }
 
+        // %{public}：让 `log show` 无需特权即可读到全文（调试需要），
+        // 代价是任何本机进程也能读——用户路径 / PIN / 凭据一律先过 LogRedaction
         os_log(osLogType, log: osLog, "%{public}@", message)
     }
 

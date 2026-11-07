@@ -32,6 +32,9 @@ runAppEventsTests()
 // MARK: - 设置页目录偏好（截图快速保存 / 互传接收）
 runSettingsDirectoryTests()
 
+// MARK: - 日志脱敏（OSLog 全量 public，用户路径 / PIN 必须先脱敏）
+runLogRedactionTests()
+
 // MARK: - 剪贴板访问权限状态（文案 / 色调 / 跳转）
 runClipboardAccessTests()
 
