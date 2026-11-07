@@ -38,10 +38,11 @@ reasonix.toml
 .worktrees/
 
 # Open Design 原型工作区：过程截图与落选稿不入库，只归档设计决策文档与定稿原型
-.open-design/
-
-# >>> open-design 原型白名单（odops keep 生成，勿手改）
-# 本地工作区全部保留；入库只放定稿原型 + 决策链 + 设计体系 + 关键截图
+#
+# 注意：必须先不排除 .open-design/ 目录本身，再排除其内容，白名单才生效。
+# 反例（曾长期失效）：写 `.open-design/` 整体排除父目录后，后面的
+# `!.open-design/08-prototype.html` 无法把子项重新包含回来（git 不会进入被排除的
+# 目录），实测 `git ls-files .open-design` 为 0，白名单形同虚设。
 .open-design/*
 !.open-design/08-prototype.html
 !.open-design/00-brief.md
@@ -50,4 +51,3 @@ reasonix.toml
 !.open-design/05-checklist.md
 !.open-design/design-system/
 !.open-design/shots/
-# <<< open-design 原型白名单
