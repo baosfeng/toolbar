@@ -30,10 +30,17 @@ class TokenCardRow: MenuPanelRow {
         body.spacing = spacing
         body.translatesAutoresizingMaskIntoConstraints = false
         addSubview(body)
+        // 底部用 ≤ 而不是 ==：定高卡片的行数会随数据变化（0/1/3 行分布），
+        // 底部约束只在「内容比卡片矮」时生效；内容高于卡片时变成可检测的
+        // Auto Layout 冲突（而不是画到边界外、静默压住下一张卡）。
+        // 同理也不再强制 ==：三行 distribution 恰好贴近 111pt，字号或文案一变就顶破。
+        let bottom = body.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -paddingY)
+        bottom.priority = .defaultHigh
         NSLayoutConstraint.activate([
             body.leadingAnchor.constraint(equalTo: leadingAnchor, constant: paddingX),
             body.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -paddingX),
             body.topAnchor.constraint(equalTo: topAnchor, constant: paddingY),
+            bottom,
         ])
     }
 

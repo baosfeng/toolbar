@@ -20,7 +20,9 @@ final class SystemMetricValueView: NSView {
         label = NSTextField(labelWithString: "")
         label.font = valueFont
         label.textColor = SystemPalette.foreground
-        label.lineBreakMode = .byClipping
+        // 用尾部省略而不是直接裁：四联小格每格约 71pt，负载值「12.34」或 4 位宽度
+        // 会顶出边界，byClipping 会把末尾切成半个数字却仍然「看起来完整」
+        label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
         label.isEditable = false
         label.isSelectable = false
