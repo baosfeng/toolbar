@@ -217,6 +217,8 @@ final class TokenPaneView: MenuPanelPaneView {
         self.selection = selection
         detailPane.update(kind: kind, model: model, snapshot: snapshot,
                           selection: selection, hourScope: hourScope)
+        // 打开即挂悬停文案：否则要等下一次数据刷新才生效（占比条 / 图例是这里唯一的 provider 出口）
+        syncDistroHoverTips(kind: kind, model: model)
         detailPane.isHidden = false
         dataStack.isHidden = true
         onContentChanged?()

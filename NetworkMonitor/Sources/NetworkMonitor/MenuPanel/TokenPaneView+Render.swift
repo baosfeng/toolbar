@@ -74,12 +74,23 @@ extension TokenPaneView {
 
         projectMeta.stringValue = model.projectMeta
         modelMeta.stringValue = model.modelMeta
-        projectBar.update(shares: model.projects.prefix(6).map { $0.share },
-                          colors: model.projects.prefix(6).map { TokenPaneStyle.distroColor($0.colorIndex) },
-                          accessibility: "按项目累计占比条")
-        modelBar.update(shares: model.models.prefix(6).map { $0.share },
-                        colors: model.models.prefix(6).map { TokenPaneStyle.distroColor($0.colorIndex + 1) },
-                        accessibility: "按模型累计占比条")
+        // 两张卡的无障碍文案随范围刷新（切换今日/7/30 天后读屏仍应报当前范围，而不是「累计」）
+        projectCard.setAccessibilityLabel(TokenDistroDimension.projects.cardAccessibility(range: model.range))
+        modelCard.setAccessibilityLabel(TokenDistroDimension.models.cardAccessibility(range: model.range))
+        // 占比条只有色块、图例又会被 296pt 宽截断：整条 toolTip 逐段给出「provider/model 金额 · 占比」
+        let projectBarRows = Array(model.projects.prefix(6))
+        let modelBarRows = Array(model.models.prefix(6))
+        // 无障碍文案也跟随范围（写死「累计」会与「按项目/按模型已跟随范围」互相打脸），文案从 Core 取
+        projectBar.update(shares: projectBarRows.map { $0.share },
+                          colors: projectBarRows.map { TokenPaneStyle.distroColor($0.colorIndex) },
+                          accessibility: TokenDistroDimension.projects.barAccessibility(range: model.range),
+                          tip: TokenDerive.stackBarTip(projectBarRows,
+                                                       hiddenCount: model.projects.count - projectBarRows.count))
+        modelBar.update(shares: modelBarRows.map { $0.share },
+                        colors: modelBarRows.map { TokenPaneStyle.distroColor($0.colorIndex + 1) },
+                        accessibility: TokenDistroDimension.models.barAccessibility(range: model.range),
+                        tip: TokenDerive.stackBarTip(modelBarRows,
+                                                     hiddenCount: model.models.count - modelBarRows.count))
         updateDistroRows(projectRows, model.projects)
         updateDistroRows(modelRows, model.models)
 
@@ -101,8 +112,20 @@ extension TokenPaneView {
         if let detailKind {
             detailPane.update(kind: detailKind, model: model, snapshot: snapshot,
                               selection: selection, hourScope: hourScope)
+            syncDistroHoverTips(kind: detailKind, model: model)
         }
         onContentChanged?()
+    }
+
+    /// 二级页「按项目 / 按模型」的占比条与图例：挂上 Core 生成的悬停文案
+    ///
+    /// 这两页的构建代码在 TokenDetailPages+Distro.swift（另一任务在改口径文案），
+    /// 所以文案挂载单独收在这里：打开二级页与每次重渲染都调用同一份，不重不漏。
+    func syncDistroHoverTips(kind: TokenDetailKind, model: TokenPaneModel) {
+        guard kind == .projects || kind == .models else { return }
+        let rows = kind == .projects ? model.projects : model.models
+        detailPane.applyDistroHoverTips(barTip: TokenDerive.stackBarTip(rows),
+                                        legendTips: rows.prefix(3).map { TokenDerive.stackBarTip([$0]) })
     }
 
     // MARK: - 坐标轴与图例
@@ -159,5 +182,33 @@ extension TokenPaneView {
                 view.isHidden = true
             }
         }
+    }
+}
+// MARK: - 二级页分布悬停文案挂载
+
+extension TokenDetailPaneView {
+
+    /// 给「按项目 / 按模型」页的顶部占比条与图例项挂上悬停文案
+    ///
+    /// 这两页的构建代码在 TokenDetailPages+Distro.swift，调用点若直接改那里会与「口径文案」任务撞车，
+    /// 所以挂载集中在本文件：渲染完成后按类型遍历一次子树，把 Core 生成的文案挂到第一个占比条与图例行上。
+    /// - Parameters:
+    ///   - barTip: 整条占比条文案（逐段「provider/model 金额 · 占比」，换行分隔）
+    ///   - legendTips: 图例前三项的逐项文案（与图例项顺序一致）
+    func applyDistroHoverTips(barTip: String, legendTips: [String]) {
+        var bars: [TokenStackBarView] = []
+        var legends: [TokenLegendRowView] = []
+        func walk(_ node: NSView) {
+            if let bar = node as? TokenStackBarView { bars.append(bar) }
+            if let legend = node as? TokenLegendRowView { legends.append(legend) }
+            for subview in node.subviews { walk(subview) }
+        }
+        walk(self)
+        if let bar = bars.first {
+            bar.toolTip = barTip.isEmpty ? nil : barTip
+        }
+        // 图例行此刻已由构建代码填好前三项：逐项补 tip（项数不同时按较短的一边对齐，不越界）
+        guard let legend = legends.first else { return }
+        legend.applyItemTips(legendTips)
     }
 }

@@ -169,11 +169,22 @@ package struct TokenDistroRow {
     package let amount: String
     package let share: Double
     package let colorIndex: Int
+    /// 悬停文案（toolTip）
+    ///
+    /// 由 Core 的纯函数（projectRows / modelRows）拼装，视图只负责塞进 toolTip：
+    /// 同一模型来自多个 provider 时，主面板半宽行只显示模型名、两行一模一样，
+    /// 悬停是唯一能区分的入口，所以文案必须可被 TestRunner 直接断言，不能写在视图层。
+    package let tip: String
+
+    /// provider/model 全名（provider 为空或与模型同名时只给模型名，不留孤立斜杠）
+    package var fullName: String {
+        (provider.isEmpty || provider == name) ? name : provider + "/" + name
+    }
 
     /// 显式 package 初始化器：自动生成的逐成员初始化器只有 internal，
     /// 跨目标（NetworkMonitor 的 DEBUG 取证）构造不了，所以手写一份
     package init(rank: Int, name: String, provider: String, sub: String,
-                 amount: String, share: Double, colorIndex: Int) {
+                 amount: String, share: Double, colorIndex: Int, tip: String = "") {
         self.rank = rank
         self.name = name
         self.provider = provider
@@ -181,6 +192,30 @@ package struct TokenDistroRow {
         self.amount = amount
         self.share = share
         self.colorIndex = colorIndex
+        self.tip = tip
+    }
+}
+
+/// 分布维度（按项目 / 按模型）
+///
+/// 占比条与整卡的无障碍文案都从这一处按当前范围派生，避免「按项目累计占比条」这种
+/// 与「按项目已跟随范围」互相打脸的硬编码字符串散落在视图里。
+package enum TokenDistroDimension {
+    case projects
+    case models
+
+    package var title: String {
+        self == .projects ? "按项目" : "按模型"
+    }
+
+    /// 占比条无障碍文案：维度 + 当前范围（范围与行数据同源，不再写死「累计」）
+    package func barAccessibility(range: TokenRange) -> String {
+        title + " " + range.window.title + " 占比条"
+    }
+
+    /// 整卡无障碍文案：维度 + 当前范围 + 进二级页的提示
+    package func cardAccessibility(range: TokenRange) -> String {
+        title + " " + range.window.title + "分布，可点击查看" + title.dropFirst() + "明细"
     }
 }
 

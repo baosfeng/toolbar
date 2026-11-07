@@ -181,10 +181,12 @@ extension TokenPaneView {
             }
             setAccessibilityLabel(card, accessibility)
         }
-        assemble(card: projectCard, title: "按项目", meta: projectMeta,
-                 bar: projectBar, rows: projectRows, accessibility: "按项目累计分布，可点击查看项目明细")
-        assemble(card: modelCard, title: "按模型", meta: modelMeta,
-                 bar: modelBar, rows: modelRows, accessibility: "按模型累计分布，可点击查看模型明细")
+        // 无障碍文案写死「累计」会与「按项目/按模型已跟随范围」互相打脸：文案由 Core 按范围派生，
+        // 装配时先按当前范围给一份，之后每次渲染再随范围刷新（见 TokenPaneView+Render.swift）
+        assemble(card: projectCard, title: "按项目", meta: projectMeta, bar: projectBar, rows: projectRows,
+                 accessibility: TokenDistroDimension.projects.cardAccessibility(range: range))
+        assemble(card: modelCard, title: "按模型", meta: modelMeta, bar: modelBar, rows: modelRows,
+                 accessibility: TokenDistroDimension.models.cardAccessibility(range: range))
     }
 
     private func buildCompareCard() {

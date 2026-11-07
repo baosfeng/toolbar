@@ -73,11 +73,21 @@ final class TokenDistroRowView: NSView {
         let provider = (showsProvider && !row.provider.isEmpty) ? row.provider + "/" : ""
         nameLabel.stringValue = provider + row.name
         valueLabel.stringValue = row.amount + " · " + TokenFormatting.percent(row.share)
+        // 悬停文案由 Core 拼装（row.tip）：半宽卡正文只放模型名时，同名模型的 provider 只能从悬停看到；
+        // showsProvider=false 也必须设，否则主面板这两行仍是「一模一样且无处区分」。
+        // 标签是子视图、会遮住整行的悬停命中区，所以三个视图都挂同一份文案，鼠标落在名字或数值上都能看到
+        let tip = row.tip.isEmpty ? nil : row.tip
+        toolTip = tip
+        nameLabel.toolTip = tip
+        valueLabel.toolTip = tip
         setAccessibilityLabel("\(row.rank) " + provider + row.name + " " + row.amount
             + " " + TokenFormatting.percent(row.share))
     }
 
 #if DEBUG
+    /// 快照自证：当前挂上去的悬停文案（复验「两行同名模型 tip 不同」）
+    var toolTipForSnapshot: String { toolTip ?? "" }
+
     /// 快照自证：名称 / 数值标签的实到宽度与「完整显示所需宽度」（needed > available 即截断）
     ///
     /// 另给行宽 / 行高 / 名称实到高度：名称高过行高即「压行」，行宽用于复算可用宽度。
