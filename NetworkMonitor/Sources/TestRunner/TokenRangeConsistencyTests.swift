@@ -14,6 +14,8 @@ func runTokenRangeConsistencyTests() {
     testProjectModelFollowRange()
     testShareDenominator()
     testDistroPageCopyFollowsRange()
+    // 缓存命中二级页同样跟随范围（曾写死今日 + 30 天混合口径）
+    runTokenCachePageTests()
 
     print("\n🧪 Testing 窗口化聚合（真实 SQLite 内存库）...")
     testWindowedAggregationInDatabase()

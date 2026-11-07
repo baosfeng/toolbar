@@ -37,9 +37,14 @@ package struct TokenPaneModel {
     package let hitMeta: String
     package let cacheReadText: String
     package let uncachedText: String
+    /// 命中率序列 —— 与缓存页同一份（按 range 取窗口，不随 hourScope 换数据）
+    ///
+    /// hourScope 只管主图看今日还是昨日，缓存卡是「范围」口径：
+    /// 改前一按昨日看主图，缓存卡的大数字还是今日、序列却变成昨日，数字与图对不上。
     package let hitSeries: [Double]
     /// 当前口径命中率（0…1，环形图用）
     package let hitRateFraction: Double
+    /// 桶数文案（24 桶 / 7 天 / 30 天）
     package let hitBucketText: String
 
     package let projects: [TokenDistroRow]
@@ -51,6 +56,13 @@ package struct TokenPaneModel {
 
     /// 「按项目 / 按模型」二级页的范围口径文案（Core 派生，视图只透传）
     package let distroCopy: TokenDistroCopy
+
+    /// 缓存命中二级页的全套数值与文案（跟随当前范围，Core 派生，视图只透传）
+    ///
+    /// 与 distroCopy 同理：这页曾写死「主数值今日 / 走势与均值 30 天 / 逐桶今日 24 桶」，
+    /// 用户把主面板切到近 7 天后页面仍是混合口径。数字与文案必须在 Core 里派生，
+    /// TestRunner 才能断言「换范围真的换了数据」。
+    package let cachePage: TokenCachePage
 
     /// 今日 vs 昨日同期（按天范围且取不到上一周期时为 nil，整卡隐藏，不编数）
     package let compare: TokenCompare?
@@ -95,6 +107,10 @@ package struct TokenPaneModel {
         let modelRows = TokenDerive.modelRows(snapshot, window: range.window)
         // 二级页文案与主面板同源派生，避免「上面跟随范围、下面写累计口径」再次分叉
         let distroCopy = TokenDerive.distroCopy(range: range)
+        // 缓存命中页与主面板缓存卡共用同一份派生：卡片大数字 / 图例桶数 / 环形比例
+        // 全部取自 cachePage，视图层不再各算一遍（改前主面板说「昨日 97.1%」而圆环画的是今日，
+        // 就是两套算式各走各的留下的坑）
+        let cachePage = TokenDerive.cachePage(snapshot, range: range)
 
         return TokenPaneModel(
             range: range,
@@ -119,14 +135,14 @@ package struct TokenPaneModel {
             trendBuckets: TokenDerive.dailyBuckets(snapshot, days: 14),
             trendTitle: "天趋势 · 固定 14 天",
             trendMeta: TokenDerive.trendMeta(snapshot),
-            hitText: TokenFormatting.decimal(TokenDerive.hitRate(currentTotal) * 100),
-            hitMeta: "\(range == .today ? hourScope.title : range.title) "
-                + TokenFormatting.decimal(TokenDerive.hitRate(currentTotal) * 100) + "%",
+            hitText: cachePage.heroValue,
+            // 说明始终写当前范围（曾按 hourScope 写「昨日」，而数值取的是今日，标签与数字打架）
+            hitMeta: range.title + " " + cachePage.heroValue + "%",
             cacheReadText: TokenFormatting.tokens(currentTotal.cache),
             uncachedText: TokenFormatting.tokens(currentTotal.uncached),
-            hitSeries: windowBuckets.map { TokenDerive.hitRate($0) * 100 },
-            hitRateFraction: TokenDerive.hitRate(currentTotal),
-            hitBucketText: range == .today ? "24 桶" : "\(range.days) 天",
+            hitSeries: cachePage.series,
+            hitRateFraction: cachePage.ringFraction,
+            hitBucketText: cachePage.bucketUnitText,
             projects: projectRows,
             models: modelRows,
             projectMeta: "\(distroCopy.rangeTitle) \(projectRows.count) 个",
@@ -134,6 +150,7 @@ package struct TokenPaneModel {
             projectCount: projectRows.count,
             modelCount: modelRows.count,
             distroCopy: distroCopy,
+            cachePage: cachePage,
             compare: TokenDerive.compare(snapshot, current: currentTotal, previous: previousTotal, range: range),
             stateBand: TokenDerive.stateBand(snapshot, range: range, buckets: windowBuckets,
                                              previous: previousTotal, current: currentTotal),

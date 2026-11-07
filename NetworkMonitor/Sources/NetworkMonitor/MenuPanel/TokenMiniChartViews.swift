@@ -9,6 +9,9 @@ final class TokenSparkView: NSView {
     private var values: [Double] = []
     private var fill: NSColor?
     private var stroke: NSColor = TokenPaneStyle.uncachedColor
+    /// 纵轴地板：默认 0（从零起画）。命中率走势在窄窗口里都是 96%–99%，
+    /// 从 0 起画会整片填实成一块色块，看不出峰谷，所以允许把地板抬到序列最小值。
+    private var baseline: Double = 0
 
     init(height: CGFloat,
          stroke: NSColor = TokenPaneStyle.uncachedColor,
@@ -24,20 +27,26 @@ final class TokenSparkView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    func update(values: [Double], accessibility: String) {
+    /// - Parameter baseline: 纵轴地板（默认 0）；调用方抬高地板时须在卡头写明起点，不能悄悄拉伸
+    func update(values: [Double], accessibility: String, baseline: Double = 0) {
         self.values = values
+        self.baseline = baseline
         setAccessibilityLabel(accessibility)
         needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
         guard values.count > 1 else { return }
-        let peak = max(values.max() ?? 1, 1)
+        let rawPeak = max(values.max() ?? 1, 1)
+        // 地板必须严格低于峰值（相等会除零、整条贴顶），且不能为负
+        let floor = min(max(0, baseline), max(0, rawPeak - 0.01))
+        let span = rawPeak - floor
         let count = values.count
         let line = NSBezierPath()
         for index in values.indices {
             let x = bounds.minX + CGFloat(index) / CGFloat(count - 1) * bounds.width
-            let y = bounds.minY + CGFloat(min(1, values[index] / peak)) * (bounds.height - 2) + 1
+            let ratio = min(1, max(0, (values[index] - floor) / span))
+            let y = bounds.minY + CGFloat(ratio) * (bounds.height - 2) + 1
             if index == 0 { line.move(to: NSPoint(x: x, y: y)) } else { line.line(to: NSPoint(x: x, y: y)) }
         }
         if let fill {

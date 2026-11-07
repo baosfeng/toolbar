@@ -24,10 +24,13 @@ extension TokenPaneSnapshot {
         }
     }
 
-    /// 六个二级页各截「顶部 / 滚到底部」两张，并导出文档高度与视口高度
+    /// 二级页各截「顶部 / 滚到底部」两张，并导出文档高度与视口高度
+    ///
+    /// 缓存命中页不在这里出图：它有「三档范围 × 顶部/底部」的专门取证
+    /// （见 TokenPaneSnapshot+Cache.swift），固定口径那张图已被取代，不再重复产出。
     static func captureDetailPages(directory: URL, snapshot: HarnessUsageSnapshot) {
         var lines: [String] = []
-        for kind in TokenDetailKind.allCases {
+        for kind in TokenDetailKind.allCases where kind != .cache {
             let slug = detailSlug(kind)
             for suffix in ["top", "bottom"] {
                 let panel = MenuPanelView()
