@@ -79,7 +79,6 @@ func testCachePaneModelSync() {
         assertEqual(model.hitBucketText, page.bucketUnitText, "\(range.title) 主面板桶数文案 = 二级页")
         assertEqual(model.hitMeta.hasPrefix(range.title), true,
                     "\(range.title) 主面板缓存卡说明以当前范围开头")
-        assertEqual(model.hitSeries.count, page.series.count, "\(range.title) 主面板与二级页序列等长")
         assertEqual(model.hitRateFraction, page.ringFraction, "\(range.title) 主面板环与二级页环同值")
     }
     let d7 = cacheModel(snapshot, .d7)

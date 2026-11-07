@@ -37,11 +37,6 @@ package struct TokenPaneModel {
     package let hitMeta: String
     package let cacheReadText: String
     package let uncachedText: String
-    /// 命中率序列 —— 与缓存页同一份（按 range 取窗口，不随 hourScope 换数据）
-    ///
-    /// hourScope 只管主图看今日还是昨日，缓存卡是「范围」口径：
-    /// 改前一按昨日看主图，缓存卡的大数字还是今日、序列却变成昨日，数字与图对不上。
-    package let hitSeries: [Double]
     /// 当前口径命中率（0…1，环形图用）
     package let hitRateFraction: Double
     /// 桶数文案（24 桶 / 7 天 / 30 天）
@@ -140,7 +135,6 @@ package struct TokenPaneModel {
             hitMeta: range.title + " " + cachePage.heroValue + "%",
             cacheReadText: TokenFormatting.tokens(currentTotal.cache),
             uncachedText: TokenFormatting.tokens(currentTotal.uncached),
-            hitSeries: cachePage.series,
             hitRateFraction: cachePage.ringFraction,
             hitBucketText: cachePage.bucketUnitText,
             projects: projectRows,
