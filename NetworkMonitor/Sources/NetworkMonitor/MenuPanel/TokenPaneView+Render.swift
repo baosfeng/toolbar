@@ -74,17 +74,21 @@ extension TokenPaneView {
 
         projectMeta.stringValue = model.projectMeta
         modelMeta.stringValue = model.modelMeta
+        // 两张卡的无障碍文案随范围刷新（切换今日/7/30 天后读屏仍应报当前范围，而不是「累计」）
+        projectCard.setAccessibilityLabel(TokenDistroDimension.projects.cardAccessibility(range: model.range))
+        modelCard.setAccessibilityLabel(TokenDistroDimension.models.cardAccessibility(range: model.range))
         // 占比条只有色块、图例又会被 296pt 宽截断：整条 toolTip 逐段给出「provider/model 金额 · 占比」
         let projectBarRows = Array(model.projects.prefix(6))
         let modelBarRows = Array(model.models.prefix(6))
+        // 无障碍文案也跟随范围（写死「累计」会与「按项目/按模型已跟随范围」互相打脸），文案从 Core 取
         projectBar.update(shares: projectBarRows.map { $0.share },
                           colors: projectBarRows.map { TokenPaneStyle.distroColor($0.colorIndex) },
-                          accessibility: "按项目累计占比条",
+                          accessibility: TokenDistroDimension.projects.barAccessibility(range: model.range),
                           tip: TokenDerive.stackBarTip(projectBarRows,
                                                        hiddenCount: model.projects.count - projectBarRows.count))
         modelBar.update(shares: modelBarRows.map { $0.share },
                         colors: modelBarRows.map { TokenPaneStyle.distroColor($0.colorIndex + 1) },
-                        accessibility: "按模型累计占比条",
+                        accessibility: TokenDistroDimension.models.barAccessibility(range: model.range),
                         tip: TokenDerive.stackBarTip(modelBarRows,
                                                      hiddenCount: model.models.count - modelBarRows.count))
         updateDistroRows(projectRows, model.projects)

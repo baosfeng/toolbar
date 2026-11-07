@@ -19,6 +19,7 @@ func runTokenHoverTipTests() {
     testProjectRowTip()
     testStackBarTip()
     testDistroRowFullName()
+    testDistroAccessibilityCopy()
     print("✅ Token 悬停文案（模型行 / 项目行 / 占比条整条）works")
 }
 
@@ -146,4 +147,29 @@ private func testDistroRowFullName() {
     assertEqual(noProvider.fullName, "local", "provider 为空时不带斜杠")
     assertEqual(noProvider.tip, "", "未显式给 tip 时为空（DEBUG 取证构造的探针行不会挂到悬停上）")
     print("✅ 分布行全名（provider 空 / 同名 / 异名）works")
+}
+
+// MARK: - 无障碍文案（随范围，不写死「累计」）
+
+/// 用户反馈的连带问题：「按项目 / 按模型」已跟随范围，但占比条与整卡的无障碍文案还写着「累计」
+private func testDistroAccessibilityCopy() {
+    for range in [TokenRange.today, .d7, .d30] {
+        let barTip = TokenDistroDimension.projects.barAccessibility(range: range)
+        assertEqual(barTip.contains("累计"), false, "\(range.title) 占比条无障碍文案不写死「累计」")
+        assertEqual(barTip.contains(range.window.title), true,
+                    "\(range.title) 占比条无障碍文案含当前范围「\(range.window.title)」")
+        let cardTip = TokenDistroDimension.models.cardAccessibility(range: range)
+        assertEqual(cardTip.contains("累计"), false, "\(range.title) 按模型卡无障碍文案不写死「累计」")
+        assertEqual(cardTip.contains(range.window.title), true,
+                    "\(range.title) 按模型卡无障碍文案含当前范围")
+        assertEqual(cardTip.contains("按模型"), true, "按模型卡无障碍文案含维度名")
+    }
+    assertEqual(TokenDistroDimension.projects.barAccessibility(range: .today), "按项目 今日 占比条",
+                "按项目占比条无障碍文案（今日）")
+    assertEqual(TokenDistroDimension.models.barAccessibility(range: .d7), "按模型 近 7 天 占比条",
+                "按模型占比条无障碍文案（近 7 天）")
+    assertEqual(TokenDistroDimension.projects.cardAccessibility(range: .d30),
+                "按项目 近 30 天分布，可点击查看项目明细", "按项目卡无障碍文案（近 30 天）")
+    assertEqual(TokenDistroDimension.models.title, "按模型", "维度标题")
+    print("✅ 分布卡 / 占比条无障碍文案随范围（不写死累计）works")
 }

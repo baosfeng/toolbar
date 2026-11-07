@@ -196,6 +196,29 @@ package struct TokenDistroRow {
     }
 }
 
+/// 分布维度（按项目 / 按模型）
+///
+/// 占比条与整卡的无障碍文案都从这一处按当前范围派生，避免「按项目累计占比条」这种
+/// 与「按项目已跟随范围」互相打脸的硬编码字符串散落在视图里。
+package enum TokenDistroDimension {
+    case projects
+    case models
+
+    package var title: String {
+        self == .projects ? "按项目" : "按模型"
+    }
+
+    /// 占比条无障碍文案：维度 + 当前范围（范围与行数据同源，不再写死「累计」）
+    package func barAccessibility(range: TokenRange) -> String {
+        title + " " + range.window.title + " 占比条"
+    }
+
+    /// 整卡无障碍文案：维度 + 当前范围 + 进二级页的提示
+    package func cardAccessibility(range: TokenRange) -> String {
+        title + " " + range.window.title + "分布，可点击查看" + title.dropFirst() + "明细"
+    }
+}
+
 /// 底状态带的一格
 package struct TokenStateItem {
     package enum Tone {
