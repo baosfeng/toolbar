@@ -61,13 +61,10 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
     }
 
     private func _initialize() {
-        let path = (dbPath as NSString).utf8String
-        guard let cPath = path else {
-            logger.error("数据库路径无效")
-            return
-        }
-
-        let status = sqlite3_open(cPath, &db)
+        // 路径必须用 withCString 保证在整个 sqlite3_open 调用期间有效：
+        // `(dbPath as NSString).utf8String` 的临时桥接对象在表达式结束即可释放，
+        // 得到的是悬空指针，sqlite3_open 可能拿到空串 → 静默建出一个空库。
+        let status = dbPath.withCString { sqlite3_open($0, &db) }
         guard status == SQLITE_OK else {
             logger.error("打开数据库失败: \(status)")
             db = nil
@@ -161,10 +158,27 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 // MARK: - SQLite3 辅助扩展
 
 extension DatabaseManager {
+    /// SQLITE_TRANSIENT — 让 SQLite 在绑定时就复制文本
+    ///
+    /// 传 nil（= SQLITE_STATIC）时 SQLite 只保存指针、不复制内容，而
+    /// `(value as NSString).utf8String` 返回的缓冲区随桥接对象释放即失效
+    /// （表达式结束、下一行准备语句、下一次分配都可能复用它），
+    /// 于是写进库的可能是上一次的字符串或乱码。所有绑定一律走 TRANSIENT。
+    ///
+    /// 用局部量而非全局常量：非 Sendable 的 C 函数指针做全局常量会触发 Swift 6 并发检查。
+    static var sqliteTransient: sqlite3_destructor_type {
+        unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    }
+
+    /// 绑定文本字段（自动复制）
+    func sqlite3_bind_text_copy(_ stmt: OpaquePointer?, _ index: Int32, _ value: String) {
+        sqlite3_bind_text(stmt, index, value, -1, Self.sqliteTransient)
+    }
+
     /// 绑定可空文本字段：nil 则绑定 NULL
     func sqlite3_bind_text_or_null(_ stmt: OpaquePointer?, _ index: Int32, _ value: String?) {
         if let value {
-            sqlite3_bind_text(stmt, index, (value as NSString).utf8String, -1, nil)
+            sqlite3_bind_text_copy(stmt, index, value)
         } else {
             sqlite3_bind_null(stmt, index)
         }

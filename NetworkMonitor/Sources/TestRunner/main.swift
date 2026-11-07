@@ -44,6 +44,7 @@ runClipboardRepositoryTests()
 runClipboardFullTextSearchTests()
 runClipboardLimitsTests()
 runClipboardUninitializedTests()
+runClipboardBindingLifetimeTests()
 
 // MARK: - 剪贴板：面板数据流与相对时间
 runClipboardPanelMockTests()

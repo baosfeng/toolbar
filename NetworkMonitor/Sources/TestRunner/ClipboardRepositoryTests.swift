@@ -145,3 +145,52 @@ func runClipboardUninitializedTests() {
 
 }
 
+// MARK: - 绑定文本生命周期（SQLITE_TRANSIENT）
+
+/// 复现「绑定指针未复制」导致写错内容：多行/长文本连续插入后逐条回读。
+///
+/// 传 nil（SQLITE_STATIC）时 SQLite 只存指针不复制内容，而
+/// `(value as NSString).utf8String` 的缓冲区随桥接对象释放即失效，
+/// 典型表现是不同行的 text / preview 互相串味或写进乱码。
+func runClipboardBindingLifetimeTests() {
+    print("🧪 Testing SQLite 绑定文本生命周期...")
+    let db = DatabaseManager()
+    db.initializeInMemory()
+    defer { db.close() }
+
+    // 构造长度不一、内容互不相同的文本，迫使桥接缓冲区被反复复用
+    let samples: [(hash: String, text: String)] = (0..<24).map { index in
+        let filler = String(repeating: "内容\(index)-", count: index + 1)
+        return ("hash-lifetime-\(index)", "第 \(index) 条 \(filler)")
+    }
+
+    var savedIDs: [UUID] = []
+    for sample in samples {
+        guard let item = db.saveClipboardItem(ClipboardDraft(kind: .text,
+                                                             contentHash: sample.hash,
+                                                             text: sample.text,
+                                                             sourceBundleID: "com.apple.Safari",
+                                                             sourceAppName: "Safari")) else {
+            assertEqual(false, true, "第 \(sample.hash) 条插入失败")
+            return
+        }
+        savedIDs.append(item.id)
+    }
+
+    // 逐条回读：内容必须与写入时完全一致，且互不串味
+    for (index, sample) in samples.enumerated() {
+        let fetched = db.fetchClipboardItem(id: savedIDs[index])
+        assertEqual(fetched?.text, sample.text, "第 \(index) 条文本原样写入原样读回")
+        assertEqual(fetched?.contentHash, sample.hash, "第 \(index) 条内容哈希未被上一个绑定串改")
+        assertEqual(fetched?.sourceAppName, "Safari", "第 \(index) 条来源应用未被串改")
+        assertNotNil(fetched?.preview, "第 \(index) 条摘要非空")
+    }
+
+    // 全文检索同样走绑定：搜其中任意一条的独特内容应只命中它
+    let hits = db.searchClipboardItems(query: "内容7-", limit: 10)
+    assertEqual(hits.count, 1, "全文检索按独特片段只命中一条")
+    assertEqual(hits.first?.text, samples[7].text, "检索命中的是写入时的原文")
+
+    print("✅ SQLite 绑定文本生命周期 works")
+}
+
