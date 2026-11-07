@@ -184,6 +184,10 @@ enum TokenPaneSnapshot {
         if let tokenSnapshot {
             captureHoverTips(directory: directory, snapshot: tokenSnapshot)
         }
+        // 缓存命中二级页三档范围取证（今日 / 近 7 天 / 近 30 天各一条链路）
+        if let tokenSnapshot {
+            captureCachePage(directory: directory, snapshot: tokenSnapshot)
+        }
         if let tokenSnapshot {
             writeBarMetrics(directory: directory, snapshot: tokenSnapshot)
             writeKeyRowMetrics(directory: directory, snapshot: tokenSnapshot)

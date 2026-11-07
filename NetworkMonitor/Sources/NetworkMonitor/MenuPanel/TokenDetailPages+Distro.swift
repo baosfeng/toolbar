@@ -7,24 +7,23 @@ extension TokenDetailPaneView {
 
     // MARK: 缓存命中
 
-    func buildCache(snapshot: HarnessUsageSnapshot) -> [NSView] {
-        let today = TokenDerive.sum(TokenDerive.todayBuckets(snapshot))
-        let yesterday = TokenDerive.sum(TokenDerive.yesterdayBuckets(snapshot))
-        let week = TokenDerive.sum(TokenDerive.dailyBuckets(snapshot, days: 7))
-        let monthBuckets = TokenDerive.dailyBuckets(snapshot, days: 30)
-        let rates = monthBuckets.map { TokenDerive.hitRate($0) * 100 }
-        let rate = TokenDerive.hitRate(today) * 100
-        overrideCrumb("/ 缓存命中", meta: "今日")
+    /// 缓存命中页 —— 每一块都跟随主面板当前范围（今日 / 近 7 天 / 近 30 天）
+    ///
+    /// 本页曾写死「主数值今日 / 走势与均值固定 30 天 / 逐桶固定今日 24 桶」，用户把主面板
+    /// 切到近 7 天后仍是今日 + 30 天的混合数据，反馈「我选择 7 天就只展示 7 天的」。
+    /// 现在数值与文案全部由 Core 的 `TokenDerive.cachePage` 按当前范围派生，
+    /// 视图只做透传（算式分散在视图里就测不到，且会与主面板悄悄分叉）。
+    func buildCache(model: TokenPaneModel) -> [NSView] {
+        let page = model.cachePage
+        overrideCrumb("/ 缓存命中", meta: page.crumbMeta)
 
         let ring = TokenRingView()
-        ring.update(rate: TokenDerive.hitRate(today),
-                    text: String(format: "%.1f", rate),
-                    accessibility: "今日缓存命中率 " + String(format: "%.1f", rate) + "%")
+        ring.update(rate: page.ringFraction, text: page.ringText, accessibility: page.ringAccessibility)
         let ringColumn = twoColumn([
-            keyRow("缓存读", TokenFormatting.tokens(today.cache), color: TokenPaneStyle.cacheInk),
-            keyRow("未缓存输入", TokenFormatting.tokens(today.uncached)),
-            keyRow("节省比例", String(format: "%.1f", rate) + "%"),
-            keyRow("输出", TokenFormatting.tokens(today.output)),
+            keyRow("缓存读", page.cacheReadText, color: TokenPaneStyle.cacheInk),
+            keyRow("未缓存输入", page.uncachedText),
+            keyRow(page.saveRatioLabel, page.saveRatioText),
+            keyRow("输出", page.outputText),
         ])
         let ringRow = NSStackView(views: [ring, ringColumn])
         ringRow.orientation = .horizontal
@@ -36,42 +35,44 @@ extension TokenDetailPaneView {
 
         let spark = TokenSparkView(height: 44, stroke: TokenPaneStyle.cacheColor,
                                    fill: TokenPaneStyle.cacheColor)
-        spark.update(values: rates, accessibility: "近 30 天缓存命中率走势")
+        spark.update(values: page.series, accessibility: page.trendAccessibility,
+                    baseline: page.seriesFloor)
         let trendCard = TokenBoxView()
         trendCard.setRows([
-            head("命中率走势 · 固定 30 天",
-                 meta: String(format: "%.1f", rates.min() ?? 0) + "% – "
-                     + String(format: "%.1f", rates.max() ?? 0) + "%"),
+            head(page.trendTitle, meta: page.trendMeta),
             spark,
+            axisView(page.axisLabels),
         ])
 
-        let bucketRates = TokenDerive.todayBuckets(snapshot).map { TokenDerive.hitRate($0) * 100 }
-        let bucketBars = TokenSparkView(height: 36, stroke: TokenPaneStyle.cacheColor)
-        bucketBars.update(values: bucketRates, accessibility: "今日逐桶命中率")
-        let bucketCard = TokenBoxView()
-        bucketCard.setRows([
-            head("逐桶命中率 · 今日 24 桶",
-                 meta: "高 " + String(format: "%.1f", bucketRates.max() ?? 0) + "% · 低 "
-                     + String(format: "%.1f", bucketRates.min() ?? 0) + "%"),
-            bucketBars,
-            axisView(["0 时", "6 时", "12 时", "18 时", "23 时"]),
+        // 本周期 vs 上一周期：两条横条按两者较大值归一（比值不溢出），
+        // 上一周期没数据时不画条、数值给「—」，不拿 0% 冒充「命中率 0」
+        let currentRow = compareRow(name: page.currentLabel, text: page.currentRateText,
+                                    fraction: page.currentFraction,
+                                    color: TokenPaneStyle.cacheColor)
+        let previousRow = compareRow(name: page.previousLabel, text: page.previousRateText,
+                                     fraction: page.hasPrevious ? page.previousFraction : 0,
+                                     color: TokenPaneStyle.ghostColor)
+        let compareCard = TokenBoxView()
+        compareCard.setRows([
+            head(page.compareTitle, meta: page.compareMeta),
+            currentRow, previousRow,
         ])
 
-        let averageRate = rates.isEmpty ? 0 : rates.reduce(0, +) / Double(rates.count)
         let statCard = TokenBoxView()
         statCard.setRows([
             twoColumn([
-                keyRow("今日命中", String(format: "%.1f", rate) + "%"),
-                keyRow("昨日命中", String(format: "%.1f", TokenDerive.hitRate(yesterday) * 100) + "%"),
-                keyRow("本周命中", String(format: "%.1f", TokenDerive.hitRate(week) * 100) + "%"),
-                keyRow("30 天均值", String(format: "%.1f", averageRate) + "%"),
+                keyRow(page.currentLabel + "命中", page.currentRateText),
+                keyRow(page.previousLabel + "命中", page.previousRateText),
+                keyRow(page.deltaLabel, page.deltaText,
+                       color: page.hasPrevious ? (page.deltaUp ? TokenPaneStyle.warnInk : TokenPaneStyle.okInk)
+                                               : TokenPaneStyle.secondaryText),
+                keyRow("样本量", page.sampleText),
             ]),
         ])
 
-        return [hero(String(format: "%.1f", rate), unit: "% · 今日命中",
-                     sub: "缓存读 ÷（缓存读 + 未缓存输入）· 主数值固定「今日」口径，不随主面板范围切换；下面三块各自标口径"),
-                ringCard, trendCard, bucketCard, statCard,
-                note(TokenDistroCopy.cacheNote)]
+        return [hero(page.heroValue, unit: page.heroUnit, sub: page.heroSub),
+                ringCard, trendCard, compareCard, statCard,
+                note(page.note)]
     }
 
     // MARK: 按项目

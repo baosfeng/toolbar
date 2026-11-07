@@ -34,7 +34,8 @@ enum TokenDetailKind: Int, CaseIterable {
         case .hourly: return "00–23 时"
         case .bucket: return "单桶"
         case .trend: return "上限 33 天"
-        case .cache: return "今日"
+        // 缓存命中页跟随主面板范围：说明取当前范围（曾写死「今日」，与页面内容对不上）
+        case .cache: return model.cachePage.crumbMeta
         case .projects: return model.distroCopy.projectsCrumbMeta
         case .models: return model.distroCopy.modelsCrumbMeta
         }
@@ -247,7 +248,7 @@ final class TokenDetailPaneView: NSView {
         case .hourly: return buildHourly(snapshot: snapshot, hourScope: hourScope)
         case .bucket: return buildBucket(model: model, snapshot: snapshot, selection: selection)
         case .trend: return buildTrend(snapshot: snapshot)
-        case .cache: return buildCache(snapshot: snapshot)
+        case .cache: return buildCache(model: model)
         case .projects: return buildProjects(model: model)
         case .models: return buildModels(model: model)
         }
