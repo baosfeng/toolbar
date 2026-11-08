@@ -30,6 +30,10 @@ final class SettingsGeneralPane: SettingsPaneView {
     private let displayPreferences = MenuBarDisplayPreferences()
     private var metricToggles: [MenuBarMetric: NSSwitch] = [:]
     private var templateControl: NSSegmentedControl?
+    private var densityControl = NSPopUpButton(frame: .zero, pullsDown: false)
+    private var unitControl2 = NSPopUpButton(frame: .zero, pullsDown: false)
+    private var layoutControl = NSPopUpButton(frame: .zero, pullsDown: false)
+    private var intervalControl = NSPopUpButton(frame: .zero, pullsDown: false)
 
     init(launchAtStartup: LaunchAtStartupService = LaunchAtStartupService(),
          alertPreferences: BillingAlertPreferences = BillingAlertPreferences(),
