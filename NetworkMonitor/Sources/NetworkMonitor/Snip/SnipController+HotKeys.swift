@@ -24,26 +24,67 @@ extension SnipController {
 #endif
     }
 
-    func registerSnipHotKey() {
-        let primary = hotKeys.register(Self.primarySnipCombo) { [weak self] in self?.beginSnip() }
-        if case .success = primary { return }
-        let fallback = hotKeys.register(Self.fallbackSnipCombo) { [weak self] in self?.beginSnip() }
-        if case .success = fallback {
-            logger.info("截图热键回落为 \(Self.fallbackSnipCombo.displayString)")
-        } else {
-            logger.error("截图热键注册失败，功能不可用")
+    private func registerSnipHotKeyAction(_ action: SnipHotKeyAction, combo: HotKeyCombo) -> Bool {
+        let result = hotKeys.register(combo) { [weak self] in
+            self?.performSnipHotKeyAction(action)
+        }
+        switch result {
+        case .success(let id):
+            if let oldID = registeredHotKeyIDs[action] {
+                hotKeys.unregister(oldID)
+            }
+            registeredHotKeyIDs[action] = id
+            return true
+        case .conflict, .failed:
+            return false
         }
     }
 
-    func registerPinHotKey() {
-        let primary = hotKeys.register(Self.primaryPinCombo) { [weak self] in self?.pinFromClipboard() }
-        if case .success = primary { return }
-        let fallback = hotKeys.register(Self.fallbackPinCombo) { [weak self] in self?.pinFromClipboard() }
-        if case .success = fallback {
-            logger.info("贴图热键回落为 \(Self.fallbackPinCombo.displayString)")
-        } else {
-            logger.error("贴图热键注册失败，功能不可用")
+    private func performSnipHotKeyAction(_ action: SnipHotKeyAction) {
+        switch action {
+        case .screenshot: beginSnip()
+        case .pin: pinFromClipboard()
+        case .delayedScreenshot: beginDelayedSnip()
+        case .hidePins: pinWindows.toggleHidden()
+        case .settings: onOpenSettings?()
+        case .whiteboard: beginWhiteboard()
         }
+    }
+
+    @discardableResult
+    func updateHotKey(for action: SnipHotKeyAction, combo: HotKeyCombo) -> Bool {
+        if registerSnipHotKeyAction(action, combo: combo) {
+            hotKeyPreferences.setCombo(combo, for: action)
+            logger.info("截图快捷键已更新：\(action.displayName) → \(combo.displayString)")
+            return true
+        }
+        logger.warning("截图快捷键注册失败：\(combo.displayString)")
+        return false
+    }
+
+    func registerSnipHotKey(combo: HotKeyCombo? = nil) {
+        let requested = combo ?? hotKeyPreferences.combo(for: .screenshot)
+        guard registerSnipHotKeyAction(.screenshot, combo: requested) else {
+            guard requested != SnipHotKeyAction.screenshot.defaultCombo,
+                  registerSnipHotKeyAction(.screenshot, combo: SnipHotKeyAction.screenshot.defaultCombo) else {
+                logger.error("截图热键注册失败，功能不可用")
+                return
+            }
+            logger.info("截图热键回落为 \(SnipHotKeyAction.screenshot.defaultCombo.displayString)")
+            return
+        }
+        hotKeyPreferences.setCombo(requested, for: .screenshot)
+        logger.info("截图热键：\(requested.displayString)")
+    }
+
+    func registerPinHotKey(combo: HotKeyCombo? = nil) {
+        let requested = combo ?? hotKeyPreferences.combo(for: .pin)
+        guard registerSnipHotKeyAction(.pin, combo: requested) else {
+            logger.error("贴图热键注册失败，功能不可用")
+            return
+        }
+        hotKeyPreferences.setCombo(requested, for: .pin)
+        logger.info("贴图热键：\(requested.displayString)")
     }
 
 #if DEBUG

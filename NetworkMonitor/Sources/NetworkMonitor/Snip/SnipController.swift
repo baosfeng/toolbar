@@ -19,6 +19,10 @@ final class SnipController: SnipOverlayViewDelegate {
     let hotKeys: HotKeyRegistry
     /// 放宽为 internal：导出扩展要解析快速保存目录
     let storage: KeyValueStorage
+    /// 截图快捷键偏好（lazy 是为了和 storage 同步初始化）
+    let hotKeyPreferences: SnipHotKeyPreferences
+    /// 已注册热键 id，按动作映射（用于重新录制时注销旧注册）
+    var registeredHotKeyIDs: [SnipHotKeyAction: UInt32] = [:]
     /// 放宽为 internal：导出扩展文件要写日志
     let logger: LoggingService
 
@@ -74,6 +78,7 @@ final class SnipController: SnipOverlayViewDelegate {
         self.pinWindows = pinWindows
         self.hotKeys = hotKeys
         self.storage = storage
+        self.hotKeyPreferences = SnipHotKeyPreferences(storage: storage)
         self.logger = logger
     }
 
@@ -99,18 +104,11 @@ final class SnipController: SnipOverlayViewDelegate {
 
     /// 热键说明（供设置窗展示）
     var hotKeySummary: String {
-        [
-            "F1        开始截图",
-            "F3        贴图（图片 / 文件 / 颜色 / HTML / 文本）",
-            "⇧F3       隐藏 / 显示全部贴图",
-            "⌥⇧D       延时 3 秒截图",
-            "⌥⇧V       剪贴板历史",
-            "⌥⇧,       打开本设置窗",
-            "",
-            "截图界面内：回车复制 · ⌘S 另存为 · ⌘⇧S 快速保存 · ⌘T 贴图",
-            "            R 上次区域 · ⌘A 全屏 · Tab 窗口检测 · 反引号 指针",
-            "            空格 显隐工具条 · ⌘Z / ⌘⇧Z 撤销重做"
-        ].joined(separator: "\n")
+        SnipHotKeyAction.allCases.map { action in
+            "\(action.displayName)：\(hotKeyPreferences.combo(for: action).displayString)"
+        }.joined(separator: "\n") + "\n\n截图界面内：回车复制 · ⌘S 另存为 · ⌘⇧S 快速保存 · ⌘T 贴图\n"
+             + "            R 上次区域 · ⌘A 全屏 · Tab 窗口检测 · 反引号 指针\n"
+             + "            空格 显隐工具条 · ⌘Z / ⌘⇧Z 撤销重做"
     }
 
     /// 延时 3 秒后开始截图，便于先摆好要截的画面

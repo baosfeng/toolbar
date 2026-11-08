@@ -15,3 +15,9 @@ extension AppCoordinator {
         snipController.start()
     }
 }
+
+extension AppCoordinator: SnipSettingsDelegate {
+    func settingsDidChangeSnipHotKey(_ action: SnipHotKeyAction, combo: HotKeyCombo) -> Bool {
+        snipController?.updateHotKey(for: action, combo: combo) ?? false
+    }
+}

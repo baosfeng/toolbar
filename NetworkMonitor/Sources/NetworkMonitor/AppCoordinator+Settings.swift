@@ -30,7 +30,8 @@ extension AppCoordinator {
             .capture: { [weak self] in
                 guard let self else { return Self.unavailable(.capture) }
                 // 只读热键摘要来自 SnipController；未注册时给出可读兜底
-                return SettingsCapturePane(hotKeySummary: { [weak self] in
+                return SettingsCapturePane(hotKeyDelegate: self,
+                                         hotKeySummary: { [weak self] in
                     self?.snipController?.hotKeySummary ?? "热键尚未注册"
                 }, logger: self.logger)
             },

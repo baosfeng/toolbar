@@ -12,6 +12,7 @@ final class SettingsCapturePane: SettingsPaneView {
     private let storage: any KeyValueStorage
     private let logger: LoggingService
     /// 只读的截图热键摘要（组合根注入；nil 时不显示「控制」分组）
+    private let hotKeyDelegate: (any SnipSettingsDelegate)?
     private let hotKeySummary: (() -> String)?
     private var hotKeyRow: SettingsRowView?
 
@@ -22,6 +23,7 @@ final class SettingsCapturePane: SettingsPaneView {
     private var alphaValueLabel: NSTextField?
     private var widthControl: NSSegmentedControl?
     private var colorButtons: [NSButton] = []
+    private var hotKeyRecorders: [SnipHotKeyAction: HotKeyRecorderView] = [:]
 
     /// 标注调色板 — hex 与 `SnipAnnotationColor` 一一对应（偏好里存 hex）
     private static let palette: [(hex: String, color: SnipAnnotationColor, name: String)] = [
@@ -37,9 +39,11 @@ final class SettingsCapturePane: SettingsPaneView {
     private static let defaultColorHex = "#EB3330"
 
     init(storage: any KeyValueStorage = AppContext.shared.storage,
+         hotKeyDelegate: (any SnipSettingsDelegate)? = nil,
          hotKeySummary: (() -> String)? = nil,
          logger: LoggingService = AppContext.shared.logger) {
         self.storage = storage
+        self.hotKeyDelegate = hotKeyDelegate
         self.hotKeySummary = hotKeySummary
         self.logger = logger
         super.init(section: .capture)
@@ -149,14 +153,26 @@ final class SettingsCapturePane: SettingsPaneView {
         }
     }
 
-    /// 控制 — 只读的截图 / 贴图热键摘要（旧窗口「控制」组，信息项不是设置）
+    /// 快捷键 — 录制控件（点一下再按新组合键完成录制；Esc 取消）
     private func buildHotKeySection() {
-        guard let summary = hotKeySummary else { return }
-        let row = SettingsRowView(title: "快捷键", subtitle: summary())
-        hotKeyRow = row
+        let preferences = SnipHotKeyPreferences(storage: storage)
         let card = SettingsCardView()
-        card.addRow(row)
-        page.addCard(card, sectionTitle: "控制")
+        for action in SnipHotKeyAction.allCases {
+            let recorder = HotKeyRecorderView()
+            recorder.combo = preferences.combo(for: action)
+            recorder.onChange = { [weak self] combo in
+                guard let self else { return }
+                let success = self.hotKeyDelegate?.settingsDidChangeSnipHotKey(action, combo: combo) ?? false
+                recorder.isConflicted = !success
+                if success { recorder.isConflicted = false }
+            }
+            hotKeyRecorders[action] = recorder
+            let row = SettingsRowView(title: "\(action.displayName) 快捷键",
+                                      subtitle: "录制后立即生效，冲突时变红")
+            row.trailingStack.addArrangedSubview(recorder)
+            card.addRow(row)
+        }
+        page.addCard(card, sectionTitle: "快捷键")
     }
 
     // MARK: - 刷新
