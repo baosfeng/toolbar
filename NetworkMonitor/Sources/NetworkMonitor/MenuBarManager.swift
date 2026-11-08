@@ -233,7 +233,13 @@ final class MenuBarManager: NSObject {
         if enabled.contains(.tokenCacheHit), let rate = harnessUsage?.snapshot().totals.cacheHitRate { parts.append("HIT " + String(Int((rate * 100).rounded())) + "%") }
         if enabled.contains(.tokenWeek) { parts.append("7d " + formatSpeedShort(Double(harnessUsage?.snapshot().totals.thisWeek.totalTokens ?? 0))) }
         if parts.isEmpty { parts.append(formatSpeedShort(downSpeedSafe)) }
-        let text = parts.joined(separator: "  ")
+        let separator: String
+        switch displayPreferences.density {
+        case .compact: separator = "  "
+        case .comfortable: separator = "   "
+        case .relaxed: separator = "  ·  "
+        }
+        let text = parts.joined(separator: separator)
         let title = NSAttributedString(string: text)
         if statusItem.button?.attributedTitle.string != text {
             statusItem.button?.attributedTitle = title
