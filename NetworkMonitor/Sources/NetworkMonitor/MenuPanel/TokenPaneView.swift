@@ -1,16 +1,20 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
-// MARK: - Token 页（定稿原型 final-定稿.html 的 Swift 实现）
+// MARK: - Token 页
 
 /// Token 消耗页 —— 菜单面板第 5 个 tab
 ///
 /// 数据由 HarnessUsageSnapshot 注入（update），本视图不直接访问数据库或索引服务。
-/// 版式对齐定稿原型：四族卡（sparkline + 同比）→ 小时/按天主图（今日/昨日、堆叠/对比、
-/// 累计虚线、每根柱可点）→ 天趋势（固定 14 天）→ 缓存命中环 → 项目/模型双栏 →
-/// 今日 vs 昨日对比条 → 状态带。任一密度块可点进面板内覆盖式二级页（共六个）。
-/// 成员可见性：布局装配在 TokenPaneView+Layout.swift，渲染在 +Render.swift，
-/// 二级页在 TokenDetailPages*.swift。
+/// 版式（改前 8 个区块一屏到底，520pt 内既看不到图表也看不到分布）：
+/// 页头（主机 + 范围 + 刷新）→ 屏切换条（概览 / 用量 / 缓存 / 排行）→ 当前屏内容。
+/// 区块归属由 TokenScreen 契约给出（NetworkMonitorUI，纯逻辑可断言）；各屏高度不同，
+/// 切屏后走 onContentChanged 让面板重算 popover 尺寸。
+/// 二级页保留三个（单桶 / 按小时三段 / 天趋势）；「缓存命中 / 按项目 / 按模型」
+/// 已并入缓存屏与排行屏，入口与枚举 case 一并删除。
+/// 成员分布：状态机与二级页在 +State.swift，布局在 +Layout.swift，渲染在 +Render.swift，
+/// 屏内容在 TokenScreenContent*.swift，二级页在 TokenDetailPages*.swift。
 final class TokenPaneView: MenuPanelPaneView {
 
     // MARK: - 回调
@@ -25,9 +29,13 @@ final class TokenPaneView: MenuPanelPaneView {
     private(set) var hourView: TokenHourView = .stack
     private(set) var metric: TokenChartMetric = .total
     private(set) var trendMode: TokenTrendMode = .stack
+    /// 当前屏 —— 区块归属见 TokenScreen 契约
+    private(set) var screen: TokenScreen = .overview
     /// 当前打开的二级页（nil = 主面板）
-    private(set) var detailKind: TokenDetailKind?
-    private(set) var selection: TokenBucketSelection?
+    ///
+    /// 写入方在 TokenPaneView+State.swift（applyStateMachine / openDetail），跨文件访问故放开 private(set)
+    var detailKind: TokenDetailKind?
+    var selection: TokenBucketSelection?
 
     // MARK: - 数据
 
@@ -35,10 +43,12 @@ final class TokenPaneView: MenuPanelPaneView {
     var snapshot: HarnessUsageSnapshot?
     var lastModel: TokenPaneModel?
 
-    // MARK: - 页头与范围
+    // MARK: - 页头
 
-    /// 范围分段（口径说明见页头的时区提示：窗口边界按 Asia/Shanghai 切分）
+    /// 范围分段（窗口边界按 Asia/Shanghai 切分，页头时区提示里写明）
     let rangeControl = TokenSegmentedControl(titles: TokenRange.allCases.map { $0.title })
+    /// 屏切换条（页头下一行，四段等宽）
+    let screenControl = TokenSegmentedControl(titles: TokenScreen.titles, expands: true)
     let refreshRow = TokenIconButtonRow(symbolName: "arrow.clockwise")
     let indexLabel = MenuPanelLabel.text("", font: TokenPaneStyle.metaFont,
                                         color: TokenPaneStyle.tertiaryText)
@@ -47,12 +57,22 @@ final class TokenPaneView: MenuPanelPaneView {
 
     // MARK: - 分区
 
-    /// 首屏 Hero（当前范围三项合计 + 较昨日 + 实时）
+    /// 概览屏 Hero（当前范围三项合计 + 较昨日 + 实时）
     let heroView = TokenHeroView()
     lazy var familyCards = TokenMetric.allCases.map { metric in
         TokenFamilyCardView(metric: metric, onClick: {})
     }
-    let hourCard = TokenCardRow(height: 88, background: TokenPaneStyle.cardFill)
+    /// 四族卡矩阵容器（2×2）
+    let familyGrid = NSStackView()
+    /// 屏页脚状态带：概览 / 用量 / 排行各一个实例，都用同一份 model.stateBand 更新
+    let overviewBand = TokenStateBandView()
+    let usageBand = TokenStateBandView()
+    let rankingBand = TokenStateBandView()
+    /// 三个状态带实例（渲染时统一刷新；缓存屏页脚是口径说明，没有状态带）
+    var stateBands: [TokenStateBandView] { [overviewBand, usageBand, rankingBand] }
+
+    /// 用量屏：主图卡（整屏独占，柱高 160pt + 左侧刻度与网格；每根柱可点进单桶页）
+    let hourCard = TokenCardRow(height: 230, background: TokenPaneStyle.cardFill)
     let hourTitle = MenuPanelLabel.text("", font: TokenPaneStyle.cardHeadTitleFont,
                                         color: TokenPaneStyle.secondaryText)
     let hourMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
@@ -65,33 +85,34 @@ final class TokenPaneView: MenuPanelPaneView {
     let hourAxis = TokenAxisView()
     let hourLegend = TokenLegendRowView()
 
-    let trendCard = TokenCardRow(height: 38, background: TokenPaneStyle.cardFill)
+    /// 概览屏：缓存命中紧凑条（小环 + 命中率大字 + 三个值，数据取 model.cachePage）
+    lazy var cacheHitStrip = TokenCacheHitStripView(onClick: { [weak self] in
+        self?.selectScreen(.cache)
+    })
+
+    /// 概览屏：近 14 天迷你走势（56pt 高，补概览密度；整高的天趋势卡在用量屏）
+    let overviewTrendCard = TokenCardRow(height: 79, background: TokenPaneStyle.cardFill)
+    let overviewTrendTitle = MenuPanelLabel.text("近 14 天 · 固定",
+                                                 font: TokenPaneStyle.cardHeadTitleFont,
+                                                 color: TokenPaneStyle.secondaryText)
+    let overviewTrendMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
+                                                color: TokenPaneStyle.tertiaryText)
+    let overviewTrendSpark = TokenSparkView(height: 56,
+                                            stroke: TokenPaneStyle.uncachedColor,
+                                            fill: TokenPaneStyle.uncachedColor)
+
+    /// 用量屏：天趋势卡（整屏独占，走势给足 88pt）
+    let trendCard = TokenCardRow(height: 144, background: TokenPaneStyle.cardFill)
     let trendTitle = MenuPanelLabel.text("天趋势 · 固定 14 天", font: TokenPaneStyle.cardHeadTitleFont,
                                          color: TokenPaneStyle.secondaryText)
     let trendMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
                                         color: TokenPaneStyle.tertiaryText)
     let trendAction = TokenTextButton(title: "切：分线")
-    let trendSpark = TokenSparkView(height: TokenPaneStyle.trendHeight,
+    let trendSpark = TokenSparkView(height: TokenPaneStyle.usageTrendHeight,
                                     stroke: TokenPaneStyle.uncachedColor,
                                     fill: TokenPaneStyle.uncachedColor)
 
-    let cacheCard = TokenCardRow(height: 54, background: TokenPaneStyle.cardFill)
-    let cacheRing = TokenRingView()
-    let cacheMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
-                                        color: TokenPaneStyle.tertiaryText)
-    let cacheLegend = TokenLegendRowView()
-
-    let projectCard = TokenCardRow(height: 111, background: TokenPaneStyle.cardFill)
-    let modelCard = TokenCardRow(height: 111, background: TokenPaneStyle.cardFill)
-    let projectBar = TokenStackBarView()
-    let modelBar = TokenStackBarView()
-    lazy var projectRows = (0..<3).map { _ in TokenDistroRowView() }
-    lazy var modelRows = (0..<3).map { _ in TokenDistroRowView() }
-    let projectMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
-                                          color: TokenPaneStyle.tertiaryText)
-    let modelMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
-                                        color: TokenPaneStyle.tertiaryText)
-
+    /// 用量屏：今日 vs 昨日同期（无对照窗口时整卡隐藏，不编数）
     let compareCard = TokenCardRow(height: 50, background: TokenPaneStyle.cardFill)
     let compareTotal = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
                                            color: TokenPaneStyle.tertiaryText)
@@ -100,7 +121,22 @@ final class TokenPaneView: MenuPanelPaneView {
     let compareCurrentRow = TokenCompareRowView()
     let comparePreviousRow = TokenCompareRowView()
 
-    let stateBand = TokenStateBandView()
+    /// 缓存屏（大环 + 四行拆分 / 趋势 / 对照 / 统计 + 口径），自带内容栈
+    let cacheScreen = TokenCacheScreenView()
+    /// 排行屏（维度分段 + 占比条 + Top 8 两行式行 + 计数），自带内容栈
+    let rankScreen = TokenRankingScreenView(cardHeight: TokenPaneView.rankingCardHeight)
+    /// 四个屏的外框（顺序 = TokenScreen.allCases；渲染按 screen 切显隐）
+    ///
+    /// 外框高度给死（screenHeight）→ 四屏 pane 高度一致 → 切屏时 popover 不跳高跳低；
+    /// 屏内 = 内容滚动区 + 页脚（状态带 / 口径说明），超高内容走屏内滚动。
+    var screenFrames: [TokenScreenFrameView] = []
+
+    /// 屏外框高度：520（popover 上限）− 顶 10 − 分页条 28 − 间距 12 − 底 12 − 页头 22 − 间隙 3
+    /// − 屏切换条 20 − 屏间距 4 = 409；于是 pane = 458，desiredContentHeight 恰好 520（不再触发外框滚动）
+    static let screenHeight: CGFloat = 409
+
+    /// 排行卡高度 = 外框 − 页脚状态带 − 间距：卡片撑到页脚上方，可见行均分这块高度
+    static let rankingCardHeight: CGFloat = screenHeight - PaneCardStyle.stateBandHeight - 4
 
     /// 二级页容器（覆盖在主面板之上，同一 Pane 内切换）
     let detailPane = TokenDetailPaneView()
@@ -108,9 +144,7 @@ final class TokenPaneView: MenuPanelPaneView {
     // MARK: - 状态页
 
     let dataStack = NSStackView()
-    /// 四族卡矩阵容器（2×2）
-    let familyGrid = NSStackView()
-    /// 页头下方的内容起点（buildHeader 里赋值为范围条底边）
+    /// 页头下方的内容起点（buildHeader 里赋值为页头底边）
     var contentTopAnchor: NSLayoutYAxisAnchor?
     let loadingView = TokenLoadingView()
     lazy var emptyView = TokenEmptyView(onRetry: { [weak self] in self?.onRefresh?() })
@@ -132,19 +166,28 @@ final class TokenPaneView: MenuPanelPaneView {
     // MARK: - 键盘可达
 
     override var focusableRows: [MenuPanelRow] {
-        // 二级页打开时只留返回入口：原先这里返回空数组，键盘用户进得去出不来，
-        // 只能靠 Esc（而 Esc 又会把整个面板收起）
+        // 二级页打开时只留返回入口：返回空数组会让键盘用户进得去出不来
         guard detailKind == nil else { return detailPane.focusableRows }
+        // 页头三组行（刷新 / 范围 / 屏切换条）永远在前且数量固定：
+        // 切屏只改变其后的行，焦点下标不会指向别的控件
         var rows: [MenuPanelRow] = [refreshRow]
         rows.append(contentsOf: rangeControl.focusableRows)
+        rows.append(contentsOf: screenControl.focusableRows)
         if !dataStack.isHidden {
-            rows.append(contentsOf: daySegment.focusableRows)
-            rows.append(contentsOf: familyCards)
-            rows.append(hourCard)
-            rows.append(trendCard)
-            rows.append(cacheCard)
-            rows.append(projectCard)
-            rows.append(modelCard)
+            switch screen {
+            case .overview:
+                rows.append(contentsOf: familyCards)
+                rows.append(cacheHitStrip)
+                rows.append(overviewTrendCard)
+            case .usage:
+                if range == .today { rows.append(contentsOf: daySegment.focusableRows) }
+                rows.append(hourCard)
+                rows.append(trendCard)
+            case .cache:
+                rows.append(contentsOf: cacheScreen.focusableRows)
+            case .ranking:
+                rows.append(contentsOf: rankScreen.focusableRows)
+            }
         }
         if !emptyView.isHidden { rows.append(emptyView.retryRow) }
         return rows
@@ -154,102 +197,23 @@ final class TokenPaneView: MenuPanelPaneView {
 
     func update(_ snapshot: HarnessUsageSnapshot) {
         self.snapshot = snapshot
-        applyState()
+        applyStateMachine()
     }
 
-    // MARK: - 状态切换
+    // MARK: - 屏切换
 
-    private func applyState() {
-        guard let snapshot else { return }
-        let available = snapshot.sourceAvailability.isAvailable
-        let empty = TokenComparison.isEmpty(snapshot)
-        let indexing = snapshot.indexingState.isIndexing
-        let progress: HarnessIndexProgress? = {
-            if case .indexing(let progress) = snapshot.indexingState { return progress }
-            return nil
-        }()
-
-        unavailableView.isHidden = available
-        guard available else {
-            unavailableView.update(message: snapshot.sourceAvailability.displayMessage)
-            dataStack.isHidden = true
-            loadingView.isHidden = true
-            emptyView.isHidden = true
-            indexLabel.isHidden = true
-            detailPane.isHidden = true
-            detailKind = nil
+    /// 切换屏：先切显隐再渲染，渲染末尾统一通知面板按新屏重算高度（各屏不做等高等）
+    func selectScreen(_ value: TokenScreen) {
+        guard screen != value else { return }
+        screen = value
+        screenControl.select(value.rawValue, notify: false)
+        applyScreenVisibility()
+        // 新屏从顶部开始看：沿用上一屏的滚动位置会让人以为内容没换
+        screenFrames[safe: value.rawValue]?.scrollToTop()
+        guard lastModel != nil else {
             onContentChanged?()
             return
         }
-
-        // 首轮索引尚未产出任何数据：显示带进度的加载态，不阻塞面板
-        if empty && (indexing || snapshot.indexingState == .idle) {
-            loadingView.update(progress: progress)
-            loadingView.isHidden = false
-            dataStack.isHidden = true
-            emptyView.isHidden = true
-            indexLabel.isHidden = true
-            detailPane.isHidden = true
-            detailKind = nil
-            onContentChanged?()
-            return
-        }
-
-        loadingView.isHidden = true
-        dataStack.isHidden = empty
-        emptyView.isHidden = !empty
-        if empty {
-            // 失败态也要落到这一支（没有缓存数据时 empty 必然为 true）：
-            // 之前它显示的是「还没有可统计的会话」，把「索引坏了」说成「你没数据」
-            if case .failed(let message) = snapshot.indexingState {
-                emptyView.update(reason: message)
-            } else {
-                emptyView.update(reason: nil)
-            }
-            indexLabel.isHidden = true
-            detailPane.isHidden = true
-            detailKind = nil
-            onContentChanged?()
-            return
-        }
-        // 有数据但索引失败：保留数据，同时把失败原因挂到索引标签上，不让错误静默
-        if case .failed(let message) = snapshot.indexingState {
-            indexLabel.isHidden = false
-            indexLabel.stringValue = "索引失败：\(message)"
-        }
-        if case .failed = snapshot.indexingState {
-            // 已在上方设置失败文案
-        } else {
-            indexLabel.isHidden = !indexing
-            if indexing, let progress {
-                indexLabel.stringValue = "索引中 \(progress.completedFiles)/\(progress.totalFiles) · 完成后自动刷新"
-            }
-        }
-        render()
-    }
-
-    // MARK: - 二级页
-
-    func openDetail(_ kind: TokenDetailKind, selection: TokenBucketSelection? = nil) {
-        guard let snapshot, let model = lastModel else { return }
-        self.detailKind = kind
-        self.selection = selection
-        detailPane.update(kind: kind, model: model, snapshot: snapshot,
-                          selection: selection, hourScope: hourScope)
-        detailPane.isHidden = false
-        dataStack.isHidden = true
-        onContentChanged?()
-    }
-
-    /// 是否正处在二级页（面板根视图据此把 Esc 解释为「返回」而不是「收起面板」）
-    var isShowingDetail: Bool { detailKind != nil }
-
-    func closeDetail() {
-        guard detailKind != nil else { return }
-        detailKind = nil
-        selection = nil
-        detailPane.isHidden = true
-        dataStack.isHidden = false
         render()
     }
 
@@ -294,9 +258,13 @@ final class TokenPaneView: MenuPanelPaneView {
                                                            scope: self.hourScope))
         }
         trendCard.onClick = { [weak self] in self?.openDetail(.trend) }
-        cacheCard.onClick = { [weak self] in self?.openDetail(.cache) }
-        projectCard.onClick = { [weak self] in self?.openDetail(.projects) }
-        modelCard.onClick = { [weak self] in self?.openDetail(.models) }
+        overviewTrendCard.onClick = { [weak self] in self?.openDetail(.trend) }
+        screenControl.onSelect = { [weak self] index in
+            guard let self, let value = TokenScreen(rawValue: index) else { return }
+            self.selectScreen(value)
+        }
+        // 排行屏的维度分段与屏切换走同一条 render 路径（不各走一套刷新）
+        rankScreen.onDimensionChange = { [weak self] in self?.render() }
         detailPane.onBack = { [weak self] in self?.closeDetail() }
         detailPane.onSelectBucket = { [weak self] selection in
             self?.openDetail(.bucket, selection: selection)
@@ -320,5 +288,9 @@ final class TokenPaneView: MenuPanelPaneView {
         openDetail(kind, selection: selection)
     }
 
+    /// 快照自证专用（仅 DEBUG）：切到指定屏（4 屏 × 浅/深取证）
+    func selectScreenForSnapshot(_ screen: TokenScreen) {
+        selectScreen(screen)
+    }
 #endif
 }

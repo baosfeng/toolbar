@@ -168,6 +168,10 @@ package struct TokenDistroRow {
     package let sub: String
     package let amount: String
     package let share: Double
+    /// 该行请求数（与 amount 同一份窗口聚合；排行屏第二行用）
+    package let requestCount: Int
+    /// 项目行会话数（模型行没有这个概念，给 0）
+    package let sessionCount: Int
     package let colorIndex: Int
     /// 悬停文案（toolTip）
     ///
@@ -184,13 +188,16 @@ package struct TokenDistroRow {
     /// 显式 package 初始化器：自动生成的逐成员初始化器只有 internal，
     /// 跨目标（NetworkMonitor 的 DEBUG 取证）构造不了，所以手写一份
     package init(rank: Int, name: String, provider: String, sub: String,
-                 amount: String, share: Double, colorIndex: Int, tip: String = "") {
+                 amount: String, share: Double, requestCount: Int = 0, sessionCount: Int = 0,
+                 colorIndex: Int, tip: String = "") {
         self.rank = rank
         self.name = name
         self.provider = provider
         self.sub = sub
         self.amount = amount
         self.share = share
+        self.requestCount = requestCount
+        self.sessionCount = sessionCount
         self.colorIndex = colorIndex
         self.tip = tip
     }

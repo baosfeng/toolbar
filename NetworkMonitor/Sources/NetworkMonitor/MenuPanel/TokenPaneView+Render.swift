@@ -1,12 +1,14 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - Token 页渲染（TokenPaneView 扩展）
 
-/// 主面板逐块渲染 —— 从 TokenPaneView.swift 拆出（单文件体积门禁）
+/// 逐块渲染 —— 从 TokenPaneView.swift 拆出（单文件体积门禁）
 ///
 /// 所有数值都来自 TokenPaneModel（派生计算在 TokenDerive），这里只做「模型 → 控件」的搬运，
 /// 不在视图层重算占比 / 窗口 / 环比，保证同一份数据在各区块口径一致。
+/// 屏显隐只在这里切：四个屏栈里只有当前屏可见，切屏后由 onContentChanged 让面板重算高度。
 extension TokenPaneView {
 
     func render() {
@@ -18,6 +20,7 @@ extension TokenPaneView {
                                         metric: metric,
                                         trendMode: trendMode)
         lastModel = model
+        applyScreenVisibility()
 
         hostLabel.stringValue = model.hostLabel
         // 每次渲染都重设：NSTextField 的默认无障碍文案取自 stringValue，
@@ -52,8 +55,11 @@ extension TokenPaneView {
                         shape: shape,
                         showsCumulative: shape == .stack,
                         pairMetric: metric == .request ? .request : .output,
+                        // 整屏主图才画左侧刻度 + 网格（二级页小图不画，宽度不够）
+                        showsScale: true,
                         accessibility: model.bucketTitle + "，每根柱可点开该时段详情")
-        hourAxis.update(labels: axisLabels(for: model))
+        hourAxis.update(labels: axisLabels(for: model),
+                        leadingInset: TokenBarsView.scaleGutter)
         hourLegend.update(items: legendItems(for: model, comparing: comparing,
                                              lineColor: hourBars.lineColor))
 
@@ -65,37 +71,18 @@ extension TokenPaneView {
             : model.trendBuckets.map { Double($0.cache) }
         trendSpark.update(values: trendValues, accessibility: "近 14 天每日 Token 总量走势")
 
-        cacheMeta.stringValue = model.hitMeta
-        cacheRing.update(rate: model.hitRateFraction,
-                         text: model.hitText,
-                         accessibility: "缓存命中率 " + model.hitText + "%")
-        cacheLegend.update(items: [
-            TokenLegendItem(color: TokenPaneStyle.cacheColor, title: "缓存读", value: model.cacheReadText),
-            TokenLegendItem(color: TokenPaneStyle.uncachedColor, title: "未缓存", value: model.uncachedText),
-            TokenLegendItem(color: nil, title: model.hitBucketText, value: "", dashed: true),
-        ])
+        // 概览屏的缓存命中条：与缓存屏同一份 cachePage（小环 / 命中率 / 三个值）
+        cacheHitStrip.update(page: model.cachePage)
 
-        projectMeta.stringValue = model.projectMeta
-        modelMeta.stringValue = model.modelMeta
-        // 两张卡的无障碍文案随范围刷新（切换今日/7/30 天后读屏仍应报当前范围，而不是「累计」）
-        projectCard.setAccessibilityLabel(TokenDistroDimension.projects.cardAccessibility(range: model.range))
-        modelCard.setAccessibilityLabel(TokenDistroDimension.models.cardAccessibility(range: model.range))
-        // 占比条只有色块、图例又会被 296pt 宽截断：整条 toolTip 逐段给出「provider/model 金额 · 占比」
-        let projectBarRows = Array(model.projects.prefix(6))
-        let modelBarRows = Array(model.models.prefix(6))
-        // 无障碍文案也跟随范围（写死「累计」会与「按项目/按模型已跟随范围」互相打脸），文案从 Core 取
-        projectBar.update(shares: projectBarRows.map { $0.share },
-                          colors: projectBarRows.map { TokenPaneStyle.distroColor($0.colorIndex) },
-                          accessibility: TokenDistroDimension.projects.barAccessibility(range: model.range),
-                          tip: TokenDerive.stackBarTip(projectBarRows,
-                                                       hiddenCount: model.projects.count - projectBarRows.count))
-        modelBar.update(shares: modelBarRows.map { $0.share },
-                        colors: modelBarRows.map { TokenPaneStyle.distroColor($0.colorIndex + 1) },
-                        accessibility: TokenDistroDimension.models.barAccessibility(range: model.range),
-                        tip: TokenDerive.stackBarTip(modelBarRows,
-                                                     hiddenCount: model.models.count - modelBarRows.count))
-        updateDistroRows(projectRows, model.projects)
-        updateDistroRows(modelRows, model.models)
+        // 概览屏的迷你走势：同一条天序列（跟着主面板总量，不另算口径）
+        overviewTrendMeta.stringValue = model.trendMeta
+        overviewTrendSpark.update(values: model.trendBuckets.map { Double($0.total) },
+                                  accessibility: "近 14 天每日 Token 总量走势（概览）")
+
+        // 缓存屏 / 排行屏：全部数值取自 Core 的 cachePage 与 projects / models，
+        // 两个屏视图只做搬运（内容常驻，切屏不重建，避免丢焦点与闪一下）
+        cacheScreen.update(page: model.cachePage)
+        rankScreen.update(model: model)
 
         if let compare = model.compare {
             compareCard.isHidden = false
@@ -110,15 +97,28 @@ extension TokenPaneView {
             compareCard.isHidden = true
         }
 
-        stateBand.update(items: model.stateBand)
+        // 页脚状态带：三屏各一个实例，同一份 model.stateBand（不各算一套）
+        for band in stateBands { band.update(items: model.stateBand) }
 
         if let detailKind {
-            // 占比条与图例的悬停文案由构建代码直接带上（TokenDetailPages+Distro），
-            // 这里不再事后遍历子树补挂，避免重渲染后漏挂 `.update` 被漏挂
+            // 占比条与图例的悬停文案由构建代码直接带上（TokenScreenContent），
+            // 这里不再事后遍历子树补挂，避免重渲染后漏挂
             detailPane.update(kind: detailKind, model: model, snapshot: snapshot,
                               selection: selection, hourScope: hourScope)
         }
         onContentChanged?()
+    }
+
+    // MARK: - 屏显隐
+
+    /// 按当前屏切显隐：四个屏外框只有一个可见（隐藏的外框由 NSStackView 折叠，不占高度）
+    ///
+    /// 外框高度一致，所以切屏只换内容，不换面板高度。
+    func applyScreenVisibility() {
+        screenControl.select(screen.rawValue, notify: false)
+        for (index, frame) in screenFrames.enumerated() {
+            frame.isHidden = TokenScreen(rawValue: index) != screen
+        }
     }
 
     // MARK: - 坐标轴与图例
@@ -165,16 +165,4 @@ extension TokenPaneView {
             TokenLegendItem(color: palette[index], title: item.title, value: item.value)
         }
     }
-
-    private func updateDistroRows(_ rows: [TokenDistroRowView], _ data: [TokenDistroRow]) {
-        for (index, view) in rows.enumerated() {
-            if index < data.count {
-                view.isHidden = false
-                view.update(row: data[index], showsProvider: false)
-            } else {
-                view.isHidden = true
-            }
-        }
-    }
 }
-

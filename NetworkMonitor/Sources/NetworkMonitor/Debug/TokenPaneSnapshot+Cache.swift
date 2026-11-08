@@ -1,33 +1,30 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
-// MARK: - 缓存命中二级页三档范围取证（仅 DEBUG，从 TokenPaneSnapshot 拆出：单文件体积门禁）
+// MARK: - 缓存屏三档范围取证（仅 DEBUG，从 TokenPaneSnapshot 拆出：单文件体积门禁）
 
-/// 为什么单独取证：这页此前是「主数值今日 / 走势与均值 30 天 / 逐桶今日 24 桶」的混合口径，
+/// 为什么单独取证：缓存这块此前是「主数值今日 / 走势与均值 30 天 / 逐桶今日 24 桶」的混合口径，
 /// 用户要求「我选择 7 天就只展示 7 天的」。三档范围各截一张 + 一份数值文案台账，
 /// 才能证明「换范围真的换了数据」而不是换了个标题。
 @MainActor
 extension TokenPaneSnapshot {
 
-    /// 三档范围 × 缓存命中二级页：顶部 / 滚到底部各一张，外加数值与文案台账
-    static func captureCachePage(directory: URL, snapshot: HarnessUsageSnapshot) {
+    /// 三档范围 × 缓存屏：顶部 / 滚到底部各一张，外加数值与文案台账
+    static func captureCacheScreen(directory: URL, snapshot: HarnessUsageSnapshot) {
         var lines: [String] = []
         for range in TokenRange.allCases {
             let slug = cacheSlug(range)
             for suffix in ["top", "bottom"] {
-                let panel = MenuPanelView()
-                panel.updateToken(snapshot, notifySize: false)
-                panel.select(tab: .token)
-                panel.tokenPane.applyStateForSnapshot(range: range, hourScope: .today, trendMode: .stack)
-                panel.tokenPane.openDetailForSnapshot(.cache)
+                let panel = makeCachePanel(snapshot: snapshot, range: range)
                 let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
                 MenuPanelSnapshot.render(
                     view: panel, size: size, appearanceName: .aqua,
                     to: directory.appendingPathComponent("menu-token-cache-\(slug)-\(suffix).png"),
                     postLayout: { view in
                         guard let panel = view as? MenuPanelView, suffix == "bottom" else { return }
-                        panel.tokenPane.detailPane.scrollToBottomForSnapshot()
+                        panel.scrollToBottomForSnapshot()
                     })
             }
             lines.append(contentsOf: cacheMetricsLines(snapshot: snapshot, range: range, slug: slug))
@@ -35,30 +32,35 @@ extension TokenPaneSnapshot {
         let text = lines.joined(separator: "\n") + "\n"
         try? text.write(to: directory.appendingPathComponent("menu-token-cache-metrics.txt"),
                         atomically: true, encoding: .utf8)
-        AppContext.shared.logger.info("缓存命中二级页取证完成（三档范围 × 顶部/底部 + 数值台账）")
+        AppContext.shared.logger.info("缓存屏取证完成（三档范围 × 顶部/底部 + 数值台账）")
     }
 
-    /// 单档范围的台账：主数值 / 桶数 / 走势区间 / 上一周期 / 差值 / 样本量 / 面包屑与说明卡
-    private static func cacheMetricsLines(snapshot: HarnessUsageSnapshot,
-                                          range: TokenRange,
-                                          slug: String) -> [String] {
+    // MARK: - 内部
+
+    /// 选好范围并切到缓存屏的面板（截图与台账共用同一条链路）
+    private static func makeCachePanel(snapshot: HarnessUsageSnapshot, range: TokenRange) -> MenuPanelView {
         let panel = MenuPanelView()
         panel.updateToken(snapshot, notifySize: false)
         panel.select(tab: .token)
         panel.tokenPane.applyStateForSnapshot(range: range, hourScope: .today, trendMode: .stack)
-        panel.tokenPane.openDetailForSnapshot(.cache)
+        panel.tokenPane.selectScreenForSnapshot(.cache)
+        return panel
+    }
+
+    /// 单档范围的台账：主数值 / 桶数 / 走势区间 / 上一周期 / 差值 / 样本量 / 口径
+    private static func cacheMetricsLines(snapshot: HarnessUsageSnapshot,
+                                          range: TokenRange,
+                                          slug: String) -> [String] {
+        let panel = makeCachePanel(snapshot: snapshot, range: range)
         panel.layoutSubtreeIfNeeded()
-        let detail = panel.tokenPane.detailPane
-        let scroll = detail.snapshotScrollMetrics()
         // 页面实际渲染出来的模型（与视图同一份派生，避免台账自成一套）
         guard let model = panel.tokenPane.lastModel else {
             return ["# \(slug): 无模型（快照为空）"]
         }
         let page = model.cachePage
-        let crumb = detail.crumbLabel.stringValue
-        let meta = detail.metaLabel.stringValue
+        let scroll = panel.snapshotScrollMetrics()
         var lines: [String] = []
-        lines.append("# \(slug) 面包屑 [" + crumb + "] meta [" + meta + "]")
+        lines.append("# \(slug) 缓存屏 · 块顺序 " + TokenScreen.blocks(for: .cache).map { $0.title }.joined(separator: " → "))
         lines.append("\(slug).hero: value=\(page.heroValue) unit=[\(page.heroUnit)]")
         lines.append("\(slug).heroSub: [\(page.heroSub)]")
         lines.append("\(slug).buckets: count=\(page.bucketCount) unit=[\(page.bucketUnitText)]"

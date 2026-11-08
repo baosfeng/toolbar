@@ -18,19 +18,16 @@ extension TokenPaneSnapshot {
         case .hourly: return "hourly"
         case .bucket: return "bucket"
         case .trend: return "trend"
-        case .cache: return "cache"
-        case .projects: return "projects"
-        case .models: return "models"
         }
     }
 
-    /// 二级页各截「顶部 / 滚到底部」两张，并导出文档高度与视口高度
+    /// 三张二级页各截「顶部 / 滚到底部」两张，并导出文档高度与视口高度
     ///
-    /// 缓存命中页不在这里出图：它有「三档范围 × 顶部/底部」的专门取证
-    /// （见 TokenPaneSnapshot+Cache.swift），固定口径那张图已被取代，不再重复产出。
+    /// 缓存 / 按项目 / 按模型三种内容已并入缓存屏与排行屏（取证见 +Cache 与 +Distro），
+    /// 这里只留仍然存在的三个覆盖式二级页。
     static func captureDetailPages(directory: URL, snapshot: HarnessUsageSnapshot) {
         var lines: [String] = []
-        for kind in TokenDetailKind.allCases where kind != .cache {
+        for kind in TokenDetailKind.allCases {
             let slug = detailSlug(kind)
             for suffix in ["top", "bottom"] {
                 let panel = MenuPanelView()
@@ -59,7 +56,7 @@ extension TokenPaneSnapshot {
                                 metrics.document > metrics.viewport + 0.5 ? "YES" : "NO",
                                 metrics.document - metrics.viewport))
         }
-        // 视口压到 300pt 的强制滚动自证（内容 377 > 视口 274），证明能滚到底
+        // 视口压到 300pt 的强制滚动自证，证明能滚到底
         for suffix in ["top", "bottom"] {
             let panel = MenuPanelView()
             panel.updateToken(snapshot, notifySize: false)

@@ -1,25 +1,20 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - Token 页布局装配（TokenPaneView 扩展）
 
-/// 页头与各分区装配 —— 从 TokenPaneView.swift 拆出（单文件体积门禁）
-///
-/// 版式：页头（主机 + 实时 + 时间）→ 范围条（今日/7/30 + 合计 + 刷新）→
-/// 四族卡 2×2 → 主图卡 → 天趋势卡 → 缓存环卡 → 项目/模型双栏 → 对比条 → 状态带；
-/// 二级页容器覆盖在最上层（与主面板互斥显示）。
+/// 页头一行（主机 + 范围 + 刷新）→ 屏切换条 → 当前屏内容栈；
+/// 二级页容器覆盖在最上层，与主内容互斥显示。
+/// 从 TokenPaneView.swift 拆出（单文件体积门禁）。
 extension TokenPaneView {
 
     /// 页头一行：主机 + 会话数 → 范围分段 → 刷新
-    ///
-    /// r3：字号上调后原来「页头 + 范围条」两行合并成一行（实时时间与总量都搬进 Hero），
-    /// 省下的 ~18pt 高度全部给首屏内容；范围分段与刷新仍是可键盘聚焦的行。
     func buildHeader() {
         hostLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         // 时间口径必须写在界面上：自然日 / 自然周边界固定按 Asia/Shanghai 切分，
-        // 不跟随系统时区。用户把 Mac 时区改到别的地区后，「今日」与系统日历不是同一天，
-        // 而这个差异在界面上原本没有任何说明——工具提示与读屏标签都补上，
-        // 免得用户以为是统计错了（运行期数字不动，只把口径说清楚）。
+        // 不跟随系统时区。用户把 Mac 时区改到别的地区后「今日」与系统日历不是同一天，
+        // 这个差异原本界面上没有任何说明——工具提示与读屏标签都补上。
         hostLabel.toolTip = TokenTimeZoneNote.text
         hostLabel.setAccessibilityLabel(TokenTimeZoneNote.text)
         let headRow = NSStackView(views: [hostLabel, MenuPanelLabel.spacer(), rangeControl, refreshRow])
@@ -41,26 +36,19 @@ extension TokenPaneView {
         buildFamilyGrid()
         buildHourCard()
         buildTrendCard()
-        buildCacheCard()
-        buildDistroCards()
         buildCompareCard()
-
-        let duoRow = NSStackView(views: [projectCard, modelCard])
-        duoRow.orientation = .horizontal
-        duoRow.alignment = .top
-        duoRow.distribution = .fillEqually
-        duoRow.spacing = PaneCardStyle.cardSpacing
+        buildOverviewTrendCard()
+        screenFrames = buildScreenFrames()
 
         dataStack.orientation = .vertical
         dataStack.alignment = .leading
         dataStack.spacing = PaneCardStyle.cardSpacing
-        // 顺序即首屏优先级：Hero → 四族卡 → 24h → 缓存环 → 项目/模型 必须在 520pt 内一次看全；
-        // 天趋势 / 对比条 / 状态带是次要块，排在其后由面板滚动承载
-        let sections: [NSView] = [heroView, familyGrid, hourCard, cacheCard,
-                                  duoRow, trendCard, compareCard, stateBand]
-        for view in sections { dataStack.addArrangedSubview(view) }
-        for view in sections {
-            view.widthAnchor.constraint(equalTo: dataStack.widthAnchor).isActive = true
+        // 屏切换条固定在第一行，其下四个屏栈按契约顺序排列，渲染时只显示当前屏
+        dataStack.addArrangedSubview(screenControl)
+        screenControl.widthAnchor.constraint(equalTo: dataStack.widthAnchor).isActive = true
+        for frame in screenFrames {
+            dataStack.addArrangedSubview(frame)
+            frame.widthAnchor.constraint(equalTo: dataStack.widthAnchor).isActive = true
         }
         dataStack.isHidden = true
         loadingView.isHidden = true
@@ -96,7 +84,87 @@ extension TokenPaneView {
         detailPane.isHidden = true
     }
 
-    // MARK: - 分区装配
+    // MARK: - 屏装配
+
+    /// 四个屏的外框（顺序 = TokenScreen.allCases）
+    ///
+    /// 概览 / 用量：按 TokenScreen.blocks 契约逐块装配（switch 无 default，漏接即编译不过）；
+    /// 缓存 / 排行：整块视图自带内容栈，页脚分别是口径说明卡与状态带。
+    /// 外框高度统一给死（screenHeight），页脚固定屏底，超高内容走屏内滚动。
+    private func buildScreenFrames() -> [TokenScreenFrameView] {
+        var frames: [TokenScreenFrameView] = []
+        for screen in TokenScreen.allCases {
+            let content: NSStackView
+            let footer: NSView
+            switch screen {
+            case .overview, .usage:
+                content = makeBlockStack(for: screen)
+                footer = band(for: screen)
+            case .cache:
+                content = cacheScreen
+                footer = cacheScreen.footerView
+            case .ranking:
+                content = rankScreen
+                footer = band(for: screen)
+            }
+            frames.append(TokenScreenFrameView(content: content, footer: footer,
+                                               height: Self.screenHeight))
+        }
+        return frames
+    }
+
+    private func makeBlockStack(for screen: TokenScreen) -> NSStackView {
+        let stack = NSStackView()
+        for block in TokenScreen.blocks(for: screen) {
+            for view in blockViews(block) {
+                stack.addArrangedSubview(view)
+                view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+            }
+        }
+        return stack
+    }
+
+    /// 屏页脚：概览 / 用量 / 排行各用一个状态带实例（一个视图不能挂两处）
+    private func band(for screen: TokenScreen) -> NSView {
+        switch screen {
+        case .overview: return overviewBand
+        case .usage: return usageBand
+        case .ranking: return rankingBand
+        case .cache: return cacheScreen.footerView
+        }
+    }
+
+    /// 区块 → 视图；缓存屏与排行屏的区块在各自屏视图内部，故返回空
+    private func blockViews(_ block: TokenScreenBlock) -> [NSView] {
+        switch block {
+        case .hero: return [heroView]
+        case .familyCards: return [familyGrid]
+        case .cacheHit: return [cacheHitStrip]
+        case .overviewTrend: return [overviewTrendCard]
+        case .compare: return [compareCard]
+        case .hourChart: return [hourCard]
+        case .trend: return [trendCard]
+        case .cacheRing, .cacheTrend, .cacheCompare, .cacheStats, .distroBar, .distroRows:
+            return []
+        }
+    }
+
+    /// 概览屏的「近 14 天 · 固定」迷你走势卡（40pt 高，整卡可点开天趋势明细）
+    private func buildOverviewTrendCard() {
+        let headRow = NSStackView(views: [overviewTrendTitle, MenuPanelLabel.spacer(), overviewTrendMeta])
+        headRow.orientation = .horizontal
+        headRow.alignment = .centerY
+        headRow.spacing = 4
+        overviewTrendTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        overviewTrendMeta.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        for row in [headRow, overviewTrendSpark] {
+            overviewTrendCard.body.addArrangedSubview(row)
+            row.widthAnchor.constraint(equalTo: overviewTrendCard.body.widthAnchor).isActive = true
+        }
+        setAccessibilityLabel(overviewTrendCard, "近 14 天走势卡，可点击查看 30 天明细")
+    }
+
+    // MARK: - 区块装配
 
     private func buildFamilyGrid() {
         let topRow = NSStackView(views: [familyCards[0], familyCards[1]])
@@ -132,7 +200,7 @@ extension TokenPaneView {
             hourCard.body.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: hourCard.body.widthAnchor).isActive = true
         }
-        hourBars.heightAnchor.constraint(equalToConstant: TokenPaneStyle.bucketChartHeight).isActive = true
+        hourBars.heightAnchor.constraint(equalToConstant: TokenPaneStyle.usageChartHeight).isActive = true
         setAccessibilityLabel(hourCard, "按小时图表卡，可点击查看明细")
     }
 
@@ -150,51 +218,6 @@ extension TokenPaneView {
         setAccessibilityLabel(trendCard, "天趋势卡，可点击查看 30 天明细")
     }
 
-    /// 缓存卡：环 + 标题 + 说明成一行，图例独占第二行（字号提到 10pt 后宽度放不下三行结构）
-    private func buildCacheCard() {
-        let headRow = NSStackView(views: [cacheRing,
-                                          MenuPanelLabel.text("缓存命中率",
-                                                              font: TokenPaneStyle.cardHeadTitleFont,
-                                                              color: TokenPaneStyle.secondaryText),
-                                          MenuPanelLabel.spacer(), cacheMeta])
-        headRow.orientation = .horizontal
-        headRow.alignment = .centerY
-        headRow.spacing = 6
-        cacheLegend.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        for row in [headRow, cacheLegend] {
-            cacheCard.body.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: cacheCard.body.widthAnchor).isActive = true
-        }
-        setAccessibilityLabel(cacheCard, "缓存命中率卡，可点击查看命中明细")
-    }
-
-    private func buildDistroCards() {
-        func assemble(card: TokenCardRow, title: String, meta: NSTextField,
-                      bar: TokenStackBarView, rows: [TokenDistroRowView], accessibility: String) {
-            let titleLabel = MenuPanelLabel.text(title,
-                                                 font: TokenPaneStyle.cardTitleFont,
-                                                 color: TokenPaneStyle.secondaryText)
-            let headRow = NSStackView(views: [titleLabel, MenuPanelLabel.spacer(), meta])
-            headRow.orientation = .horizontal
-            headRow.alignment = .centerY
-            headRow.spacing = 3
-            var views: [NSView] = [headRow, bar]
-            views.append(contentsOf: rows)
-            for view in views {
-                card.body.addArrangedSubview(view)
-                view.widthAnchor.constraint(equalTo: card.body.widthAnchor).isActive = true
-            }
-            setAccessibilityLabel(card, accessibility)
-        }
-        // 无障碍文案写死「累计」会与「按项目/按模型已跟随范围」互相打脸：文案由 Core 按范围派生，
-        // 装配时先按当前范围给一份，之后每次渲染再随范围刷新（见 TokenPaneView+Render.swift）
-        assemble(card: projectCard, title: "按项目", meta: projectMeta, bar: projectBar, rows: projectRows,
-                 accessibility: TokenDistroDimension.projects.cardAccessibility(range: range))
-        assemble(card: modelCard, title: "按模型", meta: modelMeta, bar: modelBar, rows: modelRows,
-                 accessibility: TokenDistroDimension.models.cardAccessibility(range: range))
-    }
-
     private func buildCompareCard() {
         let headRow = NSStackView(views: [MenuPanelLabel.text("今日 vs 昨日同期",
                                                               font: TokenPaneStyle.cardHeadTitleFont,
@@ -210,7 +233,7 @@ extension TokenPaneView {
         compareCard.onClick = nil
     }
 
-    /// 页头右侧「实时」圆点着色 + 无障碍标签统一设置
+    /// 卡片无障碍角色统一（读屏把整卡当按钮）
     private func setAccessibilityLabel(_ view: NSView, _ label: String) {
         view.setAccessibilityLabel(label)
         view.setAccessibilityRole(.button)

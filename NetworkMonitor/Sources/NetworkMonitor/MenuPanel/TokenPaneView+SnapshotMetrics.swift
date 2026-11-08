@@ -1,4 +1,6 @@
 import AppKit
+import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - Token 页几何 / 截断度量（仅 DEBUG，从 TokenPaneView.swift 拆出：单文件体积门禁）
 
@@ -33,41 +35,61 @@ extension TokenPaneView {
         return items.map { ($0.0, $0.1.convert($0.1.bounds, to: anchor), needed($0.1), text($0.1)) }
     }
 
-    /// 快照自证专用（仅 DEBUG）：主面板关键区块在页面坐标系中的 frame
+    /// 快照自证专用（仅 DEBUG）：当前屏的区块与屏切换条在页面坐标系中的 frame
+    ///
+    /// 只量当前可见屏：隐藏的屏栈 frame 全为零，量了也没意义；4 屏各自的几何由
+    /// TokenPaneSnapshot+Screens.swift 逐屏取证。缓存 / 排行屏是整块视图，
+    /// 由 screen-stack 一行覆盖，块内不再逐个列（内部块不是主面板的子视图）。
     func layoutMetricsForSnapshot() -> [(name: String, frame: NSRect)] {
         layoutSubtreeIfNeeded()
-        let items: [(String, NSView)] = [
-            ("hero", heroView),
-            ("card-uncached", familyCards[0]),
-            ("card-output", familyCards[1]),
-            ("card-cache", familyCards[2]),
-            ("card-req", familyCards[3]),
-            ("chart-hourly", hourCard),
-            ("chart-hourly-bars", hourBars),
-            ("chart-trend", trendCard),
-            ("card-cache-ring", cacheCard),
-            ("card-proj", projectCard),
-            ("card-model", modelCard),
-            ("compare-card", compareCard),
-            ("stateband", stateBand),
+        var items: [(String, NSView)] = [
+            ("screenbar", screenControl),
+            ("screen-frame", screenFrames[safe: screen.rawValue] ?? self),
         ]
+        items.append(contentsOf: blockMeasureTargets())
         return items.map { ($0.0, $0.1.convert($0.1.bounds, to: self)) }
     }
 
-    /// 快照自证专用（仅 DEBUG）：项目 / 模型每行名称的可用宽度与截断状态
+    /// 当前屏里独立成块的视图（缓存屏 / 排行屏内部块不经这里）
+    private func blockMeasureTargets() -> [(String, NSView)] {
+        switch screen {
+        case .overview:
+            return [("hero", heroView), ("card-uncached", familyCards[0]), ("card-output", familyCards[1]),
+                    ("card-cache", familyCards[2]), ("card-req", familyCards[3]),
+                    ("chart-trend-mini", overviewTrendCard), ("compare-card", compareCard),
+                    ("footer-stateband", overviewBand)]
+        case .usage:
+            return [("chart-hourly", hourCard), ("chart-hourly-bars", hourBars),
+                    ("chart-trend", trendCard), ("footer-stateband", usageBand)]
+        case .cache:
+            return [("footer-note", cacheScreen.footerView)]
+        case .ranking:
+            return [("footer-stateband", rankingBand)]
+        }
+    }
+
+    /// 快照自证专用（仅 DEBUG）：排行屏 Top 8 行名称的可用宽度与截断状态
     ///
+    /// 项目 / 模型两个维度各量一遍（维度分段切换后行数据整套换掉，只量一个维度会漏）。
     /// available = 名称标签实到宽度；needed = 完整显示所需宽度；needed > available 即截断。
     func distroRowMetricsForSnapshot()
         -> [(name: String, available: CGFloat, needed: CGFloat, truncated: Bool, text: String)] {
         layoutSubtreeIfNeeded()
         var result: [(String, CGFloat, CGFloat, Bool, String)] = []
-        for (block, rows) in [("project", projectRows), ("model", modelRows)] {
-            for (index, row) in rows.enumerated() where !row.isHidden {
+        let original = rankScreen.dimension
+        for dimension in [TokenDistroDimension.projects, .models] {
+            rankScreen.setDimensionForSnapshot(dimension)
+            if let lastModel { rankScreen.update(model: lastModel) }
+            layoutSubtreeIfNeeded()
+            let prefix = dimension == .projects ? "project" : "model"
+            for (index, row) in rankScreen.rowsForSnapshot.enumerated() where !row.isHidden {
                 let metric = row.metricsForSnapshot(in: self)
-                result.append((block + "-" + String(index + 1), metric.available, metric.needed,
+                result.append((prefix + "-" + String(index + 1), metric.available, metric.needed,
                                metric.needed > metric.available + 0.5, metric.text + " | " + metric.value))
             }
         }
+        rankScreen.setDimensionForSnapshot(original)
+        if let lastModel { rankScreen.update(model: lastModel) }
         return result
     }
 

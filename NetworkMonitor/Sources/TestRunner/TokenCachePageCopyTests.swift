@@ -91,6 +91,7 @@ func runTokenCachePageTests() {
     print("\n🧪 Testing 缓存命中二级页随范围（今日 / 近 7 天 / 近 30 天）...")
     testCacheBucketsFollowRange()
     testCacheValuesFollowRange()
+    testCacheSeriesGaps()
     testCacheCopyFollowsRange()
     testCacheNoPreviousData()
     testCachePaneModelSync()

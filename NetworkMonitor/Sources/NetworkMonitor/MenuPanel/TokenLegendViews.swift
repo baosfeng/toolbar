@@ -101,7 +101,7 @@ final class TokenLegendRowView: NSView {
 /// 图例小色块（虚线态画成一条短划线）
 final class TokenSwatch: NSView {
 
-    private let color: NSColor?
+    private var color: NSColor?
     /// 虚线态（累计基准 / 对比态对照序列）
     private let dashed: Bool
 
@@ -118,6 +118,13 @@ final class TokenSwatch: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
+
+    /// 换色（分布行的色点按维度轮流取色；虚线态不变色）
+    func update(color: NSColor?) {
+        guard !dashed else { return }
+        self.color = color
+        needsDisplay = true
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         // 虚线态：按给定色画短划线；没给色（累计基准）时退回 55% 三级的灰

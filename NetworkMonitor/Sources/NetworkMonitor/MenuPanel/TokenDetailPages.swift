@@ -4,13 +4,14 @@ import NetworkMonitorCore
 // MARK: - Token 二级页（面板内覆盖式，不新开窗口）
 
 /// 二级页种类
+///
+/// 只剩三种：单桶详情（点柱子）、按小时三段拆分（用量屏「24h 明细」）、
+/// 天趋势明细（用量屏「30 天」）。缓存 / 按项目 / 按模型三种内容已并入
+/// 缓存屏与排行屏，这里的 case 与入口一并删除，不留死代码。
 enum TokenDetailKind: Int, CaseIterable {
     case hourly
     case bucket
     case trend
-    case cache
-    case projects
-    case models
 
     /// 返回条面包屑（bucket 页在运行时改写）
     var crumb: String {
@@ -18,26 +19,17 @@ enum TokenDetailKind: Int, CaseIterable {
         case .hourly: return "/ 按小时 · 三段拆分"
         case .bucket: return "/ 按小时"
         case .trend: return "/ 天趋势"
-        case .cache: return "/ 缓存命中"
-        case .projects: return "/ 按项目"
-        case .models: return "/ 按模型"
         }
     }
 
-    /// 返回条右侧说明 —— 「按项目 / 按模型」跟随主面板范围，文案取 Core 的 TokenDistroCopy
+    /// 返回条右侧说明
     ///
-    /// 这里不再写死「累计口径」：这句话曾与主面板已跟随范围的「按项目 / 按模型」卡直接冲突，
-    /// 用户看到上面是今日数据、下面写累计口径，反馈「上面的数据和下面的数据也对不上」。
-    /// 视图只做透传，文案本身在 Core（TokenDerive.distroCopy）里派生，TestRunner 可直接断言。
+    /// 视图只做透传：范围口径文案在 Core 派生，改口径改一处即可，TestRunner 也能断言。
     func metaText(for model: TokenPaneModel) -> String {
         switch self {
         case .hourly: return "00–23 时"
         case .bucket: return "单桶"
         case .trend: return "上限 33 天"
-        // 缓存命中页跟随主面板范围：说明取当前范围（曾写死「今日」，与页面内容对不上）
-        case .cache: return model.cachePage.crumbMeta
-        case .projects: return model.distroCopy.projectsCrumbMeta
-        case .models: return model.distroCopy.modelsCrumbMeta
         }
     }
 }
@@ -52,7 +44,7 @@ struct TokenBucketSelection {
 /// 二级页容器：顶部「‹ Token」返回条 + 当前页内容
 ///
 /// 覆盖在 Token 页内（同一 320pt 宽），进入隐藏首屏、返回恢复首屏；
-/// 页面切换只重建内容栈，六页共用一套卡片样式（见两个扩展文件）。
+/// 页面切换只重建内容栈，三页共用一套卡片样式（组件见 TokenScreenContent.swift）。
 @MainActor
 final class TokenDetailPaneView: NSView {
 
@@ -264,9 +256,6 @@ final class TokenDetailPaneView: NSView {
         case .hourly: return buildHourly(snapshot: snapshot, hourScope: hourScope)
         case .bucket: return buildBucket(model: model, snapshot: snapshot, selection: selection)
         case .trend: return buildTrend(snapshot: snapshot)
-        case .cache: return buildCache(model: model)
-        case .projects: return buildProjects(model: model)
-        case .models: return buildModels(model: model)
         }
     }
 }

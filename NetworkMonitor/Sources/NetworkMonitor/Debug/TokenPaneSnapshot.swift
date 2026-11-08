@@ -81,31 +81,17 @@ enum TokenPaneSnapshot {
             })
         }
 
-        // 真实数据：滚到「按天趋势」段，证明堆叠柱 / 斜纹空档 / 今日描边
-        if let tokenSnapshot {
-            let panel = MenuPanelView()
-            panel.updateToken(tokenSnapshot, notifySize: false)
-            panel.select(tab: .token)
-            let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
-            MenuPanelSnapshot.render(view: panel, size: size, appearanceName: .aqua,
-                                     to: directory.appendingPathComponent("menu-token-trend-light.png"),
-                                     postLayout: { view in
-                (view as? MenuPanelView)?.scrollForSnapshot(fraction: 0.42)
-            })
-        }
-
         // 交互状态：近 7 天 + 折线 + 比昨日（覆盖范围切换与两种图标形态）
+        // 主图与天趋势现在都在「用量」屏，取证必须先切屏再截
         if let tokenSnapshot {
             let panel = MenuPanelView()
             panel.updateToken(tokenSnapshot, notifySize: false)
             panel.select(tab: .token)
             panel.tokenPane.applyStateForSnapshot(range: .d7, hourScope: .yesterday, trendMode: .line)
+            panel.tokenPane.selectScreenForSnapshot(.usage)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
             MenuPanelSnapshot.render(view: panel, size: size, appearanceName: .aqua,
-                                     to: directory.appendingPathComponent("menu-token-d7-line-light.png"),
-                                     postLayout: { view in
-                (view as? MenuPanelView)?.scrollForSnapshot(fraction: 0.42)
-            })
+                                     to: directory.appendingPathComponent("menu-token-d7-line-light.png"))
         }
 
         // 交互状态：主图「对比」形态（本周期实线 / 对照虚线两条折线，主面板与二级页同源）
@@ -117,12 +103,10 @@ enum TokenPaneSnapshot {
                 panel.select(tab: .token)
                 panel.tokenPane.applyStateForSnapshot(range: .today, hourScope: .today,
                                                       trendMode: .stack, hourView: .compare)
+                panel.tokenPane.selectScreenForSnapshot(.usage)
                 let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
                 MenuPanelSnapshot.render(view: panel, size: size, appearanceName: appearance,
-                                         to: directory.appendingPathComponent("menu-token-compare-" + name + ".png"),
-                                         postLayout: { view in
-                    (view as? MenuPanelView)?.scrollForSnapshot(fraction: 0.16)
-                })
+                                         to: directory.appendingPathComponent("menu-token-compare-" + name + ".png"))
             }
         }
 
@@ -184,9 +168,13 @@ enum TokenPaneSnapshot {
         if let tokenSnapshot {
             captureHoverTips(directory: directory, snapshot: tokenSnapshot)
         }
-        // 缓存命中二级页三档范围取证（今日 / 近 7 天 / 近 30 天各一条链路）
+        // 缓存屏三档范围取证（今日 / 近 7 天 / 近 30 天各一条链路）
         if let tokenSnapshot {
-            captureCachePage(directory: directory, snapshot: tokenSnapshot)
+            captureCacheScreen(directory: directory, snapshot: tokenSnapshot)
+        }
+        // 4 屏 × 浅/深 取证 + 屏台账（分屏验收的主证据）
+        if let tokenSnapshot {
+            captureScreens(directory: directory, snapshot: tokenSnapshot)
         }
         if let tokenSnapshot {
             writeBarMetrics(directory: directory, snapshot: tokenSnapshot)

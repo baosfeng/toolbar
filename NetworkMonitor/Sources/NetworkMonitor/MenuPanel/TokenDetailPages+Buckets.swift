@@ -147,10 +147,8 @@ extension TokenDetailPaneView {
                 note(TokenDistroCopy.dayBucketNote)]
     }
 
-    /// 对比行：private 放宽为 internal（单桶页在 TokenDetailPages+Buckets.swift，跨文件访问需要）
+    /// 对比行：实现在 TokenContentKit（缓存屏的对照块共用同一份）
     func compareRow(name: String, text: String, fraction: Double, color: NSColor) -> NSView {
-        let row = TokenCompareRowView()
-        row.update(name: name, text: text, fraction: fraction, color: color)
-        return row
+        TokenContentKit.compareRow(name: name, text: text, fraction: fraction, color: color)
     }
 }

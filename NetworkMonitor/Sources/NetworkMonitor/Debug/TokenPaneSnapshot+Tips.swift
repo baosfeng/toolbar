@@ -1,15 +1,16 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 分布行 / 图例 / 占比条悬停文案取证（仅 DEBUG）
 
 /// 悬停文案落盘自证。
 ///
-/// 为什么要这个文件：同一模型（如 deepseek-v4.1-flash）来自多个 provider 时，主面板半宽卡的
-/// 可见正文只写模型名、两行一模一样；provider 只在 toolTip 里，而 toolTip 不落盘就等于没有证据。
-/// 这里把「主面板项目/模型卡每一行」「二级页整宽列表每一行」「占比条整条」「图例每一项」
-/// 当前真正挂上去的 toolTip 原样导出，供复验时逐条比对，不重算文案（重算会掩盖接线错误）。
+/// 为什么要这个文件：同一模型（如 deepseek-v4.1-flash）来自多个 provider 时，
+/// 排行屏可见正文只写模型名、两行一模一样；provider 只在 toolTip 里，
+/// 而 toolTip 不落盘就等于没有证据。这里把「排行屏每一行」「占比条整条」
+/// 「图例每一项」以及三张二级页的同类文案原样导出，不重算文案（重算会掩盖接线错误）。
 @MainActor
 extension TokenPaneSnapshot {
 
@@ -17,32 +18,36 @@ extension TokenPaneSnapshot {
     static func captureHoverTips(directory: URL, snapshot: HarnessUsageSnapshot) {
         var lines: [String] = []
 
-        // 1. 主面板：项目卡 / 模型卡的半宽行（这里是 provider 唯一可见的地方）
-        let panel = MenuPanelView()
-        panel.updateToken(snapshot, notifySize: false)
-        panel.select(tab: .token)
-        panel.layoutSubtreeIfNeeded()
-        let pane = panel.tokenPane
-        for (block, rows) in [("project", pane.projectRows), ("model", pane.modelRows)] {
-            lines.append("# 主面板 · " + (block == "project" ? "按项目" : "按模型") + " 卡（半宽行）")
-            for (index, row) in rows.enumerated() where !row.isHidden {
+        // 1. 排行屏：项目 / 模型两个维度各一遍（维度分段切换后行整套换掉）
+        for dimension in [TokenDistroDimension.projects, .models] {
+            let panel = MenuPanelView()
+            panel.updateToken(snapshot, notifySize: false)
+            panel.select(tab: .token)
+            panel.tokenPane.selectScreenForSnapshot(.ranking)
+            panel.tokenPane.rankScreen.setDimensionForSnapshot(dimension)
+            if let model = panel.tokenPane.lastModel { panel.tokenPane.rankScreen.update(model: model) }
+            panel.layoutSubtreeIfNeeded()
+            let screen = panel.tokenPane.rankScreen
+            let rows = screen.rowsForSnapshot.filter { !$0.isHidden }
+            lines.append("# 排行屏 · " + dimension.title + " · " + String(rows.count) + " 行")
+            for (index, row) in rows.enumerated() {
                 lines.append(singleLine(index + 1, tip: row.toolTipForSnapshot))
             }
+            lines.append("# 排行屏 · 占比条整条")
+            lines.append("bar: " + flatten(screen.barForSnapshot.toolTipForSnapshot))
         }
-        lines.append("# 主面板 · 占比条整条")
-        lines.append("projectBar: " + flatten(pane.projectBar.toolTipForSnapshot))
-        lines.append("modelBar: " + flatten(pane.modelBar.toolTipForSnapshot))
 
-        // 2. 二级页：整宽列表行 + 顶部占比条 + 图例项
-        for kind in [TokenDetailKind.projects, .models] {
+        // 2. 三张二级页：整宽列表行 + 顶部占比条 + 图例项（同一套组件挂的文案）
+        for kind in TokenDetailKind.allCases {
             let detailPanel = MenuPanelView()
             detailPanel.updateToken(snapshot, notifySize: false)
             detailPanel.select(tab: .token)
             detailPanel.tokenPane.openDetailForSnapshot(kind)
             detailPanel.layoutSubtreeIfNeeded()
             let detailPane = detailPanel.tokenPane.detailPane
-            lines.append("# 二级页 " + detailSlug(kind) + " · 整宽列表")
-            for (index, row) in detailPane.distroRowsForSnapshot().enumerated() {
+            let rows = distroRows(in: detailPane)
+            lines.append("# 二级页 " + detailSlug(kind) + " · 整宽列表 " + String(rows.count) + " 行")
+            for (index, row) in rows.enumerated() {
                 lines.append(singleLine(index + 1, tip: row.toolTipForSnapshot))
             }
             let bars = detailStackBars(in: detailPane)
@@ -73,6 +78,19 @@ extension TokenPaneSnapshot {
     /// 多行 toolTip 压成一行（导出文件按行读，行内用 " ⏎ " 标出原来的断行位置）
     private static func flatten(_ tip: String) -> String {
         tip.isEmpty ? "(空)" : tip.replacingOccurrences(of: "\n", with: " ⏎ ")
+    }
+
+    private static func distroRows(in view: NSView) -> [TokenDistroRowView] {
+        var result: [TokenDistroRowView] = []
+        func walk(_ node: NSView) {
+            if let row = node as? TokenDistroRowView {
+                result.append(row)
+                return
+            }
+            for subview in node.subviews { walk(subview) }
+        }
+        walk(view)
+        return result
     }
 
     private static func detailStackBars(in view: NSView) -> [TokenStackBarView] {

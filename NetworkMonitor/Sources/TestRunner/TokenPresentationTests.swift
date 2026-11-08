@@ -60,12 +60,17 @@ private func testDistroRowsAndStateBand() {
     assertEqual(rows[0].sub, "provider anthropic · 占 40.0% · 命中 75.0%", "模型行命中率按模型自算")
     assertEqual(rows[1].provider, "", "空 provider 原样透出")
     assertEqual(rows[1].sub, "provider — · 占 60.0% · 命中 0.0%", "provider 为空时的文案")
+    // 排行屏第二行要「请求数」：同一份窗口聚合带出的请求数，视图不再解析文案字符串
+    assertEqual(rows[0].requestCount, 2, "模型行请求数取窗口聚合")
+    assertEqual(rows[0].sessionCount, 0, "模型行没有会话数概念，给 0")
 
     let projects = [HarnessProjectUsage(path: "/tmp/a", displayName: "a", sessionCount: 3,
                                         usage: HarnessTokenUsage(uncachedInput: 100, output: 0, cacheRead: 100, requestCount: 1))]
     let projectRow = TokenDerive.projectRows(tokenSnapshot(projects: projects), window: .today).first
     assertEqual(projectRow?.sub, "3 会话 · 占 100.0%", "项目行带会话数与占比")
     assertEqual(projectRow?.provider, "", "项目行不带 provider")
+    assertEqual(projectRow?.sessionCount, 3, "项目行会话数来自聚合")
+    assertEqual(projectRow?.requestCount, 1, "项目行请求数来自聚合")
 
     // 峰值桶按下标（与真实小时桶的 index == 小时一致）
     let buckets = [tokenBucket("0时", uncached: 1, output: 0, cache: 0, request: 1),

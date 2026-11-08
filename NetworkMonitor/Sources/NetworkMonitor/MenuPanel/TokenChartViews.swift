@@ -29,6 +29,11 @@ final class TokenBarsView: NSView {
     private var pairMetric: TokenMetric = .request
     /// 显式归一化基准（nil = 用本序列峰值；二级页跨序列对比时传入）
     private var scaleMax: Int?
+    /// 是否画左侧刻度（0 / 中值 / 峰值）与 4 条水平网格虚线（用量屏主图开；二级页小图不开）
+    private var showsScale = false
+
+    /// 左侧刻度栏宽度（横轴刻度行按同一宽度右移，柱与刻度才对得齐）
+    static let scaleGutter: CGFloat = 34
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -48,6 +53,7 @@ final class TokenBarsView: NSView {
                 showsCumulative: Bool,
                 pairMetric: TokenMetric = .request,
                 scaleMax: Int? = nil,
+                showsScale: Bool = false,
                 accessibility: String) {
         self.buckets = buckets
         self.previous = previous
@@ -56,8 +62,16 @@ final class TokenBarsView: NSView {
         self.showsCumulative = showsCumulative
         self.pairMetric = pairMetric
         self.scaleMax = scaleMax
+        self.showsScale = showsScale
         setAccessibilityLabel(accessibility)
         needsDisplay = true
+    }
+
+    /// 绘图区：开了左侧刻度就右移刻度栏宽度（柱、折线、累计虚线共用同一块）
+    private var plotRect: NSRect {
+        guard showsScale else { return bounds }
+        return NSRect(x: bounds.minX + Self.scaleGutter, y: bounds.minY,
+                      width: max(1, bounds.width - Self.scaleGutter), height: bounds.height)
     }
 
     /// 对比值（仅对比态用）：请求数取 request，三段取总 tok
@@ -78,8 +92,12 @@ final class TokenBarsView: NSView {
         guard !buckets.isEmpty else { return }
         let count = buckets.count
         let gap: CGFloat = 2
-        let columnWidth = max(1, (bounds.width - gap * CGFloat(count - 1)) / CGFloat(count))
+        let plot = plotRect
+        let columnWidth = max(1, (plot.width - gap * CGFloat(count - 1)) / CGFloat(count))
         let scale = resolvedScale()
+
+        // 网格在所有内容之下，柱 / 折线 / 累计虚线压在上面
+        if showsScale { drawScale(scale: scale, in: plot) }
 
         if shape == .pair {
             // 对比态不画柱（原型 #hBars 直接隐藏），整幅只有两条折线
@@ -96,8 +114,8 @@ final class TokenBarsView: NSView {
     /// 逐列画柱（堆叠 / 请求数两态共用）
     private func drawColumns(gap: CGFloat, columnWidth: CGFloat, scale: Int) {
         for index in buckets.indices {
-            let x = bounds.minX + CGFloat(index) * (columnWidth + gap)
-            let column = NSRect(x: x, y: bounds.minY, width: columnWidth, height: bounds.height)
+            let x = plotRect.minX + CGFloat(index) * (columnWidth + gap)
+            let column = NSRect(x: x, y: plotRect.minY, width: columnWidth, height: plotRect.height)
             if shape == .stack {
                 drawStack(bucket: buckets[index], scale: scale, in: column)
             } else {
@@ -138,15 +156,16 @@ final class TokenBarsView: NSView {
     /// 颜色沿用既有语义色——请求数用 requestColor、三段总量用 uncachedColor，对照固定 ghostColor。
     private func drawPairLines(gap: CGFloat, columnWidth: CGFloat, count: Int, scale: Int) {
         let inset = TokenPaneStyle.pairLineInset
-        let plotHeight = max(1, bounds.height - inset * 2)
+        let plot = plotRect
+        let plotHeight = max(1, plot.height - inset * 2)
 
         func path(_ values: [TokenBucket]) -> NSBezierPath {
             let line = NSBezierPath()
             for index in 0..<count {
                 let value = index < values.count ? pairValue(values[index]) : 0
-                let x = bounds.minX + (CGFloat(index) + 0.5) * (columnWidth + gap)
+                let x = plot.minX + (CGFloat(index) + 0.5) * (columnWidth + gap)
                 let ratio = min(1, max(0, Double(value) / Double(scale)))
-                let y = bounds.minY + inset + CGFloat(ratio) * plotHeight
+                let y = plot.minY + inset + CGFloat(ratio) * plotHeight
                 if index == 0 {
                     line.move(to: NSPoint(x: x, y: y))
                 } else {
@@ -177,15 +196,46 @@ final class TokenBarsView: NSView {
         guard let peak = cumulative.last, peak > 0 else { return }
         let path = NSBezierPath()
         for index in cumulative.indices {
-            let x = bounds.minX + (CGFloat(index) + 0.5) * (columnWidth + gap)
+            let x = plotRect.minX + (CGFloat(index) + 0.5) * (columnWidth + gap)
             let ratio = min(1, max(0, cumulative[index] / peak))
-            let y = bounds.minY + CGFloat(ratio) * bounds.height
+            let y = plotRect.minY + CGFloat(ratio) * plotRect.height
             if index == 0 { path.move(to: NSPoint(x: x, y: y)) } else { path.line(to: NSPoint(x: x, y: y)) }
         }
         path.lineWidth = 1.1
         path.setLineDash([2.4, 2.2], count: 2, phase: 0)
         TokenPaneStyle.secondaryText.withAlphaComponent(0.5).setStroke()
         path.stroke()
+    }
+
+    /// 左侧刻度 + 4 条水平网格虚线
+    ///
+    /// 刻度值 = 归一化基准按比例缩放（与柱高同一基准，不另算口径），数值走
+    /// TokenFormatting.abbreviated（跟随设置页「数值单位」：亿 / 万 或 K / M / B）。
+    /// 刻度只放左栏，不占右侧（右侧留给图例与累计说明）。
+    private func drawScale(scale: Int, in plot: NSRect) {
+        let line = NSBezierPath()
+        for fraction in [0.25, 0.5, 0.75, 1.0] as [CGFloat] {
+            let y = plot.minY + fraction * plot.height
+            line.move(to: NSPoint(x: plot.minX, y: y))
+            line.line(to: NSPoint(x: plot.maxX, y: y))
+        }
+        line.lineWidth = 1
+        line.setLineDash([2, 3], count: 2, phase: 0)
+        TokenPaneStyle.gridLine.setStroke()
+        line.stroke()
+
+        let ticks: [(CGFloat, Int)] = [(0, 0), (0.5, scale / 2), (1.0, scale)]
+        for (fraction, value) in ticks {
+            let text = TokenFormatting.abbreviated(Double(value)) as NSString
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: TokenPaneStyle.axisFont,
+                .foregroundColor: TokenPaneStyle.tertiaryText,
+            ]
+            let size = text.size(withAttributes: attributes)
+            // 右对齐贴着绘图区左边：刻度不压柱子，柱子也不进刻度栏
+            let y = plot.minY + fraction * plot.height - size.height / 2
+            text.draw(at: NSPoint(x: plot.minX - 4 - size.width, y: y), withAttributes: attributes)
+        }
     }
 
     /// 单桶绘图值：堆叠态 = 三段之和（total）、请求数态 = 请求数、对比态 = 对比指标
@@ -227,7 +277,10 @@ final class TokenBarsView: NSView {
         guard onSelect != nil, !buckets.isEmpty else { return }
         let point = convert(event.locationInWindow, from: nil)
         guard bounds.contains(point) else { return }
-        let ratio = max(0, min(0.9999, (point.x - bounds.minX) / max(1, bounds.width)))
+        let plot = plotRect
+        // 点在刻度栏里不算选中某一列（否则会误开最左那格）
+        guard point.x >= plot.minX else { return }
+        let ratio = max(0, min(0.9999, (point.x - plot.minX) / max(1, plot.width)))
         onSelect?(min(buckets.count - 1, Int(ratio * CGFloat(buckets.count))))
     }
 

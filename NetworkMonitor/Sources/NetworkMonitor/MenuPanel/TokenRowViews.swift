@@ -12,12 +12,17 @@ final class TokenDistroRowView: NSView {
 
     private let nameLabel: NSTextField
     private let valueLabel: NSTextField
+    /// 可选色点：排行屏整宽列表用（与占比条同色，去掉被截断的图例）；默认无，其他调用点零改动
+    private let swatch: TokenSwatch?
 
-    init(height: CGFloat = TokenPaneStyle.distroRowHeight, stacked: Bool = true) {
+    init(height: CGFloat = TokenPaneStyle.distroRowHeight, stacked: Bool = true,
+         showsSwatch: Bool = false) {
         nameLabel = MenuPanelLabel.text("", font: TokenPaneStyle.rowNameFont,
                                         color: TokenPaneStyle.secondaryText)
         valueLabel = MenuPanelLabel.text("", font: TokenPaneStyle.rowValueFont,
                                          color: TokenPaneStyle.tertiaryText)
+        // 色点只出现在整宽单行排法（半宽堆叠排法没有位置，保持原样）
+        swatch = (!stacked && showsSwatch) ? TokenSwatch(color: TokenPaneStyle.ghostColor) : nil
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         nameLabel.lineBreakMode = .byTruncatingTail
@@ -54,6 +59,7 @@ final class TokenDistroRowView: NSView {
             stack.orientation = .horizontal
             stack.alignment = .centerY
             stack.spacing = 8
+            if let swatch { stack.addArrangedSubview(swatch) }
             stack.addArrangedSubview(nameLabel)
             stack.addArrangedSubview(valueLabel)
             // 数值按自身文字宽度铺开（下限 distroValueWidth），名称拿剩下的宽度并尾部省略。
@@ -68,8 +74,11 @@ final class TokenDistroRowView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    /// - Parameter showsProvider: 半宽卡放不下 "provider/model"，主面板传 false（provider 在二级页与无障碍文案里保留）
-    func update(row: TokenDistroRow, showsProvider: Bool = true) {
+    /// - Parameters:
+    ///   - showsProvider: 半宽卡放不下 "provider/model"，主面板传 false（provider 在二级页与无障碍文案里保留）
+    ///   - swatchColor: 行前色点颜色（仅 showsSwatch 的行生效，传 nil 用中性灰）
+    func update(row: TokenDistroRow, showsProvider: Bool = true, swatchColor: NSColor? = nil) {
+        swatch?.update(color: swatchColor)
         let provider = (showsProvider && !row.provider.isEmpty) ? row.provider + "/" : ""
         nameLabel.stringValue = provider + row.name
         valueLabel.stringValue = row.amount + " · " + TokenFormatting.percent(row.share)
@@ -255,12 +264,13 @@ final class TokenKeyRowView: NSView {
 
 #if DEBUG
 /// 标签的可绘制文字宽度（去掉 cell 内边距）
-fileprivate func snapshotTextArea(_ label: NSTextField) -> CGFloat {
+/// 由 fileprivate 放宽为 internal：排行行（TokenRankingRowView）在另一个文件复用同一度量
+func snapshotTextArea(_ label: NSTextField) -> CGFloat {
     label.cell?.drawingRect(forBounds: label.bounds).width ?? label.bounds.width
 }
 
 /// 完整显示所需文字宽度（按当前字体量纯文本）
-fileprivate func snapshotTextWidth(_ text: String, font: NSFont?) -> CGFloat {
+func snapshotTextWidth(_ text: String, font: NSFont?) -> CGFloat {
     let size = (text as NSString).size(withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 10.5)])
     return (size.width * 100).rounded(.up) / 100
 }

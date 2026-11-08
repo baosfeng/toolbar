@@ -53,8 +53,12 @@ package struct TokenCachePage {
 
     // MARK: 走势卡
 
-    /// 当前范围逐桶命中率（%），长度 = bucketCount
-    package let series: [Double]
+    /// 当前范围逐桶命中率（%），长度 = bucketCount；**空缺桶为 nil**
+    ///
+    /// 改前用 0 冒充空缺：24 桶里没会话的小时会被画成「命中率掉到 0%」的两座山，
+    /// 与项目口径「无会话的小时保留空缺、不画 0」相违。nil = 该桶没有缓存读/未缓存输入，
+    /// 图上应断开（不连线、不落底），纵轴范围也只按真实有数据的桶算。
+    package let series: [Double?]
     /// 走势卡标题（命中率走势 · 当前范围）
     package let trendTitle: String
     /// 走势卡 meta（纵轴区间 + 桶数）
@@ -129,9 +133,15 @@ extension TokenDerive {
         let previousFraction = hasPrevious ? Double(previous.cache) / Double(previousDenominator) : 0
         // 样本量 = 命中率分母（缓存读 + 未缓存输入）；输出不进分母
         let sample = current.cache + current.uncached
-        let series = buckets.map { hitRate($0) * 100 }
-        let low = series.min() ?? 0
-        let high = series.max() ?? 0
+        // 逐桶命中率：分母为 0 的桶没有数据，给 nil（图断开），不给 0%
+        let series = buckets.map { bucket -> Double? in
+            let denominator = bucket.cache + bucket.uncached
+            guard denominator > 0 else { return nil }
+            return Double(bucket.cache) / Double(denominator) * 100
+        }
+        let valid = series.compactMap { $0 }
+        let low = valid.min() ?? 0
+        let high = valid.max() ?? 0
 
         let previousLabel = range == .today ? "昨日" : "前 " + String(range.days) + " 天"
         let bucketUnit = range == .today ? "24 桶" : String(range.days) + " 天"
@@ -162,9 +172,12 @@ extension TokenDerive {
             outputText: TokenFormatting.tokens(current.output),
             series: series,
             trendTitle: "命中率走势 · " + range.title,
-            // 纵轴被抬到序列最小值时，卡头必须写清起点（否则图看起来像「一路贴顶」）
-            trendMeta: "纵轴 " + TokenFormatting.percent(low / 100) + " – "
-                + TokenFormatting.percent(high / 100) + " · " + bucketUnit,
+            // 纵轴按**真实有数据的桶**取区间（改前把空缺算 0，卡头写成「0.0% – 98.7%」，
+            // 图上还长出两座掉底的山）。没有一桶有数据时写「—」，不给 0% 区间。
+            trendMeta: valid.isEmpty
+                ? "无有效桶 · " + bucketUnit
+                : "纵轴 " + TokenFormatting.percent(low / 100) + " – "
+                    + TokenFormatting.percent(high / 100) + " · " + bucketUnit,
             seriesFloor: low,
             axisLabels: cacheAxisLabels(buckets: buckets, range: range),
             trendAccessibility: range.title + "缓存命中率走势，" + String(buckets.count) + " 个点",

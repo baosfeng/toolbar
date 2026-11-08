@@ -85,15 +85,43 @@ func testCacheBucketsFollowRange() {
                 "近 30 天每个刻度都是 mmdd（不是被裁成单个数字）")
     assertEqual(d30.cachePage.axisLabels.last, TokenFormatting.mmdd(HarnessTokenTimeWindow.dayKey(for: Date())),
                 "近 30 天末刻度是今日")
-    // 纵轴地板 = 本范围序列最小值：30 天都挤在 96%–99% 时从 0 起画会糊成一块
-    assertEqual(d30.cachePage.seriesFloor, d30.cachePage.series.min() ?? -1, "近 30 天纵轴地板取序列最小值")
-    assertEqual(today.cachePage.seriesFloor, 0, "今日含空桶，纵轴从 0 起（与改造前画法一致）")
+    // 纵轴地板 = 本范围**有数据桶**的最小值：30 天都挤在 96%–99% 时从 0 起画会糊成一块
+    assertEqual(d30.cachePage.seriesFloor, d30.cachePage.series.compactMap { $0 }.min() ?? -1,
+                "近 30 天纵轴地板取有效桶序列最小值")
+    assertEqual(today.cachePage.seriesFloor, 90, "今日只有 3 时有数据，纵轴地板 = 该桶 90%（不再被空缺拉到底）")
     assertEqual(d30.cachePage.trendMeta.contains("纵轴"), true, "纵轴被抬时卡头写明起点")
 
     assertEqual(today.cachePage.trendTitle, "命中率走势 · 今日", "今日走势卡标题带范围")
     assertEqual(d7.cachePage.trendTitle, "命中率走势 · 近 7 天", "近 7 天走势卡标题带范围")
     assertEqual(d30.cachePage.trendTitle, "命中率走势 · 近 30 天", "近 30 天走势卡标题带范围")
     print("✅ 缓存命中页桶序列跟随范围（24 桶 / 7 天 / 30 天，与主面板同源）works")
+}
+
+/// 6) 空缺桶给 nil，不拿 0 冒充「命中率掉到底」
+///
+/// 用户口径：「无会话的小时保留空缺、不画 0」。改前 series 把空缺算成 0，
+/// 24 桶图上会长出两座掉底的山，纵轴卡头也跟着写「0.0% – 98.7%」。
+func testCacheSeriesGaps() {
+    let today = cacheModel(cacheRangeSnapshot(), .today).cachePage
+    assertEqual(today.series.count, 24, "空缺不改长度：仍是 24 个桶位（横轴对齐）")
+    assertEqual(today.series[3], 90, "3 时有数据的桶 = 90%")
+    assertEqual(today.series[0], nil, "0 时无会话 → nil（不是 0%）")
+    assertEqual(today.series.filter { $0 == nil }.count, 23, "只有 3 时有数据，其余 23 桶为 nil")
+    assertEqual(today.trendMeta.hasPrefix("纵轴 0.0%"), false, "卡头不再把空缺算进纵轴下限（改前写「0.0% – 98.7%」）")
+    assertEqual(today.trendMeta.hasPrefix("纵轴 90.0% – 90.0%"), true,
+                "卡头纵轴 = 真实 min–max（单桶时上下限同值）")
+
+    // 满覆盖窗口没有缺口
+    let d7 = cacheModel(cacheRangeSnapshot(), .d7).cachePage
+    assertEqual(d7.series.allSatisfy { $0 != nil }, true, "近 7 天每天都有数据 → 无缺口")
+    assertEqual(d7.trendMeta.contains("纵轴 70.0% – 70.0%"), true, "近 7 天纵轴 = 真实命中率区间")
+
+    // 整窗无数据：不给「0%」区间，写「无有效桶」
+    let emptyToday = cacheModel(cacheNoPreviousSnapshot(), .today).cachePage
+    assertEqual(emptyToday.series.allSatisfy { $0 == nil }, true, "今日无小时数据 → 全部 nil")
+    assertEqual(emptyToday.trendMeta.contains("无有效桶"), true, "全空窗口写明无有效桶，不写 0% 区间")
+    assertEqual(emptyToday.seriesFloor, 0, "全空窗口地板退回 0（不出现负值/NaN）")
+    print("✅ 缓存走势空缺桶 = nil（不画 0，纵轴取真实 min–max）works")
 }
 
 /// 2) 主数值与上一周期三档各不相同（同上，跨文件调用不设 private）

@@ -1,60 +1,39 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
-// MARK: - 分布行取证（项目 / 模型 / 二级页整宽列表，仅 DEBUG）
+// MARK: - 排行屏分布行取证（项目 / 模型两维度，仅 DEBUG）
 
 /// 整宽列表分布行的截断与压行自证。
 ///
 /// 证据口径：nameAvailable < nameNeeded = 名称被截断；valueAvailable < valueNeeded = 数值被截断；
 /// nameHeight > rowHeight = 名称高过行高（换行 / 压行）。
 @MainActor
-extension TokenDetailPaneView {
-
-    /// 页内分布行（按视图层级顺序）
-    func distroRowsForSnapshot() -> [TokenDistroRowView] {
-        layoutSubtreeIfNeeded()
-        var result: [TokenDistroRowView] = []
-        func walk(_ view: NSView) {
-            if let row = view as? TokenDistroRowView {
-                result.append(row)
-                return
-            }
-            for subview in view.subviews { walk(subview) }
-        }
-        walk(self)
-        return result
-    }
-}
-
-@MainActor
 extension TokenPaneSnapshot {
 
-    /// 二级页「按项目 / 按模型」整宽列表 + 超长名压力行：导出每行可用宽度与所需宽度
+    /// 排行屏「项目 / 模型」两个维度的整宽列表 + 超长名压力行
+    ///
+    /// 这两个维度改前各有一个二级页，现在合成一屏由分段切换；两档都量，
+    /// 免得「按模型」那档因为没被点开而漏掉截断证据。
     static func captureDistroRows(directory: URL, snapshot: HarnessUsageSnapshot) {
         var lines: [String] = []
-        for kind in [TokenDetailKind.projects, .models] {
-            let panel = MenuPanelView()
-            panel.updateToken(snapshot, notifySize: false)
-            panel.select(tab: .token)
-            panel.tokenPane.openDetailForSnapshot(kind)
+        for dimension in [TokenDistroDimension.projects, .models] {
+            let panel = makeRankingPanel(snapshot: snapshot, dimension: dimension)
             panel.layoutSubtreeIfNeeded()
-            let pane = panel.tokenPane.detailPane
-            let rows = pane.distroRowsForSnapshot()
-            lines.append("# " + detailSlug(kind) + " 二级页整宽列表：" + String(rows.count) + " 行")
+            let screen = panel.tokenPane.rankScreen
+            let rows = screen.rowsForSnapshot.filter { !$0.isHidden }
+            lines.append("# 排行屏 " + distroSlug(dimension) + " 整宽列表：" + String(rows.count) + " 行")
             for (index, row) in rows.enumerated() {
-                lines.append(metricLine(index + 1, row.metricsForSnapshot(in: pane)))
+                lines.append(metricLine(index + 1, row.metricsForSnapshot(in: screen)))
             }
         }
 
         // 超长名压力行：同一行宽下把名称换成长 provider/model，验证「单行尾部省略」而非换行
-        let probePanel = MenuPanelView()
-        probePanel.updateToken(snapshot, notifySize: false)
-        probePanel.select(tab: .token)
-        probePanel.tokenPane.openDetailForSnapshot(.models)
+        let probePanel = makeRankingPanel(snapshot: snapshot, dimension: .models)
         probePanel.layoutSubtreeIfNeeded()
-        let probePane = probePanel.tokenPane.detailPane
-        let rowWidth = probePane.distroRowsForSnapshot().first?.bounds.width ?? MenuPanelStyle.contentWidth
+        let probeScreen = probePanel.tokenPane.rankScreen
+        let rowWidth = probeScreen.rowsForSnapshot.first?.bounds.width ?? MenuPanelStyle.contentWidth
         let rowHeight = TokenPaneStyle.distroDetailRowHeight
         let container = NSView(frame: NSRect(x: 0, y: 0, width: rowWidth, height: rowHeight))
         let probe = TokenDistroRowView(height: rowHeight, stacked: false)
@@ -68,7 +47,7 @@ extension TokenPaneSnapshot {
         let longName = "xiaomi-token-plan-cn/mimo-v2.5-pro-preview-long"
         probe.update(row: TokenDistroRow(rank: 1, name: longName,
                                          provider: "xiaomi-token-plan-cn",
-                                         sub: "provider xiaomi-token-plan-cn · 占 41.2%" ,
+                                         sub: "provider xiaomi-token-plan-cn · 占 41.2%",
                                          amount: "1.23B", share: 0.4123, colorIndex: 0))
         container.layoutSubtreeIfNeeded()
         lines.append("# 压力行：名称 " + longName + "（行宽 " + String(Int(rowWidth.rounded())) + "pt）")
@@ -77,6 +56,25 @@ extension TokenPaneSnapshot {
         let text = lines.joined(separator: "\n") + "\n"
         try? text.write(to: directory.appendingPathComponent("menu-token-detail-distro-rows.txt"),
                         atomically: true, encoding: .utf8)
+    }
+
+    // MARK: - 内部
+
+    /// 切到排行屏并指定维度的面板
+    private static func makeRankingPanel(snapshot: HarnessUsageSnapshot,
+                                        dimension: TokenDistroDimension) -> MenuPanelView {
+        let panel = MenuPanelView()
+        panel.updateToken(snapshot, notifySize: false)
+        panel.select(tab: .token)
+        panel.tokenPane.selectScreenForSnapshot(.ranking)
+        panel.tokenPane.rankScreen.setDimensionForSnapshot(dimension)
+        if let model = panel.tokenPane.lastModel { panel.tokenPane.rankScreen.update(model: model) }
+        return panel
+    }
+
+    /// 维度后缀（文件名 / 台账用）
+    private static func distroSlug(_ dimension: TokenDistroDimension) -> String {
+        dimension == .projects ? "projects" : "models"
     }
 
     /// 单行度量文本（名称 / 数值各给可用与所需宽度，超出即截断）

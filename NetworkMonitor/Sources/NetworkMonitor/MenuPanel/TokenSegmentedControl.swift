@@ -16,13 +16,16 @@ final class TokenSegmentedControl: NSView {
     /// 键盘可达分段
     var focusableRows: [MenuPanelRow] { rows }
 
-    init(titles: [String]) {
+    /// - Parameter expands: true = 撑满可用宽度且各段等宽（屏切换条 / 维度分段）；
+    ///   false = 按文字宽度收紧（页头范围分段，宽度留给主机名）
+    init(titles: [String], expands: Bool = false) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         let stack = NSStackView()
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 1
+        if expands { stack.distribution = .fillEqually }
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -38,8 +41,8 @@ final class TokenSegmentedControl: NSView {
             rows.append(row)
         }
         select(0, notify: false)
-        setContentHuggingPriority(.required, for: .horizontal)
-        setContentCompressionResistancePriority(.required, for: .horizontal)
+        setContentHuggingPriority(expands ? .defaultLow : .required, for: .horizontal)
+        setContentCompressionResistancePriority(expands ? .defaultLow : .required, for: .horizontal)
     }
 
     @available(*, unavailable)

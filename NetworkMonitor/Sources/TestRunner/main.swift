@@ -137,6 +137,9 @@ runTokenRangeConsistencyTests()
 // MARK: - Token 分布行 / 占比条悬停文案（同名模型的 provider 可辨识）
 runTokenHoverTipTests()
 
+// MARK: - Token 分屏契约（4 屏标题 / 区块唯一归属）
+runTokenScreenTests()
+
 // MARK: - 截图选区几何（多屏 / Retina / 归一化）
 runSnipGeometryTests()
 

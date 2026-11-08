@@ -82,6 +82,12 @@ enum PaneCardStyle {
     /// 迷你折线高度 / 宽度
     static let sparkHeight: CGFloat = 12
     static let sparkWidth: CGFloat = 54
+    /// 缓存屏大命中环（主面板卡片内仍是 34pt 小环）
+    static let bigRingSize: CGFloat = 72
+    static let bigRingWidth: CGFloat = 7
+    /// 用量屏主图 / 天趋势高度（整屏独占，第三轮再放大：主图 160 / 趋势 120）
+    static let usageChartHeight: CGFloat = 160
+    static let usageTrendHeight: CGFloat = 120
 
     // MARK: 卡片底色
 
