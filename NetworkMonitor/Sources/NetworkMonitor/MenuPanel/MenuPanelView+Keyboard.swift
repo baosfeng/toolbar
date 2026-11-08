@@ -49,9 +49,11 @@ extension MenuPanelView {
         case 36, 49, 76:  // Return / Space / 小键盘 Enter
             activateFocusedTarget()
         default:
-            if let number = Int(characters), number >= 1, number <= MenuPanelTab.allCases.count,
-               let tab = MenuPanelTab(rawValue: number - 1) {
-                select(tab: tab)
+            if let number = Int(characters), number >= 1,
+               let view = self as? MenuPanelView,
+               number <= view.tabBar.visibleTabs.count,
+               number - 1 < view.tabBar.visibleTabs.count {
+                select(tab: view.tabBar.visibleTabs[number - 1])
                 return
             }
             super.keyDown(with: event)

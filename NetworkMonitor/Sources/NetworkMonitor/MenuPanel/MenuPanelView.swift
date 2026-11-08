@@ -37,6 +37,9 @@ final class MenuPanelView: NSView {
 
     weak var delegate: MenuPanelViewDelegate?
 
+    /// 面板分页可见性/顺序偏好
+    let panelTabPreferences = PanelTabPreferences()
+
     let tabBar = MenuTabBarView()
     /// 设置菜单入口（标题栏右侧齿轮：传送设置 / 开机自启动 / 退出）
     let settingsButton = NSPopUpButton(frame: .zero, pullsDown: true)
@@ -125,6 +128,10 @@ final class MenuPanelView: NSView {
             pane.widthAnchor.constraint(equalTo: paneStack.widthAnchor).isActive = true
         }
 
+        tabBar.visibleTabs = panelTabPreferences.orderedVisibleTabs
+        if !tabBar.visibleTabs.contains(currentTab) {
+            currentTab = tabBar.visibleTabs.first ?? .network
+        }
         tabBar.onSelect = { [weak self] tab in
             self?.select(tab: tab)
         }
@@ -210,7 +217,7 @@ final class MenuPanelView: NSView {
     /// 相邻分页切换（←/→ 时使用，循环）
     /// 左右方向键切页（键盘处理在 MenuPanelView+Keyboard.swift，故为 internal）
     func switchTab(by delta: Int) {
-        let all = MenuPanelTab.allCases
+        let all = tabBar.visibleTabs
         let count = all.count
         guard let index = all.firstIndex(of: currentTab) else { return }
         let next = ((index + delta) % count + count) % count

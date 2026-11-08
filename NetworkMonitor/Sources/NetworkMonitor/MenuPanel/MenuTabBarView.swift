@@ -60,6 +60,9 @@ final class MenuTabBarView: NSView {
         }
     }
 
+    /// 可见分页（由 PanelTabPreferences 驱动；默认全量）
+    var visibleTabs: [MenuPanelTab] = MenuPanelTab.allCases
+
     private var hoveredIndex: Int?
 
     private var trackingAreaRef: NSTrackingArea?
@@ -80,8 +83,8 @@ final class MenuTabBarView: NSView {
 
     /// 每个分段一个可激活的虚拟元素（不自绘子视图，避免改动现有绘制与命中逻辑）
     private func accessibilitySegmentElements() -> [NSAccessibilityElement] {
-        let segmentWidth = bounds.width / CGFloat(MenuPanelTab.allCases.count)
-        return MenuPanelTab.allCases.enumerated().map { index, tab in
+        let segmentWidth = bounds.width / CGFloat(visibleTabs.count)
+        return visibleTabs.enumerated().map { index, tab in
             let element = MenuTabSegmentElement(onPress: { [weak self] in self?.activateSegment(at: index) })
             element.setAccessibilityParent(self)
             element.setAccessibilityRole(.button)
@@ -114,8 +117,8 @@ final class MenuTabBarView: NSView {
         track.lineWidth = 1
         track.stroke()
 
-        let segmentWidth = bounds.width / CGFloat(MenuPanelTab.allCases.count)
-        for (index, tab) in MenuPanelTab.allCases.enumerated() {
+        let segmentWidth = bounds.width / CGFloat(visibleTabs.count)
+        for (index, tab) in visibleTabs.enumerated() {
             let segmentRect = NSRect(x: CGFloat(index) * segmentWidth + 2, y: 2,
                                      width: segmentWidth - 4, height: bounds.height - 4)
             let isSelected = tab == selected
@@ -242,8 +245,8 @@ final class MenuTabBarView: NSView {
             needsDisplay = true
             return
         }
-        let index = Int(point.x / (bounds.width / CGFloat(MenuPanelTab.allCases.count)))
-        hoveredIndex = max(0, min(MenuPanelTab.allCases.count - 1, index))
+        let index = Int(point.x / (bounds.width / CGFloat(visibleTabs.count)))
+        hoveredIndex = max(0, min(visibleTabs.count - 1, index))
         needsDisplay = true
         NSCursor.pointingHand.set()
     }
@@ -251,14 +254,14 @@ final class MenuTabBarView: NSView {
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         guard bounds.contains(point) else { return }
-        let index = Int(point.x / (bounds.width / CGFloat(MenuPanelTab.allCases.count)))
+        let index = Int(point.x / (bounds.width / CGFloat(visibleTabs.count)))
         select(index: index)
     }
 
     /// 选中指定下标（越界忽略）
     func select(index: Int) {
-        guard index >= 0, index < MenuPanelTab.allCases.count else { return }
-        guard let tab = MenuPanelTab(rawValue: index) else { return }
+        guard index >= 0, index < visibleTabs.count else { return }
+        let tab = visibleTabs[index]
         selected = tab
         onSelect?(tab)
     }
