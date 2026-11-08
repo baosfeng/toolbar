@@ -13,6 +13,7 @@ final class MenuBarManager: NSObject {
     private let statusItem: NSStatusItem
     private let monitor: any NetworkMonitoringService
     private let processMonitor: any ProcessNetworkMonitoringService
+    private let trafficTracker: any TrafficTrackingService
     private let panel: MenuPanelController
     private let logger: LoggingService
     /// 系统指标采样服务（nil = 未装配；采样频率跟随偏好周期）
@@ -45,6 +46,7 @@ final class MenuBarManager: NSObject {
          logger: LoggingService = AppContext.shared.logger) {
         self.monitor = networkMonitor
         self.processMonitor = processMonitor
+        self.trafficTracker = trafficTracker
         self.systemMonitor = systemMonitor
         self.systemPreferences = systemPreferences
         self.displayPreferences = MenuBarDisplayPreferences(storage: AppContext.shared.storage)
@@ -207,20 +209,33 @@ final class MenuBarManager: NSObject {
         monitor.poll()
         let downSpeed = max(monitor.downloadSpeed, 0)
         let upSpeed = max(monitor.uploadSpeed, 0)
-        let baseTitle = StatusBarView.attributedString(downSpeed: formatSpeedShort(downSpeed),
-                                                      upSpeed: formatSpeedShort(upSpeed))
-        // 系统偏好开启时，在网速后追加 CPU 百分比（复用既有 showsCPUInMenuBar 偏好）
-        let title: NSAttributedString
-        if systemPreferences?.showsCPUInMenuBar == true,
-           let cpu = systemMonitor?.snapshot?.cpu?.totalUsage {
-            let mutable = NSMutableAttributedString(attributedString: baseTitle)
-            mutable.append(NSAttributedString(string: "  CPU \(Int((cpu * 100).rounded()))%"))
-            title = mutable
-        } else {
-            title = baseTitle
+        let enabled = displayPreferences.enabledMetrics
+        let downSpeedSafe = max(monitor.downloadSpeed, 0)
+        let upSpeedSafe = max(monitor.uploadSpeed, 0)
+        var parts: [String] = []
+        if enabled.contains(.downSpeed) { parts.append("↓" + formatSpeedShort(downSpeedSafe)) }
+        if enabled.contains(.upSpeed) { parts.append("↑" + formatSpeedShort(upSpeedSafe)) }
+        let snap = systemMonitor?.snapshot
+        if enabled.contains(.cpu), let cpu = snap?.cpu?.totalUsage { parts.append("CPU " + String(Int((cpu * 100).rounded())) + "%") }
+        if enabled.contains(.gpu), let gpu = snap?.gpu { parts.append("GPU " + String(Int((gpu.utilization * 100).rounded())) + "%") }
+        if enabled.contains(.memory), let mem = snap?.memory, mem.total > 0 { parts.append("MEM " + String(Int((Double(mem.used) / Double(mem.total) * 100).rounded())) + "%") }
+        if enabled.contains(.memoryPressure), let mem = snap?.memory { parts.append("P " + mem.pressure.rawValue) }
+        if enabled.contains(.diskFree), let disk = snap?.disk { parts.append("Disk " + String(format: "%.1f", Double(disk.total - disk.used) / 1073741824.0) + "G") }
+        if enabled.contains(.diskIO), let disk = snap?.disk {
+            if let r = disk.readBytesPerSecond { parts.append("R " + formatSpeedShort(r)) }
+            if let w = disk.writeBytesPerSecond { parts.append("W " + formatSpeedShort(w)) }
         }
-        // 仅内容变化时设置，避免每秒触发整条 Auto Layout 链布局
-        if statusItem.button?.attributedTitle != title {
+        if enabled.contains(.wifi), let wifi = snap?.wifi { parts.append("WiFi " + String(wifi.rssiDBm) + "dBm") }
+        if enabled.contains(.battery), let bat = snap?.battery, let p = bat.percentage { parts.append("BAT " + String(Int((p * 100).rounded())) + "%") }
+        if enabled.contains(.thermal), let t = snap?.thermal, let c = t.cpuTemperatureCelsius { parts.append("Temp " + String(Int(c.rounded())) + "°C") }
+        if enabled.contains(.todayTraffic) { parts.append("Today " + formatSpeedShort(Double(trafficTracker.todayRx + trafficTracker.todayTx))) }
+        if enabled.contains(.tokenToday) { parts.append("Token " + formatSpeedShort(Double(harnessUsage?.snapshot().totals.today.totalTokens ?? 0))) }
+        if enabled.contains(.tokenCacheHit), let rate = harnessUsage?.snapshot().totals.cacheHitRate { parts.append("HIT " + String(Int((rate * 100).rounded())) + "%") }
+        if enabled.contains(.tokenWeek) { parts.append("7d " + formatSpeedShort(Double(harnessUsage?.snapshot().totals.thisWeek.totalTokens ?? 0))) }
+        if parts.isEmpty { parts.append(formatSpeedShort(downSpeedSafe)) }
+        let text = parts.joined(separator: "  ")
+        let title = NSAttributedString(string: text)
+        if statusItem.button?.attributedTitle.string != text {
             statusItem.button?.attributedTitle = title
         }
 

@@ -27,6 +27,10 @@ final class SettingsGeneralPane: SettingsPaneView {
     private let panelTabPreferences = PanelTabPreferences()
     private var tabToggles: [MenuPanelTab: NSSwitch] = [:]
 
+    private let displayPreferences = MenuBarDisplayPreferences()
+    private var metricToggles: [MenuBarMetric: NSSwitch] = [:]
+    private var templateControl: NSSegmentedControl?
+
     init(launchAtStartup: LaunchAtStartupService = LaunchAtStartupService(),
          alertPreferences: BillingAlertPreferences = BillingAlertPreferences(),
          unitPreferences: NumberUnitPreferences = NumberUnitPreferences()) {
@@ -66,7 +70,49 @@ final class SettingsGeneralPane: SettingsPaneView {
         page.addCard(alertCard, sectionTitle: "额度提醒")
         page.addCard(unitCard, sectionTitle: "显示")
         buildPanelTabsCard()
+        buildMenuBarMetricsCard()
         page.addNote("设置会立即生效；开机自启动依赖应用签名，未签名构建可能被系统拒绝。")
+    }
+
+    private func buildMenuBarMetricsCard() {
+        let card = SettingsCardView()
+        for metric in MenuBarMetric.allCases {
+            let toggle = NSSwitch()
+            toggle.target = self
+            toggle.action = #selector(menuBarMetricToggled(_:))
+            toggle.tag = metric.hashValue
+            metricToggles[metric] = toggle
+            let row = SettingsRowView(title: metric.displayName, subtitle: "菜单栏显示")
+            row.trailingStack.addArrangedSubview(toggle)
+            card.addRow(row)
+        }
+        // 模板快速切换
+        let template = NSSegmentedControl(labels: ["默认", "性能", "Token", "网络", "全部"], trackingMode: .selectOne,
+                                          target: self, action: #selector(menuBarTemplateChanged))
+        template.tag = 0
+        templateControl = template
+        let templateRow = SettingsRowView(title: "快捷模板")
+        templateRow.trailingStack.addArrangedSubview(template)
+        card.addRow(templateRow)
+        page.addCard(card, sectionTitle: "菜单栏显示")
+    }
+
+    @objc private func menuBarMetricToggled(_ sender: NSSwitch) {
+        // 反查 metric
+        for (metric, toggle) in metricToggles where toggle === sender {
+            displayPreferences.setMetric(metric, enabled: sender.state == .on)
+        }
+    }
+
+    @objc private func menuBarTemplateChanged() {
+        let index = templateControl?.selectedSegment ?? 0
+        let names = ["minimal", "performance", "token", "network", "full"]
+        guard names.indices.contains(index) else { return }
+        displayPreferences.applyTemplate(names[index])
+        // 同步 toggle
+        for (metric, toggle) in metricToggles {
+            toggle.state = displayPreferences.enabledMetrics.contains(metric) ? .on : .off
+        }
     }
 
     private func buildPanelTabsCard() {
@@ -117,6 +163,9 @@ final class SettingsGeneralPane: SettingsPaneView {
                          : "当前未登记开机自启动")
         for (tab, toggle) in tabToggles {
             toggle.state = panelTabPreferences.visibleTabs.contains(tab) ? .on : .off
+        }
+        for (metric, toggle) in metricToggles {
+            toggle.state = displayPreferences.enabledMetrics.contains(metric) ? .on : .off
         }
     }
 
