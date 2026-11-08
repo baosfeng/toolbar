@@ -75,9 +75,42 @@ final class MenuBarManager: NSObject {
             return
         }
         button.target = self
-        button.action = #selector(togglePanel)
-        button.sendAction(on: [.leftMouseUp])
+        button.action = #selector(handleStatusButton)
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         button.imagePosition = .noImage
+    }
+
+    @objc private func handleStatusButton() {
+        // 左键：打开/关闭面板；右键：弹出右键菜单（设置等）
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            showStatusItemMenu()
+        } else {
+            togglePanel()
+        }
+    }
+
+    private lazy var statusItemMenu: NSMenu = {
+        let menu = NSMenu()
+        let settingsItem = NSMenuItem(title: "设置…", action: #selector(openSettingsFromMenu), keyEquivalent: ",")
+        settingsItem.keyEquivalentModifierMask = [.command, .option]
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        menu.addItem(.separator())
+        let quitItem = NSMenuItem(title: "退出 NetworkMonitor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quitItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(quitItem)
+        return menu
+    }()
+
+    private func showStatusItemMenu() {
+        guard let button = statusItem.button else { return }
+        statusItemMenu.popUp(positioning: nil,
+                              at: NSPoint(x: 0, y: button.bounds.height),
+                              in: button)
+    }
+
+    @objc func openSettingsFromMenu() {
+        onOpenSettings?(nil)
     }
 
     @objc private func togglePanel() {

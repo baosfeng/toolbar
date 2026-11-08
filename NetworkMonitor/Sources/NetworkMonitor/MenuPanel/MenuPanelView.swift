@@ -95,7 +95,8 @@ final class MenuPanelView: NSView {
         // 标题栏：分段控件 + 右侧齿轮（设置菜单）
         configureSettingsButton()
 
-        let headerStack = NSStackView(views: [tabBar, settingsButton])
+        // 设置入口已收口到状态栏右键菜单 / 主菜单，面板内不再显示齿轮
+        let headerStack = NSStackView(views: [tabBar])
         headerStack.orientation = .horizontal
         headerStack.alignment = .centerY
         headerStack.spacing = 8
@@ -116,8 +117,8 @@ final class MenuPanelView: NSView {
             contentStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -MenuPanelStyle.inset),
         ])
         headerStack.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
-        // 齿轮 24 + 间距 8 之外宽度归分段控件
-        tabBar.widthAnchor.constraint(equalTo: headerStack.widthAnchor, constant: -32).isActive = true
+        // 设置入口已隐藏到状态栏右键菜单，分段控件占满标题栏
+        tabBar.widthAnchor.constraint(equalTo: headerStack.widthAnchor).isActive = true
         scrollView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         // 各页都撑满面板内容宽度（NSStackView 的 leading 对齐不会自动拉伸子视图）
         for pane in [networkPane, clipboardPane, transferPane, billingPane, tokenPane, systemPane] {

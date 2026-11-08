@@ -17,6 +17,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let coordinator = AppCoordinator()
         self.coordinator = coordinator
         menuBarManager = coordinator.start()
+        // 系统菜单栏入口（右键菜单之外的另一处设置入口）
+        if let menuBarManager {
+            let mainMenu = NSMenu()
+            let appItem = NSMenuItem()
+            mainMenu.addItem(appItem)
+            let appMenu = NSMenu()
+            let settingsItem = NSMenuItem(title: "设置…", action: #selector(MenuBarManager.openSettingsFromMenu), keyEquivalent: ",")
+            settingsItem.keyEquivalentModifierMask = [.command]
+            settingsItem.target = menuBarManager
+            appMenu.addItem(settingsItem)
+            appMenu.addItem(.separator())
+            appMenu.addItem(NSMenuItem(title: "退出 NetworkMonitor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+            appItem.submenu = appMenu
+            NSApp.mainMenu = mainMenu
+        }
         // 启动后预热一次面板：NSPopover 的窗口 / 约束引擎 / 首帧绘制都在首次 show 时才建，
         // 提前付掉这份一次性开销，首次点击不必再等 1 秒
         menuBarManager?.schedulePrewarm()
