@@ -239,7 +239,16 @@ final class MenuBarManager: NSObject {
         case .comfortable: separator = "   "
         case .relaxed: separator = "  ·  "
         }
-        let text = parts.joined(separator: separator)
+        var alertPrefix = ""
+        if displayPreferences.alertsEnabled {
+            let cpu = systemMonitor?.snapshot?.cpu?.totalUsage ?? 0
+            let memPct = systemMonitor?.snapshot?.memory.map { m in m.total > 0 ? Double(m.used) / Double(m.total) : 0 } ?? 0
+            if (enabled.contains(.cpu) && cpu >= displayPreferences.cpuAlertThreshold) ||
+               (enabled.contains(.memory) && memPct >= displayPreferences.memoryAlertThreshold) {
+                alertPrefix = "⚠️ "
+            }
+        }
+        let text = alertPrefix + parts.joined(separator: separator)
         let title = NSAttributedString(string: text)
         if statusItem.button?.attributedTitle.string != text {
             statusItem.button?.attributedTitle = title

@@ -62,6 +62,9 @@ final class MenuBarDisplayPreferences {
         static let unit = "menuBar.unitStyle"
         static let interval = "menuBar.refreshInterval"
         static let template = "menuBar.template"
+        static let alertsEnabled = "menuBar.alertsEnabled"
+        static let cpuAlert = "menuBar.cpuAlert"
+        static let memoryAlert = "menuBar.memoryAlert"
     }
 
     var enabledMetrics: Set<MenuBarMetric> {
@@ -107,6 +110,25 @@ final class MenuBarDisplayPreferences {
     var template: String {
         get { storage.string(forKey: Key.template) ?? "minimal" }
         set { storage.set(newValue, forKey: Key.template) }
+    }
+
+    var alertsEnabled: Bool {
+        get { storage.object(forKey: Key.alertsEnabled) == nil ? false : storage.bool(forKey: Key.alertsEnabled) }
+        set { storage.set(newValue, forKey: Key.alertsEnabled) }
+    }
+    var cpuAlertThreshold: Double {
+        get {
+            let v = storage.double(forKey: Key.cpuAlert)
+            return v > 0 ? v : 0.8
+        }
+        set { storage.set(newValue, forKey: Key.cpuAlert) }
+    }
+    var memoryAlertThreshold: Double {
+        get {
+            let v = storage.double(forKey: Key.memoryAlert)
+            return v > 0 ? v : 0.85
+        }
+        set { storage.set(newValue, forKey: Key.memoryAlert) }
     }
 
     func applyTemplate(_ name: String) {
