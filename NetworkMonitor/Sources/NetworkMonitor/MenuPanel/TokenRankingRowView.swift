@@ -28,10 +28,13 @@ final class TokenRankingRowView: NSView {
         nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.usesSingleLineMode = true
         nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // 右侧数值列优先完整：宽度紧张时让名称截断，而不是把 tok / 占比压掉半个字
         amountLabel.usesSingleLineMode = true
         amountLabel.setContentHuggingPriority(.required, for: .horizontal)
+        amountLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         shareLabel.usesSingleLineMode = true
         shareLabel.setContentHuggingPriority(.required, for: .horizontal)
+        shareLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         metaLabel.usesSingleLineMode = true
         metaLabel.lineBreakMode = .byTruncatingTail
 
@@ -111,7 +114,7 @@ extension TokenRankingRowView {
             valueAvailable: CGFloat, valueNeeded: CGFloat) {
         layoutSubtreeIfNeeded()
         let nameFrame = nameLabel.convert(nameLabel.bounds, to: reference)
-        let valueText = amountLabel.stringValue + " · " + shareLabel.stringValue
+        let valueText = amountLabel.stringValue + "  " + shareLabel.stringValue
         return (snapshotTextArea(nameLabel),
                 snapshotTextWidth(nameLabel.stringValue, font: nameLabel.font),
                 nameLabel.stringValue,
@@ -120,7 +123,8 @@ extension TokenRankingRowView {
                 bounds.height,
                 nameFrame.height,
                 snapshotTextArea(amountLabel) + snapshotTextArea(shareLabel),
-                snapshotTextWidth(valueText, font: amountLabel.font))
+                snapshotTextWidth(amountLabel.stringValue, font: amountLabel.font)
+                    + snapshotTextWidth(shareLabel.stringValue, font: shareLabel.font))
     }
 }
 #endif

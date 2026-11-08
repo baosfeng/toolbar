@@ -62,17 +62,24 @@ final class TokenStateBandView: NSView {
     }
 }
 
-/// 口径说明段（二级页底部）
+/// 口径说明段（二级页底部 / 缓存屏页脚 / 排行屏卡底）
+///
+/// - Parameter maxLines: 0 = 不限行数（二级页 / 缓存屏页脚）；N > 0 = 最多 N 行、尾部省略，
+///   完整文案挂到悬停与读屏（排行屏卡底要给 3 行：全展开会把 4 行压到 35pt，单行又太省）。
 final class TokenNoteView: NSView {
 
     private let label = MenuPanelLabel.text("", font: TokenPaneStyle.noteFont,
                                             color: TokenPaneStyle.tertiaryText)
+    private let truncated: Bool
 
-    init() {
+    init(maxLines: Int = 0) {
+        truncated = maxLines > 0
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
+        // 多行必须走 byWordWrapping：byTruncatingTail 会让 field 只算一行高（实测只剩一行）
         label.lineBreakMode = .byWordWrapping
-        label.maximumNumberOfLines = 0
+        label.maximumNumberOfLines = max(maxLines, 0)
+        label.usesSingleLineMode = maxLines == 1
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
@@ -89,6 +96,11 @@ final class TokenNoteView: NSView {
 
     func update(_ text: String) {
         label.stringValue = text
+        // 限行时正文会被省略，完整口径靠悬停与读屏补全
+        if truncated {
+            label.toolTip = text
+            setAccessibilityLabel(text)
+        }
     }
 }
 

@@ -75,6 +75,14 @@ extension TokenPaneSnapshot {
         lines.append(String(format: "pane_height = %.1f content_needed = %.0f popover_max = %.0f outer_scrollable = %@",
                             pane.fittingSize.height, panel.desiredContentHeight, MenuPanelStyle.maxHeight,
                             panel.desiredContentHeight > MenuPanelStyle.maxHeight + 0.5 ? "YES" : "NO"))
+        if screen == .ranking {
+            let rows = pane.rankScreen.rowMetricsForSnapshot()
+            lines.append(String(format: "ranking_rows = %d row_height = %.1fpt row_blank = %.1fpt (min %.0f / max %.0f)",
+                                rows.visible, rows.rowHeight, rows.blank,
+                                TokenRankingScreenView.minRowHeight,
+                                TokenRankingScreenView.maxRowHeight))
+            lines.append("ranking_parts = " + pane.rankScreen.cardPartsForSnapshot())
+        }
         if screen == .usage {
             lines.append(String(format: "chart_hourly_height = %.1f chart_trend_height = %.1f",
                                 pane.hourBars.bounds.height, pane.trendSpark.bounds.height))

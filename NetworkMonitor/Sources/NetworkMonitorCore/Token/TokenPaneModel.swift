@@ -48,6 +48,9 @@ package struct TokenPaneModel {
     package let modelMeta: String
     package let projectCount: Int
     package let modelCount: Int
+    /// 当前范围的项目 / 模型合计（与占比分母同源，排行屏汇总块用）
+    package let projectTotals: TokenDistroTotals
+    package let modelTotals: TokenDistroTotals
 
     /// 「按项目 / 按模型」二级页的范围口径文案（Core 派生，视图只透传）
     package let distroCopy: TokenDistroCopy
@@ -143,6 +146,8 @@ package struct TokenPaneModel {
             modelMeta: "\(distroCopy.rangeTitle) \(modelRows.count) 个",
             projectCount: projectRows.count,
             modelCount: modelRows.count,
+            projectTotals: TokenDistroTotals(usage: snapshot.windowProjectTotals[range.window] ?? .zero),
+            modelTotals: TokenDistroTotals(usage: snapshot.windowModelTotals[range.window] ?? .zero),
             distroCopy: distroCopy,
             cachePage: cachePage,
             compare: TokenDerive.compare(snapshot, current: currentTotal, previous: previousTotal, range: range),

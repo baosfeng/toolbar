@@ -215,6 +215,7 @@ private func testDistroRowInit() {
     print("✅ 分布行 package 初始化器可用（跨目标取证构造）works")
 }
 
+
 func runTokenPresentationTests() {
     print("\n🧪 Testing Token 页展示层（Hero / 分布 / 状态带 / 格式化 / 模型装配）...")
     testHeroAndCompare()

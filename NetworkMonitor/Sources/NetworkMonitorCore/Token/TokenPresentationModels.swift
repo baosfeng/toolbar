@@ -203,6 +203,37 @@ package struct TokenDistroRow {
     }
 }
 
+/// 当前范围某个维度（项目 / 模型）的合计
+///
+/// 与占比分母是同一份数据（`windowProjectTotals` / `windowModelTotals`），
+/// **不是 TopN 行求和**：行会被截断，求和会让汇总块与每行占比对不上。
+package struct TokenDistroTotals {
+    package let totalTokens: Int
+    package let cacheRead: Int
+    package let uncached: Int
+    package let output: Int
+    package let requestCount: Int
+
+    package static let zero = TokenDistroTotals(totalTokens: 0, cacheRead: 0, uncached: 0,
+                                               output: 0, requestCount: 0)
+
+    package init(totalTokens: Int, cacheRead: Int, uncached: Int, output: Int, requestCount: Int) {
+        self.totalTokens = totalTokens
+        self.cacheRead = cacheRead
+        self.uncached = uncached
+        self.output = output
+        self.requestCount = requestCount
+    }
+
+    package init(usage: HarnessTokenUsage) {
+        totalTokens = usage.totalTokens
+        cacheRead = usage.cacheRead
+        uncached = usage.uncachedInput
+        output = usage.output
+        requestCount = usage.requestCount
+    }
+}
+
 /// 分布维度（按项目 / 按模型）
 ///
 /// 占比条与整卡的无障碍文案都从这一处按当前范围派生，避免「按项目累计占比条」这种

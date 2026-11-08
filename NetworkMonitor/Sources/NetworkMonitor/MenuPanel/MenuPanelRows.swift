@@ -18,7 +18,8 @@ class MenuPanelRow: NSView {
     /// 键盘聚焦态（由面板根视图设置）
     private(set) var isKeyboardFocused = false
 
-    private var isHovered = false
+    /// 悬停态（子类绘制悬停反馈时需要读；写入仍只在本类）
+    private(set) var isHovered = false
     private var trackingAreaRef: NSTrackingArea?
 
     init(height: CGFloat, onClick: (() -> Void)? = nil) {
