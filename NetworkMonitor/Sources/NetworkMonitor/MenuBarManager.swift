@@ -17,6 +17,9 @@ final class MenuBarManager: NSObject {
     private let logger: LoggingService
     /// 系统指标采样服务（nil = 未装配；采样频率跟随偏好周期）
     private let systemMonitor: (any SystemMonitoringService)?
+    private let systemPreferences: SystemMonitorPreferences?
+    private let displayPreferences: MenuBarDisplayPreferences
+    private let harnessUsage: (any HarnessUsageServicing)?
     /// 系统指标采样周期（秒）— 由偏好给出，1 秒链按此节流
     private let systemSampleInterval: TimeInterval
     private var lastSystemPoll: Date = .distantPast
@@ -43,6 +46,9 @@ final class MenuBarManager: NSObject {
         self.monitor = networkMonitor
         self.processMonitor = processMonitor
         self.systemMonitor = systemMonitor
+        self.systemPreferences = systemPreferences
+        self.displayPreferences = MenuBarDisplayPreferences(storage: AppContext.shared.storage)
+        self.harnessUsage = harnessUsage
         self.systemSampleInterval = systemPreferences?.sampleInterval
             ?? SystemMonitorPreferences.defaultSampleInterval
         self.logger = logger
@@ -201,8 +207,18 @@ final class MenuBarManager: NSObject {
         monitor.poll()
         let downSpeed = max(monitor.downloadSpeed, 0)
         let upSpeed = max(monitor.uploadSpeed, 0)
-        let title = StatusBarView.attributedString(downSpeed: formatSpeedShort(downSpeed),
-                                                   upSpeed: formatSpeedShort(upSpeed))
+        let baseTitle = StatusBarView.attributedString(downSpeed: formatSpeedShort(downSpeed),
+                                                      upSpeed: formatSpeedShort(upSpeed))
+        // 系统偏好开启时，在网速后追加 CPU 百分比（复用既有 showsCPUInMenuBar 偏好）
+        let title: NSAttributedString
+        if systemPreferences?.showsCPUInMenuBar == true,
+           let cpu = systemMonitor?.snapshot?.cpu?.totalUsage {
+            let mutable = NSMutableAttributedString(attributedString: baseTitle)
+            mutable.append(NSAttributedString(string: "  CPU \(Int((cpu * 100).rounded()))%"))
+            title = mutable
+        } else {
+            title = baseTitle
+        }
         // 仅内容变化时设置，避免每秒触发整条 Auto Layout 链布局
         if statusItem.button?.attributedTitle != title {
             statusItem.button?.attributedTitle = title
