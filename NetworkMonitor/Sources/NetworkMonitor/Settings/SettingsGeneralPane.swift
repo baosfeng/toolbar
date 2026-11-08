@@ -24,6 +24,9 @@ final class SettingsGeneralPane: SettingsPaneView {
     private let alertSwitch = NSSwitch()
     private let unitControl = NSPopUpButton(frame: .zero, pullsDown: false)
 
+    private let panelTabPreferences = PanelTabPreferences()
+    private var tabToggles: [MenuPanelTab: NSSwitch] = [:]
+
     init(launchAtStartup: LaunchAtStartupService = LaunchAtStartupService(),
          alertPreferences: BillingAlertPreferences = BillingAlertPreferences(),
          unitPreferences: NumberUnitPreferences = NumberUnitPreferences()) {
@@ -62,7 +65,44 @@ final class SettingsGeneralPane: SettingsPaneView {
         page.addCard(launchCard, sectionTitle: "启动")
         page.addCard(alertCard, sectionTitle: "额度提醒")
         page.addCard(unitCard, sectionTitle: "显示")
+        buildPanelTabsCard()
         page.addNote("设置会立即生效；开机自启动依赖应用签名，未签名构建可能被系统拒绝。")
+    }
+
+    private func buildPanelTabsCard() {
+        let card = SettingsCardView()
+        for tab in MenuPanelTab.allCases {
+            let toggle = NSSwitch()
+            toggle.target = self
+            toggle.action = #selector(panelTabToggled(_:))
+            toggle.tag = tab.rawValue
+            tabToggles[tab] = toggle
+            let row = SettingsRowView(title: tab.title, subtitle: "显示面板分页；至少保留 1 个")
+            row.trailingStack.addArrangedSubview(toggle)
+            let up = SettingsLinkButton.make("上移", target: self, action: #selector(panelTabMoveUp(_:)))
+            up.tag = tab.rawValue
+            let down = SettingsLinkButton.make("下移", target: self, action: #selector(panelTabMoveDown(_:)))
+            down.tag = tab.rawValue
+            row.trailingStack.addArrangedSubview(up)
+            row.trailingStack.addArrangedSubview(down)
+            card.addRow(row)
+        }
+        page.addCard(card, sectionTitle: "面板分页")
+    }
+
+    @objc private func panelTabToggled(_ sender: NSSwitch) {
+        guard let tab = MenuPanelTab(rawValue: sender.tag) else { return }
+        panelTabPreferences.setVisible(sender.state == .on, for: tab)
+    }
+
+    @objc private func panelTabMoveUp(_ sender: NSButton) {
+        guard let tab = MenuPanelTab(rawValue: sender.tag) else { return }
+        panelTabPreferences.move(tab, offset: -1)
+    }
+
+    @objc private func panelTabMoveDown(_ sender: NSButton) {
+        guard let tab = MenuPanelTab(rawValue: sender.tag) else { return }
+        panelTabPreferences.move(tab, offset: 1)
     }
 
     override func refresh() {
@@ -75,6 +115,9 @@ final class SettingsGeneralPane: SettingsPaneView {
         launchRow.update(subtitle: launchAtStartup.isEnabled
                          ? "登录后自动启动 NetworkMonitor"
                          : "当前未登记开机自启动")
+        for (tab, toggle) in tabToggles {
+            toggle.state = panelTabPreferences.visibleTabs.contains(tab) ? .on : .off
+        }
     }
 
     // MARK: - 动作

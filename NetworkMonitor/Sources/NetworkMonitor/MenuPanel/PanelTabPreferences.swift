@@ -36,7 +36,8 @@ final class PanelTabPreferences {
             return result.isEmpty ? Self.defaultOrder : result
         }
         set {
-            storage.set(newValue.map(String.init).joined(separator: ","), forKey: Key.order)
+            let orderValue = newValue.map { String($0.rawValue) }.joined(separator: ",")
+            storage.set(orderValue, forKey: Key.order)
         }
     }
 
@@ -53,7 +54,8 @@ final class PanelTabPreferences {
         set {
             // 至少保留一项
             let filtered = newValue.isEmpty ? [tabOrder.first ?? .network] : Array(newValue)
-            storage.set(filtered.map(String.init).joined(separator: ","), forKey: Key.visible)
+            let visibleValue = filtered.map { String($0.rawValue) }.joined(separator: ",")
+            storage.set(visibleValue, forKey: Key.visible)
         }
     }
 
