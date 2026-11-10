@@ -17,6 +17,19 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         needsDisplay = true
     }
 
+    /// 工具条右侧动作按钮（取消 / 复制 / 保存 / 贴顶）
+    ///
+    /// 此前只有键盘能触发这些动作，鼠标用户看不到任何按钮，
+    /// 于是「菜单栏点一下就能确定 / 保存 / 置顶」的需求完全落空。
+    func toolBarDidPerform(_ action: SnipBarAction) {
+        switch action {
+        case .cancel: delegate?.overlayViewDidCancel(self)
+        case .copy: confirm()
+        case .save: requestSave(quick: false)
+        case .pin: requestPin()
+        }
+    }
+
     // MARK: - 工具条布局
 
     /// 选中态才显示工具条：默认贴选区下方居中，放不下就翻到上方

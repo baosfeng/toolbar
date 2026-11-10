@@ -1,7 +1,28 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 工具条回调
+
+/// 工具条右侧的动作按钮
+enum SnipBarAction: CaseIterable {
+    case cancel
+    case copy
+    case save
+    case pin
+
+    var title: String {
+        switch self {
+        case .cancel: return "取消"
+        case .copy: return "复制"
+        case .save: return "保存"
+        case .pin: return "贴图"
+        }
+    }
+
+    /// 强调色按钮（主动作）
+    var isPrimary: Bool { self == .copy }
+}
 
 @MainActor
 protocol SnipToolBarViewDelegate: AnyObject {
@@ -9,6 +30,8 @@ protocol SnipToolBarViewDelegate: AnyObject {
     func toolBarDidChangeTool(_ tool: SnipTool?)
     /// 切换颜色或线宽
     func toolBarDidChangeStyle(_ style: SnipAnnotationStyle)
+    /// 点击右侧动作按钮（取消 / 复制 / 保存 / 贴顶）
+    func toolBarDidPerform(_ action: SnipBarAction)
 }
 
 // MARK: - 标注工具条
@@ -17,12 +40,21 @@ protocol SnipToolBarViewDelegate: AnyObject {
 @MainActor
 final class SnipToolBarView: NSView {
 
-    static let height: CGFloat = 40
+    static let height: CGFloat = SnipToolBarLayout.height
 
     weak var delegate: SnipToolBarViewDelegate?
 
-    private(set) var selectedTool: SnipTool?
+    /// 放宽为 internal：DEBUG 取证要在离屏渲染里摆出「已选中」状态
+    var selectedTool: SnipTool?
     private(set) var style = SnipAnnotationStyle()
+
+    /// 仅 DEBUG：离屏取证时设置已选中的颜色 / 线宽
+    #if DEBUG
+    func debugSetStyle(_ newStyle: SnipAnnotationStyle) {
+        style = newStyle
+        needsDisplay = true
+    }
+    #endif
 
     private let tools = SnipTool.allCases
     private let colors: [SnipAnnotationColor] = [.red, .orange, .yellow, .green, .blue, .black, .white]
@@ -31,30 +63,27 @@ final class SnipToolBarView: NSView {
     private var toolRects: [(SnipTool, CGRect)] = []
     private var colorRects: [(SnipAnnotationColor, CGRect)] = []
     private var widthRects: [(CGFloat, CGRect)] = []
-
-    private enum Metrics {
-        static let padding: CGFloat = 8
-        static let toolSide: CGFloat = 30
-        static let toolGap: CGFloat = 3
-        static let colorSide: CGFloat = 20
-        static let colorGap: CGFloat = 3
-        static let widthSide: CGFloat = 24
-        static let widthGap: CGFloat = 3
-        static let separatorGap: CGFloat = 8
-    }
+    private var actionRects: [(SnipBarAction, CGRect)] = []
+    /// 组间分隔线的 x 坐标（与按钮排布同源，避免两处各算一遍）
+    private var dividerXs: [CGFloat] = []
 
     override var isFlipped: Bool { true }
 
     /// 整条工具条的宽度
+    ///
+    /// 宽度与按钮位置都由 SnipToolBarLayout 一次算出：早期实现里宽度与布局各写一遍累加式，
+    /// 前者多算一段组间宽度、后者末尾多算一个组内间隙，右侧因此多出 17pt 空白，
+    /// 按钮看着像被挤向左边。纯逻辑搬到 NetworkMonitorUI 后可被 TestRunner 直接断言。
     static var preferredWidth: CGFloat {
-        let tools = CGFloat(SnipTool.allCases.count)
-        let widths = CGFloat(3)
-        let colors = CGFloat(7)
-        return Metrics.padding * 2
-            + tools * Metrics.toolSide + (tools - 1) * Metrics.toolGap
-            + Metrics.separatorGap * 2
-            + colors * Metrics.colorSide + (colors - 1) * Metrics.colorGap
-            + widths * Metrics.widthSide + (widths - 1) * Metrics.widthGap
+        layoutPlan.width
+    }
+
+    /// 当前传入组件的布局计划
+    private static var layoutPlan: SnipToolBarLayout.Plan {
+        SnipToolBarLayout.plan(toolCount: SnipTool.allCases.count,
+                               colorCount: 7,
+                               widthCount: 3,
+                               actionCount: SnipBarAction.allCases.count)
     }
 
     init() {
@@ -69,33 +98,17 @@ final class SnipToolBarView: NSView {
 
     // MARK: - 布局
 
+    /// 按共享计划摆放（每帧重算，bounds 变化后仍然对齐）
     private func layoutRects() {
-        toolRects.removeAll()
-        colorRects.removeAll()
-        widthRects.removeAll()
-
-        var x = Metrics.padding
-        let centerY = bounds.height / 2
-
-        for tool in tools {
-            toolRects.append((tool, CGRect(x: x, y: centerY - Metrics.toolSide / 2,
-                                           width: Metrics.toolSide, height: Metrics.toolSide)))
-            x += Metrics.toolSide + Metrics.toolGap
-        }
-        x += Metrics.separatorGap * 2 - Metrics.toolGap
-
-        for color in colors {
-            colorRects.append((color, CGRect(x: x, y: centerY - Metrics.colorSide / 2,
-                                             width: Metrics.colorSide, height: Metrics.colorSide)))
-            x += Metrics.colorSide + Metrics.colorGap
-        }
-        x += Metrics.separatorGap * 2 - Metrics.colorGap
-
-        for width in widths {
-            widthRects.append((width, CGRect(x: x, y: centerY - Metrics.widthSide / 2,
-                                             width: Metrics.widthSide, height: Metrics.widthSide)))
-            x += Metrics.widthSide + Metrics.widthGap
-        }
+        let plan = SnipToolBarLayout.plan(toolCount: tools.count,
+                                          colorCount: colors.count,
+                                          widthCount: widths.count,
+                                          actionCount: SnipBarAction.allCases.count)
+        toolRects = Array(zip(tools, plan.toolRects))
+        colorRects = Array(zip(colors, plan.colorRects))
+        widthRects = Array(zip(widths, plan.widthRects))
+        actionRects = Array(zip(SnipBarAction.allCases, plan.actionRects))
+        dividerXs = plan.dividerXs
     }
 
     // MARK: - 绘制
@@ -118,8 +131,29 @@ final class SnipToolBarView: NSView {
                        alpha: isSelected ? 1 : 0.72)
         }
 
-        drawSeparator(at: toolRects.last?.1.maxX ?? 0, in: context)
-        drawSeparator(at: colorRects.last?.1.maxX ?? 0, in: context)
+        for x in dividerXs {
+            drawSeparator(at: x, in: context)
+        }
+
+        // 动作按钮：复制用强调色，其余灰色描边
+        for (action, rect) in actionRects {
+            let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
+            if action.isPrimary {
+                NSColor.controlAccentColor.setFill()
+                path.fill()
+            } else {
+                NSColor.white.withAlphaComponent(0.16).setFill()
+                path.fill()
+            }
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                .foregroundColor: NSColor.white
+            ]
+            let text = action.title as NSString
+            let size = text.size(withAttributes: attributes)
+            text.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
+                      withAttributes: attributes)
+        }
 
         for (color, rect) in colorRects {
             let dotRect = rect.insetBy(dx: 3, dy: 3)
@@ -162,8 +196,8 @@ final class SnipToolBarView: NSView {
         context.saveGState()
         context.setStrokeColor(NSColor.white.withAlphaComponent(0.18).cgColor)
         context.setLineWidth(1)
-        context.move(to: CGPoint(x: x + Metrics.separatorGap, y: 10))
-        context.addLine(to: CGPoint(x: x + Metrics.separatorGap, y: bounds.height - 10))
+        context.move(to: CGPoint(x: x, y: 9))
+        context.addLine(to: CGPoint(x: x, y: bounds.height - 9))
         context.strokePath()
         context.restoreGState()
     }
@@ -188,6 +222,10 @@ final class SnipToolBarView: NSView {
             style.lineWidth = width
             delegate?.toolBarDidChangeStyle(style)
             needsDisplay = true
+            return
+        }
+        for (action, rect) in actionRects where rect.contains(point) {
+            delegate?.toolBarDidPerform(action)
             return
         }
     }
