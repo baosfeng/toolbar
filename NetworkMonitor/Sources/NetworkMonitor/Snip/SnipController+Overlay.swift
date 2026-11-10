@@ -11,6 +11,12 @@ extension SnipController {
         let windowInfos = captureService.windowInfos()
         let previous = lastSelection
         let history = selectionHistory
+        // 开工样式来自设置页偏好：颜色 / 线宽 / 实虚线三个键此前没有任何消费方，
+        // 用户改「默认颜色、线宽」对新建截图完全不生效（本轮把这条链路接上）。
+        let initialStyle = SnipAnnotationStyleResolver.style(
+            colorHex: storage.string(forKey: SnipPreferenceKey.annotationColor),
+            lineWidth: (storage.object(forKey: SnipPreferenceKey.annotationLineWidth) as? Double).map { CGFloat($0) },
+            dashed: storage.bool(forKey: SnipPreferenceKey.annotationDashed))
         overlays = result.map { captured in
             SnipOverlayWindow(display: captured.display,
                               screenshot: captured.image,
@@ -18,7 +24,17 @@ extension SnipController {
                               lastSelection: previous,
                               history: history,
                               primaryHeight: primaryHeight,
+                              initialStyle: initialStyle,
                               delegate: self)
+        }
+        // 样式回写：覆盖层里调过的颜色 / 线宽 / 实虚线要落进偏好，下次截图还是这支笔
+        // （此前设置页写了这三个键却无人消费，等于「设了不生效」）
+        for window in overlays {
+            window.overlayView.onStylePersist = { [weak self] style in
+                self?.storage.set(SnipAnnotationColorHex.hex(style.color), forKey: SnipPreferenceKey.annotationColor)
+                self?.storage.set(Double(style.lineWidth), forKey: SnipPreferenceKey.annotationLineWidth)
+                self?.storage.set(style.dashed, forKey: SnipPreferenceKey.annotationDashed)
+            }
         }
         // 先装键盘兜底再上屏：上屏瞬间按下的键（双击热键、抢手速按 Esc）也要能被接住
         installKeyboardFallback()

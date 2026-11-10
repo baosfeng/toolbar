@@ -25,6 +25,7 @@ final class SnipOverlayWindow: NSPanel {
          lastSelection: CGRect?,
          history: [CGRect],
          primaryHeight: CGFloat,
+         initialStyle: SnipAnnotationStyle,
          delegate: SnipOverlayViewDelegate) {
         let frame = SelectionGeometry.appKitRect(fromCG: display.frame, primaryHeight: primaryHeight)
         let view = SnipOverlayView(frame: NSRect(origin: .zero, size: frame.size),
@@ -32,7 +33,8 @@ final class SnipOverlayWindow: NSPanel {
                                    windowInfos: windowInfos,
                                    displayOrigin: display.frame.origin,
                                    lastSelection: lastSelection,
-                                   history: history)
+                                   history: history,
+                                   initialStyle: initialStyle)
         overlayView = view
         // .nonactivatingPanel：窗口可成为 key 而不要求 App 变成前台（见类型注释）
         super.init(contentRect: frame,

@@ -78,7 +78,12 @@ final class SnipToolBarView: NSView {
 
     /// 工具条上可选的颜色与线宽（二级面板的内容与工具条当前值的来源，只此一份）
     static let colors: [SnipAnnotationColor] = [.red, .orange, .yellow, .green, .blue, .black, .white]
-    static let widths: [CGFloat] = [2, 4, 8]
+    /// 线宽档（与 SnipLineWidthStepper.widths 同源，两者共用一份，不再各写一份）
+    static let widths: [CGFloat] = SnipLineWidthStepper.widths
+    /// 实线 / 虚线两档（官方专业版「虚线/点线」能力）
+    static let dashes: [Bool] = [false, true]
+    /// 颜色透明度三档：不透明 / 半透明 / 淡（官方 Alpha 0–255 的常用档位）
+    static let alphas: [CGFloat] = [1.0, 0.6, 0.3]
     /// 一级工具条常驻的工具
     static let primaryTools = SnipTool.primary
     /// 收进二级面板的工具
@@ -253,7 +258,12 @@ final class SnipToolBarView: NSView {
             return
         }
         if widthRect.contains(point) {
-            delegate?.toolBarDidRequestPanel(.widths(Self.widths), anchor: widthRect)
+            // 官方把线宽 / 实虚线 / 颜色 Alpha 放在同一个「画笔设置」入口里：
+            // 点一级工具条上的当前线宽档就一次把三件事都调好，不用来回开三个盘面
+            delegate?.toolBarDidRequestPanel(.styles(widths: Self.widths,
+                                                     dashes: Self.dashes,
+                                                     alphas: Self.alphas),
+                                             anchor: widthRect)
             return
         }
         for (action, rect) in actionRects where rect.contains(point) {

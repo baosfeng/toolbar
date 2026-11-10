@@ -33,6 +33,8 @@ public enum SnipKeyCommand: Equatable {
     case clearAnnotations
     /// 调整画笔粗细：delta 为正加粗、为负变细（官方 1 / 2 与 [ / ]）
     case adjustLineWidth(delta: Int)
+    /// 删除当前选中的标注（官方二次编辑的 Del）
+    case deleteSelectedAnnotation
     /// 保存选区；quick 为 true 表示快速保存到默认目录
     case save(quick: Bool)
     /// 复制选区到剪贴板
@@ -81,6 +83,10 @@ public enum SnipKeyCommandResolver {
         public static let upArrow = 126
         public static let leftBracket = 33
         public static let rightBracket = 30
+        /// Delete（退格键在 Mac 键盘上位于主键区）
+        public static let delete = 51
+        /// Forward Delete（键盘右侧扩展键）
+        public static let forwardDelete = 117
     }
 
     /// 解析一次按键
@@ -105,6 +111,9 @@ public enum SnipKeyCommandResolver {
         case KeyCode.comma: return .historyOlder
         case KeyCode.period: return .historyNewer
         case KeyCode.tab: return .toggleWindowDetection
+        // 官方二次编辑：Del 删除当前选中的形状。主键区退格与扩展 Delete 同义，
+        // 都在这里提前判掉，免得走到下面「裸字母 → 微调」的分支
+        case KeyCode.delete, KeyCode.forwardDelete: return .deleteSelectedAnnotation
         case KeyCode.leftArrow: return .nudge(dx: -1, dy: 0)
         case KeyCode.rightArrow: return .nudge(dx: 1, dy: 0)
         case KeyCode.downArrow: return .nudge(dx: 0, dy: 1)

@@ -224,5 +224,10 @@ runSnipLineWidthTests()
 // MARK: - 贴图窗键位与点击语义（⌘W / 双击 / 中键 / +/- / ⌃+/-）
 runPinKeyCommandTests()
 
+// MARK: - Shift 标注约束 / 偏好样式解析 / Del 删除（Snipaste 官方标注语义）
+runSnipAnnotationConstraintTests()
+runSnipAnnotationStyleResolverTests()
+runSnipAnnotationSelectionTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")

@@ -19,75 +19,8 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         currentStyle = style
         // 一级工具条只显示当前颜色 / 线宽，选完要同步，否则面板里换了色条上看不出来
         toolbarView?.updateStyle(style)
-        needsDisplay = true
-    }
-
-    /// 工具条请求二级面板：关掉已有的，再在触发按钮上方摆出新的
-    func toolBarDidRequestPanel(_ content: SnipPanelContent, anchor: CGRect) {
-        // 工具条的 frame 由 draw 阶段摆放：先跑一次布局，面板才能贴着真实的工具条定位
-        // （否则首次弹出时工具条 frame 还是零尺寸，面板会飘到屏幕左上角）
-        layoutToolBar()
-        closeToolPanel()
-        let panel = SnipToolPanelView(content: content,
-                                      selectedIndex: selectedIndex(in: content))
-        panel.onPick = { [weak self] index in
-            self?.pickPanelItem(in: content, index: index)
-        }
-        let width = content.size.width
-        let height = content.size.height
-        // anchor 是工具条自身的本地坐标，面板是覆盖层的子视图：先换算到覆盖层坐标再居中
-        let barOriginX = toolbarView?.frame.minX ?? 0
-        var originX = barOriginX + anchor.midX - width / 2
-        originX = min(max(originX, 8), max(bounds.width - width - 8, 8))
-        // 默认贴在一级工具条上方；上方放不下就压到工具条下方
-        var originY = (toolbarView?.frame.minY ?? anchor.minY) - height - 6
-        if originY < 8 {
-            originY = (toolbarView?.frame.maxY ?? anchor.maxY) + 6
-        }
-        originY = min(max(originY, 8), max(bounds.height - height - 8, 8))
-        panel.frame = CGRect(x: originX, y: originY, width: width, height: height)
-        addSubview(panel)
-        toolPanel = panel
-        needsDisplay = true
-    }
-
-    /// 二级面板里当前应高亮的项：工具按工具枚举、颜色按色值、线宽按当前宽度
-    private func selectedIndex(in content: SnipPanelContent) -> Int? {
-        switch content {
-        case .tools(let tools):
-            guard let activeTool else { return nil }
-            return tools.firstIndex(of: activeTool)
-        case .colors(let colors):
-            return colors.firstIndex(of: currentStyle.color)
-        case .widths(let widths):
-            return widths.firstIndex(of: currentStyle.lineWidth)
-        }
-    }
-
-    /// 选中二级面板里的一项：工具 / 颜色 / 线宽各自回写，随后面板收起
-    private func pickPanelItem(in content: SnipPanelContent, index: Int) {
-        switch content {
-        case .tools(let tools):
-            guard tools.indices.contains(index) else { closeToolPanel(); return }
-            let picked = tools[index]
-            activeTool = (activeTool == picked) ? nil : picked
-            toolBarDidChangeTool(activeTool)
-        case .colors(let colors):
-            guard colors.indices.contains(index) else { closeToolPanel(); return }
-            currentStyle.color = colors[index]
-            toolBarDidChangeStyle(currentStyle)
-        case .widths(let widths):
-            guard widths.indices.contains(index) else { closeToolPanel(); return }
-            currentStyle.lineWidth = widths[index]
-            toolBarDidChangeStyle(currentStyle)
-        }
-        closeToolPanel()
-    }
-
-    /// 收起二级面板
-    func closeToolPanel() {
-        toolPanel?.removeFromSuperview()
-        toolPanel = nil
+        // 落偏好：下支笔沿用这次的选择（官方口径里这些属于持久设置，不是一次性的）
+        onStylePersist?(style)
         needsDisplay = true
     }
 
@@ -180,6 +113,9 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
             return true
         }
         guard let kind = tool.annotationKind else { return false }
+        // 二次编辑最小集：点在同类型的已绘制图形上 → 选中它（Del 删除、可见选中描边），
+        // 而不是又压一个新图形上去。官方口径是「选中某一类型时对同类型形状二次编辑」。
+        if selectSameKindAnnotationIfHit(at: point, kind: kind) { return true }
         if kind == .text {
             // 点在已有文字上 → 选中它（滚轮改字号、⌘R 旋转）；点在空白 → 新建
             if let index = annotationStack.annotations.indices.last(where: {
@@ -246,15 +182,28 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         needsDisplay = true
     }
 
-    func handleAnnotationMouseDragged(to point: CGPoint) -> Bool {
+    func handleAnnotationMouseDragged(to point: CGPoint, lockingShift: Bool = false) -> Bool {
         if activeTool == .eraser, state.phase == .selected {
             eraseAnnotation(at: point)
             return true
         }
         guard var draft = draftAnnotation else { return false }
-        draft.end = point
+        // Shift 约束：矩形→正方形、椭圆→圆、直线/箭头→水平·垂直·45°、画笔→直线。
+        // 约束在每次拖拽都重算（中途按下 Shift 立刻生效、松开立刻回到自由形状），
+        // 因此这里用 draft.start 当锚点，不受上一次约束结果影响。
+        let constrained = SnipAnnotationConstraint.constrained(kind: draft.kind,
+                                                              start: draft.start,
+                                                              end: point,
+                                                              lockingShift: lockingShift)
+        draft.end = constrained
         if draft.kind == .freehand {
-            draft.points.append(point)
+            // 画笔轨迹：按住 Shift 时只保留起点与当前点（等于画直线），
+            // 否则按历史点追加，中途松手再按住也能延续同一条轨迹
+            if lockingShift {
+                draft.points = [draft.start, constrained]
+            } else {
+                draft.points.append(point)
+            }
         }
         draftAnnotation = draft
         needsDisplay = true

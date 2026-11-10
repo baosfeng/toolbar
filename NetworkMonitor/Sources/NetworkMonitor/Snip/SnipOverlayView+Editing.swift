@@ -73,4 +73,62 @@ extension SnipOverlayView {
         stepLineWidth(by: delta > 0 ? 1 : -1)
         return true
     }
+
+    // MARK: - 选中与删除
+
+    /// 删除当前选中的标注；返回是否真的删了
+    ///
+    /// 官方二次编辑的最小集：先能选中、再能删。没有选中内容时返回 false，
+    /// 由调用方把按键放行（吞掉一个什么都不做的 Del 比不响应更糟）。
+    func deleteSelectedAnnotation() -> Bool {
+        guard let index = selectedAnnotationIndex,
+              annotationStack.annotations.indices.contains(index) else { return false }
+        annotationStack.remove(at: index)
+        selectedAnnotationIndex = nil
+        needsDisplay = true
+        return true
+    }
+
+    /// 点中**同类型**的已绘制图形 → 选中它（官方二次编辑语义）
+    ///
+    /// 只选同类型：选中矩形工具时点箭头不该把箭头选走（那是拖出新矩形的手势）。
+    /// 轨迹类（画笔 / 折线）无论如何都让给绘制：它们的命中带比较宽，
+    /// 点一下就被选走会让「接着上一笔继续画」变得不可能。
+    @discardableResult
+    func selectSameKindAnnotationIfHit(at point: CGPoint, kind: SnipAnnotationKind) -> Bool {
+        guard draftAnnotation == nil, !kind.isStroke else { return false }
+        for index in annotationStack.annotations.indices.reversed() {
+            let annotation = annotationStack.annotations[index]
+            guard annotation.kind == kind else { continue }
+            if SnipAnnotationRenderer.hitTest(annotation, point: point, tolerance: 8) {
+                selectedAnnotationIndex = index
+                needsDisplay = true
+                return true
+            }
+        }
+        return false
+    }
+
+    /// 点中已有标注 → 选中它（供 Del 删除与可见的选中描边）
+    ///
+    /// 只在没有草稿时生效：正在画新图形时点击应继续画，不该被上一个图形抢走。
+    /// 命中判定复用渲染器的 hitTest（与橡皮擦同一口径）。
+    @discardableResult
+    func selectAnnotationIfHit(at point: CGPoint) -> Bool {
+        guard draftAnnotation == nil else { return false }
+        for index in annotationStack.annotations.indices.reversed() {
+            if SnipAnnotationRenderer.hitTest(annotationStack.annotations[index],
+                                              point: point,
+                                              tolerance: 8) {
+                selectedAnnotationIndex = index
+                needsDisplay = true
+                return true
+            }
+        }
+        if selectedAnnotationIndex != nil {
+            selectedAnnotationIndex = nil
+            needsDisplay = true
+        }
+        return false
+    }
 }

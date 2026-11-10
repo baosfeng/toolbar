@@ -257,7 +257,7 @@ extension SnipOverlayView {
         switch content {
         case .tools: anchor = bar.debugMoreRect
         case .colors: anchor = bar.debugColorRect
-        case .widths: anchor = bar.debugWidthRect
+        case .widths, .styles: anchor = bar.debugWidthRect
         }
         toolBarDidRequestPanel(content, anchor: anchor)
     }

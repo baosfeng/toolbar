@@ -86,6 +86,14 @@ public enum SnipAnnotationKind: String, Equatable, Sendable, CaseIterable {
     public var isDrawable: Bool {
         self != .text
     }
+
+    /// 轨迹类图元（画笔 / 折线）— 命中带较宽，点击不该把它选走
+    ///
+    /// 二次编辑的「点中同类型图形即选中」要用这条判据：轨迹类的用法是接着上一笔继续画，
+    /// 点一下就选中会让继续绘制变得不可能。
+    public var isStroke: Bool {
+        self == .freehand || self == .polyline
+    }
 }
 
 /// 一个标注图元 — 坐标为本地点坐标（左上原点）

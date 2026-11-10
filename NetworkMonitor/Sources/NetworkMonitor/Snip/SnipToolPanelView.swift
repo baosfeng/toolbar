@@ -16,21 +16,29 @@ enum SnipPanelContent: Equatable {
     case colors([SnipAnnotationColor])
     /// 可选线宽
     case widths([CGFloat])
+    /// 样式面板：线宽 + 实线/虚线 + 颜色透明度
+    ///
+    /// 官方把三件事放在同一个「大颜色按钮 / 画笔设置」入口里：线宽、虚线/点线、
+    /// 颜色 Alpha 通道（0–255）。分成三个独立面板会让用户来回点三次，
+    /// 这里合并成一个盘面，一次就能把一支笔画好。
+    case styles(widths: [CGFloat], dashes: [Bool], alphas: [CGFloat])
 
     var itemCount: Int {
         switch self {
         case .tools(let items): return items.count
         case .colors(let items): return items.count
         case .widths(let items): return items.count
+        case .styles(let widths, let dashes, let alphas): return widths.count + dashes.count + alphas.count
         }
     }
 
-    /// 每行列数：工具 3 列、颜色 4 列、线宽 3 列
+    /// 每行列数：工具 3 列、颜色 4 列、线宽 3 列、样式 4 列
     var columns: Int {
         switch self {
         case .tools: return 3
         case .colors: return 4
         case .widths: return 3
+        case .styles: return 4
         }
     }
 
@@ -40,6 +48,7 @@ enum SnipPanelContent: Equatable {
         case .tools: return 34
         case .colors: return 30
         case .widths: return 40
+        case .styles: return 38
         }
     }
 
@@ -56,6 +65,7 @@ enum SnipPanelContent: Equatable {
         case .tools: return "标注工具"
         case .colors: return "标注颜色"
         case .widths: return "标注线宽"
+        case .styles: return "画笔样式（线宽 / 虚线 / 透明度）"
         }
     }
 }
@@ -116,9 +126,37 @@ final class SnipToolPanelView: NSView {
                 SnipBarDrawing.drawColorDot(colors[index], in: rect, isSelected: isSelected)
             case .widths(let widths) where widths.indices.contains(index):
                 SnipBarDrawing.drawWidth(widths[index], in: rect, isSelected: isSelected)
+            case .styles(let widths, let dashes, let alphas):
+                drawStyleItem(widths: widths, dashes: dashes, alphas: alphas,
+                              index: index, rect: rect, isSelected: isSelected)
             default:
                 break
             }
+        }
+    }
+
+    /// 样式面板的单项：线宽 → 粗细条、虚线 → 虚线段、透明度 → 半透明圆点
+    ///
+    /// 三种项在同一个盘面里用图形自身表达，不写字：线宽条越长越粗、虚线段一眼能分实虚、
+    /// 透明度圆点越淡越透明——用户不必读标签就知道点的是什么。
+    private func drawStyleItem(widths: [CGFloat],
+                               dashes: [Bool],
+                               alphas: [CGFloat],
+                               index: Int,
+                               rect: CGRect,
+                               isSelected: Bool) {
+        if widths.indices.contains(index) {
+            SnipBarDrawing.drawWidth(widths[index], in: rect, isSelected: isSelected)
+            return
+        }
+        let offset = index - widths.count
+        if dashes.indices.contains(offset) {
+            SnipBarDrawing.drawDashSample(dashed: dashes[offset], in: rect, isSelected: isSelected)
+            return
+        }
+        let alphaIndex = offset - dashes.count
+        if alphas.indices.contains(alphaIndex) {
+            SnipBarDrawing.drawAlphaDot(alpha: alphas[alphaIndex], in: rect, isSelected: isSelected)
         }
     }
 
