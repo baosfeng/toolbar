@@ -21,6 +21,8 @@ extension SnipController {
         }
         runOverlayDemoIfRequested()
         runWhiteboardDemoIfRequested()
+        SnipToolBarSnapshot.runIfRequested()
+        SnipOverlaySnapshot.runIfRequested()
 #endif
     }
 

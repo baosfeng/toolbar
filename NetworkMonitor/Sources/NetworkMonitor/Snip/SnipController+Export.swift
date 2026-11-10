@@ -51,17 +51,40 @@ extension SnipController {
             logger.info("已快速保存：\(LogRedaction.path(url.path))")
             dismissOverlays()
         } catch {
-            logger.error("快速保存失败：\(error)")
+            fail(message: "保存失败：\(error.localizedDescription)")
+        }
+    }
+
+    /// 复制后自动落盘：写进快速保存目录，失败只记日志（主流程是复制，不该被落盘失败打断）
+    func persistQuietly(_ image: CGImage) {
+        let directory = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let url = directory.appendingPathComponent(SnipFileNaming.fileName(for: Date()))
+            try SnipFileWriter.writePNG(image, to: url)
+            logger.info("已自动保存：\(LogRedaction.path(url.path))")
+        } catch {
+            logger.warning("自动保存失败：\(error)")
         }
     }
 
     func presentSavePanel(for image: CGImage) {
+        // 覆盖层已收掉、激活策略也退回了菜单栏态：不自报家门时面板会开在别的 App 后面，
+        // 用户只看到「按了保存什么都没发生」。这里显式切回可激活态并激活，面板关掉再退回。
+        if NSApp.activationPolicy() != .regular {
+            NSApp.setActivationPolicy(.regular)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        defer { restoreMenuBarPolicy() }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = SnipFileNaming.fileName(for: Date())
         panel.directoryURL = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
         panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard panel.runModal() == .OK, let url = panel.url else {
+            logger.info("保存已取消")
+            return
+        }
         do {
             try SnipFileWriter.writePNG(image, to: url)
             logger.info("已保存到：\(LogRedaction.path(url.path))")

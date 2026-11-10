@@ -98,7 +98,62 @@ final class SettingsGeneralPane: SettingsPaneView {
         let templateRow = SettingsRowView(title: "快捷模板")
         templateRow.trailingStack.addArrangedSubview(template)
         card.addRow(templateRow)
+
+        densityControl.addItems(withTitles: MenuBarDensity.allCases.map(\.rawValue))
+        densityControl.target = self
+        densityControl.action = #selector(menuBarDensityChanged)
+        let densityRow = SettingsRowView(title: "密度")
+        densityRow.trailingStack.addArrangedSubview(densityControl)
+        card.addRow(densityRow)
+
+        unitControl2.addItems(withTitles: MenuBarUnitStyle.allCases.map(\.rawValue))
+        unitControl2.target = self
+        unitControl2.action = #selector(menuBarUnitChanged)
+        let unit2Row = SettingsRowView(title: "单位")
+        unit2Row.trailingStack.addArrangedSubview(unitControl2)
+        card.addRow(unit2Row)
+
+        layoutControl.addItems(withTitles: MenuBarLayout.allCases.map(\.rawValue))
+        layoutControl.target = self
+        layoutControl.action = #selector(menuBarLayoutChanged)
+        let layoutRow = SettingsRowView(title: "布局")
+        layoutRow.trailingStack.addArrangedSubview(layoutControl)
+        card.addRow(layoutRow)
+
+        intervalControl.addItems(withTitles: ["1s", "2s", "5s"])
+        intervalControl.target = self
+        intervalControl.action = #selector(menuBarIntervalChanged)
+        let intervalRow = SettingsRowView(title: "间隔")
+        intervalRow.trailingStack.addArrangedSubview(intervalControl)
+        card.addRow(intervalRow)
+
         page.addCard(card, sectionTitle: "菜单栏显示")
+    }
+
+    @objc private func menuBarDensityChanged() {
+        let idx = densityControl.indexOfSelectedItem
+        guard MenuBarDensity.allCases.indices.contains(idx) else { return }
+        displayPreferences.density = MenuBarDensity.allCases[idx]
+    }
+
+    @objc private func menuBarUnitChanged() {
+        let idx = unitControl2.indexOfSelectedItem
+        guard MenuBarUnitStyle.allCases.indices.contains(idx) else { return }
+        displayPreferences.unitStyle = MenuBarUnitStyle.allCases[idx]
+    }
+
+    @objc private func menuBarLayoutChanged() {
+        let idx = layoutControl.indexOfSelectedItem
+        guard MenuBarLayout.allCases.indices.contains(idx) else { return }
+        displayPreferences.layout = MenuBarLayout.allCases[idx]
+    }
+
+    @objc private func menuBarIntervalChanged() {
+        let titles = ["1s", "2s", "5s"]
+        let idx = intervalControl.indexOfSelectedItem
+        guard titles.indices.contains(idx) else { return }
+        let vals: [TimeInterval] = [1, 2, 5]
+        displayPreferences.refreshInterval = vals[idx]
     }
 
     @objc private func menuBarMetricToggled(_ sender: NSSwitch) {
@@ -171,6 +226,11 @@ final class SettingsGeneralPane: SettingsPaneView {
         for (metric, toggle) in metricToggles {
             toggle.state = displayPreferences.enabledMetrics.contains(metric) ? .on : .off
         }
+        if let i = MenuBarDensity.allCases.firstIndex(of: displayPreferences.density) { densityControl.selectItem(at: i) }
+        if let i = MenuBarUnitStyle.allCases.firstIndex(of: displayPreferences.unitStyle) { unitControl2.selectItem(at: i) }
+        if let i = MenuBarLayout.allCases.firstIndex(of: displayPreferences.layout) { layoutControl.selectItem(at: i) }
+        let vals: [TimeInterval] = [1, 2, 5]
+        if let i = vals.firstIndex(of: displayPreferences.refreshInterval) { intervalControl.selectItem(at: i) }
     }
 
     // MARK: - 动作

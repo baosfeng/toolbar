@@ -122,7 +122,15 @@ extension SnipOverlayView {
     // MARK: - 绘制
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
+
+        // 首次上屏时 NSGraphicsContext 可能还没有（窗口 back store 未建好），
+        // 早退会把这个窗口永久留白：清掉 needsDisplay 后没人再要求重绘。
+        // 因此无 context 时把重绘排到下一轮主循环（有上限，避免死循环）。
+        guard let context = NSGraphicsContext.current?.cgContext else {
+            scheduleRedrawAfterMissingContext()
+            return
+        }
+        redrawAttempts = 0
         layoutToolBar()
         drawScreenshot(in: context)
 
