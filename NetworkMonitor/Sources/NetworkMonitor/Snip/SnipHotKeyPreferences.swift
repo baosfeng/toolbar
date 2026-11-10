@@ -29,8 +29,12 @@ enum SnipHotKeyAction: String, CaseIterable {
 
     var defaultCombo: HotKeyCombo {
         switch self {
-        case .screenshot: return HotKeyCombo(keyCode: UInt32(kVK_F1), modifiers: 0)
-        case .pin: return HotKeyCombo(keyCode: UInt32(kVK_F3), modifiers: 0)
+        // 默认一律带修饰键：无修饰键的单功能键（F1/F3）在 macOS 27 会与系统媒体键
+        // 抢同一通道，注册成功但经常不投递按键（实测连按 3 次只到 1 次）
+        case .screenshot: return HotKeyCombo(keyCode: UInt32(kVK_ANSI_S),
+                                            modifiers: UInt32(controlKey | shiftKey))
+        case .pin: return HotKeyCombo(keyCode: UInt32(kVK_ANSI_V),
+                                     modifiers: UInt32(controlKey | shiftKey))
         case .delayedScreenshot: return HotKeyCombo(keyCode: UInt32(kVK_ANSI_D),
                                                   modifiers: UInt32(optionKey | shiftKey))
         case .hidePins: return HotKeyCombo(keyCode: UInt32(kVK_F3), modifiers: UInt32(shiftKey))
@@ -53,11 +57,21 @@ final class SnipHotKeyPreferences {
         self.storage = storage
     }
 
+    /// 读偏好并顺带迁移历史默认值
+    ///
+    /// 历史默认值是无修饰键的 F1 / F3，那种组合键在 macOS 27 上注册成功但经常不投递
+    /// 按键（表现就是「按截图键毫无反应」）。迁移只在读取路径做一次并立即回写，
+    /// 用户自己录制过的组合键（都带修饰键）不会被改动。
     func combo(for action: SnipHotKeyAction) -> HotKeyCombo {
         let code = storage.integer(forKey: action.keyCodeKey)
         let modifiers = storage.integer(forKey: action.modifiersKey)
         guard code > 0 else { return action.defaultCombo }
-        return HotKeyCombo(keyCode: UInt32(code), modifiers: UInt32(modifiers))
+        let stored = SnipHotKeyMigration.migrated(keyCode: UInt32(code), modifiers: UInt32(modifiers))
+        let combo = HotKeyCombo(keyCode: stored.keyCode, modifiers: stored.modifiers)
+        if stored.keyCode != UInt32(code) || stored.modifiers != UInt32(modifiers) {
+            setCombo(combo, for: action)
+        }
+        return combo
     }
 
     func setCombo(_ combo: HotKeyCombo, for action: SnipHotKeyAction) {
