@@ -10,6 +10,13 @@ import ScreenCaptureKit
 @MainActor
 final class ScreenCaptureService: SnipCaptureServicing {
 
+    /// 日志（捕获路径降级时记录被跳过的路径与原因）
+    private let logger: LoggingService
+
+    init(logger: LoggingService = AppContext.shared.logger) {
+        self.logger = logger
+    }
+
     // MARK: - 屏幕与权限
 
     func screens() -> [SnipDisplay] {
@@ -28,6 +35,12 @@ final class ScreenCaptureService: SnipCaptureServicing {
                          height: frame.height * screen.backingScaleFactor)
             return SnipDisplay(frame: frame, pixelSize: pixelSize, displayID: displayID)
         }
+    }
+
+    /// 可用捕获路径 — 名字用于日志，capture 为具体实现
+    struct CapturePath {
+        let name: String
+        let capture: (SnipDisplay) async throws -> SnipCapturedImage
     }
 
     func isAuthorized() -> Bool {
@@ -87,13 +100,42 @@ final class ScreenCaptureService: SnipCaptureServicing {
         guard !includeCursor else {
             return try await captureWithFilter(display, includeCursor: true)
         }
-        if #available(macOS 26.0, *) {
-            return try await captureWithScreenshotConfiguration(display)
-        } else if #available(macOS 15.2, *) {
-            return try await captureWithRect(display)
-        } else {
-            return try await captureWithFilter(display)
+        // 三条路径互为降级：单条路径失败不代表整机不可截（实测 macOS 26/27 上
+        // SCScreenshotConfiguration 会间歇返回 -3811「无法开始流播放」，而
+        // captureImage(in:) 与 filter 路径同一时刻正常）。任一成功即返回，
+        // 只有全部失败才把最后一个错误抛给调用方。
+        var lastError: (any Error)?
+        for path in capturePaths() {
+            do {
+                return try await path.capture(display)
+            } catch {
+                lastError = error
+                logger.warning("截图路径 \(path.name) 失败，尝试下一条：\(error)")
+            }
         }
+        throw lastError ?? SnipCaptureError.captureFailed("所有截图路径均失败")
+    }
+
+    /// 可用捕获路径（按优先级排列，最后一条兜底）
+    private func capturePaths() -> [CapturePath] {
+        var paths: [CapturePath] = []
+        if #available(macOS 26.0, *) {
+            paths.append(CapturePath(name: "SCScreenshotConfiguration", capture: { [weak self] display in
+                guard let self else { throw SnipCaptureError.captureFailed("捕获服务已释放") }
+                return try await self.captureWithScreenshotConfiguration(display)
+            }))
+        }
+        if #available(macOS 15.2, *) {
+            paths.append(CapturePath(name: "captureImage(rect)", capture: { [weak self] display in
+                guard let self else { throw SnipCaptureError.captureFailed("捕获服务已释放") }
+                return try await self.captureWithRect(display)
+            }))
+        }
+        paths.append(CapturePath(name: "SCContentFilter", capture: { [weak self] display in
+            guard let self else { throw SnipCaptureError.captureFailed("捕获服务已释放") }
+            return try await self.captureWithFilter(display)
+        }))
+        return paths
     }
 
     // MARK: - macOS 26+
