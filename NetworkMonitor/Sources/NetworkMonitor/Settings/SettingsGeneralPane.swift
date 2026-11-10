@@ -34,6 +34,13 @@ final class SettingsGeneralPane: SettingsPaneView {
     private var unitControl2 = NSPopUpButton(frame: .zero, pullsDown: false)
     private var layoutControl = NSPopUpButton(frame: .zero, pullsDown: false)
     private var intervalControl = NSPopUpButton(frame: .zero, pullsDown: false)
+    /// 菜单栏「单位」行（副标题随档位变化，refresh 时要更新）
+    private let unit2Row = SettingsRowView(title: "单位")
+
+    /// 快捷模板内部名（`MenuBarDisplayPreferences.applyTemplate` 认这份名字）
+    private static let templateNames = ["minimal", "performance", "token", "network", "full"]
+    /// 快捷模板分段标题（与内部名一一对应）
+    private static let templateTitles = ["默认", "性能", "Token", "网络", "全部"]
 
     init(launchAtStartup: LaunchAtStartupService = LaunchAtStartupService(),
          alertPreferences: BillingAlertPreferences = BillingAlertPreferences(),
@@ -91,7 +98,7 @@ final class SettingsGeneralPane: SettingsPaneView {
             card.addRow(row)
         }
         // 模板快速切换
-        let template = NSSegmentedControl(labels: ["默认", "性能", "Token", "网络", "全部"], trackingMode: .selectOne,
+        let template = NSSegmentedControl(labels: Self.templateTitles, trackingMode: .selectOne,
                                           target: self, action: #selector(menuBarTemplateChanged))
         template.tag = 0
         templateControl = template
@@ -106,10 +113,11 @@ final class SettingsGeneralPane: SettingsPaneView {
         densityRow.trailingStack.addArrangedSubview(densityControl)
         card.addRow(densityRow)
 
-        unitControl2.addItems(withTitles: MenuBarUnitStyle.allCases.map(\.rawValue))
+        // 菜单栏单位档：custom 目前没有自定义单位表（按 short 回落），
+        // 直接标在标题里，避免用户选了「自定义」却看不到任何变化
+        unitControl2.addItems(withTitles: MenuBarUnitStyle.allCases.map(\.title))
         unitControl2.target = self
         unitControl2.action = #selector(menuBarUnitChanged)
-        let unit2Row = SettingsRowView(title: "单位")
         unit2Row.trailingStack.addArrangedSubview(unitControl2)
         card.addRow(unit2Row)
 
@@ -134,18 +142,31 @@ final class SettingsGeneralPane: SettingsPaneView {
         let idx = densityControl.indexOfSelectedItem
         guard MenuBarDensity.allCases.indices.contains(idx) else { return }
         displayPreferences.density = MenuBarDensity.allCases[idx]
+        AppEvents.postMenuBarDisplayChanged()
     }
 
     @objc private func menuBarUnitChanged() {
         let idx = unitControl2.indexOfSelectedItem
         guard MenuBarUnitStyle.allCases.indices.contains(idx) else { return }
         displayPreferences.unitStyle = MenuBarUnitStyle.allCases[idx]
+        unit2Row.update(subtitle: Self.menuBarUnitSubtitle(displayPreferences.unitStyle))
+        AppEvents.postMenuBarDisplayChanged()
+    }
+
+    /// 菜单栏单位行副标题 — 直接写出各档的实际效果，避免「选了自定义却看不出变化」
+    private static func menuBarUnitSubtitle(_ style: MenuBarUnitStyle) -> String {
+        switch style {
+        case .short: return "紧凑写法，如 1.2M"
+        case .full: return "带空格全称，如 1.2 MB/s"
+        case .custom: return "自定义单位表暂未提供，当前按紧凑写法显示"
+        }
     }
 
     @objc private func menuBarLayoutChanged() {
         let idx = layoutControl.indexOfSelectedItem
         guard MenuBarLayout.allCases.indices.contains(idx) else { return }
         displayPreferences.layout = MenuBarLayout.allCases[idx]
+        AppEvents.postMenuBarDisplayChanged()
     }
 
     @objc private func menuBarIntervalChanged() {
@@ -154,6 +175,7 @@ final class SettingsGeneralPane: SettingsPaneView {
         guard titles.indices.contains(idx) else { return }
         let vals: [TimeInterval] = [1, 2, 5]
         displayPreferences.refreshInterval = vals[idx]
+        AppEvents.postMenuBarDisplayChanged()
     }
 
     @objc private func menuBarMetricToggled(_ sender: NSSwitch) {
@@ -161,17 +183,18 @@ final class SettingsGeneralPane: SettingsPaneView {
         for (metric, toggle) in metricToggles where toggle === sender {
             displayPreferences.setMetric(metric, enabled: sender.state == .on)
         }
+        AppEvents.postMenuBarDisplayChanged()
     }
 
     @objc private func menuBarTemplateChanged() {
         let index = templateControl?.selectedSegment ?? 0
-        let names = ["minimal", "performance", "token", "network", "full"]
-        guard names.indices.contains(index) else { return }
-        displayPreferences.applyTemplate(names[index])
+        guard Self.templateNames.indices.contains(index) else { return }
+        displayPreferences.applyTemplate(Self.templateNames[index])
         // 同步 toggle
         for (metric, toggle) in metricToggles {
             toggle.state = displayPreferences.enabledMetrics.contains(metric) ? .on : .off
         }
+        AppEvents.postMenuBarDisplayChanged()
     }
 
     private func buildPanelTabsCard() {
@@ -198,16 +221,21 @@ final class SettingsGeneralPane: SettingsPaneView {
     @objc private func panelTabToggled(_ sender: NSSwitch) {
         guard let tab = MenuPanelTab(rawValue: sender.tag) else { return }
         panelTabPreferences.setVisible(sender.state == .on, for: tab)
+        // 至少保留一项：存储侧已拦，这里把界面勾选态拉回真实值
+        sender.state = panelTabPreferences.visibleTabs.contains(tab) ? .on : .off
+        AppEvents.postPanelTabsChanged()
     }
 
     @objc private func panelTabMoveUp(_ sender: NSButton) {
         guard let tab = MenuPanelTab(rawValue: sender.tag) else { return }
         panelTabPreferences.move(tab, offset: -1)
+        AppEvents.postPanelTabsChanged()
     }
 
     @objc private func panelTabMoveDown(_ sender: NSButton) {
         guard let tab = MenuPanelTab(rawValue: sender.tag) else { return }
         panelTabPreferences.move(tab, offset: 1)
+        AppEvents.postPanelTabsChanged()
     }
 
     override func refresh() {
@@ -226,8 +254,13 @@ final class SettingsGeneralPane: SettingsPaneView {
         for (metric, toggle) in metricToggles {
             toggle.state = displayPreferences.enabledMetrics.contains(metric) ? .on : .off
         }
+        // 模板选中段回灌：点完模板再进设置页时不能显示成「默认」（-1 = 与应用内模板名不匹配）
+        if let templateControl {
+            templateControl.selectedSegment = Self.templateNames.firstIndex(of: displayPreferences.template) ?? -1
+        }
         if let i = MenuBarDensity.allCases.firstIndex(of: displayPreferences.density) { densityControl.selectItem(at: i) }
         if let i = MenuBarUnitStyle.allCases.firstIndex(of: displayPreferences.unitStyle) { unitControl2.selectItem(at: i) }
+        unit2Row.update(subtitle: Self.menuBarUnitSubtitle(displayPreferences.unitStyle))
         if let i = MenuBarLayout.allCases.firstIndex(of: displayPreferences.layout) { layoutControl.selectItem(at: i) }
         let vals: [TimeInterval] = [1, 2, 5]
         if let i = vals.firstIndex(of: displayPreferences.refreshInterval) { intervalControl.selectItem(at: i) }

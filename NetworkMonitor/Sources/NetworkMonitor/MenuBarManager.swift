@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - Menu Bar Manager
 
@@ -11,7 +12,8 @@ import NetworkMonitorCore
 final class MenuBarManager: NSObject {
 
     private let statusItem: NSStatusItem
-    private let monitor: any NetworkMonitoringService
+    /// 放宽为 internal：状态栏文本组装拆在 MenuBarManager+StatusTitle.swift
+    let monitor: any NetworkMonitoringService
     private let processMonitor: any ProcessNetworkMonitoringService
     private let trafficTracker: any TrafficTrackingService
     private let panel: MenuPanelController
@@ -19,12 +21,20 @@ final class MenuBarManager: NSObject {
     /// 系统指标采样服务（nil = 未装配；采样频率跟随偏好周期）
     private let systemMonitor: (any SystemMonitoringService)?
     private let systemPreferences: SystemMonitorPreferences?
-    private let displayPreferences: MenuBarDisplayPreferences
+    /// 放宽为 internal：显示偏好订阅与渲染都拆在 MenuBarManager+DisplayPreferences.swift
+    let displayPreferences: MenuBarDisplayPreferences
+    /// 注入的键值存储（菜单栏偏好与面板分页偏好共用同一份，测试 / 取证可写隔离 suite）
+    let storage: any KeyValueStorage
     private let harnessUsage: (any HarnessUsageServicing)?
     /// 系统指标采样周期（秒）— 由偏好给出，1 秒链按此节流
     private let systemSampleInterval: TimeInterval
     private var lastSystemPoll: Date = .distantPast
     private var timer: Timer?
+    /// 当前定时器周期（秒）— 恢复默认值后需按偏好重建，故单独记账
+    // 放宽为 internal：定时器重建与偏好订阅拆在 MenuBarManager+DisplayPreferences.swift
+    var timerInterval: TimeInterval = 0
+    /// 菜单栏显示偏好变更观察者（注册与移除都在 +DisplayPreferences 扩展文件）
+    nonisolated(unsafe) var displayPreferencesObserver: NSObjectProtocol?
 
     /// 剪贴板历史面板入口（由组合根装配）
     var onOpenClipboardHistory: (() -> Void)?
@@ -43,13 +53,15 @@ final class MenuBarManager: NSObject {
          harnessUsage: (any HarnessUsageServicing)? = nil,
          systemMonitor: (any SystemMonitoringService)? = nil,
          systemPreferences: SystemMonitorPreferences? = nil,
+         storage: any KeyValueStorage = MenuBarManager.preferredStorage(),
          logger: LoggingService = AppContext.shared.logger) {
         self.monitor = networkMonitor
         self.processMonitor = processMonitor
         self.trafficTracker = trafficTracker
         self.systemMonitor = systemMonitor
         self.systemPreferences = systemPreferences
-        self.displayPreferences = MenuBarDisplayPreferences(storage: AppContext.shared.storage)
+        self.storage = storage
+        self.displayPreferences = MenuBarDisplayPreferences(storage: storage)
         self.harnessUsage = harnessUsage
         self.systemSampleInterval = systemPreferences?.sampleInterval
             ?? SystemMonitorPreferences.defaultSampleInterval
@@ -65,13 +77,38 @@ final class MenuBarManager: NSObject {
                                          harnessUsage: harnessUsage,
                                          systemMonitor: systemMonitor,
                                          systemPreferences: systemPreferences,
+                                         storage: storage,
                                          logger: logger)
         super.init()
 
         configureStatusItem()
         panel.onOpenClipboardHistory = { [weak self] in self?.onOpenClipboardHistory?() }
         panel.onOpenSettings = { [weak self] section in self?.onOpenSettings?(section) }
-        setupTimer()
+        setupTimer(interval: displayPreferences.refreshInterval)
+        observeDisplayPreferenceChanges()
+#if DEBUG
+        runStatusEvidenceIfRequested()
+#endif
+    }
+
+    /// 菜单栏偏好存储：默认走全局注入（`AppContext.shared.storage`）
+    ///
+    /// 仅 DEBUG 取证可变：设置 `NM_EVIDENCE_SUITE` 时改用隔离 suite，
+    /// 避免取证脚本改写用户真实的菜单栏 / 面板分页偏好。
+    static func preferredStorage() -> any KeyValueStorage {
+#if DEBUG
+        if let suite = ProcessInfo.processInfo.environment["NM_EVIDENCE_SUITE"], !suite.isEmpty,
+           let defaults = UserDefaults(suiteName: suite) {
+            return UserDefaultsStorage(defaults: defaults)
+        }
+#endif
+        return AppContext.shared.storage
+    }
+
+    nonisolated deinit {
+        if let displayPreferencesObserver {
+            NotificationCenter.default.removeObserver(displayPreferencesObserver)
+        }
     }
 
     // MARK: - 状态栏配置
@@ -152,6 +189,32 @@ final class MenuBarManager: NSObject {
         panel.forceEmptyDataForEvidence = true
     }
 
+    /// 取证专用（仅 DEBUG）：状态栏当前文本（含换行，可直接核对 layout / 单位写法）
+    var statusTitleForEvidence: String { statusItem.button?.attributedTitle.string ?? "" }
+
+    /// 取证专用（仅 DEBUG）：当前定时器周期（核对「间隔」偏好是否真的重建了定时器）
+    var timerIntervalForEvidence: TimeInterval { timerInterval }
+
+    /// 取证专用（仅 DEBUG）：面板当前分页
+    var currentTabForEvidence: MenuPanelTab { panel.currentTabForEvidence }
+
+    /// 取证专用（仅 DEBUG）：分段条可见分页
+    var visibleTabsForEvidence: [MenuPanelTab] { panel.visibleTabsForEvidence }
+
+    /// 取证专用（仅 DEBUG）：系统页二级详情是否展开
+    var systemDetailShownForEvidence: Bool { panel.systemDetailShownForEvidence }
+
+    /// 取证专用（仅 DEBUG）：进入系统页二级详情
+    func showSystemDetailForEvidence() {
+        panel.showSystemDetailForEvidence()
+    }
+
+    /// 取证专用（仅 DEBUG）：跑显示偏好生效取证（见 Debug/DisplayPreferenceEvidence.swift）
+    func runStatusEvidenceIfRequested() {
+        guard !PanelOpenProbe.requested else { return }
+        DisplayPreferenceEvidence.runIfRequested(manager: self)
+    }
+
     /// 测量专用（仅 DEBUG）：面板当前是否展开
     var isPanelShownForMeasure: Bool { panel.isShown }
 
@@ -191,48 +254,38 @@ final class MenuBarManager: NSObject {
 
     // MARK: - 定时器
 
-    private func setupTimer() {
-        let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+    /// 启动 / 重建状态栏刷新定时器（周期来自「间隔」偏好，1...10 秒）
+    ///
+    /// 重建前先停掉旧定时器并从 RunLoop 移除：否则同一时刻会有两个定时器各跑一份 update，
+    /// 旧的那个永远不会被释放。
+    func setupTimer(interval: TimeInterval) {
+        let period = MenuBarDisplayLogic.clampedRefreshInterval(interval)
+        // invalidate 会同时把定时器从所有 RunLoop 模式中摘除，不会残留两份节拍
+        timer?.invalidate()
+        let t = Timer(timeInterval: period, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.update()
             }
         }
         RunLoop.main.add(t, forMode: .common)
         timer = t
+        timerInterval = period
 
-        // 立即更新一次，避免启动后 1 秒空白
+        // 立即更新一次，避免启动后一个周期内状态栏是空白
         update()
     }
 
-    /// 每秒刷新：网速（状态栏）+ 进程采样 + 面板展开时的分层刷新
-    @objc private func update() {
+    /// 按刷新周期刷新：网速（状态栏）+ 进程采样 + 面板展开时的分层刷新
+    // 放宽为 internal：MenuBarManager+DisplayPreferences.swift 在偏好变更后立即重渲染
+    @objc func update() {
         monitor.poll()
-        let downSpeed = max(monitor.downloadSpeed, 0)
-        let upSpeed = max(monitor.uploadSpeed, 0)
         let enabled = displayPreferences.enabledMetrics
-        let downSpeedSafe = max(monitor.downloadSpeed, 0)
-        let upSpeedSafe = max(monitor.uploadSpeed, 0)
-        var parts: [String] = []
-        if enabled.contains(.downSpeed) { parts.append("↓" + formatSpeedShort(downSpeedSafe)) }
-        if enabled.contains(.upSpeed) { parts.append("↑" + formatSpeedShort(upSpeedSafe)) }
-        let snap = systemMonitor?.snapshot
-        if enabled.contains(.cpu), let cpu = snap?.cpu?.totalUsage { parts.append("CPU " + String(Int((cpu * 100).rounded())) + "%") }
-        if enabled.contains(.gpu), let gpu = snap?.gpu { parts.append("GPU " + String(Int((gpu.utilization * 100).rounded())) + "%") }
-        if enabled.contains(.memory), let mem = snap?.memory, mem.total > 0 { parts.append("MEM " + String(Int((Double(mem.used) / Double(mem.total) * 100).rounded())) + "%") }
-        if enabled.contains(.memoryPressure), let mem = snap?.memory { parts.append("P " + mem.pressure.rawValue) }
-        if enabled.contains(.diskFree), let disk = snap?.disk { parts.append("Disk " + String(format: "%.1f", Double(disk.total - disk.used) / 1073741824.0) + "G") }
-        if enabled.contains(.diskIO), let disk = snap?.disk {
-            if let r = disk.readBytesPerSecond { parts.append("R " + formatSpeedShort(r)) }
-            if let w = disk.writeBytesPerSecond { parts.append("W " + formatSpeedShort(w)) }
-        }
-        if enabled.contains(.wifi), let wifi = snap?.wifi { parts.append("WiFi " + String(wifi.rssiDBm) + "dBm") }
-        if enabled.contains(.battery), let bat = snap?.battery, let p = bat.percentage { parts.append("BAT " + String(Int((p * 100).rounded())) + "%") }
-        if enabled.contains(.thermal), let t = snap?.thermal, let c = t.cpuTemperatureCelsius { parts.append("Temp " + String(Int(c.rounded())) + "°C") }
-        if enabled.contains(.todayTraffic) { parts.append("Today " + formatSpeedShort(Double(trafficTracker.todayRx + trafficTracker.todayTx))) }
-        if enabled.contains(.tokenToday) { parts.append("Token " + formatSpeedShort(Double(harnessUsage?.snapshot().totals.today.totalTokens ?? 0))) }
-        if enabled.contains(.tokenCacheHit), let rate = harnessUsage?.snapshot().totals.cacheHitRate { parts.append("HIT " + String(Int((rate * 100).rounded())) + "%") }
-        if enabled.contains(.tokenWeek) { parts.append("7d " + formatSpeedShort(Double(harnessUsage?.snapshot().totals.thisWeek.totalTokens ?? 0))) }
-        if parts.isEmpty { parts.append(formatSpeedShort(downSpeedSafe)) }
+        let parts = makeStatusParts(enabled: enabled,
+                                    snapshot: systemMonitor?.snapshot,
+                                    todayTraffic: trafficTracker.todayRx + trafficTracker.todayTx,
+                                    tokenTotals: harnessUsage?.snapshot().totals,
+                                    unitStyle: MenuBarDisplayLogic.unitStyle(
+                                        fromRawValue: displayPreferences.unitStyle.rawValue))
         let separator: String
         switch displayPreferences.density {
         case .compact: separator = "  "
@@ -248,7 +301,12 @@ final class MenuBarManager: NSObject {
                 alertPrefix = "⚠️ "
             }
         }
-        let text = alertPrefix + parts.joined(separator: separator)
+        // 布局偏好：单行 / 两行（card 在菜单栏高度受限时按两行呈现）
+        let body = MenuBarDisplayLogic.statusTitle(
+            parts: parts,
+            layout: MenuBarDisplayLogic.layout(fromRawValue: displayPreferences.layout.rawValue),
+            separator: separator)
+        let text = alertPrefix.isEmpty ? body : alertPrefix + body
         let title = NSAttributedString(string: text)
         if statusItem.button?.attributedTitle.string != text {
             statusItem.button?.attributedTitle = title
@@ -262,7 +320,7 @@ final class MenuBarManager: NSObject {
         }
         // 进程采样（内部 3 秒节流 + 后台队列执行，不阻塞主线程）
         processMonitor.poll()
-        // 面板自身按 1 秒 / 5 秒分层刷新（收起时内部直接返回）
+        // 面板自身按 1 秒 / 5 秒分层刷新（内部按时间差节流，收起时直接返回），与状态栏刷新周期无关
         panel.tick()
     }
 }

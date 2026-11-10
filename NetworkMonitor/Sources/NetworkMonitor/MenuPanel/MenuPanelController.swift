@@ -40,7 +40,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
 
     // popover 放宽为 internal：数据绑定扩展（MenuPanelController+DataSources）要读 isShown
     let popover = NSPopover()
-    let content = MenuPanelView()
+    /// 面板根视图（用注入存储构造：分页偏好必须与设置页读写同一份存储）
+    let content: MenuPanelView
     // 以下三个监控服务由 private 放宽为 internal：打开 / 刷新链路已拆到
     // MenuPanelController+Open.swift（速率、流量、进程采样），同模块内无其他调用方。
     let monitor: any NetworkMonitoringService
@@ -135,6 +136,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         self.systemMonitor = systemMonitor
         self.systemPreferences = systemPreferences
         self.storage = storage
+        self.content = MenuPanelView(storage: storage)
         self.logger = logger
         super.init()
 

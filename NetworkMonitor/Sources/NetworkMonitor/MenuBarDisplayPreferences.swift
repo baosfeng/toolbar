@@ -49,7 +49,19 @@ enum MenuBarMetric: String, CaseIterable {
 
 enum MenuBarDensity: String, CaseIterable { case compact, comfortable, relaxed }
 enum MenuBarLayout: String, CaseIterable { case singleLine, twoLine, card }
-enum MenuBarUnitStyle: String, CaseIterable { case short, full, custom }
+enum MenuBarUnitStyle: String, CaseIterable {
+    case short, full, custom
+
+    /// 下拉标题：custom 档没有自定义单位表（按 short 回落），标题里直接写明，
+    /// 避免用户选了「自定义」却看不出任何变化
+    var title: String {
+        switch self {
+        case .short: return "紧凑"
+        case .full: return "全称"
+        case .custom: return "自定义（暂等同紧凑）"
+        }
+    }
+}
 
 final class MenuBarDisplayPreferences {
     private let storage: any KeyValueStorage

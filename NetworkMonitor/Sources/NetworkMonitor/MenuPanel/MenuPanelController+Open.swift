@@ -239,6 +239,22 @@ extension MenuPanelController {
 
     /// 测量专用（仅 DEBUG）：popover 内容窗口对象（强制首帧落屏用）
     func measurePanelWindow() -> NSWindow? { popover.contentViewController?.view.window }
+
+    /// 取证专用（仅 DEBUG）：当前分页
+    var currentTabForEvidence: MenuPanelTab { content.currentTab }
+
+    /// 取证专用（仅 DEBUG）：分段条当前可见分页（隐藏分页后应少一段）
+    var visibleTabsForEvidence: [MenuPanelTab] { content.tabBar.visibleTabs }
+
+    /// 取证专用（仅 DEBUG）：系统页二级详情是否展开
+    var systemDetailShownForEvidence: Bool { content.systemPane.isShowingDetail }
+
+    /// 取证专用（仅 DEBUG）：进入系统页二级详情（CPU），用于验证隐藏分页时详情收起
+    func showSystemDetailForEvidence() {
+        content.select(tab: .system)
+        content.systemPane.showDetail(.cpu)
+        updateContentSize(force: true)
+    }
 }
 
 #endif

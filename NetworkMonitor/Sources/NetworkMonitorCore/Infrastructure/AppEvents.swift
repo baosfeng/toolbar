@@ -32,4 +32,23 @@ public enum AppEvents {
     public static func postNumberUnitStyleChanged() {
         NotificationCenter.default.post(name: numberUnitStyleChanged, object: nil)
     }
+
+    /// 面板分页可见性 / 顺序已变化（设置页「面板分页」开关、上移、下移）— 面板应重排分段
+    ///
+    /// 面板若只在自己初始化时读一次偏好，运行中改可见性不会有任何反应（用户口径「设置页禁止了某个功能，
+    /// 详情页展开之后没有消失」），因此写存储之后必须发这个事件。
+    public static let panelTabsChanged = Notification.Name("AppEvents.panelTabsChanged")
+
+    /// 发布面板分页变更通知（设置页在写存储之后调用）
+    public static func postPanelTabsChanged() {
+        NotificationCenter.default.post(name: panelTabsChanged, object: nil)
+    }
+
+    /// 菜单栏显示偏好已变化（布局 / 数值单位 / 刷新周期 / 密度 / 指标 / 模板）— 菜单栏应重建定时器并重渲染
+    public static let menuBarDisplayChanged = Notification.Name("AppEvents.menuBarDisplayChanged")
+
+    /// 发布菜单栏显示偏好变更通知（设置页在写存储之后调用）
+    public static func postMenuBarDisplayChanged() {
+        NotificationCenter.default.post(name: menuBarDisplayChanged, object: nil)
+    }
 }

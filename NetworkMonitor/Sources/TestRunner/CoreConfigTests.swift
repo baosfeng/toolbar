@@ -58,6 +58,32 @@ func runAppEventsTests() {
         NotificationCenter.default.removeObserver(unitObserver)
         assertEqual(unitReceived, true, "numberUnitStyleChanged 事件已发布并接收")
 
+        // 分页可见性变更：设置页写存储后发布，面板靠它重排分段 / 切页 / 收起二级详情
+        var panelTabsReceived = false
+        let panelTabsObserver = NotificationCenter.default.addObserver(
+            forName: AppEvents.panelTabsChanged,
+            object: nil,
+            queue: nil
+        ) { _ in
+            panelTabsReceived = true
+        }
+        AppEvents.postPanelTabsChanged()
+        NotificationCenter.default.removeObserver(panelTabsObserver)
+        assertEqual(panelTabsReceived, true, "panelTabsChanged 事件已发布并接收")
+
+        // 菜单栏显示偏好变更：设置页写存储后发布，菜单栏靠它重建定时器并重渲染
+        var menuBarReceived = false
+        let menuBarObserver = NotificationCenter.default.addObserver(
+            forName: AppEvents.menuBarDisplayChanged,
+            object: nil,
+            queue: nil
+        ) { _ in
+            menuBarReceived = true
+        }
+        AppEvents.postMenuBarDisplayChanged()
+        NotificationCenter.default.removeObserver(menuBarObserver)
+        assertEqual(menuBarReceived, true, "menuBarDisplayChanged 事件已发布并接收")
+
         print("✅ AppEvents 事件总线 works")
     }
 

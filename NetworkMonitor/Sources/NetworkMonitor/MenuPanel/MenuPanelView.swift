@@ -37,8 +37,8 @@ final class MenuPanelView: NSView {
 
     weak var delegate: MenuPanelViewDelegate?
 
-    /// 面板分页可见性/顺序偏好
-    let panelTabPreferences = PanelTabPreferences()
+    /// 面板分页可见性/顺序偏好（构造器注入存储，测试与取证可用隔离 suite，不污染真实偏好）
+    let panelTabPreferences: PanelTabPreferences
 
     let tabBar = MenuTabBarView()
     /// 设置菜单入口（标题栏右侧齿轮：传送设置 / 开机自启动 / 退出）
@@ -57,14 +57,19 @@ final class MenuPanelView: NSView {
     private let scrollView = NSScrollView()
     /// 分页容器（作为 scrollView 的 documentView；flipped 保证初始停在顶部）
     private let paneStack = MenuPanelDocumentStack()
-    private(set) var currentTab: MenuPanelTab = .network
+    /// 放宽为 internal（含 setter）：分页偏好事件驱动要重设当前页，见 MenuPanelView+TabPreferences.swift
+    var currentTab: MenuPanelTab = .network
     /// 当前键盘聚焦下标（行在前、卡片在后；nil = 未聚焦任何元素）
     /// 键盘焦点下标（行与卡片共享；键盘处理拆在 MenuPanelView+Keyboard.swift，故为 internal）
     var focusedIndex: Int?
 
+    /// 分页偏好变更观察者（注册与移除都在 MenuPanelView+TabPreferences.swift，故为 internal）
+    nonisolated(unsafe) var panelTabsObserver: NSObjectProtocol?
+
     // MARK: - 初始化
 
-    init() {
+    init(storage: any KeyValueStorage = AppContext.shared.storage) {
+        self.panelTabPreferences = PanelTabPreferences(storage: storage)
         super.init(frame: .zero)
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
@@ -147,10 +152,17 @@ final class MenuPanelView: NSView {
             self?.focus(card: card)
         }
         applyTab()
+        observePanelTabChanges()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
+
+    nonisolated deinit {
+        if let panelTabsObserver {
+            NotificationCenter.default.removeObserver(panelTabsObserver)
+        }
+    }
 
     // MARK: - 背景
 
@@ -225,7 +237,8 @@ final class MenuPanelView: NSView {
     }
 
     /// 应用当前分页：仅显示选中页（隐藏的 arranged subview 由 NSStackView 折叠）
-    private func applyTab() {
+    // 放宽为 internal：分页偏好事件驱动切页后要重应用，见 MenuPanelView+TabPreferences.swift
+    func applyTab() {
         networkPane.isHidden = currentTab != .network
         clipboardPane.isHidden = currentTab != .clipboard
         transferPane.isHidden = currentTab != .transfer

@@ -61,7 +61,17 @@ final class MenuTabBarView: NSView {
     }
 
     /// 可见分页（由 PanelTabPreferences 驱动；默认全量）
-    var visibleTabs: [MenuPanelTab] = MenuPanelTab.allCases
+    ///
+    /// 设置页在面板显示期间改可见性时由面板根视图重设，这里同步重绘并按新分段重建读屏元素，
+    /// 否则仍按旧段数绘制、点击命中也会错位。
+    var visibleTabs: [MenuPanelTab] = MenuPanelTab.allCases {
+        didSet {
+            guard visibleTabs != oldValue else { return }
+            hoveredIndex = nil
+            needsDisplay = true
+            setAccessibilityChildren(accessibilitySegmentElements())
+        }
+    }
 
     private var hoveredIndex: Int?
 
