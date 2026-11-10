@@ -32,11 +32,20 @@ protocol SnipToolBarViewDelegate: AnyObject {
     func toolBarDidChangeStyle(_ style: SnipAnnotationStyle)
     /// 点击右侧动作按钮（取消 / 复制 / 保存 / 贴顶）
     func toolBarDidPerform(_ action: SnipBarAction)
+    /// 请求在工具条上方弹出二级面板（工具 / 颜色 / 线宽）
+    /// - Parameters:
+    ///   - content: 面板内容
+    ///   - anchor: 触发按钮在覆盖层坐标里的矩形（面板据此定位）
+    func toolBarDidRequestPanel(_ content: SnipPanelContent, anchor: CGRect)
 }
 
 // MARK: - 标注工具条
 
 /// 选区下方的标注工具条 — 自绘按钮，避免在浮动覆盖层里放原生控件
+///
+/// 一级工具条只摆高频项：4 个常用工具 + 「更多」+ 当前颜色 + 当前线宽 + 4 个动作按钮。
+/// 10 个工具全摆上来要 800pt 以上（比半个屏幕还宽），其余工具与全部颜色 / 线宽带
+/// 收进二级面板（SnipToolPanelView）。
 @MainActor
 final class SnipToolBarView: NSView {
 
@@ -44,9 +53,20 @@ final class SnipToolBarView: NSView {
 
     weak var delegate: SnipToolBarViewDelegate?
 
+    /// 当前工具；属于二级面板里的工具时，「更多」按钮显示该工具图标并高亮
     /// 放宽为 internal：DEBUG 取证要在离屏渲染里摆出「已选中」状态
-    var selectedTool: SnipTool?
-    private(set) var style = SnipAnnotationStyle()
+    var selectedTool: SnipTool? {
+        didSet { needsDisplay = true }
+    }
+
+    private(set) var style = SnipAnnotationStyle() {
+        didSet { needsDisplay = true }
+    }
+
+    /// 由覆盖层回灌样式（二级面板里选了颜色 / 线宽后一级工具条要跟着变）
+    func updateStyle(_ newStyle: SnipAnnotationStyle) {
+        style = newStyle
+    }
 
     /// 仅 DEBUG：离屏取证时设置已选中的颜色 / 线宽
     #if DEBUG
@@ -56,13 +76,18 @@ final class SnipToolBarView: NSView {
     }
     #endif
 
-    private let tools = SnipTool.allCases
-    private let colors: [SnipAnnotationColor] = [.red, .orange, .yellow, .green, .blue, .black, .white]
-    private let widths: [CGFloat] = [2, 4, 8]
+    /// 工具条上可选的颜色与线宽（二级面板的内容与工具条当前值的来源，只此一份）
+    static let colors: [SnipAnnotationColor] = [.red, .orange, .yellow, .green, .blue, .black, .white]
+    static let widths: [CGFloat] = [2, 4, 8]
+    /// 一级工具条常驻的工具
+    static let primaryTools = SnipTool.primary
+    /// 收进二级面板的工具
+    static let overflowTools = SnipTool.overflow
 
     private var toolRects: [(SnipTool, CGRect)] = []
-    private var colorRects: [(SnipAnnotationColor, CGRect)] = []
-    private var widthRects: [(CGFloat, CGRect)] = []
+    private var moreRect: CGRect = .zero
+    private var colorRect: CGRect = .zero
+    private var widthRect: CGRect = .zero
     private var actionRects: [(SnipBarAction, CGRect)] = []
     /// 组间分隔线的 x 坐标（与按钮排布同源，避免两处各算一遍）
     private var dividerXs: [CGFloat] = []
@@ -78,17 +103,25 @@ final class SnipToolBarView: NSView {
         layoutPlan.width
     }
 
+    /// 当前工具条用到的布局参数（宽度与摆放共用，不各算一遍）
+    static var layoutArguments: (toolCount: Int, colorCount: Int, widthCount: Int, actionCount: Int) {
+        (primaryTools.count + 1, 1, 1, SnipBarAction.allCases.count)
+    }
+
     /// 当前传入组件的布局计划
     private static var layoutPlan: SnipToolBarLayout.Plan {
-        SnipToolBarLayout.plan(toolCount: SnipTool.allCases.count,
-                               colorCount: 7,
-                               widthCount: 3,
-                               actionCount: SnipBarAction.allCases.count)
+        let args = layoutArguments
+        return SnipToolBarLayout.plan(toolCount: args.toolCount,
+                                      colorCount: args.colorCount,
+                                      widthCount: args.widthCount,
+                                      actionCount: args.actionCount)
     }
 
     init() {
         super.init(frame: CGRect(x: 0, y: 0, width: Self.preferredWidth, height: Self.height))
         wantsLayer = true
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("截图标注工具条")
     }
 
     @available(*, unavailable)
@@ -100,13 +133,17 @@ final class SnipToolBarView: NSView {
 
     /// 按共享计划摆放（每帧重算，bounds 变化后仍然对齐）
     private func layoutRects() {
-        let plan = SnipToolBarLayout.plan(toolCount: tools.count,
-                                          colorCount: colors.count,
-                                          widthCount: widths.count,
-                                          actionCount: SnipBarAction.allCases.count)
-        toolRects = Array(zip(tools, plan.toolRects))
-        colorRects = Array(zip(colors, plan.colorRects))
-        widthRects = Array(zip(widths, plan.widthRects))
+        let args = Self.layoutArguments
+        let plan = SnipToolBarLayout.plan(toolCount: args.toolCount,
+                                          colorCount: args.colorCount,
+                                          widthCount: args.widthCount,
+                                          actionCount: args.actionCount)
+        let toolSlots = plan.toolRects
+        toolRects = Array(zip(Self.primaryTools, toolSlots))
+        // 工具组最后一个位置是「更多」
+        moreRect = toolSlots.count > Self.primaryTools.count ? toolSlots[Self.primaryTools.count] : .zero
+        colorRect = plan.colorRects.first ?? .zero
+        widthRect = plan.widthRects.first ?? .zero
         actionRects = Array(zip(SnipBarAction.allCases, plan.actionRects))
         dividerXs = plan.dividerXs
     }
@@ -127,15 +164,18 @@ final class SnipToolBarView: NSView {
                 NSColor.white.withAlphaComponent(0.22).setFill()
                 NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
             }
-            drawSymbol(for: tool, in: rect.insetBy(dx: 6, dy: 6),
-                       alpha: isSelected ? 1 : 0.72)
+            SnipBarDrawing.drawTool(tool, in: rect, alpha: isSelected ? 1 : 0.72)
         }
 
+        drawMoreButton()
         for x in dividerXs {
             drawSeparator(at: x, in: context)
         }
 
-        // 动作按钮：复制用强调色，其余灰色描边
+        // 当前颜色 / 线宽：一级只显示当前值，点开二级面板再换
+        SnipBarDrawing.drawColorDot(style.color, in: colorRect, isSelected: false)
+        SnipBarDrawing.drawWidth(style.lineWidth, in: widthRect, isSelected: true)
+
         for (action, rect) in actionRects {
             let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
             if action.isPrimary {
@@ -154,41 +194,27 @@ final class SnipToolBarView: NSView {
             text.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2),
                       withAttributes: attributes)
         }
-
-        for (color, rect) in colorRects {
-            let dotRect = rect.insetBy(dx: 3, dy: 3)
-            NSColor(cgColor: color.cgColor)?.setFill()
-            NSBezierPath(ovalIn: dotRect).fill()
-            if color == style.color {
-                NSColor.white.withAlphaComponent(0.95).setStroke()
-                let ring = NSBezierPath(ovalIn: dotRect.insetBy(dx: -2, dy: -2))
-                ring.lineWidth = 1.5
-                ring.stroke()
-            }
-        }
-
-        for (width, rect) in widthRects {
-            let isSelected = width == style.lineWidth
-            if isSelected {
-                NSColor.white.withAlphaComponent(0.22).setFill()
-                NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
-            }
-            let lineRect = CGRect(x: rect.minX + 5, y: rect.midY - width / 2,
-                                  width: rect.width - 10, height: width)
-            NSColor.white.withAlphaComponent(isSelected ? 1 : 0.7).setFill()
-            NSBezierPath(roundedRect: lineRect, xRadius: width / 2, yRadius: width / 2).fill()
-        }
     }
 
-    private func drawSymbol(for tool: SnipTool, in rect: CGRect, alpha: CGFloat) {
-        let name = tool.symbolName
-        let configuration = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
-        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: tool.displayName)?
-            .withSymbolConfiguration(configuration) else {
+    /// 「更多」按钮：当前工具在二级面板里时显示该工具图标（用户仍看得到自己在用什么）
+    private func drawMoreButton() {
+        guard moreRect.width > 0 else { return }
+        let overflowSeleted = selectedTool.map { Self.overflowTools.contains($0) } ?? false
+        if overflowSeleted {
+            NSColor.white.withAlphaComponent(0.22).setFill()
+            NSBezierPath(roundedRect: moreRect, xRadius: 6, yRadius: 6).fill()
+        }
+        if let tool = selectedTool, overflowSeleted {
+            SnipBarDrawing.drawTool(tool, in: moreRect, alpha: 1)
             return
         }
-        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: alpha)
+        let configuration = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
+        if let image = NSImage(systemSymbolName: "chevron.down.2",
+                               accessibilityDescription: "更多工具")?
+            .withSymbolConfiguration(configuration) {
+            image.draw(in: moreRect.insetBy(dx: 9, dy: 9), from: .zero, operation: .sourceOver, fraction: 0.72)
+        }
     }
 
     private func drawSeparator(at x: CGFloat, in context: CGContext) {
@@ -202,6 +228,13 @@ final class SnipToolBarView: NSView {
         context.restoreGState()
     }
 
+    #if DEBUG
+    /// 仅 DEBUG：取证时按位置取三个入口按钮的本地矩形
+    var debugMoreRect: CGRect { layoutRects(); return moreRect }
+    var debugColorRect: CGRect { layoutRects(); return colorRect }
+    var debugWidthRect: CGRect { layoutRects(); return widthRect }
+    #endif
+
     // MARK: - 交互
 
     override func mouseDown(with event: NSEvent) {
@@ -209,19 +242,18 @@ final class SnipToolBarView: NSView {
         for (tool, rect) in toolRects where rect.contains(point) {
             selectedTool = (selectedTool == tool) ? nil : tool
             delegate?.toolBarDidChangeTool(selectedTool)
-            needsDisplay = true
             return
         }
-        for (color, rect) in colorRects where rect.contains(point) {
-            style.color = color
-            delegate?.toolBarDidChangeStyle(style)
-            needsDisplay = true
+        if moreRect.contains(point) {
+            delegate?.toolBarDidRequestPanel(.tools(Self.overflowTools), anchor: moreRect)
             return
         }
-        for (width, rect) in widthRects where rect.contains(point) {
-            style.lineWidth = width
-            delegate?.toolBarDidChangeStyle(style)
-            needsDisplay = true
+        if colorRect.contains(point) {
+            delegate?.toolBarDidRequestPanel(.colors(Self.colors), anchor: colorRect)
+            return
+        }
+        if widthRect.contains(point) {
+            delegate?.toolBarDidRequestPanel(.widths(Self.widths), anchor: widthRect)
             return
         }
         for (action, rect) in actionRects where rect.contains(point) {

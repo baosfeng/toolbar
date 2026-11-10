@@ -28,7 +28,66 @@ enum SnipToolBarSnapshot {
             let directory = URL(fileURLWithPath: path, isDirectory: true)
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             render(to: directory.appendingPathComponent("toolbar-dark.png"))
+            renderPanel(.tools(SnipTool.overflow),
+                        selectedIndex: 0,
+                        to: directory.appendingPathComponent("panel-tools.png"))
+            renderPanel(.colors(SnipToolBarView.colors),
+                        selectedIndex: 0,
+                        to: directory.appendingPathComponent("panel-colors.png"))
+            renderPanel(.widths(SnipToolBarView.widths),
+                        selectedIndex: 1,
+                        to: directory.appendingPathComponent("panel-widths.png"))
             NSApp.terminate(nil)
+        }
+    }
+
+    /// 渲染一张二级面板（工具 / 颜色 / 线宽）取证图
+    ///
+    /// selectedIndex 用于摆出「选中一项」的对照（越界即无选中）。
+    private static func renderPanel(_ content: SnipPanelContent,
+                                    selectedIndex: Int,
+                                    to url: URL) {
+        let panel = SnipToolPanelView(content: content, selectedIndex: selectedIndex)
+        guard let appearance = NSAppearance(named: .darkAqua) else { return }
+        let size = content.size
+        let container = SnapshotBackdropView(frame: NSRect(origin: .zero, size: size))
+        container.appearance = appearance
+        panel.appearance = appearance
+        panel.frame = NSRect(origin: .zero, size: size)
+        container.addSubview(panel)
+        container.layoutSubtreeIfNeeded()
+        panel.needsDisplay = true
+        panel.displayIfNeeded()
+        container.needsDisplay = true
+        container.displayIfNeeded()
+        writePNG(of: container, size: size, to: url)
+        AppContext.shared.logger.info("面板取证已写入 \(url.lastPathComponent) \(Int(size.width))x\(Int(size.height))")
+    }
+
+    /// 把视图快照成 PNG（工具条与面板共用）
+    private static func writePNG(of view: NSView, size: NSSize, to url: URL) {
+        let pixelWidth = max(1, Int(size.width.rounded()))
+        let pixelHeight = max(1, Int(size.height.rounded()))
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
+                                         pixelsWide: pixelWidth,
+                                         pixelsHigh: pixelHeight,
+                                         bitsPerSample: 8,
+                                         samplesPerPixel: 4,
+                                         hasAlpha: true,
+                                         isPlanar: false,
+                                         colorSpaceName: .deviceRGB,
+                                         bytesPerRow: 0,
+                                         bitsPerPixel: 0) else {
+            AppContext.shared.logger.error("快照位图创建失败")
+            return
+        }
+        rep.size = size
+        view.cacheDisplay(in: view.bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else { return }
+        do {
+            try data.write(to: url)
+        } catch {
+            AppContext.shared.logger.error("快照写入失败：\(error)")
         }
     }
 
@@ -41,9 +100,11 @@ enum SnipToolBarSnapshot {
         style.lineWidth = 4
         bar.debugSetStyle(style)
 
-        let size = NSSize(width: SnipToolBarLayout.plan(toolCount: SnipTool.allCases.count,
-                                                        colorCount: 7, widthCount: 3,
-                                                        actionCount: SnipBarAction.allCases.count).width,
+        let args = SnipToolBarView.layoutArguments
+        let size = NSSize(width: SnipToolBarLayout.plan(toolCount: args.toolCount,
+                                                        colorCount: args.colorCount,
+                                                        widthCount: args.widthCount,
+                                                        actionCount: args.actionCount).width,
                           height: SnipToolBarLayout.height)
         guard let appearance = NSAppearance(named: .darkAqua) else { return }
         let container = SnapshotBackdropView(frame: NSRect(origin: .zero, size: size))

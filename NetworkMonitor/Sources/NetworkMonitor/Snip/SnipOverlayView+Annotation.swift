@@ -9,11 +9,85 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
 
     func toolBarDidChangeTool(_ tool: SnipTool?) {
         activeTool = tool
+        // 工具条自己点选时 already 设过一次；二级面板选出来时要回灌给它，
+        // 否则「更多」按钮的高亮与图标停在旧状态
+        toolbarView?.selectedTool = tool
         needsDisplay = true
     }
 
     func toolBarDidChangeStyle(_ style: SnipAnnotationStyle) {
         currentStyle = style
+        // 一级工具条只显示当前颜色 / 线宽，选完要同步，否则面板里换了色条上看不出来
+        toolbarView?.updateStyle(style)
+        needsDisplay = true
+    }
+
+    /// 工具条请求二级面板：关掉已有的，再在触发按钮上方摆出新的
+    func toolBarDidRequestPanel(_ content: SnipPanelContent, anchor: CGRect) {
+        // 工具条的 frame 由 draw 阶段摆放：先跑一次布局，面板才能贴着真实的工具条定位
+        // （否则首次弹出时工具条 frame 还是零尺寸，面板会飘到屏幕左上角）
+        layoutToolBar()
+        closeToolPanel()
+        let panel = SnipToolPanelView(content: content,
+                                      selectedIndex: selectedIndex(in: content))
+        panel.onPick = { [weak self] index in
+            self?.pickPanelItem(in: content, index: index)
+        }
+        let width = content.size.width
+        let height = content.size.height
+        // anchor 是工具条自身的本地坐标，面板是覆盖层的子视图：先换算到覆盖层坐标再居中
+        let barOriginX = toolbarView?.frame.minX ?? 0
+        var originX = barOriginX + anchor.midX - width / 2
+        originX = min(max(originX, 8), max(bounds.width - width - 8, 8))
+        // 默认贴在一级工具条上方；上方放不下就压到工具条下方
+        var originY = (toolbarView?.frame.minY ?? anchor.minY) - height - 6
+        if originY < 8 {
+            originY = (toolbarView?.frame.maxY ?? anchor.maxY) + 6
+        }
+        originY = min(max(originY, 8), max(bounds.height - height - 8, 8))
+        panel.frame = CGRect(x: originX, y: originY, width: width, height: height)
+        addSubview(panel)
+        toolPanel = panel
+        needsDisplay = true
+    }
+
+    /// 二级面板里当前应高亮的项：工具按工具枚举、颜色按色值、线宽按当前宽度
+    private func selectedIndex(in content: SnipPanelContent) -> Int? {
+        switch content {
+        case .tools(let tools):
+            guard let activeTool else { return nil }
+            return tools.firstIndex(of: activeTool)
+        case .colors(let colors):
+            return colors.firstIndex(of: currentStyle.color)
+        case .widths(let widths):
+            return widths.firstIndex(of: currentStyle.lineWidth)
+        }
+    }
+
+    /// 选中二级面板里的一项：工具 / 颜色 / 线宽各自回写，随后面板收起
+    private func pickPanelItem(in content: SnipPanelContent, index: Int) {
+        switch content {
+        case .tools(let tools):
+            guard tools.indices.contains(index) else { closeToolPanel(); return }
+            let picked = tools[index]
+            activeTool = (activeTool == picked) ? nil : picked
+            toolBarDidChangeTool(activeTool)
+        case .colors(let colors):
+            guard colors.indices.contains(index) else { closeToolPanel(); return }
+            currentStyle.color = colors[index]
+            toolBarDidChangeStyle(currentStyle)
+        case .widths(let widths):
+            guard widths.indices.contains(index) else { closeToolPanel(); return }
+            currentStyle.lineWidth = widths[index]
+            toolBarDidChangeStyle(currentStyle)
+        }
+        closeToolPanel()
+    }
+
+    /// 收起二级面板
+    func closeToolPanel() {
+        toolPanel?.removeFromSuperview()
+        toolPanel = nil
         needsDisplay = true
     }
 

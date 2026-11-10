@@ -111,6 +111,55 @@ public enum SnipToolBarLayout {
                     actionRects: rects(3))
     }
 
+    // MARK: - 二级面板
+
+    /// 二级面板的排布（工具 / 样式收进弹出层以后，一级工具条只留高频项）
+    ///
+    /// 面板贴着工具条上沿弹出，内部按网格摆放：宽 = 列数 × 单元 + 间隙，
+    /// 高 = 行数 × 行高 + 间隙。列数由调用方按内容给出，纯逻辑保证不会被挤成两行。
+    public struct PanelPlan: Equatable {
+        /// 面板整体尺寸（含内边距）
+        public let size: CGSize
+        /// 每个按钮的矩形（面板局部坐标，左上原点）
+        public let itemRects: [CGRect]
+        /// 列数
+        public let columns: Int
+    }
+
+    /// 面板内边距、行高与间隙
+    public static let panelPadding: CGFloat = 8
+    public static let panelItemGap: CGFloat = 4
+    public static let panelRowHeight: CGFloat = 30
+
+    /// 计算二级面板排布
+    ///
+    /// - Parameters:
+    ///   - itemCount: 按钮数量
+    ///   - itemWidth: 单个按钮宽
+    ///   - columns: 每行列数（调用方按面板最大宽给出）
+    public static func panelPlan(itemCount: Int, itemWidth: CGFloat, columns: Int) -> PanelPlan {
+        guard itemCount > 0, columns > 0, itemWidth > 0 else {
+            return PanelPlan(size: .zero, itemRects: [], columns: max(columns, 0))
+        }
+        let usedColumns = min(columns, itemCount)
+        let rows = Int(ceil(Double(itemCount) / Double(usedColumns)))
+        let contentWidth = CGFloat(usedColumns) * itemWidth + CGFloat(usedColumns - 1) * panelItemGap
+        let contentHeight = CGFloat(rows) * panelRowHeight + CGFloat(rows - 1) * panelItemGap
+        let size = CGSize(width: contentWidth + panelPadding * 2,
+                          height: contentHeight + panelPadding * 2)
+        var rects: [CGRect] = []
+        rects.reserveCapacity(itemCount)
+        for index in 0..<itemCount {
+            let row = index / usedColumns
+            let column = index % usedColumns
+            rects.append(CGRect(x: panelPadding + CGFloat(column) * (itemWidth + panelItemGap),
+                                y: panelPadding + CGFloat(row) * (panelRowHeight + panelItemGap),
+                                width: itemWidth,
+                                height: panelRowHeight))
+        }
+        return PanelPlan(size: size, itemRects: rects, columns: usedColumns)
+    }
+
     /// 把一组按钮按「单元宽 + 组内间隙」摆成一行
     private static func cells(in placement: Placement) -> [CGRect] {
         let group = placement.group
