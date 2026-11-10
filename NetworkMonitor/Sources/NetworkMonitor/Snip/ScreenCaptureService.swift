@@ -58,6 +58,17 @@ final class ScreenCaptureService: SnipCaptureServicing {
 
     // MARK: - 窗口列表
 
+    /// 当前屏幕上的可检测窗口 — 普通窗口 + 程序坞 + 菜单栏 + 状态栏项
+    ///
+    /// 层级：只收 SnipWindowLayer 白名单（0 / 20 / 24 / 25）。程序坞与菜单栏在 CGWindowList 里
+    /// 都是「一条整屏窗口」，不是逐个图标；逐个图标要 Accessibility API，不在本轮范围。
+    /// 尺寸：普通窗口仍过 minimumSide（滤掉提示条、浮动条），系统层级不受该限制 ——
+    /// 状态栏项实测可能只有 30×24，按普通窗口门槛会被整片滤掉。
+    /// 自家进程：不再整段排除。自家 popover 就在状态栏项层级（25），排除掉就是用户说的
+    /// 「自己的详情页窗口识别不到」；只有覆盖层量级（>= 1000）的自家窗口才丢。
+    ///
+    /// 时序：本方法在 presentOverlays 里先于覆盖层创建调用，此刻屏幕上还没有自家覆盖层，
+    /// 所以这份列表天然不含覆盖层；覆盖层自身是 screenSaver（1000），也不在白名单内。
     func windowInfos() -> [SnipWindowInfo] {
         guard isAuthorized() else { return [] }
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
@@ -66,7 +77,8 @@ final class ScreenCaptureService: SnipCaptureServicing {
         }
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let parsed: [SnipWindowInfo] = raw.compactMap { info in
-            guard let layer = info[kCGWindowLayer as String] as? Int, layer == 0,
+            guard let layer = info[kCGWindowLayer as String] as? Int,
+                  SnipWindowLayer.isSupported(layer),
                   let windowNumber = info[kCGWindowNumber as String] as? Int,
                   let bounds = info[kCGWindowBounds as String] as? [String: Any],
                   let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary)
@@ -78,9 +90,9 @@ final class ScreenCaptureService: SnipCaptureServicing {
                                   frame: frame,
                                   ownerPID: pid,
                                   ownerName: owner,
-                                  title: title)
+                                  title: title,
+                                  layer: layer)
         }
-        // 自身进程窗口排除；面积过小的辅助窗口（提示条、浮动条）也排除
         return SnipWindowHitTesting.usable(windows: parsed, excludingPID: Int32(ownPID))
     }
 

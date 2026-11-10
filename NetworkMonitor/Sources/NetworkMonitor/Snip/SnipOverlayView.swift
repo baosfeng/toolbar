@@ -90,9 +90,11 @@ final class SnipOverlayView: NSView {
     /// 是否有输入框正在编辑（此时按键要让给输入框）
     var hasActiveTextInput: Bool { sizeEditor != nil || textEditor != nil }
     /// 本次按下时的落点（用于区分单击选窗与拖拽选区）
-    private var pressPoint: CGPoint?
+    /// 放宽为 internal：动作扩展文件（+Actions 的单击选窗判定）要读写
+    var pressPoint: CGPoint?
     /// 本次按下时悬停的窗口（松手且位移很小时用它成立整窗选区）
-    private var pressedWindow: SnipWindowInfo?
+    /// 放宽为 internal：动作扩展文件（+Actions 的单击选窗判定）要读写
+    var pressedWindow: SnipWindowInfo?
 
     init(frame: NSRect,
          screenshot: CGImage,
@@ -224,24 +226,6 @@ final class SnipOverlayView: NSView {
         } else {
             state.endAdjust()
         }
-        needsDisplay = true
-    }
-
-    /// 松手时若位移小于阈值，且按下时悬停在某个窗口上，就判定为「单击选窗」
-    ///
-    /// 阈值取 4 点：触控板轻微抖动不至于把点击误判成拖拽，
-    /// 而用户真正想拖选区时位移必然远大于 4 点。
-    private func applyClickSelectionIfNeeded(at point: CGPoint) {
-        guard let window = pressedWindow, let pressPoint else { return }
-        defer {
-            self.pressPoint = nil
-            pressedWindow = nil
-        }
-        guard SnipPointerGesture.outcome(start: pressPoint, end: point, hasHoveredWindow: true)
-            == .clickWindow else { return }
-        let local = window.frame.offsetBy(dx: -displayOrigin.x, dy: -displayOrigin.y)
-        state.select(local)
-        hoveredWindow = nil
         needsDisplay = true
     }
 

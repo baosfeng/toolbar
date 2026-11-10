@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 交互动作（从主类拆出，守住单文件门禁）
 
@@ -20,6 +21,30 @@ extension SnipOverlayView {
     func requestSave(quick: Bool) {
         guard let selection = state.selection else { return }
         delegate?.overlayView(self, didRequestSave: selection, quick: quick)
+    }
+
+    // MARK: - 单击选窗
+
+    /// 松手时若位移小于阈值，且按下时悬停在某个窗口上，就判定为「单击选窗」
+    ///
+    /// 阈值取 4 点：触控板轻微抖动不至于把点击误判成拖拽，
+    /// 而用户真正想拖选区时位移必然远大于 4 点。
+    /// 从主类拆到这里：主文件守住单文件门禁（500 行 / 15 KiB）。
+    func applyClickSelectionIfNeeded(at point: CGPoint) {
+        guard let window = pressedWindow, let pressPoint else { return }
+        defer {
+            self.pressPoint = nil
+            pressedWindow = nil
+        }
+        guard SnipPointerGesture.outcome(start: pressPoint, end: point, hasHoveredWindow: true)
+            == .clickWindow else { return }
+        // 程序坞的窗口矩形是整块屏幕，直接用它会截出满屏；选区口径交给纯函数裁边
+        let global = SnipWindowHitTesting.selectionFrame(for: window, at: CGPoint(x: point.x + displayOrigin.x,
+                                                                                  y: point.y + displayOrigin.y))
+        let local = global.offsetBy(dx: -displayOrigin.x, dy: -displayOrigin.y)
+        state.select(local)
+        hoveredWindow = nil
+        needsDisplay = true
     }
 
     // MARK: - 精确尺寸输入
@@ -169,7 +194,11 @@ extension SnipOverlayView {
     /// 高亮鼠标下的窗口，并标出所属应用
     func drawHoveredWindow(in context: CGContext) {
         guard let hovered = hoveredWindow else { return }
-        let local = hovered.frame.offsetBy(dx: -displayOrigin.x, dy: -displayOrigin.y)
+        // 程序坞的窗口矩形是整块屏幕：高亮也按贴边带裁，否则悬停在 Dock 上会整屏发蓝
+        let global = SnipWindowHitTesting.selectionFrame(for: hovered,
+                                                          at: CGPoint(x: pointer.x + displayOrigin.x,
+                                                                      y: pointer.y + displayOrigin.y))
+        let local = global.offsetBy(dx: -displayOrigin.x, dy: -displayOrigin.y)
         context.saveGState()
         context.setFillColor(NSColor.systemBlue.withAlphaComponent(0.15).cgColor)
         context.fill(local)
@@ -177,7 +206,11 @@ extension SnipOverlayView {
         context.setLineWidth(2)
         context.stroke(local.insetBy(dx: 1, dy: 1))
         context.restoreGState()
-        let label = hovered.title.isEmpty ? hovered.ownerName : "\(hovered.ownerName) — \(hovered.title)"
+        // 文案口径交给 NetworkMonitorUI 的纯函数：系统层级（菜单栏 / 程序坞 / 状态栏项）
+        // 要先写层级再写应用名，否则空标题的状态栏项只剩一串陌生进程名
+        let label = SnipWindowLabel.text(layer: hovered.layer,
+                                          ownerName: hovered.ownerName,
+                                          title: hovered.title)
         drawLabel(label, at: CGPoint(x: local.minX + 4, y: local.minY + 4))
     }
 

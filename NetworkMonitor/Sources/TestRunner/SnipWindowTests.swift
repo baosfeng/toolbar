@@ -33,7 +33,7 @@ func runSnipWindowTests() {
     assertEqual(SnipWindowHitTesting.window(at: CGPoint(x: 5000, y: 5000), in: windows) == nil,
                 true, "所有窗口之外不命中")
 
-    // 自身进程与过小窗口被过滤
+    // 过小窗口被过滤；自身进程的普通窗口保留（用户能看到就该能框到，详见 SnipWindowLayerTests）
     let selfWindow = SnipWindowInfo(windowID: 9,
                                     frame: CGRect(x: 0, y: 0, width: 500, height: 400),
                                     ownerPID: 42, ownerName: "NetworkMonitor", title: "")
@@ -41,8 +41,8 @@ func runSnipWindowTests() {
                               frame: CGRect(x: 10, y: 10, width: 8, height: 8),
                               ownerPID: 100, ownerName: "Finder", title: "")
     let usable = SnipWindowHitTesting.usable(windows: [selfWindow, tiny, editor], excludingPID: 42)
-    assertEqual(usable.count, 1, "自身进程与过小窗口被过滤")
-    assertEqual(usable.first?.windowID, 2, "保留正常窗口")
+    assertEqual(usable.count, 2, "只滤掉过小窗口")
+    assertEqual(usable.map(\.windowID), [9, 2], "自家普通窗口与正常窗口都保留")
 
     // 状态机：窗口点选直接成立选区
     var state = SnipSelectionState()
