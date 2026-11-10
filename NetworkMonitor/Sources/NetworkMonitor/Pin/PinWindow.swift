@@ -17,6 +17,14 @@ final class PinWindow: NSPanel {
     var onCopy: ((PinWindow) -> Void)?
     /// 回调：请求另存为
     var onSave: ((PinWindow) -> Void)?
+    /// 回调：请求复制纯文本（⌘⇧C；该贴图不是文本来源时返回 nil）
+    var onCopyPlainText: ((PinWindow) -> String?)?
+
+    /// 该贴图的来源纯文本（文本 / HTML / 文件路径贴图才有）
+    ///
+    /// 官方贴图键位表：⌘⇧C 复制纯文本（如果该贴图是由文本转换而来）。
+    /// 贴图窗只持有位图，来源文本必须由贴图时一并记下，否则这个出口无从实现。
+    var sourceText: String?
 
     private let imageView = NSImageView()
     /// 内容视图：双击 / 中键必须在这里判，否则会被窗口拖动吃掉（见 PinContentView）
@@ -86,6 +94,7 @@ final class PinWindow: NSPanel {
         case .zoom(let factor): setScale(currentScale * factor)
         case .alphaDelta(let delta): adjustAlpha(by: delta)
         case .resetSizeAndAlpha: resetSizeAndAlpha()
+        case .copyPlainText: copyPlainTextToPasteboard()
         }
     }
 
@@ -105,6 +114,22 @@ final class PinWindow: NSPanel {
         guard abs(clamped - currentScale) > 0.0001 else { return }
         currentScale = clamped
         applySize(CGSize(width: baseSize.width * clamped, height: baseSize.height * clamped))
+    }
+
+    /// 复制该贴图的来源纯文本到剪贴板（官方 ⌘⇧C）
+    ///
+    /// 没有来源文本时不静默：贴图窗不是文本来源（例如截图像素贴图），
+    /// 用户按了没反应会以为是按键失效，这里给出提示音 + 日志。
+    func copyPlainTextToPasteboard() {
+        guard let text = sourceText, !text.isEmpty else {
+            NSSound.beep()
+            AppContext.shared.logger.info("该贴图没有来源文本，⌘⇧C 无内容可复制")
+            return
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        AppContext.shared.logger.info("已复制贴图来源文本（\(text.count) 字）")
     }
 
     /// 重置为 100% 大小与 100% 不透明（中键单击的官方语义）

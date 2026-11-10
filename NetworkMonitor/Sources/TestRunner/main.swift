@@ -229,5 +229,8 @@ runSnipAnnotationConstraintTests()
 runSnipAnnotationStyleResolverTests()
 runSnipAnnotationSelectionTests()
 
+// MARK: - 贴图来源纯文本（⌘⇧C 复制纯文本；无来源时明确反馈）
+runSnipPinSourceTextTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")

@@ -59,7 +59,9 @@ extension SnipController {
             return
         }
         guard let rendered = SnipClipboardRenderer.render(.text(text)) else { return }
-        pinWindows.pin(image: rendered.image, cgRect: placementRect(size: rendered.size))
+        pinWindows.pin(image: rendered.image,
+                       cgRect: placementRect(size: rendered.size),
+                       sourceText: text)
         logger.info("已从历史贴图（文本）")
     }
 
@@ -128,7 +130,10 @@ extension SnipController {
             return
         }
         if pinWindows.restoreMatching(rendered.image) { return }
-        pinWindows.pin(image: rendered.image, cgRect: placementRect(size: rendered.size))
+        // 来源文本随贴图一起记下：⌘⇧C「复制纯文本」要靠它（文本 / HTML / 文件路径三种来源）
+        pinWindows.pin(image: rendered.image,
+                       cgRect: placementRect(size: rendered.size),
+                       sourceText: SnipPinSourceText.plainText(of: content))
         logger.info("已贴图（\(contentDescription(content))）")
     }
 

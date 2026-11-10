@@ -242,7 +242,8 @@ final class SnipController: SnipOverlayViewDelegate {
         if let image = composedImage(captured: target.captured,
                                      globalRect: target.globalRect,
                                      annotations: view.annotationsForComposition) {
-            pinWindows.pin(image: image, cgRect: target.globalRect)
+            // 截图贴图没有来源文本（它来自像素选区），⌘⇧C 会明确告知「无内容可复制」
+            pinWindows.pin(image: image, cgRect: target.globalRect, sourceText: nil)
         }
         remember(target.globalRect)
         dismissOverlays()

@@ -27,6 +27,8 @@ final class PinWindowController {
         let image: CGImage
         let frame: CGRect
         let scale: CGFloat
+        /// 来源文本随图一起进恢复池：关闭再恢复后 ⌘⇧C 仍要能复制回纯文本
+        let sourceText: String?
     }
 
     var count: Int { windows.count }
@@ -51,9 +53,13 @@ final class PinWindowController {
     // MARK: - 贴图
 
     /// 直接贴一张图到指定全局位置
+    ///
+    /// - Parameter sourceText: 该贴图的来源文本（文本 / HTML / 文件路径贴图才有）；
+    ///   记下来供 ⌘⇧C「复制纯文本」使用，没有来源的像素贴图传 nil。
     @discardableResult
-    func pin(image: CGImage, cgRect: CGRect) -> PinWindow {
+    func pin(image: CGImage, cgRect: CGRect, sourceText: String? = nil) -> PinWindow {
         let window = makeWindow(image: image, appKitRect: appKitRect(for: cgRect))
+        window.sourceText = sourceText
         windows.append(window)
         window.orderFrontRegardless()
         window.makeKey()
@@ -119,6 +125,7 @@ final class PinWindowController {
         }
         let closed = recentlyClosed.remove(at: index)
         let window = makeWindow(image: closed.image, appKitRect: closed.frame)
+        window.sourceText = closed.sourceText
         window.setScale(closed.scale)
         windows.append(window)
         window.orderFrontRegardless()
@@ -203,7 +210,8 @@ final class PinWindowController {
         recentlyClosed = SnipClosedPinRecoveryQueue.enqueue(
             ClosedPin(image: window.currentImage,
                       frame: window.frame,
-                      scale: window.currentScale),
+                      scale: window.currentScale,
+                      sourceText: window.sourceText),
             into: recentlyClosed,
             limit: recoverableCount)
         logger.info("已关闭一张贴图（可恢复），剩余 \(windows.count) 张，恢复池 \(recentlyClosed.count)/\(recoverableCount)")

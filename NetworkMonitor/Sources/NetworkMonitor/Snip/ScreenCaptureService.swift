@@ -141,12 +141,14 @@ final class ScreenCaptureService: SnipCaptureServicing {
                 return try await self.captureWithScreenshotConfiguration(display)
             }))
         }
-        if #available(macOS 15.2, *) {
-            paths.append(CapturePath(name: "captureImage(rect)", capture: { [weak self] display in
-                guard let self else { throw SnipCaptureError.captureFailed("捕获服务已释放") }
-                return try await self.captureWithRect(display)
-            }))
-        }
+        // 注意：不把 captureImage(in:)（macOS 15.2 的「按矩形抓」）放进降级链。
+        // 它导入到 Swift 的签名是 async throws -> CGImage（**非可选**），系统内部在拿不到图时
+        // 返回 nil，Swift 的 checked completion handler 桥接立刻触发
+        // 「Unexpectedly found nil while implicitly unwrapping」断言而崩溃 —— 崩溃发生在
+        // 系统回调线程，任何 do/catch 降级都救不回来（本机 macOS 27 实测：按截图热键即崩）。
+        // 26+ 的 captureScreenshot(rect:configuration:) 返回 SCScreenshotOutput，
+        // sdrImage 是可选值，拿不到图时只是返回 nil、可以正常降级，因此把它作为唯一首选；
+        // 兜底仍走 SCContentFilter（它自带完整的 throw 语义）。
         paths.append(CapturePath(name: "SCContentFilter", capture: { [weak self] display in
             guard let self else { throw SnipCaptureError.captureFailed("捕获服务已释放") }
             return try await self.captureWithFilter(display)

@@ -24,6 +24,8 @@ public enum PinKeyCommand: Equatable {
     case alphaDelta(CGFloat)
     /// 重置为 100% 大小与 100% 不透明
     case resetSizeAndAlpha
+    /// 复制纯文本（官方 ⌘⇧C，仅当该贴图由文本转换而来）
+    case copyPlainText
 }
 
 /// 贴图窗键位解析
@@ -48,9 +50,11 @@ public enum PinKeyCommandResolver {
             return modifiers.contains(.shift) ? .destroy : .close
         }
         guard let letter = character(keyCode: keyCode, characters: characters) else { return nil }
-        // ⌘W 关闭窗口：官方贴图键位表里明写
+        // ⌘W 关闭窗口、⌘⇧C 复制纯文本：官方贴图键位表里明写
         if modifiers.contains(.command) {
-            return letter == "w" ? .close : nil
+            if letter == "w" { return .close }
+            if letter == "c", modifiers.contains(.shift) { return .copyPlainText }
+            return nil
         }
         // ⌃ 与 + / - 联用是调透明度；不带 ⌃ 才是缩放（官方两张表各占一档）
         if modifiers.contains(.control) {
