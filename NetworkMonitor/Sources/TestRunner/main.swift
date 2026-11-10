@@ -182,5 +182,26 @@ runSnipTransformTests()
 // MARK: - 剪贴板内容分类
 runSnipClipboardTests()
 
+// MARK: - 截图捕获路径降级
+runSnipCapturePlannerTests()
+
+// MARK: - 截图快捷键默认值迁移（无修饰键功能键在 macOS 27 不投递）
+runSnipHotKeyMigrationTests()
+
+// MARK: - 截图工具条布局（左右内边距恒等 / 组间带）
+runSnipToolBarLayoutTests()
+
+// MARK: - 截图覆盖层键位解析（⌘S / ⌘A 优先级）
+runSnipKeyCommandTests()
+
+// MARK: - 截图鼠标手势（单击选窗 vs 拖拽任意选区）
+runSnipPointerGestureTests()
+
+// MARK: - 截图键盘拦截白名单（系统快捷键放行）
+runSnipKeyboardInterceptionTests()
+
+// MARK: - 截图键盘路由（输入态放行 / 白名单接管）
+runSnipKeyboardRoutingTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")

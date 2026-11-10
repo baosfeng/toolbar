@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 覆盖层回调
 
@@ -46,6 +47,8 @@ final class SnipOverlayView: NSView {
 
     static let handleSize: CGFloat = 8
     static let frameLineWidth: CGFloat = 1
+    /// 点击与拖拽的判定阈值（点）：位移超过它就不再算「单击选窗」
+    static let clickTolerance: CGFloat = SnipPointerGesture.clickTolerance
 
     weak var delegate: SnipOverlayViewDelegate?
 
@@ -92,6 +95,14 @@ final class SnipOverlayView: NSView {
     var textEditingAnchor: CGPoint = .zero
     /// 当前选中的标注下标（文字缩放 / 旋转用）
     var selectedAnnotationIndex: Int?
+    /// 首帧重绘尝试次数（只在拿不到绘图上下文时自增，用于终止重试）
+    var redrawAttempts = 0
+    /// 是否有输入框正在编辑（此时按键要让给输入框）
+    var hasActiveTextInput: Bool { sizeEditor != nil || textEditor != nil }
+    /// 本次按下时的落点（用于区分单击选窗与拖拽选区）
+    private var pressPoint: CGPoint?
+    /// 本次按下时悬停的窗口（松手且位移很小时用它成立整窗选区）
+    private var pressedWindow: SnipWindowInfo?
 
     init(frame: NSRect,
          screenshot: CGImage,
@@ -157,6 +168,13 @@ final class SnipOverlayView: NSView {
         hoveredWindow = SnipWindowHitTesting.window(at: global, in: windowInfos)
     }
 
+    /// 中键点击选区 = 直接贴到屏幕上（Snipaste 的 Ctrl+T 等价操作，鼠标党常用）
+    override func otherMouseDown(with event: NSEvent) {
+        let point = localPoint(of: event)
+        guard state.phase == .selected, state.rect.contains(point) else { return }
+        requestPin()
+    }
+
     override func mouseDown(with event: NSEvent) {
         let point = localPoint(of: event)
         pointer = point
@@ -168,15 +186,22 @@ final class SnipOverlayView: NSView {
             beginSizeEditing()
             return
         }
+        // 双击选区 = 复制（Snipaste 的高频动作，用户习惯双击就完成）
+        if event.clickCount == 2, state.phase == .selected, state.rect.contains(point) {
+            confirm()
+            return
+        }
         if handleAnnotationMouseDown(at: point) { return }
         if let handle = state.hitTest(point, handleSize: Self.handleSize) {
             state.beginAdjust(handle, at: point)
-        } else if state.phase == .idle, let hovered = hoveredWindow {
-            // 点选窗口：直接成立选区，之后仍可用手柄微调
-            let local = hovered.frame.offsetBy(dx: -displayOrigin.x, dy: -displayOrigin.y)
-            state.select(local)
-            hoveredWindow = nil
         } else {
+            // 按下时一律进入拖拽，不在 mouseDown 里直接选中整窗：
+            // 早期实现在 hover 到窗口时立刻成立整窗选区，用户想拖任意区域时
+            // 鼠标一按下就被判成「点选窗口」，于是只能整窗截图、画不出自定义选区。
+            // 现在改成「按下开始拖、松手时位移小于阈值才算点选窗口」，
+            // 也就是 Snipaste 的语义：悬停高亮窗口，单击选整窗，拖拽选任意区域。
+            pressPoint = point
+            pressedWindow = state.phase == .idle ? hoveredWindow : nil
             state.begin(at: point)
         }
         needsDisplay = true
@@ -198,9 +223,28 @@ final class SnipOverlayView: NSView {
         if handleAnnotationMouseUp() { return }
         if state.phase == .dragging {
             state.end()
+            applyClickSelectionIfNeeded(at: localPoint(of: event))
         } else {
             state.endAdjust()
         }
+        needsDisplay = true
+    }
+
+    /// 松手时若位移小于阈值，且按下时悬停在某个窗口上，就判定为「单击选窗」
+    ///
+    /// 阈值取 4 点：触控板轻微抖动不至于把点击误判成拖拽，
+    /// 而用户真正想拖选区时位移必然远大于 4 点。
+    private func applyClickSelectionIfNeeded(at point: CGPoint) {
+        guard let window = pressedWindow, let pressPoint else { return }
+        defer {
+            self.pressPoint = nil
+            pressedWindow = nil
+        }
+        guard SnipPointerGesture.outcome(start: pressPoint, end: point, hasHoveredWindow: true)
+            == .clickWindow else { return }
+        let local = window.frame.offsetBy(dx: -displayOrigin.x, dy: -displayOrigin.y)
+        state.select(local)
+        hoveredWindow = nil
         needsDisplay = true
     }
 
@@ -225,95 +269,89 @@ final class SnipOverlayView: NSView {
 
     // MARK: - 键盘
 
+    /// Esc 先被 AppKit 的「取消」链路吃掉，不会进 keyDown
+    ///
+    /// Esc 走的是 cancelOperation(_:)：只有 SizeEditorField 覆写过它，主视图不覆写时
+    /// Esc 会被静默吞掉——用户按 Esc 关不掉覆盖层，症状与「截图键毫无反应」同类。
+    override func cancelOperation(_ sender: Any?) {
+        delegate?.overlayViewDidCancel(self)
+    }
+
     override func keyDown(with event: NSEvent) {
-        switch event.keyCode {
-        case 53:
-            if selectedAnnotationIndex != nil {
-                selectedAnnotationIndex = nil
-                needsDisplay = true
-                return
-            }
-            if draftAnnotation != nil {
-                draftAnnotation = nil
-                needsDisplay = true
-                return
-            }
+        handleKeyEvent(event)
+    }
+
+    /// 统一处理一次按键（窗口 keyDown 与兜底监视器共用同一份逻辑）
+    ///
+    /// 兜底路径的意义：菜单栏 App 拿不到系统级前台时，AppKit 仍会把事件送到本进程，
+    /// 但可能不派给任何一个窗口。此时靠 NSApp 本地监视器把事件转进来，
+    /// 覆盖层才不会出现「窗口在屏上、按键全无反应」。
+    func handleKeyEvent(_ event: NSEvent) {
+        let modifiers = SnipKeyCommandResolver.Modifiers(nsEventFlags: event.modifierFlags)
+        let command = SnipKeyCommandResolver.resolve(keyCode: Int(event.keyCode),
+                                                     characters: event.charactersIgnoringModifiers,
+                                                     modifiers: modifiers)
+        if perform(command, modifiers: event.modifierFlags) { return }
+        super.keyDown(with: event)
+    }
+
+    /// 执行一条键位命令；返回 true 表示已处理（false 时交回系统）
+    ///
+    /// 键位解析搬到 NetworkMonitorUI 的纯函数后，带 ⌘ 的组合不会被裸字母分支吃掉，
+    /// 且有断言守着顺序（早期实现里 ⌘S / ⌘A 从来没生效过）。
+    private func perform(_ command: SnipKeyCommand, modifiers: NSEvent.ModifierFlags) -> Bool {
+        switch command {
+        case .cancel:
+            // Esc 一律结束截图：早期实现先清「选中标注 / 未完成草稿」，用户以为 Esc 没反应
+            // （画完箭头想取消要按第二下），而悬停残留的 draft 还会让取消彻底失效。
+            // 现在直接取消整次截图——这与 Snipaste「Esc 随时中止」的语义一致。
+            selectedAnnotationIndex = nil
+            draftAnnotation = nil
             delegate?.overlayViewDidCancel(self)
-            return
-        case 36, 76:
-            if finishPolylineDraft() { return }
+        case .confirm:
+            if finishPolylineDraft() { return true }
             confirm()
-            return
-        case 50:
+        case .toggleCursor:
             delegate?.overlayViewDidToggleCursor(self)
-            return
-        case 49:
+        case .toggleToolBar:
             toolbarVisible.toggle()
             needsDisplay = true
-            return
-        case 43:
+        case .historyOlder:
             stepHistory(forward: false)
-            return
-        case 47:
+        case .historyNewer:
             stepHistory(forward: true)
-            return
-        case 48:
+        case .toggleWindowDetection:
             windowDetectionEnabled.toggle()
             hoveredWindow = nil
             needsDisplay = true
-            return
-        case 123:
-            nudge(dx: -1, dy: 0, modifiers: event.modifierFlags)
-            return
-        case 124:
-            nudge(dx: 1, dy: 0, modifiers: event.modifierFlags)
-            return
-        case 125:
-            nudge(dx: 0, dy: 1, modifiers: event.modifierFlags)
-            return
-        case 126:
-            nudge(dx: 0, dy: -1, modifiers: event.modifierFlags)
-            return
-        default:
-            break
-        }
-
-        switch event.charactersIgnoringModifiers?.lowercased() {
-        case "a":
-            nudge(dx: -1, dy: 0, modifiers: event.modifierFlags)
-        case "d":
-            nudge(dx: 1, dy: 0, modifiers: event.modifierFlags)
-        case "w":
-            nudge(dx: 0, dy: -1, modifiers: event.modifierFlags)
-        case "s":
-            nudge(dx: 0, dy: 1, modifiers: event.modifierFlags)
-        case "c" where event.modifierFlags.contains(.command):
-            confirm()
-        case "c" where !event.modifierFlags.contains(.command):
+        case .nudge(let dx, let dy):
+            nudge(dx: dx, dy: dy, modifiers: modifiers)
+        case .copyColor:
             copyColorAtPointer()
-        case "a" where event.modifierFlags.contains(.command):
+        case .selectAll:
             state.select(bounds)
             hoveredWindow = nil
             needsDisplay = true
-        case "r" where event.modifierFlags.contains(.command):
+        case .rotateSelectedText:
             rotateSelectedAnnotation()
-        case "r":
+        case .restoreLastSelection:
             restoreLastSelection()
-        case "t" where event.modifierFlags.contains(.command):
+        case .pin:
             requestPin()
-        case "z" where event.modifierFlags.contains(.command) && event.modifierFlags.contains(.shift):
-            annotationStack.redo()
-            needsDisplay = true
-        case "z" where event.modifierFlags.contains(.command):
+        case .undo:
             annotationStack.undo()
             needsDisplay = true
-        case "s" where event.modifierFlags.contains([.command, .shift]):
-            requestSave(quick: true)
-        case "s" where event.modifierFlags.contains(.command):
-            requestSave(quick: false)
-        default:
-            super.keyDown(with: event)
+        case .redo:
+            annotationStack.redo()
+            needsDisplay = true
+        case .save(let quick):
+            requestSave(quick: quick)
+        case .copyImage:
+            confirm()
+        case .none:
+            return false
         }
+        return true
     }
 
     override func flagsChanged(with event: NSEvent) {
