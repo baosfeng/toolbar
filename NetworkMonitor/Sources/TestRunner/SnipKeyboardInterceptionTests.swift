@@ -26,7 +26,7 @@ func runSnipKeyboardInterceptionTests() {
     assertEqual(Interception.shouldIntercept(keyCode: 49, characters: " ", modifiers: .command), false,
                 "⌘空格 放行，能调出聚焦搜索")
     assertEqual(Interception.shouldIntercept(keyCode: 13, characters: "w", modifiers: .command), false,
-                "⌘W 放行")
+                "⌘W 放行（关闭系统窗口是系统语义，截图覆盖层不接管）")
     assertEqual(Interception.shouldIntercept(keyCode: 9, characters: "v", modifiers: .command), false,
                 "⌘V 放行")
     assertEqual(Interception.shouldIntercept(keyCode: 0, characters: "a", modifiers: [.control, .option]), true,

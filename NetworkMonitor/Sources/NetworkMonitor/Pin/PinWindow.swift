@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 贴图窗口
 
@@ -18,6 +19,8 @@ final class PinWindow: NSPanel {
     var onSave: ((PinWindow) -> Void)?
 
     private let imageView = NSImageView()
+    /// 内容视图：双击 / 中键必须在这里判，否则会被窗口拖动吃掉（见 PinContentView）
+    private let container = PinContentView(frame: .zero)
     private(set) var currentImage: CGImage
     /// 100% 尺寸（点）
     private(set) var baseSize: CGSize
@@ -48,35 +51,41 @@ final class PinWindow: NSPanel {
         imageView.image = NSImage(cgImage: image, size: initialSize)
         imageView.imageScaling = .scaleAxesIndependently
         imageView.autoresizingMask = [.width, .height]
-        contentView = imageView
+        container.frame = NSRect(origin: .zero, size: initialSize)
+        container.autoresizingMask = [.width, .height]
+        container.addSubview(imageView)
+        // 官方贴图行为：左键双击关闭、中键单击重置为 100% 大小与 100% 不透明
+        container.onCloseRequest = { [weak self] in self?.closeAndReport() }
+        container.onResetRequest = { [weak self] in self?.resetSizeAndAlpha() }
+        contentView = container
     }
 
     // MARK: - 键盘
 
     override func keyDown(with event: NSEvent) {
-        switch event.keyCode {
-        case 53:
-            if event.modifierFlags.contains(.shift) { destroy() } else { closeAndReport() }
+        let modifiers = SnipKeyCommandResolver.Modifiers(nsEventFlags: event.modifierFlags)
+        guard let command = PinKeyCommandResolver.resolve(keyCode: Int(event.keyCode),
+                                                          characters: event.charactersIgnoringModifiers,
+                                                          modifiers: modifiers) else {
+            super.keyDown(with: event)
             return
-        case 18, 19:
-            rotate(clockwise: event.keyCode == 19)
-            return
-        case 20:
-            mirror(horizontal: true)
-            return
-        case 21:
-            mirror(horizontal: false)
-            return
-        default:
-            break
         }
-        switch event.charactersIgnoringModifiers {
-        case "1": rotate(clockwise: true)
-        case "2": rotate(clockwise: false)
-        case "3": mirror(horizontal: true)
-        case "4": mirror(horizontal: false)
-        case "5": toggleThumbnail()
-        default: super.keyDown(with: event)
+        perform(command)
+    }
+
+    /// 执行一条贴图键位命令
+    private func perform(_ command: PinKeyCommand) {
+        switch command {
+        case .close: closeAndReport()
+        case .destroy: destroy()
+        case .rotateClockwise: rotate(clockwise: true)
+        case .rotateCounterClockwise: rotate(clockwise: false)
+        case .mirrorHorizontal: mirror(horizontal: true)
+        case .mirrorVertical: mirror(horizontal: false)
+        case .thumbnail: toggleThumbnail()
+        case .zoom(let factor): setScale(currentScale * factor)
+        case .alphaDelta(let delta): adjustAlpha(by: delta)
+        case .resetSizeAndAlpha: resetSizeAndAlpha()
         }
     }
 
@@ -96,6 +105,13 @@ final class PinWindow: NSPanel {
         guard abs(clamped - currentScale) > 0.0001 else { return }
         currentScale = clamped
         applySize(CGSize(width: baseSize.width * clamped, height: baseSize.height * clamped))
+    }
+
+    /// 重置为 100% 大小与 100% 不透明（中键单击的官方语义）
+    func resetSizeAndAlpha() {
+        isThumbnail = false
+        alphaValue = 1
+        setScale(1)
     }
 
     /// 固定尺寸缩略图：缩到 30%，再按一次还原
@@ -165,8 +181,9 @@ final class PinWindow: NSPanel {
         menu.addItem(.separator())
         menu.addItem(withTitle: "旋转 90°", action: #selector(menuRotate), keyEquivalent: "").target = self
         menu.addItem(withTitle: "水平镜像", action: #selector(menuMirrorH), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "垂直镜像", action: #selector(menuMirrorV), keyEquivalent: "").target = self
         menu.addItem(withTitle: "缩略图", action: #selector(menuThumbnail), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "不透明度 100%", action: #selector(menuResetAlpha), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "重置大小与不透明度", action: #selector(menuResetAll), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "关闭（可恢复）", action: #selector(menuClose), keyEquivalent: "").target = self
         menu.addItem(withTitle: "销毁", action: #selector(menuDestroy), keyEquivalent: "").target = self
@@ -177,8 +194,9 @@ final class PinWindow: NSPanel {
     @objc private func menuSave() { onSave?(self) }
     @objc private func menuRotate() { rotate(clockwise: true) }
     @objc private func menuMirrorH() { mirror(horizontal: true) }
+    @objc private func menuMirrorV() { mirror(horizontal: false) }
     @objc private func menuThumbnail() { toggleThumbnail() }
-    @objc private func menuResetAlpha() { alphaValue = 1 }
+    @objc private func menuResetAll() { resetSizeAndAlpha() }
     @objc private func menuClose() { closeAndReport() }
     @objc private func menuDestroy() { destroy() }
 }

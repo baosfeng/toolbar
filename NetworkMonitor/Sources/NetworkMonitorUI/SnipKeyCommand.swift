@@ -29,6 +29,10 @@ public enum SnipKeyCommand: Equatable {
     case pin
     case undo
     case redo
+    /// 移除所有标注（Snipaste 官方 ⌘⇧Z，清空后不可恢复）
+    case clearAnnotations
+    /// 调整画笔粗细：delta 为正加粗、为负变细（官方 1 / 2 与 [ / ]）
+    case adjustLineWidth(delta: Int)
     /// 保存选区；quick 为 true 表示快速保存到默认目录
     case save(quick: Bool)
     /// 复制选区到剪贴板
@@ -75,6 +79,8 @@ public enum SnipKeyCommandResolver {
         public static let rightArrow = 124
         public static let downArrow = 125
         public static let upArrow = 126
+        public static let leftBracket = 33
+        public static let rightBracket = 30
     }
 
     /// 解析一次按键
@@ -114,6 +120,11 @@ public enum SnipKeyCommandResolver {
         case "s": return .nudge(dx: 0, dy: 1)
         case "c": return .copyColor
         case "r": return .restoreLastSelection
+        // 画笔粗细：官方把「[ / ]」与「1 / 2」都算作默认调粗细方式，
+        // [ 与 1 变细、] 与 2 加粗（与官方「1 小 2 大」的直觉一致）。
+        // 截图覆盖层里的 1 / 2 不旋转，旋转属于贴图窗（另一个窗口，键位不冲突）。
+        case "[", "1": return .adjustLineWidth(delta: -1)
+        case "]", "2": return .adjustLineWidth(delta: 1)
         default: return .none
         }
     }
@@ -128,7 +139,10 @@ public enum SnipKeyCommandResolver {
         case "c": return .copyImage
         case "a": return .selectAll
         case "t": return .pin
-        case "z" where modifiers.contains(.shift): return .redo
+        // 官方口径：⌘Y = 重做下一个标注；⌘⇧Z = 移除所有标注（不可恢复）。
+        // 早期实现把 ⌘⇧Z 当重做，语义与官方相反，且没有清空入口。
+        case "y": return .redo
+        case "z" where modifiers.contains(.shift): return .clearAnnotations
         case "z": return .undo
         case "r": return .rotateSelectedText
         default: return .none

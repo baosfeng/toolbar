@@ -36,7 +36,13 @@ func runSnipKeyCommandTests() {
     assertEqual(Resolver.resolve(keyCode: 17, characters: "t", modifiers: .command), .pin, "⌘T 贴顶")
     assertEqual(Resolver.resolve(keyCode: 15, characters: "r", modifiers: .command), .rotateSelectedText, "⌘R 旋转选中文字")
     assertEqual(Resolver.resolve(keyCode: 6, characters: "z", modifiers: .command), .undo, "⌘Z 撤销")
-    assertEqual(Resolver.resolve(keyCode: 6, characters: "z", modifiers: [.command, .shift]), .redo, "⌘⇧Z 重做")
+    // 官方口径：⌘Y = 重做下一个标注；⌘⇧Z = 移除所有标注（不可恢复）。
+    // 早期实现把 ⌘⇧Z 当重做，用户想清空却得到「重做」，语义与官方相反。
+    assertEqual(Resolver.resolve(keyCode: 16, characters: "y", modifiers: .command), .redo, "⌘Y 重做")
+    assertEqual(Resolver.resolve(keyCode: 6, characters: "z", modifiers: [.command, .shift]),
+                .clearAnnotations, "⌘⇧Z 移除所有标注")
+    assertEqual(Resolver.resolve(keyCode: 16, characters: "y", modifiers: [.command, .shift]),
+                .redo, "⌘⇧Y 仍是重做（清空只归 ⌘⇧Z）")
 
     // 裸字母：微调与取色
     assertEqual(Resolver.resolve(keyCode: 0, characters: "a", modifiers: none), .nudge(dx: -1, dy: 0), "裸 a 仍是微调")
@@ -45,6 +51,18 @@ func runSnipKeyCommandTests() {
     assertEqual(Resolver.resolve(keyCode: 1, characters: "s", modifiers: none), .nudge(dx: 0, dy: 1), "裸 s 微调")
     assertEqual(Resolver.resolve(keyCode: 8, characters: "c", modifiers: none), .copyColor, "裸 c 取色")
     assertEqual(Resolver.resolve(keyCode: 15, characters: "r", modifiers: none), .restoreLastSelection, "裸 r 恢复上次选区")
+
+    // P0-5 画笔粗细：[ ] 与 1 2 都调粗细（官方「鼠标滚轮 或 1 2 或 [ ]」）
+    assertEqual(Resolver.resolve(keyCode: 33, characters: "[", modifiers: none),
+                .adjustLineWidth(delta: -1), "[ 变细")
+    assertEqual(Resolver.resolve(keyCode: 30, characters: "]", modifiers: none),
+                .adjustLineWidth(delta: 1), "] 加粗")
+    assertEqual(Resolver.resolve(keyCode: 18, characters: "1", modifiers: none),
+                .adjustLineWidth(delta: -1), "1 变细")
+    assertEqual(Resolver.resolve(keyCode: 19, characters: "2", modifiers: none),
+                .adjustLineWidth(delta: 1), "2 加粗")
+    assertEqual(Resolver.resolve(keyCode: 19, characters: "2", modifiers: .command), .none,
+                "⌘2 不归覆盖层（系统窗口菜单）")
 
     // 无关按键不当成命令（不能吞掉别的键）
     assertEqual(Resolver.resolve(keyCode: 9, characters: "v", modifiers: .command), .none, "⌘V 不归覆盖层处理")

@@ -188,6 +188,9 @@ runSnipTransformTests()
 // MARK: - 剪贴板内容分类
 runSnipClipboardTests()
 
+// MARK: - 贴图内容源（再贴降级为路径文本 / 恢复池上限）
+runSnipPinContentSourceTests()
+
 // MARK: - 截图捕获路径降级
 runSnipCapturePlannerTests()
 
@@ -211,6 +214,15 @@ runSnipKeyboardInterceptionTests()
 
 // MARK: - 截图键盘路由（输入态放行 / 白名单接管）
 runSnipKeyboardRoutingTests()
+
+// MARK: - 右键语义（编辑态收笔 / 非编辑态中止截图）
+runSnipRightClickTests()
+
+// MARK: - 画笔粗细档位（[ ] 与 1 2 与滚轮同源）
+runSnipLineWidthTests()
+
+// MARK: - 贴图窗键位与点击语义（⌘W / 双击 / 中键 / +/- / ⌃+/-）
+runPinKeyCommandTests()
 
 // MARK: - Done
 print("\n🎉 所有测试通过！")

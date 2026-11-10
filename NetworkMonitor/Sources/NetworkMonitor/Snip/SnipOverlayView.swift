@@ -170,10 +170,6 @@ final class SnipOverlayView: NSView {
     override func mouseDown(with event: NSEvent) {
         let point = localPoint(of: event)
         pointer = point
-        if event.type == .rightMouseDown {
-            delegate?.overlayViewDidCancel(self)
-            return
-        }
         // 二级面板展开时，点面板外等于「收起面板」：不把这一下当成新建选区，
         // 否则用户想关面板却顺手把选区清掉了
         if let panel = toolPanel {
@@ -229,12 +225,15 @@ final class SnipOverlayView: NSView {
         needsDisplay = true
     }
 
+    /// 右键语义分离：编辑态只收笔（截图与已有标注都保留），非编辑态才中止整次截图。
+    /// 判定口径见 SnipRightClickIntent（官方两张键位表对右键给了不同含义）。
     override func rightMouseDown(with event: NSEvent) {
-        delegate?.overlayViewDidCancel(self)
+        handleRightClick()
     }
 
-    /// 选中文字时滚轮改字号
+    /// 滚轮：选中文字时改字号，处于标注模式时改画笔粗细（官方把滚轮列为调粗细的通路之一）
     override func scrollWheel(with event: NSEvent) {
+        if handleStyleScroll(event) { return }
         guard let index = selectedAnnotationIndex,
               annotationStack.annotations.indices.contains(index) else {
             super.scrollWheel(with: event)
@@ -327,6 +326,13 @@ final class SnipOverlayView: NSView {
         case .redo:
             annotationStack.redo()
             needsDisplay = true
+        case .clearAnnotations:
+            // 官方 ⌘⇧Z：移除所有标注，不可再恢复
+            clearAllAnnotations()
+        case .adjustLineWidth(let delta):
+            // 官方口径是「编辑模式时」调粗细：没有进标注状态就放行，别把按键吃掉又无反应
+            guard activeTool != nil, state.phase == .selected else { return false }
+            stepLineWidth(by: delta)
         case .save(let quick):
             requestSave(quick: quick)
         case .copyImage:
