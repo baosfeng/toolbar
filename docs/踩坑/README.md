@@ -34,6 +34,9 @@
 - [nettop 进程流量漏记](运行时/nettop-进程流量漏记.md) — 重复传 `-m` 只保留最后一个（实际退化为仅 UDP），TCP 进程全部缺席；用 `-J bytes_in,bytes_out` 固定列数
 - [进程 CPU 百分比时基换算](运行时/进程CPU百分比时基换算.md) — `pti_total_user/system` 单位是 mach ticks 不是纳秒，timebase=125/3 时按 ns 换算会小 41.67 倍（3 线程自旋误算 7.2% vs 正确 298.0%）
 - [IOReport 读取崩溃](运行时/IOReport读取崩溃.md) — 三处 SIGSEGV 用法（nil callback 建 dict、unsafeBitCast 取通道元素、按 ChannelGetFormat 分派）与唯一稳定写法
+- [截图覆盖层拿不到键盘与首帧绘制](运行时/截图覆盖层拿不到键盘与首帧绘制.md) — 菜单栏 App 抢不到系统前台 → Esc / 回车时灵时不灵；首帧无 NSGraphicsContext 直接 return 导致永久留白；抓屏期间重复按热键叠层
+- [截图覆盖层把整个键盘扣住](运行时/截图覆盖层把整个键盘扣住.md) — CGEventTap「装着就吞一切」使 ⌘Tab / ⌘Q / ⌘空格 失效、文字标注打不进字；拦截须走白名单 + 编辑态放行 + ⌘ 组合优先
+- [截图工具条按钮被前序分支挡住](运行时/截图工具条按钮被前序分支挡住.md) — 裸字母键位分支先吃掉 ⌘S / ⌘A；工具条宽度与布局两份累加式导致右侧多 17pt 空白；保存链路没走合成导致标注丢失
 
 ---
 
