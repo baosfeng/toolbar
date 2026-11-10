@@ -13,6 +13,20 @@ extension AppCoordinator {
             self?.settingsWindow?.show(section: .capture)
         }
         snipController.start()
+        // 启动预热：完整走一遍「切前台 → 退回菜单栏态」
+        //
+        // LSUIElement 的菜单栏 App 从「不可激活」切到前台时，系统要做一次策略迁移，
+        // 这时段的键盘事件会丢——实测第一次截图按 Esc 必定无效，第二次起才正常。
+        // 启动阶段先把这次迁移付掉（切 .regular → 激活 → 等迁移完成 → 切回 .accessory），
+        // 正式截图时的切换就是「第二次」，不再有过渡期丢键。
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            NSApp.setActivationPolicy(.accessory)
+            logger.info("菜单栏激活预热完成")
+        }
     }
 }
 

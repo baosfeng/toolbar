@@ -39,19 +39,21 @@ final class SnipController: SnipOverlayViewDelegate {
     var captures: [SnipCapturedImage] = []
     /// 当前截图是否包含鼠标指针（由反引号键切换）
     private var cursorIncluded = false
+    /// 截图是否正在准备（抓屏 / 抢前台阶段）；用于挡住热键重入
+    private var isStarting = false
+    /// 覆盖层键盘兜底监视器（覆盖层存在期间安装）
+    /// 放宽为 internal：键盘扩展文件要读写
+    var keyboardFallback: Any?
+    /// 系统层按键桥（CGEventTap 回调 → 主线程）
+    /// 放宽为 internal：键盘扩展文件要读写
+    var keyboardBridge: SnipKeyboardTapBridge?
+    /// 系统层按键 tap 与其 run loop source
+    /// 放宽为 internal：键盘扩展文件要读写
+    var eventTap: CFMachPort?
+    var eventTapSource: CFRunLoopSource?
+    /// 系统层 tap 缺失的提示是否已记录（避免每次截图刷一条）
+    var keyboardTapWarningShown = false
 
-    /// 截图热键（默认 F1，被占用时回落 ⌥⇧X）
-    /// 放宽为 internal：热键扩展文件要用
-    static let primarySnipCombo = HotKeyCombo(keyCode: UInt32(kVK_F1), modifiers: 0)
-    /// 放宽为 internal：热键扩展文件要用
-    static let fallbackSnipCombo = HotKeyCombo(keyCode: UInt32(kVK_ANSI_X),
-                                                       modifiers: UInt32(optionKey | shiftKey))
-    /// 贴图热键（默认 F3，被占用时回落 ⌥⇧P）
-    /// 放宽为 internal：热键扩展文件要用
-    static let primaryPinCombo = HotKeyCombo(keyCode: UInt32(kVK_F3), modifiers: 0)
-    /// 放宽为 internal：热键扩展文件要用
-    static let fallbackPinCombo = HotKeyCombo(keyCode: UInt32(kVK_ANSI_P),
-                                                      modifiers: UInt32(optionKey | shiftKey))
     /// 打开设置窗（⌥⇧,） — 由组合根注入
     var onOpenSettings: (() -> Void)?
     /// 设置窗热键
@@ -83,7 +85,8 @@ final class SnipController: SnipOverlayViewDelegate {
     }
 
     /// 上次成功截图的选区
-    private var lastSelection: CGRect? {
+    /// 放宽为 internal：覆盖层装配扩展文件要读
+    var lastSelection: CGRect? {
         SnipSelectionCoding.decode(storage.string(forKey: Self.lastSelectionKey))
     }
 
@@ -96,7 +99,8 @@ final class SnipController: SnipOverlayViewDelegate {
     }
 
     /// 历史选区
-    private var selectionHistory: [CGRect] {
+    /// 放宽为 internal：覆盖层装配扩展文件要读
+    var selectionHistory: [CGRect] {
         SnipSelectionHistoryCoding.decode(storage.string(forKey: Self.historyKey))
     }
 
@@ -122,50 +126,48 @@ final class SnipController: SnipOverlayViewDelegate {
     }
 
     func beginSnip() {
-        guard overlays.isEmpty else { return }
+        // 已有覆盖层时再按一次：把键盘焦点抢回来，而不是静默什么都不做
+        // （历史上这里直接 return，用户看到的就是「按了毫无反应」）
+        guard overlays.isEmpty else {
+            refocusOverlays()
+            return
+        }
+        // 抓屏是异步的，这段空档里重复按热键会各开一套覆盖层（实测连按会叠出两层，
+        // 按 Esc 只关掉一层，看起来就像「Esc 时灵时不灵」）。这里用一个进行中标志挡住重入。
+        guard !isStarting else {
+            logger.info("截图正在准备中，忽略重复触发的截图热键")
+            return
+        }
+        isStarting = true
+        defer { isStarting = false }
         guard captureService.isAuthorized() else {
             SnipPermissionGuide.present(logger: logger)
             return
         }
+        // 抓屏本身要几百毫秒，这段空档正好用来把前台从原 App 抢过来。
+        // 若等到覆盖层上屏才激活，第一下 Esc / 回车会投给原前台 App 而丢失
+        // （实测：不提前抢前台时，每 5 轮会有 1~2 轮首下按键失效）。
         Task { @MainActor in
+            await self.claimForegroundForCapture()
             do {
                 let result = try await captureService.captureAllDisplays()
+                guard !result.isEmpty else {
+                    fail(message: "没有捕获到任何屏幕内容")
+                    return
+                }
                 captures = result
+                // 再确认一次前台（抓屏期间用户可能切走了），拿到才上屏
+                await self.waitForForeground()
                 presentOverlays(result)
             } catch {
-                logger.error("截图失败：\(error)")
-                captures = []
+                fail(message: Self.failureDescription(error))
             }
         }
     }
 
-    func presentOverlays(_ result: [SnipCapturedImage]) {
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
-        let windowInfos = captureService.windowInfos()
-        let previous = lastSelection
-        let history = selectionHistory
-        overlays = result.map { captured in
-            SnipOverlayWindow(display: captured.display,
-                              screenshot: captured.image,
-                              windowInfos: windowInfos,
-                              lastSelection: previous,
-                              history: history,
-                              primaryHeight: primaryHeight,
-                              delegate: self)
-        }
-        overlays.forEach { $0.present() }
-        logger.info("截图覆盖层已就绪，共 \(overlays.count) 屏")
-    }
 
-    /// 放宽为 internal：导出扩展文件保存后要收覆盖层
-    func dismissOverlays() {
-        for window in overlays {
-            window.orderOut(nil)
-            window.close()
-        }
-        overlays.removeAll()
-        captures.removeAll()
-    }
+    // MARK: - 覆盖层生命周期（实现在 SnipController+Overlay.swift）
+
 
     // MARK: - 覆盖层回调
 
@@ -197,19 +199,32 @@ final class SnipController: SnipOverlayViewDelegate {
 
     func overlayView(_ view: SnipOverlayView, didConfirm rect: CGRect) {
         guard let target = resolve(capturedFor: view, localRect: rect) else { return }
-        copyToPasteboard(target, annotations: view.annotationsForComposition)
+        let annotations = view.annotationsForComposition
+        copyToPasteboard(target, annotations: annotations)
         remember(target.globalRect)
+        // 设置页的「复制后自动保存」此前只落在偏好里、没有任何消费方：
+        // 打开开关后截图依然只进剪贴板。这里补上唯一落盘出口。
+        if storage.bool(forKey: SnipPreferenceKey.autoSaveAfterCopy),
+           let cropped = composedImage(captured: target.captured,
+                                      globalRect: target.globalRect,
+                                      annotations: annotations) {
+            persistQuietly(cropped)
+        }
         dismissOverlays()
     }
 
     func overlayView(_ view: SnipOverlayView, didRequestSave rect: CGRect, quick: Bool) {
         guard let target = resolve(capturedFor: view, localRect: rect) else { return }
-        guard let cropped = PinWindowController.crop(target.captured, to: target.globalRect) else {
+        // 保存必须与复制 / 贴图同一份产物：早期这里走的是「纯裁剪 + 把标注当参数传下去、
+        // 下游却没消费」，画了矩形箭头再保存，文件里干干净净 —— 用户以为标注丢了。
+        guard let cropped = composedImage(captured: target.captured,
+                                          globalRect: target.globalRect,
+                                          annotations: view.annotationsForComposition) else {
             logger.warning("保存失败：选区裁剪为空")
             return
         }
         if quick {
-            saveQuickly(cropped, annotations: view.annotationsForComposition)
+            saveQuickly(cropped)
         } else {
             // 面板会激活本 App，先收掉覆盖层避免面板被压在 screenSaver 层级之下
             dismissOverlays()
