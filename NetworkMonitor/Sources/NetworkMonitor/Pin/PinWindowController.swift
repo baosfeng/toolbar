@@ -7,8 +7,13 @@ import NetworkMonitorCore
 @MainActor
 final class PinWindowController {
 
-    /// 关闭后可恢复的张数上限（与 Snipaste 默认一致）
-    static let maximumRecoverable = 3
+    /// 关闭后可恢复的张数上限（偏好项，默认 1、范围 1...10，见设置页「截图与贴图」）
+    ///
+    /// 官方口径是「默认建议 1，可在选项对话框设置」，这里跟随偏好实时读取，
+    /// 改完立即影响下一次关闭的裁剪（无需重启）。
+    var recoverableCount: Int {
+        SnipClosedPinLimit.normalized(storage.integer(forKey: SnipPreferenceKey.pinRecoverableCount))
+    }
 
     private let logger: LoggingService
     /// 偏好存储（解析快速保存目录用，禁止直读 UserDefaults）
@@ -101,28 +106,18 @@ final class PinWindowController {
     // MARK: - 关闭恢复
 
     /// 剪贴板内容与某张已关闭贴图一致时，按原位置恢复它
+    ///
+    /// 只在「恢复池上限」范围内匹配：用户把上限从 3 调到 1 后，
+    /// 更早关闭的那两张不该再被贴图键捞回来。
     @discardableResult
     func restoreMatching(_ image: CGImage) -> Bool {
+        recentlyClosed = SnipClosedPinRecoveryQueue.trimmed(recentlyClosed, limit: recoverableCount)
         guard let index = recentlyClosed.firstIndex(where: {
             $0.image.width == image.width && $0.image.height == image.height
         }) else {
             return false
         }
         let closed = recentlyClosed.remove(at: index)
-        let window = makeWindow(image: closed.image, appKitRect: closed.frame)
-        window.setScale(closed.scale)
-        windows.append(window)
-        window.orderFrontRegardless()
-        window.makeKey()
-        logger.info("已恢复关闭的贴图，当前共 \(windows.count) 张")
-        return true
-    }
-
-    /// 若最近关闭过一张贴图，就按原位置恢复
-    @discardableResult
-    func restoreLastClosed() -> Bool {
-        guard !recentlyClosed.isEmpty else { return false }
-        let closed = recentlyClosed.removeFirst()
         let window = makeWindow(image: closed.image, appKitRect: closed.frame)
         window.setScale(closed.scale)
         windows.append(window)
@@ -153,12 +148,33 @@ final class PinWindowController {
         windows.removeAll { !$0.isVisible }
     }
 
+    /// 关闭全部贴图并清空恢复池
+    ///
+    /// 注意：目前**没有调用方**（退出应用时不会走到这里），所以官方的
+    /// 「退出时自动销毁未显示的已关闭贴图」语义仍缺失；保留本方法供接线时直接使用。
     func closeAll() {
         for window in windows {
             window.close()
         }
         windows.removeAll()
         recentlyClosed.removeAll()
+    }
+
+    // MARK: - 图片文件贴图记录（仅本次运行有效）
+
+    /// 本次运行内已作为图像贴出的图片文件签名（路径 + 内容哈希）
+    private(set) var pinnedImageFileSignatures: Set<String> = []
+
+    /// 该图片文件是否已在本会话内贴过图像
+    func hasPinnedImageFile(path: String, contentHash: String?) -> Bool {
+        SnipImageFilePinTracker.isPinned(pinnedImageFileSignatures, path: path, contentHash: contentHash)
+    }
+
+    /// 记录「该图片文件已贴为图像」，下次再贴同一个文件时降级为路径文本
+    func markImageFilePinned(path: String, contentHash: String?) {
+        pinnedImageFileSignatures = SnipImageFilePinTracker.recording(pinnedImageFileSignatures,
+                                                                     path: path,
+                                                                     contentHash: contentHash)
     }
 
     // MARK: - 内部
@@ -184,14 +200,13 @@ final class PinWindowController {
             logger.info("已销毁一张贴图，剩余 \(windows.count) 张")
             return
         }
-        recentlyClosed.insert(ClosedPin(image: window.currentImage,
-                                        frame: window.frame,
-                                        scale: window.currentScale),
-                              at: 0)
-        if recentlyClosed.count > Self.maximumRecoverable {
-            recentlyClosed.removeLast()
-        }
-        logger.info("已关闭一张贴图（可恢复），剩余 \(windows.count) 张")
+        recentlyClosed = SnipClosedPinRecoveryQueue.enqueue(
+            ClosedPin(image: window.currentImage,
+                      frame: window.frame,
+                      scale: window.currentScale),
+            into: recentlyClosed,
+            limit: recoverableCount)
+        logger.info("已关闭一张贴图（可恢复），剩余 \(windows.count) 张，恢复池 \(recentlyClosed.count)/\(recoverableCount)")
     }
 
     private func copyImage(from window: PinWindow) {

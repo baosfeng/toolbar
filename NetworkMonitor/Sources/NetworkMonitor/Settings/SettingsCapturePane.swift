@@ -9,8 +9,10 @@ import NetworkMonitorCore
 /// 快速保存目录可自定义（偏好 `snip.quickSaveDirectoryPath`），未自定义时回落到默认目录。
 final class SettingsCapturePane: SettingsPaneView {
 
-    private let storage: any KeyValueStorage
-    private let logger: LoggingService
+    /// 放宽为 internal：内容源与恢复池偏好控件在 SettingsCapturePane+Pin.swift 里组装
+    let storage: any KeyValueStorage
+    /// 放宽为 internal：同上（偏好变更要记日志）
+    let logger: LoggingService
     /// 只读的截图热键摘要（组合根注入；nil 时不显示「控制」分组）
     private let hotKeyDelegate: (any SnipSettingsDelegate)?
     private let hotKeySummary: (() -> String)?
@@ -21,6 +23,9 @@ final class SettingsCapturePane: SettingsPaneView {
     private var autoSaveSwitch: NSSwitch?
     private var alphaSlider: NSSlider?
     private var alphaValueLabel: NSTextField?
+    /// 放宽为 internal：控件在 SettingsCapturePane+Pin.swift 里创建与刷新
+    var displayImageFilesSwitch: NSSwitch?
+    var recoverablePopup: NSPopUpButton?
     private var widthControl: NSSegmentedControl?
     private var colorButtons: [NSButton] = []
     private var hotKeyRecorders: [SnipHotKeyAction: HotKeyRecorderView] = [:]
@@ -109,6 +114,8 @@ final class SettingsCapturePane: SettingsPaneView {
 
         let card = SettingsCardView()
         card.addRow(row)
+        // 内容源与恢复池两行在扩展文件里组装（守住单文件体积门禁）
+        addPinContentSourceRows(to: card)
         page.addCard(card, sectionTitle: "贴图")
     }
 
@@ -179,6 +186,8 @@ final class SettingsCapturePane: SettingsPaneView {
 
     override func refresh() {
         autoSaveSwitch?.state = storage.bool(forKey: SnipPreferenceKey.autoSaveAfterCopy) ? .on : .off
+
+        refreshPinContentSource()
 
         let alpha = min(max(storage.object(forKey: SnipPreferenceKey.pinDefaultAlpha) as? Double ?? 1, 0.3), 1)
         alphaSlider?.doubleValue = alpha
