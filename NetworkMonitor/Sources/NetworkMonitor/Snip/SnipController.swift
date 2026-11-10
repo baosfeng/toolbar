@@ -148,7 +148,13 @@ final class SnipController: SnipOverlayViewDelegate {
         // 若等到覆盖层上屏才激活，第一下 Esc / 回车会投给原前台 App 而丢失
         // （实测：不提前抢前台时，每 5 轮会有 1~2 轮首下按键失效）。
         Task { @MainActor in
-            await self.claimForegroundForCapture()
+            // 抓屏必须发生在抢前台之前：
+            // 1) 先切 .regular / activate 会让原 App 退到后台，菜单面板（NSPopover，transient）
+            //    随之收起，紧接着抓屏拍到的就是「面板底下的背景」——用户口径「想截详情页，
+            //    截出来的是背景」；
+            // 2) 原 App 退场与覆盖层上屏之间会空出一段只看得见桌面的时间，就是「屏幕闪一下」。
+            // 因此顺序改成「前台不动 → 抓屏 → 抢前台 → 上屏覆盖层」，
+            // 保住了要截的画面，也把两帧之间的空白压到几乎不存在。
             do {
                 let result = try await captureService.captureAllDisplays()
                 guard !result.isEmpty else {
@@ -156,8 +162,7 @@ final class SnipController: SnipOverlayViewDelegate {
                     return
                 }
                 captures = result
-                // 再确认一次前台（抓屏期间用户可能切走了），拿到才上屏
-                await self.waitForForeground()
+                await self.claimForegroundForCapture()
                 presentOverlays(result)
             } catch {
                 fail(message: Self.failureDescription(error))

@@ -27,8 +27,12 @@ final class ScreenCaptureService: SnipCaptureServicing {
             }
             let displayID = CGDirectDisplayID(truncating: number)
             let frame = SelectionGeometry.cgRect(fromAppKit: screen.frame, primaryHeight: primaryHeight)
-            let pixelWidth = CGDisplayPixelsWide(displayID)
-            let pixelHeight = CGDisplayPixelsHigh(displayID)
+            // 像素尺寸取显示模式的 pixelWidth / pixelHeight：本机实测 CGDisplayPixelsWide
+            // 在 macOS 27 的 2x 屏上返回的是点数（1512 而非 3024），拿它当像素数会让
+            // 选区裁剪按 1x 处理，截出来的内容整体偏到左上（「框选 A 截到 B」）。
+            let mode = CGDisplayCopyDisplayMode(displayID)
+            let pixelWidth = mode?.pixelWidth ?? 0
+            let pixelHeight = mode?.pixelHeight ?? 0
             let pixelSize = pixelWidth > 0 && pixelHeight > 0
                 ? CGSize(width: CGFloat(pixelWidth), height: CGFloat(pixelHeight))
                 : CGSize(width: frame.width * screen.backingScaleFactor,

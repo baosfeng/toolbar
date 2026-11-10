@@ -44,6 +44,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PanelOpenMeasure.runIfRequested(manager: menuBarManager)
         // 仅 DEBUG：NM_SHOW_PANEL=1 时走真实路径展开 popover 并保持打开（实机截图取证）
         MenuPanelEvidence.openIfRequested(manager: menuBarManager)
+        // 仅 DEBUG：面板开着时抓一张屏，验证「对着面板截图抓到的是面板而非背景」
+        if SnipPanelCaptureProbe.isRequested {
+            SnipPanelCaptureProbe.run(capture: coordinator.snipController.captureService,
+                                      manager: menuBarManager)
+        }
 #endif
     }
 

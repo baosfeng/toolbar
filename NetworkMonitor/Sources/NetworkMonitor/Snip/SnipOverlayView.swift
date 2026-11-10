@@ -23,25 +23,7 @@ protocol SnipOverlayViewDelegate: AnyObject {
 /// 单屏截图覆盖层 — 画截图、暗化、选区、手柄，并处理鼠标与键盘
 ///
 /// 坐标约定：视图 isFlipped，本地坐标与全局 CG 坐标只差 display.frame.origin 偏移。
-/// 尺寸输入框 — 回车提交，Esc 取消（覆盖 cancelOperation 才能拦到 Esc）
-@MainActor
-final class SizeEditorField: NSTextField {
-
-    var onCancel: (() -> Void)?
-
-    override func cancelOperation(_ sender: Any?) {
-        onCancel?()
-    }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            onCancel?()
-            return
-        }
-        super.keyDown(with: event)
-    }
-}
-
+/// 尺寸 / 文字输入框已拆到 SnipSizeEditorField.swift（主文件守住单文件门禁）。
 @MainActor
 final class SnipOverlayView: NSView {
 
@@ -87,6 +69,9 @@ final class SnipOverlayView: NSView {
     var currentStyle = SnipAnnotationStyle()
     /// 标注工具条
     var toolbarView: SnipToolBarView?
+    /// 二级面板（工具 / 颜色 / 线宽）；nil = 未展开
+    /// 放宽为 internal：标注扩展文件（+Annotation）负责创建与收起
+    var toolPanel: SnipToolPanelView?
     /// 工具条是否可见（空格切换）
     var toolbarVisible = true
     /// 文字输入框
@@ -97,6 +82,11 @@ final class SnipOverlayView: NSView {
     var selectedAnnotationIndex: Int?
     /// 首帧重绘尝试次数（只在拿不到绘图上下文时自增，用于终止重试）
     var redrawAttempts = 0
+    /// 首帧内容是否已真正画进窗口（窗口以透明上屏、首帧画好再淡入）
+    /// 放宽为 internal：绘制扩展文件（+Actions 的 draw）要读写
+    var hasRenderedContent = false
+    /// 首帧绘制完成回调（由 SnipOverlayWindow 注入：把窗口从不透明改回可见）
+    var onFirstFrameRendered: (() -> Void)?
     /// 是否有输入框正在编辑（此时按键要让给输入框）
     var hasActiveTextInput: Bool { sizeEditor != nil || textEditor != nil }
     /// 本次按下时的落点（用于区分单击选窗与拖拽选区）
@@ -180,6 +170,13 @@ final class SnipOverlayView: NSView {
         pointer = point
         if event.type == .rightMouseDown {
             delegate?.overlayViewDidCancel(self)
+            return
+        }
+        // 二级面板展开时，点面板外等于「收起面板」：不把这一下当成新建选区，
+        // 否则用户想关面板却顺手把选区清掉了
+        if let panel = toolPanel {
+            if panel.frame.contains(point) { return }
+            closeToolPanel()
             return
         }
         if state.phase == .selected, sizeEditor == nil, sizeLabelFrame.contains(point) {
@@ -315,6 +312,8 @@ final class SnipOverlayView: NSView {
             delegate?.overlayViewDidToggleCursor(self)
         case .toggleToolBar:
             toolbarVisible.toggle()
+            // 工具条一起消失，二级面板不能独自留在屏上
+            closeToolPanel()
             needsDisplay = true
         case .historyOlder:
             stepHistory(forward: false)

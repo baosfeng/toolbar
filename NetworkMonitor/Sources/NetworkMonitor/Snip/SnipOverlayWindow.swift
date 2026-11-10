@@ -51,6 +51,9 @@ final class SnipOverlayWindow: NSPanel {
         view.delegate = delegate
     }
 
+    /// 淡入任务：首帧超时兜底用（见 present()）
+    private var fadeInTask: Task<Void, Never>?
+
     /// 展示并接管键盘
     ///
     /// 菜单栏 App（LSUIElement + 自签名）不是天然可激活的前台应用：
@@ -58,15 +61,45 @@ final class SnipOverlayWindow: NSPanel {
     /// 于是会出现「第一次按 Esc 没反应、第二次起才正常」。
     /// 这里改成有限重试：每 80ms 试一次 activate 并核对 frontmost，最多 12 次（约 1 秒），
     /// 拿到前台就停。拿不到也不会卡住，仍由本地键盘兜底监视器接住按键。
+    ///
+    /// 另外「按完热键屏幕闪一下」的成因是：覆盖层上屏的第一帧是空白（back store 未建好），
+    /// 直接以不透明上屏会让用户先看到一块纯色再看到截图内容。这里改成以 alpha 0 上屏
+    /// （照样拿得到 key window 与键盘），首帧真正画好后再淡入 80ms。
+
     @discardableResult
     func present() -> Bool {
         enterInteractiveMode()
+        // 先透明上屏：既拿到 key window 与键盘，又不让用户看到空白帧
+        alphaValue = 0
+        overlayView.onFirstFrameRendered = { [weak self] in
+            self?.fadeInAfterFirstFrame()
+        }
         orderFrontRegardless()
         makeKey()
         makeFirstResponder(overlayView)
         overlayView.needsDisplay = true
         scheduleActivationRetry()
+        // 兜底：首帧真的画不出来（拿不到绘图上下文且重试耗尽）也要让窗口可见，
+        // 否则用户面对的是一片看不见的覆盖层，比闪一下更糟
+        fadeInTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard let self, self.alphaValue < 1 else { return }
+            AppContext.shared.logger.warning("覆盖层首帧超时，直接显示")
+            self.alphaValue = 1
+        }
         return isKeyWindow
+    }
+
+    /// 首帧画完后淡入（80ms）：用户只看到「原画面 → 截图画面」的直接交接
+    private func fadeInAfterFirstFrame() {
+        fadeInTask?.cancel()
+        fadeInTask = nil
+        guard alphaValue < 1 else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.08
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            animator().alphaValue = 1
+        }
     }
 
     /// 截图期间临时变成「可被激活的应用」，截图结束再由调用方切回 .accessory

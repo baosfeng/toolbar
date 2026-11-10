@@ -23,6 +23,9 @@ extension SnipController {
         runWhiteboardDemoIfRequested()
         SnipToolBarSnapshot.runIfRequested()
         SnipOverlaySnapshot.runIfRequested()
+        if SnipCropProbe.isRequested {
+            SnipCropProbe.run(controller: self)
+        }
 #endif
     }
 
@@ -109,6 +112,7 @@ extension SnipController {
                 }
                 // 再取证选区态
                 overlays.first?.overlayView.debugApplySelection(CGRect(x: 300, y: 300, width: 600, height: 400))
+                overlays.first?.overlayView.debugOpenPanel(.tools(SnipTool.overflow))
                 overlays.first?.overlayView.debugAddAnnotation(
                     SnipAnnotation(kind: .rectangle,
                                    start: CGPoint(x: 340, y: 340),

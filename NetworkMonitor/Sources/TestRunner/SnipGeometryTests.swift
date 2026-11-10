@@ -67,4 +67,26 @@ func runSnipGeometryTests() {
                                             in: main,
                                             imageSize: CGSize(width: 2880, height: 1800)),
                 CGRect(x: 2800, y: 1600, width: 80, height: 200), "越界部分被裁到图像内")
+
+    // 缩放比以捕获图实际像素为准，不采信 SnipDisplay.pixelSize
+    //
+    // 回归背景（实测 macOS 27 的 2x 屏）：CGDisplayPixelsWide 返回的是点数 1512 而非像素 3024，
+    // 由「点尺寸 ÷ 点尺寸」推出 backingScale = 1，选区按 1x 裁剪 → 内容整体偏去左上角，
+    // 用户口径是「框选 A，截到的是 B，往左偏了几百」。
+    let lyingDisplay = SnipDisplay(frame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+                                   pixelSize: CGSize(width: 1512, height: 982),
+                                   displayID: 3)
+    assertEqual(lyingDisplay.backingScale, 1, "谎报的 pixelSize 会推出 scale 1")
+    // 同一次选区：按图像 3024×1964 推导得到 2x 的像素矩形
+    assertEqual(SelectionGeometry.pixelRect(of: CGRect(x: 300, y: 200, width: 100, height: 60),
+                                            in: lyingDisplay,
+                                            imageSize: CGSize(width: 3024, height: 1964)),
+                CGRect(x: 600, y: 400, width: 200, height: 120),
+                "2x 捕获图按实际像素推导缩放比")
+    // 同一块屏换成 1x 捕获图时回到 1:1
+    assertEqual(SelectionGeometry.pixelRect(of: CGRect(x: 300, y: 200, width: 100, height: 60),
+                                            in: lyingDisplay,
+                                            imageSize: CGSize(width: 1512, height: 982)),
+                CGRect(x: 300, y: 200, width: 100, height: 60),
+                "1x 捕获图按实际像素推导缩放比")
 }

@@ -34,11 +34,16 @@ extension SnipController {
                                                    imageSize: imageSize)
         let localOrigin = CGPoint(x: globalRect.minX - captured.display.frame.minX,
                                   y: globalRect.minY - captured.display.frame.minY)
+        // 标注缩放比同样以捕获图实际像素 ÷ 屏幕点数推导：display.backingScale 来自
+        // SnipDisplay.pixelSize，像素尺寸口径修正后两者一致，但仍以图像为准最稳。
+        let scale = captured.display.frame.width > 0
+            ? imageSize.width / captured.display.frame.width
+            : captured.display.backingScale
         return SnipAnnotationComposer.compose(base: captured.image,
                                               cropRect: cropRect,
                                               annotations: annotations,
                                               selectionOrigin: localOrigin,
-                                              scale: captured.display.backingScale)
+                                              scale: scale)
     }
 
     func saveQuickly(_ image: CGImage, annotations: [SnipAnnotation] = []) {

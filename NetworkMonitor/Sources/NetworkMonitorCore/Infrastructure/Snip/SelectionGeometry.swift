@@ -49,14 +49,26 @@ public enum SelectionGeometry {
     }
 
     /// 选区在指定屏幕捕获图中的像素矩形；跨屏时只取与该屏的交叠部分
+    ///
+    /// 缩放比以「捕获图实际像素尺寸 ÷ 屏幕点尺寸」为准，不采信 display.pixelSize：
+    /// 本机（macOS 27、1512×982 点、2x 屏）实测 CGDisplayPixelsWide 返回 1512（点数而非像素数），
+    /// 由它推出的 backingScale 是 1，于是选区的点坐标被当成像素坐标去裁剪，
+    /// 截出来的内容整体偏到左上方（用户口径：「框选 A，截到的是 B，往左偏了几百」）。
+    /// NetworkMonitorCore 不能 import AppKit，拿不到 convertRectToBacking，
+    /// 因此以调用方给来的 imageSize 为唯一权威——2x 屏与 1x 屏都能自洽。
     public static func pixelRect(of rect: CGRect, in display: SnipDisplay, imageSize: CGSize) -> CGRect {
         let local = rect.intersection(display.frame)
         guard !local.isNull, local.width > 0, local.height > 0 else { return .zero }
-        let scale = display.backingScale
-        let pixel = CGRect(x: (local.minX - display.frame.minX) * scale,
-                           y: (local.minY - display.frame.minY) * scale,
-                           width: local.width * scale,
-                           height: local.height * scale)
+        let scaleX = display.frame.width > 0 && imageSize.width > 0
+            ? imageSize.width / display.frame.width
+            : display.backingScale
+        let scaleY = display.frame.height > 0 && imageSize.height > 0
+            ? imageSize.height / display.frame.height
+            : display.backingScale
+        let pixel = CGRect(x: (local.minX - display.frame.minX) * scaleX,
+                           y: (local.minY - display.frame.minY) * scaleY,
+                           width: local.width * scaleX,
+                           height: local.height * scaleY)
         return clamp(pixel.integral, to: CGRect(origin: .zero, size: imageSize))
     }
 }

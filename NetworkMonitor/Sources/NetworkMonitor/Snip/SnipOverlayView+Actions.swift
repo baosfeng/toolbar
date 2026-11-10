@@ -157,6 +157,13 @@ extension SnipOverlayView {
         if state.phase != .selected {
             drawMagnifier(in: context)
         }
+
+        // 首帧真正画进窗口后再通知窗口淡入：window.alphaValue 的过渡期里窗口内容还是空白的，
+        // 直接以不透明上屏会先闪出一块纯黑 / 纯透明，用户看到的就是「按完截图键屏幕闪一下」。
+        if !hasRenderedContent {
+            hasRenderedContent = true
+            onFirstFrameRendered?()
+        }
     }
 
     /// 高亮鼠标下的窗口，并标出所属应用
@@ -210,6 +217,18 @@ extension SnipOverlayView {
     }
 
     #if DEBUG
+    /// 仅 DEBUG：程序化弹出二级面板（工具 / 颜色 / 线宽），供实机取证核对面板定位
+    func debugOpenPanel(_ content: SnipPanelContent) {
+        guard let bar = toolbarView else { return }
+        let anchor: CGRect
+        switch content {
+        case .tools: anchor = bar.debugMoreRect
+        case .colors: anchor = bar.debugColorRect
+        case .widths: anchor = bar.debugWidthRect
+        }
+        toolBarDidRequestPanel(content, anchor: anchor)
+    }
+
     /// 仅 DEBUG：程序化把鼠标位置挪到某点，触发窗口检测与放大镜
     func debugHover(atLocalPoint point: CGPoint) {
         pointer = point
