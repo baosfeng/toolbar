@@ -45,8 +45,10 @@ enum SnipHotKeyAction: String, CaseIterable {
         }
     }
 
-    var keyCodeKey: String { "snip.hotKey.\(rawValue).keyCode" }
-    var modifiersKey: String { "snip.hotKey.\(rawValue).modifiers" }
+    /// 键码存储键（键名规则收敛在 Core 的 SnipHotKeyKeyNames，读写与测试同源）
+    var keyCodeKey: String { SnipHotKeyKeyNames.keyCodeKey(actionRawValue: rawValue) }
+    /// 修饰键掩码存储键
+    var modifiersKey: String { SnipHotKeyKeyNames.modifiersKey(actionRawValue: rawValue) }
 }
 
 /// 可测试的偏好读写层（不强依赖 concrete storage）
@@ -59,16 +61,30 @@ final class SnipHotKeyPreferences {
 
     /// 读偏好并顺带迁移历史默认值
     ///
-    /// 历史默认值是无修饰键的 F1 / F3，那种组合键在 macOS 27 上注册成功但经常不投递
-    /// 按键（表现就是「按截图键毫无反应」）。迁移只在读取路径做一次并立即回写，
-    /// 用户自己录制过的组合键（都带修饰键）不会被改动。
+    /// 判据本身在 Core 的 `SnipHotKeyComboResolver`（纯函数），这里只做委托与回写，
+    /// 让 TestRunner 能直接断言口径而不必 import 可执行目标。
+    ///
+    /// 两条纪律：
+    /// 1. **存在性看「存储里有没有这个键」，不看值大小**。历史上这里用 `code > 0`，
+    ///    而 A 键的 keyCode 恰好是 0，⌘⌥A 这类用户自己录制的组合被误判成「没设置过」，
+    ///    于是回落默认的 ⌃⇧S、并在注册成功后把默认值写回存储 —— 用户的设置被永久覆盖。
+    ///    keyCode 0 是合法键码（kVK_ANSI_A = 0），修饰键 0 也可以是用户录制的单键组合，
+    ///    所以「值非零」不能当存在性。
+    /// 2. **读路径不得回写默认值**。存储缺键时只返回 `defaultCombo`，绝不 setCombo：
+    ///    把「我根本没设置过」固化成一条显式默认值，之后默认值再调整这个用户就永远跟不上；
+    ///    而且读一次写一次会让「自定义了下次又被还原」这类现象无法排查。
+    ///    只有命中旧默认值白名单（`didMigrate`）才回写一次，因为那是把历史默认值换成新默认值，
+    ///    属于迁移而不是「补一个默认值」。真正的「写回」只发生在注册成功之后
+    ///    （`registerSnipHotKey` 写回实际注册成功的组合），那是真实生效值，不是读路径产物。
     func combo(for action: SnipHotKeyAction) -> HotKeyCombo {
-        let code = storage.integer(forKey: action.keyCodeKey)
-        let modifiers = storage.integer(forKey: action.modifiersKey)
-        guard code > 0 else { return action.defaultCombo }
-        let stored = SnipHotKeyMigration.migrated(keyCode: UInt32(code), modifiers: UInt32(modifiers))
-        let combo = HotKeyCombo(keyCode: stored.keyCode, modifiers: stored.modifiers)
-        if stored.keyCode != UInt32(code) || stored.modifiers != UInt32(modifiers) {
+        let fallback = SnipHotKeyComboValue(keyCode: action.defaultCombo.keyCode,
+                                            modifiers: action.defaultCombo.modifiers)
+        let resolution = SnipHotKeyComboResolver.resolve(storage: storage,
+                                                         keyCodeKey: action.keyCodeKey,
+                                                         modifiersKey: action.modifiersKey,
+                                                         fallback: fallback)
+        let combo = HotKeyCombo(keyCode: resolution.combo.keyCode, modifiers: resolution.combo.modifiers)
+        if resolution.didMigrate {
             setCombo(combo, for: action)
         }
         return combo

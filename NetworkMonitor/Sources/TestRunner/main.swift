@@ -107,6 +107,9 @@ runBillingVisibilityTests()
 // MARK: - 数值单位（设置项 + 万/亿化简口径）
 runNumberUnitTests()
 
+// MARK: - 菜单栏显示口径（布局 / 单位 / 刷新周期 / 分页可见性重算）
+runMenuBarDisplayTests()
+
 // MARK: - 额度阈值提醒（5%/4%/3%/2%/1%）
 runBillingAlertTests()
 
@@ -152,6 +155,9 @@ runSnipSelectionStateTests()
 // MARK: - 窗口检测命中判定
 runSnipWindowTests()
 
+// MARK: - 窗口层级白名单（菜单栏 / 程序坞 / 状态栏项，自家面板保留而覆盖层排除）
+runSnipWindowLayerTests()
+
 // MARK: - 截图文件命名与上次选区编码
 runSnipFileTests()
 
@@ -187,6 +193,9 @@ runSnipCapturePlannerTests()
 
 // MARK: - 截图快捷键默认值迁移（无修饰键功能键在 macOS 27 不投递）
 runSnipHotKeyMigrationTests()
+
+// MARK: - 截图快捷键偏好读写（keyCode 0 是合法值，不得回落到默认）
+runSnipHotKeyPreferencesTests()
 
 // MARK: - 截图工具条布局（左右内边距恒等 / 组间带）
 runSnipToolBarLayoutTests()
