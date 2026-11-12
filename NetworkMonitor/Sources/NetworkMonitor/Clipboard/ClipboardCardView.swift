@@ -74,6 +74,7 @@ final class ClipboardCardView: NSView {
         self.item = item
         self.shortcutNumber = number
         self.isSelected = isSelected
+        setAccessibilityLabel(Self.accessibilityLabel(for: item))
         needsDisplay = true
     }
 
