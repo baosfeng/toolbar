@@ -71,6 +71,12 @@ runClipboardRelativeTimeTests()
 runClipboardImagePolicyTests()
 runClipboardImageStoreTests()
 
+// MARK: - 剪贴板：图片磁盘回收（删除 / 清空 / 超限清理 / 孤儿清扫）
+runClipboardImageGCTests()
+
+// MARK: - 剪贴板：文件条目类型细分（卡片图标 / 无障碍标签）
+runClipboardFileClassifierTests()
+
 // MARK: - 菜单面板取数口径
 runMenuPanelMetricsTests()
 runSystemMetricsTests()
@@ -237,6 +243,9 @@ runSnipPinSourceTextTests()
 
 // MARK: - 面板高度预算（五页补齐页头 / 状态带后仍不触发外框滚动）
 runPaneHeightBudgetTests()
+
+// MARK: - 剪贴板动态轮询调度（三档边界 / 归一化 / 停止后不再重排）
+runClipboardPollScheduleTests()
 
 // MARK: - Done
 print("\n🎉 所有测试通过！")
