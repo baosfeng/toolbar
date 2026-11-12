@@ -2,63 +2,26 @@ import AppKit
 import NetworkMonitorCore
 
 // MARK: - Token 页底部状态行与口径说明（从 TokenRowViews.swift 拆出：单文件体积门禁）
+//
+// 状态带本身已收敛到五页共用的 `PaneStateBandView`（底 / 高度 / 内边距 / 圆角 / 键值字号
+// 全部走 `PaneBandChrome`），本文件只剩 Token 页独有的两件：语气色映射与口径说明段。
 
-/// 底状态带（峰 / 昨 / 索引 / 缓存）
-final class TokenStateBandView: NSView {
+// MARK: - 状态带语气色（TokenStateItem.Tone → 四族墨色）
 
-    private let stack = NSStackView()
+/// 状态带数值的语气色 —— 未缓存 / 缓存 / 请求数各取四族墨色，普通项用次级文字色
+///
+/// 映射放在视图层：Core 不依赖 AppKit，`NSColor` 只能在 UI 侧解析；
+/// 取色与页面其它区块同源（`PaneCardStyle`），不另写一份色值。
+extension TokenStateItem {
 
-    init() {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = 8
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 7),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -7),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            heightAnchor.constraint(equalToConstant: TokenPaneStyle.stateBandHeight),
-        ])
-        setAccessibilityRole(.staticText)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override func draw(_ dirtyRect: NSRect) {
-        TokenPaneStyle.bandFill.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
-        super.draw(dirtyRect)
-    }
-
-    func update(items: [TokenStateItem]) {
-        for view in stack.arrangedSubviews {
-            stack.removeArrangedSubview(view)
-            view.removeFromSuperview()
+    @MainActor
+    var toneColor: NSColor {
+        switch tone {
+        case .plain: return PaneCardStyle.secondaryText
+        case .accent: return PaneCardStyle.uncachedInk
+        case .cache: return PaneCardStyle.cacheInk
+        case .request: return PaneCardStyle.requestInk
         }
-        for item in items {
-            let title = MenuPanelLabel.text(item.title, font: TokenPaneStyle.stateFont,
-                                            color: TokenPaneStyle.tertiaryText)
-            let valueColor: NSColor
-            switch item.tone {
-            case .plain: valueColor = TokenPaneStyle.secondaryText
-            case .accent: valueColor = TokenPaneStyle.uncachedInk
-            case .cache: valueColor = TokenPaneStyle.cacheInk
-            case .request: valueColor = TokenPaneStyle.requestInk
-            }
-            let value = MenuPanelLabel.text(item.value, font: TokenPaneStyle.stateValueFont,
-                                            color: valueColor)
-            let group = NSStackView(views: [title, value])
-            group.orientation = .horizontal
-            group.alignment = .firstBaseline
-            group.spacing = 3
-            stack.addArrangedSubview(group)
-        }
-        stack.addArrangedSubview(MenuPanelLabel.spacer())
-        setAccessibilityLabel(items.map { $0.title + " " + $0.value }.joined(separator: "，"))
     }
 }
 

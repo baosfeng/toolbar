@@ -181,8 +181,17 @@ extension SystemPaneView {
     }
 
     /// 采样周期（秒）— 由控制器按设置页偏好注入，详情页据此写「采样 1 秒」
+    ///
+    /// 页头口径文字同源：五页页头右侧都写一句「这一页的数据按什么节奏来」
     func updateSampleInterval(_ seconds: Double?) {
         sampleIntervalSeconds = seconds
+        guard let seconds, seconds.isFinite, seconds > 0 else {
+            headerView.updateMeta(nil)
+            return
+        }
+        // 小数周期（1.5s）保一位，整数周期不写小数点
+        let text = seconds == seconds.rounded() ? "\(Int(seconds))s" : String(format: "%.1fs", seconds)
+        headerView.updateMeta("采样 " + text)
     }
 
     /// 电池：底部状态带（无电池机型 / 读取失败时显示「—」）

@@ -47,15 +47,12 @@ final class WiFiLinkBarView: NSView {
                                         MenuPanelLabel.spacer(), qualityDot])
         stack.orientation = .horizontal
         stack.alignment = .centerY
-        stack.spacing = 9
+        // 组间距统一到状态带档（原 9pt 是这一条独有的取值）
+        stack.spacing = PaneCardStyle.bandGroupSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 7),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -7),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            heightAnchor.constraint(equalToConstant: WiFiLinkStyle.barHeight),
-        ])
+        // 与页脚状态带同一个壳（底 / 高度 / 内边距 / 圆角全部走 PaneBandChrome）
+        PaneBandChrome.constrain(stack, in: self)
         // 数值列必须收敛到自身固有宽度：这是「先算宽度再排版」的落地方式，
         // 不靠 lineBreakMode 截断糊过去（截断后「103 Mbps」会变成「103 M…」）
         for label in [rssiValue, channelValue, rateValue] {
@@ -73,8 +70,7 @@ final class WiFiLinkBarView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        MenuPanelStyle.subtleFill.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
+        PaneBandChrome.draw(in: bounds)
         super.draw(dirtyRect)
     }
 

@@ -9,27 +9,39 @@ import NetworkMonitorUI
 /// 从 TokenPaneView.swift 拆出（单文件体积门禁）。
 extension TokenPaneView {
 
-    /// 页头一行：主机 + 会话数 → 范围分段 → 刷新
+    /// 页头一行：DSH · 会话数（口径文字）→ 范围分段 → 刷新
+    ///
+    /// 走五页共用的 `PaneHeaderRowView`（22pt 高、页名 11pt 粗体、右侧动作槽由调用方填），
+    /// 页头不再各页自己拼一条 NSStackView。
     func buildHeader() {
-        hostLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         // 时间口径必须写在界面上：自然日 / 自然周边界固定按 Asia/Shanghai 切分，
         // 不跟随系统时区。用户把 Mac 时区改到别的地区后「今日」与系统日历不是同一天，
-        // 这个差异原本界面上没有任何说明——工具提示与读屏标签都补上。
-        hostLabel.toolTip = TokenTimeZoneNote.text
-        hostLabel.setAccessibilityLabel(TokenTimeZoneNote.text)
-        let headRow = NSStackView(views: [hostLabel, MenuPanelLabel.spacer(), rangeControl, refreshRow])
-        headRow.orientation = .horizontal
-        headRow.alignment = .centerY
-        headRow.spacing = 6
-        headRow.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(headRow)
+        // 这个差异原本界面上没有任何说明——工具提示与读屏标签都补上（挂在页头视图上）。
+        headerView.toolTip = TokenTimeZoneNote.text
+        // 首帧渲染前口径文字为空串：先按 nil 收起，避免页头里留一个 0 宽的空标签。
+        // updateMeta 会按「页名，口径」重设读屏标签，所以时区口径的读屏标签放在它之后设。
+        headerView.updateMeta(nil)
+        headerView.setAccessibilityLabel(TokenTimeZoneNote.text)
+        headerView.setTrailing([rangeControl, refreshRow])
+        addSubview(headerView)
         NSLayoutConstraint.activate([
-            headRow.leadingAnchor.constraint(equalTo: leadingAnchor),
-            headRow.trailingAnchor.constraint(equalTo: trailingAnchor),
-            headRow.topAnchor.constraint(equalTo: topAnchor),
-            headRow.heightAnchor.constraint(equalToConstant: PaneCardStyle.pageHeadHeight),
+            headerView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            headerView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            headerView.topAnchor.constraint(equalTo: topAnchor),
         ])
-        contentTopAnchor = headRow.bottomAnchor
+        // 页头自身带着 22pt 高约束（PaneCardStyle.pageHeadHeight），这里不再重复给高度
+        contentTopAnchor = headerView.bottomAnchor
+    }
+
+    /// 页头口径文字：Core 的 hostLabel 形如「DSH · 1866 会话」，页名「DSH」已由页头左侧承担，
+    /// 原样贴到右侧会把 DSH 重复一遍，这里只保留「1866 会话」。
+    /// 前缀对不上（Core 改了措辞）就原样透传，不静默丢信息。
+    ///
+    /// 跨文件（+Render.swift）调用故为 internal。
+    func headerMeta(from hostLabel: String) -> String {
+        let prefix = TokenPaneView.pageTitle + " · "
+        guard hostLabel.hasPrefix(prefix) else { return hostLabel }
+        return String(hostLabel.dropFirst(prefix.count))
     }
 
     func buildSections() {

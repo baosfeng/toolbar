@@ -198,7 +198,7 @@ final class SystemCardView: NSView {
                                            color: SystemPalette.meta)
         washColor = wash ?? MenuPanelStyle.subtleFill
         let titleLabel = MenuPanelLabel.text(title,
-                                             font: MenuPanelStyle.sectionFont,
+                                             font: PaneCardStyle.sectionTitleFont,
                                              color: SystemPalette.foregroundSecondary)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -231,10 +231,11 @@ final class SystemCardView: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            // 卡内边距走令牌（原 6pt 是这一页独有的取值，与额度 / Token 的 7/4 对不上）
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: PaneCardStyle.cardPaddingX),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -PaneCardStyle.cardPaddingX),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: PaneCardStyle.cardPaddingY),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -PaneCardStyle.cardPaddingY),
             header.widthAnchor.constraint(equalTo: stack.widthAnchor),
             contentStack.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])

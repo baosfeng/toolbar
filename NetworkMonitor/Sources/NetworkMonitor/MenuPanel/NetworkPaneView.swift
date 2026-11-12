@@ -8,42 +8,52 @@ final class NetworkPaneView: MenuPanelPaneView {
 
     // MARK: 实时速率
 
-    private let downValueLabel = MenuPanelLabel.text("0", font: MenuPanelStyle.heroFont, color: MenuPanelStyle.downColor)
-    private let downUnitLabel = MenuPanelLabel.text("B/s", font: MenuPanelStyle.heroUnitFont,
+    let downValueLabel = MenuPanelLabel.text("0", font: MenuPanelStyle.heroFont, color: MenuPanelStyle.downColor)
+    let downUnitLabel = MenuPanelLabel.text("B/s", font: MenuPanelStyle.heroUnitFont,
                                                     color: MenuPanelStyle.secondaryText)
-    private let upValueLabel = MenuPanelLabel.text("0", font: MenuPanelStyle.sideValueFont, color: MenuPanelStyle.upColor)
-    private let upUnitLabel = MenuPanelLabel.text("B/s", font: MenuPanelStyle.heroUnitFont,
+    let upValueLabel = MenuPanelLabel.text("0", font: MenuPanelStyle.sideValueFont, color: MenuPanelStyle.upColor)
+    let upUnitLabel = MenuPanelLabel.text("B/s", font: MenuPanelStyle.heroUnitFont,
                                                   color: MenuPanelStyle.secondaryText)
-    private let downSparkline = MenuPanelSparklineView(lineColor: MenuPanelStyle.downColor)
-    private let upSparkline = MenuPanelSparklineView(lineColor: MenuPanelStyle.upColor)
+    let downSparkline = MenuPanelSparklineView(lineColor: MenuPanelStyle.downColor)
+    let upSparkline = MenuPanelSparklineView(lineColor: MenuPanelStyle.upColor)
 
     // MARK: 今日流量
 
-    private let todayDownLabel = MenuPanelLabel.value("—", color: MenuPanelStyle.downColor)
-    private let todayUpLabel = MenuPanelLabel.value("—", color: MenuPanelStyle.upColor)
-    private let todayDownShareLabel = MenuPanelLabel.text("", font: MenuPanelStyle.smallValueFont,
+    let todayDownLabel = MenuPanelLabel.value("—", color: MenuPanelStyle.downColor)
+    let todayUpLabel = MenuPanelLabel.value("—", color: MenuPanelStyle.upColor)
+    let todayDownShareLabel = MenuPanelLabel.text("", font: MenuPanelStyle.smallValueFont,
                                                           color: MenuPanelStyle.tertiaryText)
-    private let todayUpShareLabel = MenuPanelLabel.text("", font: MenuPanelStyle.smallValueFont,
+    let todayUpShareLabel = MenuPanelLabel.text("", font: MenuPanelStyle.smallValueFont,
                                                         color: MenuPanelStyle.tertiaryText)
-    private let downTrack = MenuPanelTrackView(fillColor: MenuPanelStyle.downColor)
-    private let upTrack = MenuPanelTrackView(fillColor: MenuPanelStyle.upColor)
+    let downTrack = MenuPanelTrackView(fillColor: MenuPanelStyle.downColor)
+    let upTrack = MenuPanelTrackView(fillColor: MenuPanelStyle.upColor)
 
     // MARK: 活跃进程 / 图表
 
-    private let processHeader = MenuPanelHeaderRow(title: "活跃进程", trailing: "0 个")
-    private let processStack = NSStackView()
-    private let processEmptyLabel: NSTextField = {
+    let processHeader = MenuPanelHeaderRow(title: "活跃进程", trailing: "0 个")
+    let processStack = NSStackView()
+    // 放宽为 internal：区块装配拆到 NetworkPaneView+Sections.swift
+    let processEmptyLabel: NSTextField = {
         let label = MenuPanelLabel.text("当前没有进程在使用网络",
-                                        font: NSFont.systemFont(ofSize: 12, weight: .regular),
-                                        color: .labelColor)
+                                        font: PaneCardStyle.rowNameFont,
+                                        color: PaneCardStyle.primaryText)
         label.alignment = .left
         label.maximumNumberOfLines = 1
         label.lineBreakMode = .byTruncatingTail
         label.setContentHuggingPriority(.required, for: .vertical)
         return label
     }()
-    private let chartHeader = MenuPanelHeaderRow(title: "近 6 日下行")
-    private let barsView = MenuPanelBarsView()
+    let chartHeader = MenuPanelHeaderRow(title: "近 6 日下行")
+    /// 近 6 日柱状图 — 柱体区 40pt（额度页同款默认 56pt）：
+    /// 本页补齐 22pt 页头 + 20pt 状态带后内容区只余约 388pt，柱图必须矮一档
+    let barsView = MenuPanelBarsView(barAreaHeight: 40)
+
+    // MARK: 页头 / 页脚（五页统一骨架）
+
+    /// 页头行 — 与额度 / Token / 系统 / 剪贴板 / 传送同一件（22pt，页名 + 口径 + 动作槽）
+    let headerView = PaneHeaderRowView(title: "网络")
+    /// 页脚状态带 — 与其余四页同壳（20pt，键值横排）
+    let stateBand = PaneStateBandView()
 
     // MARK: Wi-Fi 链路
 
@@ -53,10 +63,15 @@ final class NetworkPaneView: MenuPanelPaneView {
     let wifiLinkBar = WiFiLinkBarView()
 
     /// 链路条与上下区块的间距（主栈默认 10pt；这条按 4pt 收，见 init 里的理由）
-    private static let wifiLinkSpacing: CGFloat = 4
+    static let wifiLinkSpacing: CGFloat = 4
 
     /// 进程行签名 — 内容未变化时跳过重建，避免每 5 秒重建视图
-    private var processSignature = ""
+    var processSignature = ""
+    /// 当前进程条数口径（页脚状态带显示；nil = 尚未取到数据，不显示该项）
+    var processCountText: String?
+    /// 最近一帧今日流量（进程条数回填时要用来重算状态带总量）
+    var lastTodayRx: UInt64 = 0
+    var lastTodayTx: UInt64 = 0
 
 #if DEBUG
     /// 快照自证专用（仅 DEBUG）：临时抬高进程行上限，用来构造「内容高于 520pt」的场景；
@@ -72,7 +87,8 @@ final class NetworkPaneView: MenuPanelPaneView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 10
+        // 主栈间距统一到令牌档（原 10pt 是这一页独有的取值，与额度 / Token 的 4pt 对不上）
+        stack.spacing = PaneCardStyle.cardSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -83,6 +99,8 @@ final class NetworkPaneView: MenuPanelPaneView {
         ])
 
         let todayBox = makeTodayBox()
+        // 顶部页头 → 内容 → 页脚状态带：与其余四页同一顺序（此前网络页两头都没有）
+        stack.addArrangedSubview(headerView)
         stack.addArrangedSubview(makeHeroRow())
         stack.addArrangedSubview(todayBox)
         // 链路条紧跟今日流量、在活跃进程之前（Lead 定的落点）
@@ -90,12 +108,14 @@ final class NetworkPaneView: MenuPanelPaneView {
         stack.addArrangedSubview(makeProcessSection())
         let chartSection = makeChartSection()
         stack.addArrangedSubview(chartSection)
+        // 页脚状态带收尾（与其余四页同一落点）
+        stack.addArrangedSubview(stateBand)
 
-        // 链路条前后各收一档间距：主栈默认 10pt，上下各 10pt 会把整页顶到 536pt
-        //（越过 520pt 预算）。收到 4pt 后实测 516pt，余量仅 4pt——网络页的空间
-        // 已被这条吃满，后续再加区块会立刻出滚动条。
+        // 链路条前后各收一档间距：链路条是「附加口径」不是独立区块，与上下都只留 4pt
         stack.setCustomSpacing(Self.wifiLinkSpacing, after: todayBox)
         stack.setCustomSpacing(Self.wifiLinkSpacing, after: wifiLinkBar)
+        // 页脚状态带与图表区之间收一档：20pt 带再叠 4pt 间距已到高度上限
+        stack.setCustomSpacing(PaneCardStyle.cardSpacing, after: chartSection)
 
         // 分区宽度撑满面板内容区
         for subview in stack.arrangedSubviews {
@@ -105,129 +125,6 @@ final class NetworkPaneView: MenuPanelPaneView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
-
-    // MARK: - 子区块构建
-
-    /// 速率区：左侧大数字（下行）+ 右侧次数字（上行），各带一条折线
-    private func makeHeroRow() -> NSView {
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-
-        let downColumn = NSStackView()
-        downColumn.orientation = .vertical
-        downColumn.alignment = .leading
-        downColumn.spacing = 2
-
-        downColumn.addArrangedSubview(MenuPanelLabel.section("实时下行"))
-        let downValueRow = NSStackView()
-        downValueRow.orientation = .horizontal
-        downValueRow.alignment = .lastBaseline
-        downValueRow.spacing = 2
-        downValueRow.addArrangedSubview(downValueLabel)
-        downValueRow.addArrangedSubview(downUnitLabel)
-        downColumn.addArrangedSubview(downValueRow)
-        downColumn.addArrangedSubview(downSparkline)
-
-        let upColumn = NSStackView()
-        upColumn.orientation = .vertical
-        upColumn.alignment = .trailing
-        upColumn.spacing = 2
-        let upTitle = MenuPanelLabel.section("上行")
-        upColumn.addArrangedSubview(upTitle)
-        let upValueRow = NSStackView()
-        upValueRow.orientation = .horizontal
-        upValueRow.alignment = .lastBaseline
-        upValueRow.spacing = 2
-        upValueRow.addArrangedSubview(upValueLabel)
-        upValueRow.addArrangedSubview(upUnitLabel)
-        upColumn.addArrangedSubview(upValueRow)
-        upColumn.addArrangedSubview(upSparkline)
-
-        let row = NSStackView(views: [downColumn, MenuPanelLabel.spacer(), upColumn])
-        row.orientation = .horizontal
-        row.alignment = .bottom
-        row.spacing = 12
-        row.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(row)
-        NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            row.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            row.topAnchor.constraint(equalTo: container.topAnchor),
-            row.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
-        return container
-    }
-
-    /// 今日流量卡片：两行数值 + 两条占比轨道
-    private func makeTodayBox() -> NSView {
-        let box = MenuPanelCardView()
-
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 5
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        box.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 8),
-            stack.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -8),
-            stack.topAnchor.constraint(equalTo: box.topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -8),
-        ])
-
-        stack.addArrangedSubview(makeTodayRow(title: "今日下行", value: todayDownLabel, share: todayDownShareLabel))
-        stack.addArrangedSubview(downTrack)
-        stack.addArrangedSubview(makeTodayRow(title: "今日上行", value: todayUpLabel, share: todayUpShareLabel))
-        stack.addArrangedSubview(upTrack)
-        for subview in stack.arrangedSubviews {
-            subview.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        }
-        return box
-    }
-
-    /// 今日流量单行：标题 + 数值 + 占比说明
-    private func makeTodayRow(title: String, value: NSTextField, share: NSTextField) -> NSView {
-        let row = NSStackView(views: [MenuPanelLabel.text(title, font: MenuPanelStyle.sectionFont,
-                                                          color: MenuPanelStyle.secondaryText),
-                                      value,
-                                      MenuPanelLabel.spacer(),
-                                      share])
-        row.orientation = .horizontal
-        row.alignment = .firstBaseline
-        row.spacing = 8
-        return row
-    }
-
-    /// 活跃进程区：表头 + Top5 列表 + 空态
-    private func makeProcessSection() -> NSView {
-        processStack.orientation = .vertical
-        processStack.alignment = .leading
-        processStack.spacing = 0
-        processEmptyLabel.isHidden = false
-        // 空态统一 12pt regular + 18pt 行高（此前被 NSStackView 拉伸显得偏大）
-        processEmptyLabel.heightAnchor.constraint(equalToConstant: 18).isActive = true
-
-        let section = NSStackView(views: [processHeader, processStack, processEmptyLabel])
-        section.orientation = .vertical
-        section.alignment = .leading
-        section.spacing = 4
-        for subview in section.arrangedSubviews {
-            subview.widthAnchor.constraint(equalTo: section.widthAnchor).isActive = true
-        }
-        return section
-    }
-
-    /// 近 6 日柱状图区
-    private func makeChartSection() -> NSView {
-        let section = NSStackView(views: [chartHeader, barsView])
-        section.orientation = .vertical
-        section.alignment = .leading
-        section.spacing = 6
-        for subview in section.arrangedSubviews {
-            subview.widthAnchor.constraint(equalTo: section.widthAnchor).isActive = true
-        }
-        return section
-    }
 
     // MARK: - 数据更新
 
@@ -254,6 +151,10 @@ final class NetworkPaneView: MenuPanelPaneView {
         upTrack.fraction = upShare
         todayDownShareLabel.stringValue = "占今日总量 \(Int((downShare * 100).rounded()))%"
         todayUpShareLabel.stringValue = "占今日总量 \(Int((upShare * 100).rounded()))%"
+        // 页脚状态带与本帧流量同源（进程条数回填时复用同一份总量）
+        lastTodayRx = todayRx
+        lastTodayTx = todayTx
+        updateBand(todayRx: todayRx, todayTx: todayTx)
 
         barsView.bars = dailyBars.map { bar in
             MenuPanelBarsView.Bar(label: bar.label,
@@ -284,6 +185,11 @@ final class NetworkPaneView: MenuPanelPaneView {
 #endif
         let top = MenuPanelMetrics.topProcesses(processes, limit: limit)
         processHeader.updateTrailing("\(top.count) 个")
+        let countText = "\(top.count) 个"
+        if processCountText != countText {
+            processCountText = countText
+            updateBand(todayRx: lastTodayRx, todayTx: lastTodayTx)
+        }
 
         // 内容签名：名称 + 速率未变时不重建视图
         let signature = top.map { "\($0.name):\($0.bytesIn):\($0.bytesOut)" }.joined(separator: ",")
@@ -299,21 +205,6 @@ final class NetworkPaneView: MenuPanelPaneView {
             let row = MenuPanelProcessRow(process: process)
             processStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: processStack.widthAnchor).isActive = true
-        }
-    }
-
-    /// 图表数值文案（GB/MB 自适应，数字短，不占宽）
-    private func shortBytes(_ bytes: UInt64) -> String {
-        let value = Double(bytes)
-        switch value {
-        case 1_000_000_000...:
-            return String(format: "%.1fG", value / 1_000_000_000)
-        case 1_000_000...:
-            return String(format: "%.0fM", value / 1_000_000)
-        case 1_000...:
-            return String(format: "%.0fK", value / 1_000)
-        default:
-            return "\(bytes)"
         }
     }
 }

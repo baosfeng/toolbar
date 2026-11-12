@@ -94,6 +94,11 @@ final class SystemPaneView: MenuPanelPaneView {
     let processList = SystemProcessListView(rows: 2)
     let processAllButton = NSButton(title: "全部 ›", target: nil, action: nil)
 
+    // MARK: 顶部页头（五页统一样式：页名 + 口径 + 动作槽）
+
+    /// 页头行 — 与网络 / 剪贴板 / 传送 / 额度 / Token 同一件（22pt）
+    let headerView = PaneHeaderRowView(title: "系统")
+
     // MARK: 底部状态带（原温度卡下线后的形态）
 
     let stateBand = SystemStateBandView()
@@ -153,7 +158,8 @@ final class SystemPaneView: MenuPanelPaneView {
 
         overviewStack.orientation = .vertical
         overviewStack.alignment = .leading
-        overviewStack.spacing = 8
+        // 主栈间距统一到令牌档（原 8pt 是这一页独有的取值）
+        overviewStack.spacing = PaneCardStyle.cardSpacing
         rootStack.orientation = .vertical
         rootStack.alignment = .leading
         rootStack.spacing = 0
@@ -172,6 +178,7 @@ final class SystemPaneView: MenuPanelPaneView {
             detailPane.widthAnchor.constraint(equalTo: rootStack.widthAnchor),
         ])
 
+        overviewStack.addArrangedSubview(headerView)
         overviewStack.addArrangedSubview(makeHeroRow())
         overviewStack.addArrangedSubview(makeCPUCard())
         overviewStack.addArrangedSubview(makeGPUCard())

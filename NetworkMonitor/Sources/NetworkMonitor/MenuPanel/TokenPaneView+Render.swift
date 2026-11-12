@@ -22,10 +22,11 @@ extension TokenPaneView {
         lastModel = model
         applyScreenVisibility()
 
-        hostLabel.stringValue = model.hostLabel
-        // 每次渲染都重设：NSTextField 的默认无障碍文案取自 stringValue，
-        // 只在装配时设一次会被后续赋值覆盖掉，读屏就听不到时区口径了
-        hostLabel.setAccessibilityLabel(model.hostLabel + "。" + TokenTimeZoneNote.text)
+        // 页名「DSH」已由页头自带，右侧口径只放会话数（见 headerMeta）
+        headerView.updateMeta(headerMeta(from: model.hostLabel))
+        // 每次渲染都重设：页头视图的默认无障碍文案由页名 + 口径文字拼成，
+        // 只在装配时设一次会被后续 updateMeta 覆盖掉，读屏就听不到时区口径了
+        headerView.setAccessibilityLabel(model.hostLabel + "。" + TokenTimeZoneNote.text)
         heroView.update(hero: model.hero)
         rangeControl.select(range.rawValue, notify: false)
 
@@ -97,8 +98,12 @@ extension TokenPaneView {
             compareCard.isHidden = true
         }
 
-        // 页脚状态带：三屏各一个实例，同一份 model.stateBand（不各算一套）
-        for band in stateBands { band.update(items: model.stateBand) }
+        // 页脚状态带：三屏各一个实例，同一份 model.stateBand（不各算一套）；
+        // 语气色由 TokenStateItem.toneColor 映射成四族墨色，交给共用状态带
+        let bandItems: [(key: String, value: String?, tone: NSColor?)] = model.stateBand.map {
+            (key: $0.title, value: $0.value, tone: $0.toneColor)
+        }
+        for band in stateBands { band.update(items: bandItems) }
 
         if let detailKind {
             // 占比条与图例的悬停文案由构建代码直接带上（TokenScreenContent），

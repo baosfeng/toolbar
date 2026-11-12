@@ -30,13 +30,17 @@ final class TransferPaneView: MenuPanelPaneView {
 
     // MARK: 子视图
 
+    /// 页头行 — 与其余四页同一件（22pt）
+    private let headerView = PaneHeaderRowView(title: "传送")
+    /// 页脚状态带 — 与其余四页同壳（20pt）
+    private let stateBand = PaneStateBandView()
     private let autoAcceptRow: MenuPanelKeyValueRow
     private let scanRow: MenuPanelKeyValueRow
     private let deviceHeader = MenuPanelHeaderRow(title: "附近设备", trailing: "未启动")
     private let deviceStack = NSStackView()
     private let emptyView = NSStackView()
-    private let hintLabel = MenuPanelLabel.text("", font: MenuPanelStyle.smallValueFont,
-                                                color: MenuPanelStyle.secondaryText)
+    private let hintLabel = MenuPanelLabel.text("", font: PaneCardStyle.metaFont,
+                                                color: PaneCardStyle.secondaryText)
     private let taskHeader = MenuPanelHeaderRow(title: "传输任务", trailing: "0 个")
     private let taskStack = NSStackView()
     private let dropHintRow: MenuPanelKeyValueRow
@@ -82,11 +86,13 @@ final class TransferPaneView: MenuPanelPaneView {
         autoAcceptRow.onClick = { [weak self] in self?.onOpenSettings?() }
         autoAcceptRow.isHidden = true
 
-        let stack = NSStackView(views: [autoAcceptRow, scanRow, deviceHeader, deviceStack, emptyView,
-                                        hintLabel, taskHeader, taskStack, dropHintRow])
+        let stack = NSStackView(views: [headerView, autoAcceptRow, scanRow, deviceHeader, deviceStack,
+                                        emptyView, hintLabel, taskHeader, taskStack, dropHintRow,
+                                        MenuPanelLabel.spacer(), stateBand])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 6
+        // 主栈间距统一到令牌档（原 6pt 是这一页独有的取值）
+        stack.spacing = PaneCardStyle.cardSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -98,6 +104,8 @@ final class TransferPaneView: MenuPanelPaneView {
         for subview in stack.arrangedSubviews {
             subview.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         }
+        // 首次上屏就给一条有内容的状态带：等第一帧数据前它也不该是空灰条
+        updateBand(devices: [], sessions: [], autoAcceptText: "", statusText: "未启动")
     }
 
     @available(*, unavailable)
@@ -120,12 +128,12 @@ final class TransferPaneView: MenuPanelPaneView {
             emptyView.addArrangedSubview(icon)
         }
         let title = MenuPanelLabel.text("正在搜索局域网设备",
-                                        font: NSFont.systemFont(ofSize: 12, weight: .regular))
+                                        font: PaneCardStyle.rowNameFont)
         title.alignment = .center
         emptyView.addArrangedSubview(title)
         let hint = MenuPanelLabel.text("同一 Wi-Fi 下的手机与 Mac 会自动出现",
-                                       font: NSFont.systemFont(ofSize: 10, weight: .regular),
-                                       color: MenuPanelStyle.tertiaryText)
+                                       font: PaneCardStyle.metaFont,
+                                       color: PaneCardStyle.tertiaryText)
         hint.alignment = .center
         emptyView.addArrangedSubview(hint)
     }
@@ -150,6 +158,8 @@ final class TransferPaneView: MenuPanelPaneView {
         }
 
         deviceHeader.updateTrailing(newDevices.isEmpty ? statusText : "\(newDevices.count) 台 · 刷新")
+        updateBand(devices: newDevices, sessions: newSessions,
+                   autoAcceptText: autoAcceptText, statusText: statusText)
 
         let devicePad = newDevices.map { "\($0.deviceId):\($0.alias):\($0.isOnline):\($0.isPaired)" }
             .joined(separator: "|")
@@ -172,6 +182,23 @@ final class TransferPaneView: MenuPanelPaneView {
                 row.update(session: session)
             }
         }
+    }
+
+    /// 页脚状态带 — 发现状态 / 设备 / 任务 / 免配对窗口
+    ///
+    /// 只放本帧真实数据：空集合的项直接不出现，不写「0 个」冒充读数。
+    /// 「发现」一项始终在：没有设备时它承载「未启动 / 搜索中」这类过程状态，
+    /// 否则空态下页脚会是一条什么都没有的灰条。
+    private func updateBand(devices: [RemoteDevice], sessions: [TransferSession],
+                            autoAcceptText: String, statusText: String) {
+        let active = sessions.filter { $0.state.isActive }.count
+        stateBand.update(items: [
+            (key: "发现", value: statusText.isEmpty ? nil : statusText),
+            (key: "设备", value: devices.isEmpty ? nil : "\(devices.count) 台"),
+            (key: "任务", value: sessions.isEmpty ? nil : "\(sessions.count) 个"),
+            (key: "进行中", value: active == 0 ? nil : "\(active) 个"),
+            (key: "免配对", value: autoAcceptText.isEmpty ? nil : autoAcceptText),
+        ])
     }
 
     /// 行内轻提示
@@ -257,7 +284,9 @@ final class TransferPaneView: MenuPanelPaneView {
 
     override func draw(_ dirtyRect: NSRect) {
         if isDragHighlighted {
-            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 8, yRadius: 8)
+            let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2),
+                                    xRadius: PaneCardStyle.cardRadius,
+                                    yRadius: PaneCardStyle.cardRadius)
             path.lineWidth = 2
             path.setLineDash([5, 4], count: 2, phase: 0)
             MenuPanelStyle.accentColor.setStroke()

@@ -17,7 +17,7 @@ final class MenuPanelTransferDeviceRow: MenuPanelRow {
     init(device: RemoteDevice, selected: Bool) {
         nameLabel = MenuPanelLabel.text(device.alias, font: MenuPanelStyle.bodyFont)
         detailLabel = MenuPanelLabel.text(Self.detailText(device),
-                                          font: MenuPanelStyle.sectionFont,
+                                          font: PaneCardStyle.metaFont,
                                           color: MenuPanelStyle.secondaryText)
         deviceId = device.deviceId
         selectedDeviceId = selected ? device.deviceId : nil
@@ -123,11 +123,13 @@ final class MenuPanelTransferTaskRow: MenuPanelRow, NSDraggingSource {
         lastSample = (session.totalTransferred, Date())
         titleLabel = MenuPanelLabel.text(Self.titleText(session), font: MenuPanelStyle.bodyFont)
         stateLabel = MenuPanelLabel.text(Self.stateText(session),
-                                         font: MenuPanelStyle.sectionFont,
+                                         font: PaneCardStyle.metaFont,
                                          color: Self.stateColor(session))
         detailLabel = MenuPanelLabel.text(Self.detailText(session, speed: 0),
-                                          font: MenuPanelStyle.smallValueFont,
+                                          font: PaneCardStyle.metaFont,
                                           color: MenuPanelStyle.secondaryText)
+        // 有意偏离统一行高 26/28：任务行是两行布局（文件名 + 进度条 + 百分比），
+        // 收到 28pt 会把进度条与百分比起挤出，故保留 56pt。
         super.init(height: 56, onClick: {})
         pendingAction = onClick
 

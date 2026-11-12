@@ -22,11 +22,8 @@ final class BillingPaneView: MenuPanelPaneView {
 
     // MARK: - 子视图
 
-    private let headerRow = NSView()
-    private let titleLabel = MenuPanelLabel.text("额度", font: PaneCardStyle.cardTitleFont,
-                                                 color: PaneCardStyle.secondaryText)
-    private let timeLabel = MenuPanelLabel.text("—", font: PaneCardStyle.metaFont,
-                                                color: PaneCardStyle.tertiaryText)
+    /// 页头行（额度 → 最近刷新时间 → 刷新），页名与 22pt 高度由共用视图自带
+    private let headerView = PaneHeaderRowView(title: "额度")
     private let refreshRow = BillingIconButtonRow(symbolName: "arrow.clockwise")
     private let heroView = BillingHeroView()
     private let blockStack = NSStackView()
@@ -44,24 +41,11 @@ final class BillingPaneView: MenuPanelPaneView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
-        timeLabel.alignment = .right
         refreshRow.onClick = { [weak self] in self?.onRefresh?() }
-        titleLabel.setContentHuggingPriority(.required, for: .horizontal)
-        timeLabel.setContentHuggingPriority(.required, for: .horizontal)
-
-        let headerStack = NSStackView(views: [titleLabel, MenuPanelLabel.spacer(), timeLabel, refreshRow])
-        headerStack.orientation = .horizontal
-        headerStack.alignment = .centerY
-        headerStack.spacing = 6
-        headerStack.translatesAutoresizingMaskIntoConstraints = false
-        headerRow.addSubview(headerStack)
-        NSLayoutConstraint.activate([
-            headerStack.leadingAnchor.constraint(equalTo: headerRow.leadingAnchor),
-            headerStack.trailingAnchor.constraint(equalTo: headerRow.trailingAnchor),
-            headerStack.topAnchor.constraint(equalTo: headerRow.topAnchor),
-            headerStack.bottomAnchor.constraint(equalTo: headerRow.bottomAnchor),
-            headerRow.heightAnchor.constraint(equalToConstant: PaneCardStyle.pageHeadHeight),
-        ])
+        // 页头走五页共用的 PaneHeaderRowView：页名「额度」由视图自带，
+        // 右侧最近刷新时间走 updateMeta、刷新按钮走动作槽，页头不再各页自己拼一条栈
+        headerView.updateMeta("—")
+        headerView.setTrailing([refreshRow])
 
         blockStack.orientation = .vertical
         blockStack.alignment = .leading
@@ -70,7 +54,7 @@ final class BillingPaneView: MenuPanelPaneView {
         emptyView.isHidden = true
         emptyView.onConfigure = { [weak self] in self?.onOpenSettings?() }
 
-        let root = NSStackView(views: [headerRow, heroView, blockStack, emptyView,
+        let root = NSStackView(views: [headerView, heroView, blockStack, emptyView,
                                        MenuPanelLabel.spacer(), stateBand])
         root.orientation = .vertical
         root.alignment = .leading
@@ -133,7 +117,7 @@ final class BillingPaneView: MenuPanelPaneView {
         self.snapshot = snapshot
         let hasProvider = !snapshot.states.isEmpty
         emptyView.isHidden = hasProvider
-        headerRow.isHidden = !hasProvider
+        headerView.isHidden = !hasProvider
         heroView.isHidden = !hasProvider
         blockStack.isHidden = !hasProvider
         stateBand.isHidden = !hasProvider
@@ -149,7 +133,7 @@ final class BillingPaneView: MenuPanelPaneView {
         }
         syncBlocks(snapshot.states)
         let stamp = Self.latestStamp(snapshot.states)
-        timeLabel.stringValue = stamp
+        headerView.updateMeta(stamp)
         // 还没成功刷新过时不拼「实时 —」：那是把「不可得」写成了半句话
         heroView.update(hero: Self.hero(from: snapshot.states),
                         clock: stamp == "—" ? "尚未刷新" : "实时 " + stamp)

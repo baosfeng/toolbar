@@ -52,8 +52,10 @@ final class TokenPaneView: MenuPanelPaneView {
     let refreshRow = TokenIconButtonRow(symbolName: "arrow.clockwise")
     let indexLabel = MenuPanelLabel.text("", font: TokenPaneStyle.metaFont,
                                         color: TokenPaneStyle.tertiaryText)
-    let hostLabel = MenuPanelLabel.text("", font: TokenPaneStyle.pageHeadFont,
-                                        color: TokenPaneStyle.secondaryText)
+    /// 页名（页头左侧；与 Core 给的 hostLabel 前缀同源，口径文字去重时用）
+    static let pageTitle = "DSH"
+    /// 页头行（页名 → 会话数 → 范围分段 → 刷新），右侧口径文字与时区提示都挂在这条上
+    let headerView = PaneHeaderRowView(title: TokenPaneView.pageTitle)
 
     // MARK: - 分区
 
@@ -65,11 +67,14 @@ final class TokenPaneView: MenuPanelPaneView {
     /// 四族卡矩阵容器（2×2）
     let familyGrid = NSStackView()
     /// 屏页脚状态带：概览 / 用量 / 排行各一个实例，都用同一份 model.stateBand 更新
-    let overviewBand = TokenStateBandView()
-    let usageBand = TokenStateBandView()
-    let rankingBand = TokenStateBandView()
+    ///
+    /// 用的是五页共用的 `PaneStateBandView`（底 / 高度 / 内边距 / 圆角 / 键值字号走
+    /// `PaneBandChrome`）；Token 页此前那份 `TokenStateBandView` 已删除，只保留语气色映射。
+    let overviewBand = PaneStateBandView()
+    let usageBand = PaneStateBandView()
+    let rankingBand = PaneStateBandView()
     /// 三个状态带实例（渲染时统一刷新；缓存屏页脚是口径说明，没有状态带）
-    var stateBands: [TokenStateBandView] { [overviewBand, usageBand, rankingBand] }
+    var stateBands: [PaneStateBandView] { [overviewBand, usageBand, rankingBand] }
 
     /// 用量屏：主图卡（整屏独占，柱高 160pt + 左侧刻度与网格；每根柱可点进单桶页）
     let hourCard = TokenCardRow(height: 230, background: TokenPaneStyle.cardFill)

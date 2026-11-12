@@ -19,11 +19,16 @@ final class ClipboardPaneView: MenuPanelPaneView {
     /// 点击表头（查看完整剪贴板历史面板）
     var onRequestHistory: (() -> Void)?
 
+    /// 页头行 — 与其余四页同一件（22pt）
+    private let headerView = PaneHeaderRowView(title: "剪贴板")
+    /// 表头（「5 条 · 全部」可点开完整历史）：仍保留可点行，位置在页头之下
     private let header = MenuPanelHeaderRow(title: "最近复制", trailing: "0 条 · 全部")
     private let rowsStack = NSStackView()
-    private let hintLabel = MenuPanelLabel.text("", font: MenuPanelStyle.smallValueFont, color: MenuPanelStyle.secondaryText)
+    private let hintLabel = MenuPanelLabel.text("", font: PaneCardStyle.metaFont, color: PaneCardStyle.secondaryText)
     private let emptyView = NSStackView()
     private let settingsRow: MenuPanelKeyValueRow
+    /// 页脚状态带 — 与其余四页同壳（20pt）
+    private let stateBand = PaneStateBandView()
 
     private var items: [ClipboardItem] = []
     private var itemRows: [MenuPanelClipboardRow] = []
@@ -49,10 +54,12 @@ final class ClipboardPaneView: MenuPanelPaneView {
         settingsRow.onClick = { [weak self] in self?.onRequestSettings?() }
         header.onClick = { [weak self] in self?.onRequestHistory?() }
 
-        let stack = NSStackView(views: [header, rowsStack, hintLabel, emptyView, settingsRow])
+        let stack = NSStackView(views: [headerView, header, rowsStack, hintLabel, emptyView,
+                                        settingsRow, MenuPanelLabel.spacer(), stateBand])
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 6
+        // 主栈间距统一到令牌档（原 6pt 是这一页独有的取值）
+        stack.spacing = PaneCardStyle.cardSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -88,14 +95,14 @@ final class ClipboardPaneView: MenuPanelPaneView {
             emptyView.addArrangedSubview(icon)
         }
         let title = MenuPanelLabel.text("还没有复制记录",
-                                        font: NSFont.systemFont(ofSize: 12, weight: .regular),
-                                        color: .labelColor)
+                                        font: PaneCardStyle.rowNameFont,
+                                        color: PaneCardStyle.primaryText)
         title.alignment = .center
         title.heightAnchor.constraint(equalToConstant: 18).isActive = true
         emptyView.addArrangedSubview(title)
         let hint = MenuPanelLabel.text("复制任意内容后会出现在这里",
-                                       font: NSFont.systemFont(ofSize: 10, weight: .regular),
-                                       color: MenuPanelStyle.tertiaryText)
+                                       font: PaneCardStyle.metaFont,
+                                       color: PaneCardStyle.tertiaryText)
         hint.alignment = .center
         emptyView.addArrangedSubview(hint)
     }
@@ -111,6 +118,7 @@ final class ClipboardPaneView: MenuPanelPaneView {
         header.updateTrailing(limited.isEmpty ? "0 条" : "\(limited.count) 条 · 全部")
         emptyView.isHidden = !limited.isEmpty
         rowsStack.isHidden = limited.isEmpty
+        updateBand()
 
         guard signature != itemsSignature else { return }
         itemsSignature = signature
@@ -128,6 +136,18 @@ final class ClipboardPaneView: MenuPanelPaneView {
             rowsStack.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: rowsStack.widthAnchor).isActive = true
         }
+    }
+
+    /// 页脚状态带 — 条目数 / 上限 / 类型口径
+    ///
+    /// 只放本帧真实数据：没有条目时不写「0 条」冒充读数，直接让该项消失。
+    private func updateBand() {
+        let types = Set(items.map { MenuPanelClipboardRow.kindLabel(for: $0) })
+        stateBand.update(items: [
+            (key: "条目", value: items.isEmpty ? nil : "\(items.count) 条"),
+            (key: "上限", value: "\(Self.maxItems) 条"),
+            (key: "类型", value: types.isEmpty ? nil : types.sorted().joined(separator: " / ")),
+        ])
     }
 
     /// 行内轻提示（粘贴降级原因等），1.6 秒后自动隐藏
@@ -150,15 +170,14 @@ final class ClipboardPaneView: MenuPanelPaneView {
 final class MenuPanelClipboardRow: MenuPanelRow {
 
     private static let timeWidth: CGFloat = 56
-    /// 正文用等宽字体，便于对比代码片段
-    private static let textFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+    /// 正文用等宽字体（字号走令牌，五页同一档），便于对比代码片段
+    private static let textFont: NSFont = PaneCardStyle.rowValueFont
 
     init(item: ClipboardItem) {
         super.init(height: MenuPanelStyle.rowHeight, onClick: {})
 
         let timeLabel = MenuPanelLabel.text(ClipboardRelativeTime.string(from: item.createdAt),
-                                            font: MenuPanelStyle.sectionFont, color: MenuPanelStyle.secondaryText)
-        timeLabel.font = MenuPanelStyle.sectionFont
+                                            font: PaneCardStyle.metaFont, color: PaneCardStyle.secondaryText)
         timeLabel.widthAnchor.constraint(equalToConstant: Self.timeWidth).isActive = true
         timeLabel.setContentHuggingPriority(.required, for: .horizontal)
         contentStack.addArrangedSubview(timeLabel)
@@ -170,9 +189,8 @@ final class MenuPanelClipboardRow: MenuPanelRow {
         contentStack.addArrangedSubview(textLabel)
         contentStack.addArrangedSubview(MenuPanelLabel.spacer())
 
-        let kindLabel = MenuPanelLabel.text(Self.kindLabel(for: item), font: MenuPanelStyle.sectionFont,
-                                            color: MenuPanelStyle.secondaryText)
-        kindLabel.font = MenuPanelStyle.sectionFont
+        let kindLabel = MenuPanelLabel.text(Self.kindLabel(for: item), font: PaneCardStyle.metaFont,
+                                            color: PaneCardStyle.secondaryText)
         kindLabel.setContentHuggingPriority(.required, for: .horizontal)
         kindLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         contentStack.addArrangedSubview(kindLabel)
@@ -181,7 +199,9 @@ final class MenuPanelClipboardRow: MenuPanelRow {
     }
 
     /// 类型标签：URL 文本显示为「链接」，其余按条目类型中文名
-    private static func kindLabel(for item: ClipboardItem) -> String {
+    ///
+    /// 放宽为 internal：同文件的剪贴板页页脚状态带要用它统计类型分布。
+    static func kindLabel(for item: ClipboardItem) -> String {
         if item.kind == .text {
             let text = item.text ?? item.preview
             if text.hasPrefix("http://") || text.hasPrefix("https://") { return "链接" }

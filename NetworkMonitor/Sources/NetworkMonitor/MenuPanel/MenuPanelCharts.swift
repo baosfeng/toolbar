@@ -53,8 +53,14 @@ final class MenuPanelBarsView: NSView {
     private static let labelRowHeight: CGFloat = 12
     /// 单柱最大宽度（只有 1-2 天数据时不把整行撑满）
     private static let maxColumnWidth: CGFloat = 44
-    /// 柱体区最大高度
-    private static let barAreaHeight: CGFloat = 56
+    /// 柱体区默认最大高度（额度页 / Token 页用满高）
+    private static let defaultBarAreaHeight: CGFloat = 56
+
+    /// 本实例的柱体区高度
+    ///
+    /// 网络页补齐页头行与页脚状态带后，一屏只余约 388pt，柱图必须比额度页矮一档
+    /// 才不触发外框滚动；高度因此做成实例参数，默认值保持原有 56pt。
+    private let barAreaHeight: CGFloat
 
     /// 当前悬停柱下标（nil = 未悬停）
     private var hoveredIndex: Int?
@@ -62,11 +68,12 @@ final class MenuPanelBarsView: NSView {
 
     override var isFlipped: Bool { true }
 
-    init() {
+    init(barAreaHeight: CGFloat = defaultBarAreaHeight) {
+        self.barAreaHeight = barAreaHeight
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: Self.valueRowHeight + Self.barAreaHeight
+            heightAnchor.constraint(equalToConstant: Self.valueRowHeight + barAreaHeight
                                     + Self.labelRowHeight + 8),
         ])
         setAccessibilityRole(.group)
@@ -80,7 +87,7 @@ final class MenuPanelBarsView: NSView {
         guard !bars.isEmpty else { return }
         let layout = columnLayout(for: bars.count)
         let barAreaTop = Self.valueRowHeight + 4
-        let barBottom = barAreaTop + Self.barAreaHeight
+        let barBottom = barAreaTop + barAreaHeight
         let ratios = MenuPanelMetrics.barRatios(values: bars.map(\.value))
 
         for (index, bar) in bars.enumerated() {
@@ -102,7 +109,7 @@ final class MenuPanelBarsView: NSView {
 
             // 柱体：相对最大值归一化，最小 2pt 保证「有数据就一定看得见」；悬停柱用强调色
             let ratio = ratios[index]
-            let height = max(2, Self.barAreaHeight * CGFloat(ratio))
+            let height = max(2, barAreaHeight * CGFloat(ratio))
             let barRect = NSRect(x: x, y: barBottom - height, width: layout.width, height: height)
             // 悬停柱用满色强调，今天用 75% 强调色，普通柱 24% 前景色
             let fillColor: NSColor = isHovered
@@ -206,7 +213,7 @@ final class MenuPanelBarsView: NSView {
         let width = textSize.width + padding * 2
         let height = textSize.height + 2
         let centerX = layout.leftInset + CGFloat(barIndex) * (layout.width + columnGap) + layout.width / 2
-        let barHeight = max(2, Self.barAreaHeight * CGFloat(ratios[barIndex]))
+        let barHeight = max(2, barAreaHeight * CGFloat(ratios[barIndex]))
         let barTop = barBottom - barHeight
         let x = min(max(0, centerX - width / 2), max(0, bounds.width - width))
         let y = max(0, barTop - height - 4)

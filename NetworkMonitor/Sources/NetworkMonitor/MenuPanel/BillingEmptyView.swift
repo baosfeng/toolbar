@@ -16,7 +16,7 @@ final class BillingEmptyView: NSView {
     /// 主按钮行（键盘可达）
     let configureRow: BillingPrimaryButtonRow
 
-    private let titleLabel = MenuPanelLabel.text("", font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+    private let titleLabel = MenuPanelLabel.text("", font: PaneCardStyle.sectionTitleFont,
                                                 color: PaneCardStyle.secondaryText)
     private let hintLabel = NSTextField(labelWithString: "")
 
