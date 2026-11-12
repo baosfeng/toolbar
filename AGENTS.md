@@ -31,6 +31,7 @@
 | 剪贴板历史 | 全局快捷键面板、模糊搜索、Paste Stack 顺序粘贴、图片原图落盘 |
 | 局域网文件互传 | UDP 发现 + HTTP 传输 + 扫码接收 + PIN 配对，支持断点续传 |
 | Token 用量监控 | 菜单面板「Token」tab：DSH 会话事件流（zstd）增量索引，今日 / 近 7 天 / 近 30 天同源口径分 **4 屏**（概览 = Hero + 四族卡 + 缓存命中条 + 近 14 天 + 今日vs昨日；用量 = 主图 160pt（左侧刻度 + 网格）+ 天趋势 120pt；缓存 = 大环 + 四行拆分 + 走势（空缺断开）+ 对照 + 统计口径；排行 = 项目/模型维度段 + 占比条 + Top 8 两行式行），四屏 pane 高度恒 458pt（popover 520），每屏内容 + 页脚（状态带 / 缓存口径说明），区块归属由 TokenScreen 契约唯一确定；保留 3 个面板内覆盖式二级页（单桶 / 按小时三段 / 天趋势）；同会话多版本文件按内容键去重；分布行 / 占比条 / 图例悬停给 provider 全名（296pt 宽放不下 provider 前缀） |
+| 面板视觉语言 | 六个 tab 共用一套版式骨架（页头 22pt → 内容 → 页脚状态带 20pt）与唯一令牌源 `PaneCardStyle`：分区标题 11pt 粗体、行名 / 行值 10.5pt、行高 28pt、卡片圆角 9pt + 内边距 7/4、带底 0xEEEFF2；页头 `PaneHeaderRowView`、页脚 `PaneStateBandView`（共用 `PaneBandChrome` 外壳）只在 `MenuPanel/` 定义一次，页面不各画一遍 |
 | 系统监控 | 菜单面板「系统」tab：版2 紧凑首屏（四联 + CPU 蓝 / GPU 靛 / 内存 青绿 / 压力 橙 / 磁盘 石墨五张语义分族卡 + 20pt 四段状态带），五卡整卡可点进**面板内覆盖式二级详情页**（CPU 每核热力 / GPU 显存 / 内存四段与堆叠 / 磁盘读写与 IOPS / 压力 Top-10 且 CPU 榜·内存榜可切）；网络页另有一条 20pt Wi-Fi 链路条（RSSI/信道/速率/档位点，与状态带同源）。免 root 采样（host_processor_info / host_statistics64 / IOAccelerator / IOBlockStorageDriver / IOHID / IOReport / libproc / IOPS / CoreWLAN），不可得项降级为「—」 |
 
 ## 开发指南
