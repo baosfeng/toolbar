@@ -5,7 +5,9 @@ import NetworkMonitorCore
 
 /// 剪贴板采集器 — 同一个实现的两种模式（设计规格第 6 节分支 A / B）
 ///
-/// - 模式 B（polling，当前默认）：500ms Timer 轮询 + changeCount 变更即读
+/// - 模式 B（polling，当前默认）：动态间隔 Timer 轮询 + changeCount 变更即读
+///   间隔由 `ClipboardPollSchedule` 决定（0.5s / 2.0s / 5.0s，随用户活跃度切换），
+///   另有 `com.apple.pasteboard.changed` 分布式通知作提前唤醒（只提前跑一次 capture，不改轮询节奏）
 /// - 模式 A（onDemand）：不启动轮询，仅在打开面板或点击「采集当前剪贴板」时调 captureNow()
 ///
 /// 两种模式共用同一条流水线：changeCount 判定 → 访问权限判定 → 忽略判定 → 哈希 → 落盘 → onCapture。
@@ -13,13 +15,24 @@ import NetworkMonitorCore
 @MainActor
 final class PasteboardWatcher: ClipboardCaptureService {
 
-    /// 轮询间隔（设计规格第 5 节：500ms）
-    static let pollInterval: TimeInterval = 0.5
+    /// 活跃档轮询间隔（历史固定值，增量 B 起作为最快档上限，供测试与既有断言使用）
+    ///
+    /// 实际间隔由 `ClipboardPollSchedule.interval(idleSeconds:isAppActive:)` 逐次计算，
+    /// 本常量只代表「用户刚有输入且本 App 前台」时的档位。
+    static let pollInterval: TimeInterval = ClipboardPollSchedule.activeInterval
+
+    /// 剪贴板变更的分布式通知名（只作提前唤醒；changeCount 仍是唯一准入闸门）
+    static let pasteboardChangedNotification = Notification.Name("com.apple.pasteboard.changed")
 
     private let preferences: ClipboardPreferences
     private let logger: LoggingService
     private let pasteboard: NSPasteboard
+    /// 用户活跃度探针（免权限读秒 + 前台状态缓存）
+    private let activityMonitor: UserActivityMonitor
+    /// 提前唤醒的通知观察者（stop() 时注销）
+    private var wakeObserver: NSObjectProtocol?
 
+    /// 下一次 tick 的一次性 Timer（每次 tick 后按当前档位重排，不重建 RunLoop 源）
     private var timer: Timer?
     /// 上次读到的 changeCount；初值取哨兵值，避免在初始化阶段读取剪贴板（探针未覆盖的路径不做多余访问）
     private var lastChangeCount = Int.min
@@ -30,10 +43,12 @@ final class PasteboardWatcher: ClipboardCaptureService {
 
     init(preferences: ClipboardPreferences,
          logger: LoggingService = AppContext.shared.logger,
-         pasteboard: NSPasteboard = .general) {
+         pasteboard: NSPasteboard = .general,
+         activityMonitor: UserActivityMonitor? = nil) {
         self.preferences = preferences
         self.logger = logger
         self.pasteboard = pasteboard
+        self.activityMonitor = activityMonitor ?? UserActivityMonitor()
     }
 
     // MARK: ClipboardCaptureService
@@ -48,24 +63,93 @@ final class PasteboardWatcher: ClipboardCaptureService {
         }
         guard checkAccessBehavior() else { return }
 
-        let timer = Timer(timeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.capture() }
+        isRunning = true
+        activityMonitor.start()
+        registerWakeObserver()
+        scheduleTick()
+        onStateChange?(.running)
+        logger.info("剪贴板采集启动：分支 B（动态轮询 " + Self.secondsText(ClipboardPollSchedule.activeInterval)
+                   + "–" + Self.secondsText(ClipboardPollSchedule.idleInterval) + "s）")
+    }
+
+    func stop() {
+        // 先落 isRunning = false：重排决策依赖它，迟到的一次性 Timer 不会再排下一次
+        let wasRunning = isRunning
+        isRunning = false
+        timer?.invalidate()
+        timer = nil
+        unregisterWakeObserver()
+        activityMonitor.stop()
+        // 未运行时只是「清理已泄漏的观察者」，不发状态事件（保持原有静默语义）
+        guard wasRunning else { return }
+        onStateChange?(.stopped)
+        logger.info("剪贴板采集已停止")
+    }
+
+    // deinit 与 @MainActor 隔离（Swift 6 isolated deinit）：Timer 失效与观察者摘除都在主线程上做，
+    // 避免跨线程碰 Timer 这类非 Sendable 资源；即便调用方忘了 stop()，析构时也会自动收口。
+    isolated deinit {
+        timer?.invalidate()
+        if let wakeObserver {
+            DistributedNotificationCenter.default().removeObserver(wakeObserver)
+        }
+    }
+
+    // MARK: 动态轮询
+
+    /// 按当前档位排下一次一次性 tick（停止后永不重排）
+    private func scheduleTick() {
+        timer?.invalidate()
+        timer = nil
+        let idleSeconds = activityMonitor.idleSeconds
+        let isAppActive = activityMonitor.isAppActive
+        guard let interval = ClipboardPollSchedule.nextInterval(isRunning: isRunning,
+                                                               idleSeconds: idleSeconds,
+                                                               isAppActive: isAppActive) else {
+            return
+        }
+        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
         }
         // 加入 RunLoop 的 common modes：菜单展开 / 拖拽期间也不停止采集
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
-        isRunning = true
-        onStateChange?(.running)
-        logger.info("剪贴板采集启动：分支 B（500ms 轮询）")
     }
 
-    func stop() {
-        timer?.invalidate()
-        timer = nil
+    /// 一次 tick：采集一次 + 按新的活跃度重排下一次
+    private func tick() {
         guard isRunning else { return }
-        isRunning = false
-        onStateChange?(.stopped)
-        logger.info("剪贴板采集已停止")
+        capture()
+        scheduleTick()
+    }
+
+    /// 剪贴板变更的提前唤醒：立即跑一次采集，不改轮询节奏
+    ///
+    /// 通知可能来自任意进程与线程，统一回主线程；changeCount 未变时 capture() 直接返回，
+    /// 因此唤醒只可能「提前一点读到」，不会重复入库、也不会改变忽略判定。
+    private func registerWakeObserver() {
+        guard wakeObserver == nil else { return }
+        wakeObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Self.pasteboardChangedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isRunning else { return }
+                self.capture()
+            }
+        }
+    }
+
+    private func unregisterWakeObserver() {
+        guard let wakeObserver else { return }
+        DistributedNotificationCenter.default().removeObserver(wakeObserver)
+        self.wakeObserver = nil
+    }
+
+    /// 日志用的秒数文案（一位小数，避免打印 0.5000000001 这类浮点尾数）
+    private static func secondsText(_ interval: TimeInterval) -> String {
+        String(format: "%.1f", interval)
     }
 
     /// 立即采集一次（分支 A 的面板打开 / 手动采集按钮；与轮询同一条流水线，无新内容时静默返回）

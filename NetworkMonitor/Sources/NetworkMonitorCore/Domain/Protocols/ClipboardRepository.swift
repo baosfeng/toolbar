@@ -60,16 +60,16 @@ public protocol ClipboardRepository: AnyObject, Sendable {
     @discardableResult
     func setClipboardItemPinned(id: UUID, isPinned: Bool) -> Bool
 
-    /// 删除单条
-    /// - Returns: 是否命中并删除
+    /// 删除单条（返回被删条目，供上层回收其落盘图片）
+    /// - Returns: 被删除的条目；id 不存在或数据库不可用时为 nil
     @discardableResult
-    func deleteClipboardItem(id: UUID) -> Bool
+    func deleteClipboardItem(id: UUID) -> ClipboardItem?
 
-    /// 清空历史
+    /// 清空历史（返回被删条目，供上层回收其落盘图片）
     /// - Parameter keepingPinned: true = 保留收藏项（默认交互，对应 ⌘⇧⌫）
-    /// - Returns: 实际删除条数
+    /// - Returns: 实际删除的条目列表（空数组 = 没有删除，上层据此零文件系统开销）
     @discardableResult
-    func clearClipboardItems(keepingPinned: Bool) -> Int
+    func clearClipboardItems(keepingPinned: Bool) -> [ClipboardItem]
 
     /// 重写 Paste Stack 顺序：数组下标 + 1 写入 stack_position，未列出的条目清空为 NULL
     /// - Parameter orderedIDs: 从队首到队尾的条目 id；空数组 = 清空整栈
@@ -82,9 +82,9 @@ public protocol ClipboardRepository: AnyObject, Sendable {
     /// - Parameters:
     ///   - maxItems: ≤ 0 时取 ClipboardLimit.defaultMaxItems
     ///   - retentionDays: ≤ 0 时取 ClipboardLimit.defaultRetentionDays
-    /// - Returns: 实际删除条数
+    /// - Returns: 实际删除的条目列表（供上层回收其落盘图片）
     @discardableResult
-    func pruneClipboardItems(maxItems: Int, retentionDays: Int) -> Int
+    func pruneClipboardItems(maxItems: Int, retentionDays: Int) -> [ClipboardItem]
 
     /// 当前条目总数（含收藏）
     func clipboardItemCount() -> Int

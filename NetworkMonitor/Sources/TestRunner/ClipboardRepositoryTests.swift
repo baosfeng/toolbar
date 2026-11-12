@@ -102,18 +102,18 @@ func runClipboardRepositoryTests() {
         if let firstID {
             _ = db.setClipboardItemPinned(id: firstID, isPinned: true)
         }
-        assertEqual(db.clearClipboardItems(keepingPinned: true), 1, "清空删除 1 条非收藏")
+        assertEqual(db.clearClipboardItems(keepingPinned: true).count, 1, "清空删除 1 条非收藏")
         assertEqual(db.clipboardItemCount(), 1, "清空后仅剩收藏项")
-        assertEqual(db.clearClipboardItems(keepingPinned: false), 1, "全清删除收藏项")
+        assertEqual(db.clearClipboardItems(keepingPinned: false).count, 1, "全清删除收藏项")
         assertEqual(db.clipboardItemCount(), 0, "全部清空")
 
         // 删除单条
         let doomed = db.saveClipboardItem(ClipboardDraft(kind: .text, contentHash: "hash-3", text: "del-me"))
         assertNotNil(doomed, "删除测试条目插入成功")
         if let doomed {
-            assertEqual(db.deleteClipboardItem(id: doomed.id), true, "删除单条成功")
+            assertEqual(db.deleteClipboardItem(id: doomed.id)?.id, doomed.id, "删除单条成功并返回被删条目")
         }
-        assertEqual(db.deleteClipboardItem(id: UUID()), false, "删除不存在的 id 返回 false")
+        assertEqual(db.deleteClipboardItem(id: UUID()) == nil, true, "删除不存在的 id 返回 nil")
         assertEqual(db.clipboardItemCount(), 0, "删除后计数为 0")
 
         print("✅ ClipboardRepository 建表 / 迁移 / 去重 / 收藏 / 删除 / 清空 works")
@@ -132,9 +132,9 @@ func runClipboardUninitializedTests() {
         assertEqual(db.fetchClipboardItems(kind: nil, limit: 10).isEmpty, true, "未初始化时分页查询返回空")
         assertEqual(db.fetchAllClipboardItems(kind: nil).isEmpty, true, "未初始化时全量查询返回空")
         assertEqual(db.setClipboardItemPinned(id: UUID(), isPinned: true), false, "未初始化时收藏返回 false")
-        assertEqual(db.deleteClipboardItem(id: UUID()), false, "未初始化时删除返回 false")
-        assertEqual(db.clearClipboardItems(keepingPinned: true), 0, "未初始化时清空返回 0")
-        assertEqual(db.pruneClipboardItems(maxItems: 1, retentionDays: 1), 0, "未初始化时清理返回 0")
+        assertEqual(db.deleteClipboardItem(id: UUID()) == nil, true, "未初始化时删除返回 nil")
+        assertEqual(db.clearClipboardItems(keepingPinned: true).isEmpty, true, "未初始化时清空返回空列表")
+        assertEqual(db.pruneClipboardItems(maxItems: 1, retentionDays: 1).isEmpty, true, "未初始化时清理返回空列表")
         assertEqual(db.clipboardItemCount(), 0, "未初始化时计数为 0")
         assertEqual(db.searchClipboardItems(query: "任意", limit: 10).isEmpty, true, "未初始化时全文检索返回空")
         assertEqual(db.searchClipboardItems(query: "任意", limit: Int.max).isEmpty, true, "未初始化时全文检索极大 limit 仍为空")

@@ -78,8 +78,8 @@ enum ClipboardImageStore {
             logger.error("剪贴板图片落盘失败：\(error.localizedDescription)")
             return nil
         }
-        // 不清理同哈希的旧版 <hash>.png：命中 content_hash 冲突时仓储不刷新 image_path，
-        // 删掉旧文件会让老记录指向不存在的路径（宁可多留一份磁盘副本，也不能让历史图片失效）。
+        // 落盘期不清理同哈希的旧版 <hash>.png：此时记录刚写入、旧副本可能仍被历史记录引用，
+        // 删掉会让老记录指向不存在的路径。真正的清理放在记录被删除之后（见 remove / sweepOrphans）。
         writeThumbnail(data: data, to: thumbnailURL(for: contentHash), logger: logger)
         return .stored(Stored(path: fileURL.path, width: size.width, height: size.height))
     }
@@ -98,6 +98,40 @@ enum ClipboardImageStore {
         } catch {
             logger.warning("剪贴板缩略图写入失败：\(error.localizedDescription)")
         }
+    }
+
+    // MARK: 回收
+
+    /// 回收单条被删图片的落盘文件（原图任意扩展名副本 + 缩略图）
+    /// - Parameters:
+    ///   - imagePath: DB 里记录的精确路径（扩展名可能与该哈希现有文件不一致，由判定层负责对上）
+    ///   - contentHash: 内容哈希前缀（覆盖同哈希换扩展名遗留的旧副本）
+    ///   - logger: 日志（路径先过 LogRedaction）
+    /// - Returns: 实际删除的文件数
+    @discardableResult
+    static func remove(imagePath: String?, contentHash: String, logger: LoggingService) -> Int {
+        guard let fileNames = ClipboardImageSweeper.fileNames(in: directory) else { return 0 }
+        let doomed = ClipboardImageSweepPlan.reclaimableFileNames(
+            fileNames: fileNames,
+            doomedImagePaths: imagePath.map { Set([$0]) } ?? [],
+            doomedContentHashes: contentHash.isEmpty ? [] : Set([contentHash])
+        )
+        return ClipboardImageSweeper.remove(fileNames: doomed, in: directory, logger: logger)
+    }
+
+    /// 启动后一次孤儿清扫：目录内没有存活记录引用的文件全部删除
+    /// - Parameters:
+    ///   - knownImagePaths: 全量 DB 记录的 image_path
+    ///   - knownContentHashes: 全量 DB 记录的 content_hash
+    /// - Returns: 实际删除的文件数；目录不存在时返回 0（不报错）
+    @discardableResult
+    static func sweepOrphans(knownImagePaths: Set<String>, knownContentHashes: Set<String>,
+                             logger: LoggingService) -> Int {
+        guard let fileNames = ClipboardImageSweeper.fileNames(in: directory), !fileNames.isEmpty else { return 0 }
+        let orphans = ClipboardImageSweepPlan.orphanFileNames(fileNames: fileNames,
+                                                              keptImagePaths: knownImagePaths,
+                                                              keptContentHashes: knownContentHashes)
+        return ClipboardImageSweeper.remove(fileNames: orphans, in: directory, logger: logger)
     }
 
     /// 从原图补生成缩略图（缩略图文件缺失时懒加载；ImageIO 降采样，代价与缩略图尺寸成正比）

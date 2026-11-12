@@ -49,17 +49,16 @@ func runClipboardPanelMockTests() {
                 storage[index].isPinned = isPinned
                 return true
             }
-            func deleteClipboardItem(id: UUID) -> Bool {
+            func deleteClipboardItem(id: UUID) -> ClipboardItem? {
                 lock.lock(); defer { lock.unlock() }
-                let before = storage.count
-                storage.removeAll { $0.id == id }
-                return storage.count != before
+                guard let index = storage.firstIndex(where: { $0.id == id }) else { return nil }
+                return storage.remove(at: index)
             }
-            func clearClipboardItems(keepingPinned: Bool) -> Int {
+            func clearClipboardItems(keepingPinned: Bool) -> [ClipboardItem] {
                 lock.lock(); defer { lock.unlock() }
-                let before = storage.count
+                let doomed = keepingPinned ? storage.filter { !$0.isPinned } : storage
                 storage.removeAll { keepingPinned ? !$0.isPinned : true }
-                return before - storage.count
+                return doomed
             }
             func updateClipboardStackPositions(_ orderedIDs: [UUID]) {
                 lock.lock(); defer { lock.unlock() }
@@ -72,7 +71,7 @@ func runClipboardPanelMockTests() {
                 fetchAllClipboardItems(kind: nil).filter { $0.stackPosition != nil }
                     .sorted { ($0.stackPosition ?? 0) < ($1.stackPosition ?? 0) }
             }
-            func pruneClipboardItems(maxItems: Int, retentionDays: Int) -> Int { 0 }
+            func pruneClipboardItems(maxItems: Int, retentionDays: Int) -> [ClipboardItem] { [] }
             func clipboardItemCount() -> Int { fetchAllClipboardItems(kind: nil).count }
         }
 
@@ -138,7 +137,7 @@ func runClipboardPanelMockTests() {
         assertEqual(repository.searchClipboardItems(query: "mock", limit: 10).count, 1, "面板全文检索命中 mock 条目")
         assertEqual(repository.searchClipboardItems(query: "  ", limit: 10).count, 0, "面板全文检索空查询返回空")
         assertEqual(repository.setClipboardItemPinned(id: items[0].id, isPinned: true), true, "面板收藏成功")
-        assertEqual(repository.clearClipboardItems(keepingPinned: true), 0, "收藏项豁免清空")
+        assertEqual(repository.clearClipboardItems(keepingPinned: true).isEmpty, true, "收藏项豁免清空")
         repository.updateClipboardStackPositions([items[0].id])
         assertEqual(repository.fetchClipboardStack().count, 1, "面板入栈成功")
 
