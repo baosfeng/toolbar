@@ -67,10 +67,34 @@ enum PaneCardStyle {
     static let segmentFont = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
     static let segmentSelectedFont = NSFont.systemFont(ofSize: 10.5, weight: .bold)
 
+    // MARK: 五页统一令牌（v2：网络 / 剪贴板 / 传送 / 额度 / Token / 系统共用）
+
+    /// 分区标题 === 卡片标题（统一 11pt 粗体）
+    ///
+    /// 此前网络 / 剪贴板 / 传送 / 系统用 10pt 半粗、额度 / Token 用 11pt 粗体，
+    /// 同屏切换时标题层级对不上；两档收敛到一档，只保留这一个取值。
+    static let sectionTitleFont = NSFont.systemFont(ofSize: 11, weight: .bold)
+    /// 列表行高（条目 / 进程 / 设备…）
+    ///
+    /// 原 32pt（剪贴板 / 传送）比 28pt（进程）高一档，同屏两套行距；统一到 28pt。
+    static let rowHeight: CGFloat = 28
+    /// 紧凑行高（进程行）
+    static let compactRowHeight: CGFloat = 26
+    /// 次速率数字（网络页上行）
+    static let sideValueFont = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
+
     // MARK: 页面尺寸
 
-    /// 页头行高（两页一致：主体名 + 弹簧 + 页级分段 + 刷新）
+    /// 页头行高（五页一致：主体名 + 弹簧 + 页级分段 / 时间戳 / 刷新）
     static let pageHeadHeight: CGFloat = 22
+    /// 页头 / 状态带左右内边距（此前 7 / 8 / 12 混用）
+    static let bandPaddingX: CGFloat = 7
+    /// 状态带圆角（此前 6 / 8 混用）
+    static let bandRadius: CGFloat = 6
+    /// 状态带组间距（键值对之间）
+    static let bandGroupSpacing: CGFloat = 8
+    /// 状态带组内间距（键与值之间）
+    static let bandInnerSpacing: CGFloat = 3
     /// Hero 区高度
     static let heroHeight: CGFloat = 46
     /// 状态带高度

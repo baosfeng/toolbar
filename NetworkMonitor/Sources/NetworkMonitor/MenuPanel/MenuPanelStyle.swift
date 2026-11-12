@@ -1,9 +1,14 @@
 import AppKit
 
-// MARK: - 面板设计令牌（拆出自 MenuPanelComponents.swift，原文件超单文件 15 KiB 上限）
+// MARK: - 面板设计令牌（五页统一入口）
 
-/// 菜单栏面板样式 — 颜色/字体/尺寸全部走系统语义 API（深浅色自适应）
+/// 菜单栏面板样式 — 颜色 / 字体 / 尺寸全部收敛到 `PaneCardStyle`，深浅色自适应
 ///
+/// 收敛理由：网络 / 剪贴板 / 传送此前用 10pt 半粗分区标题、12pt 正文、12pt 等宽数值、
+/// 32pt 行高、8pt 圆角与半透明卡片；额度 / Token 用 11pt 粗体标题、10.5pt 数值、9pt 实色卡片。
+/// 同一面板切页时两套公式，用户实测反馈「各个 tab 风格不搭」。现在：
+/// - 字号与卡片几何只在 `PaneCardStyle` 定义一次，本文件按语义角色转发；
+/// - 颜色（下 / 上行、强调、轨道）仍留在本文件，因为网络页的语义色不属于卡片语言。
 /// 尺寸以 4pt 为基准；数字一律 `monospacedDigit`，避免每秒刷新时宽度抖动。
 @MainActor
 enum MenuPanelStyle {
@@ -16,31 +21,31 @@ enum MenuPanelStyle {
     /// 内容可用宽度
     static var contentWidth: CGFloat { panelWidth - inset * 2 }
 
-    // MARK: 字体
+    // MARK: 字体（全部转发 PaneCardStyle，五页同一张字号表）
 
-    /// 分区标题
-    static let sectionFont = NSFont.systemFont(ofSize: 10, weight: .semibold)
-    /// 正文
-    static let bodyFont = NSFont.systemFont(ofSize: 12)
-    /// 数值（等宽数字）
-    static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-    /// 小号数值（进程行 / 图表数值）
-    static let smallValueFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular)
-    /// 主速率大数字
-    static let heroFont = NSFont.monospacedDigitSystemFont(ofSize: 26, weight: .semibold)
-    /// 主速率单位
-    static let heroUnitFont = NSFont.systemFont(ofSize: 11)
-    /// 次速率数字
-    static let sideValueFont = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .medium)
+    /// 分区标题 / 卡片标题（11pt 粗体）
+    static let sectionFont: NSFont = PaneCardStyle.sectionTitleFont
+    /// 正文 / 行名（10.5pt）
+    static let bodyFont: NSFont = PaneCardStyle.rowNameFont
+    /// 行数值（10.5pt 等宽）
+    static let valueFont: NSFont = PaneCardStyle.rowValueFont
+    /// 小号数值（图表坐标 / 表头补充说明，10pt 等宽）
+    static let smallValueFont: NSFont = PaneCardStyle.metaFont
+    /// 主数值大字号（24pt 等宽粗体，与额度 / Token 页 Hero 同档）
+    static let heroFont: NSFont = PaneCardStyle.heroFont
+    /// 主数值单位（11pt 半粗）
+    static let heroUnitFont: NSFont = PaneCardStyle.heroUnitFont
+    /// 次速率数字（网络页上行，14pt 等宽半粗）
+    static let sideValueFont: NSFont = PaneCardStyle.sideValueFont
 
-    // MARK: 尺寸
+    // MARK: 尺寸（转发 PaneCardStyle）
 
-    /// 普通行高
-    static let rowHeight: CGFloat = 32
-    /// 紧凑行高（进程行）
-    static let compactRowHeight: CGFloat = 28
-    /// 圆角
-    static let cornerRadius: CGFloat = 8
+    /// 普通行高（28pt，五页一致）
+    static let rowHeight: CGFloat = PaneCardStyle.rowHeight
+    /// 紧凑行高（进程 / 设备行，26pt）
+    static let compactRowHeight: CGFloat = PaneCardStyle.compactRowHeight
+    /// 卡片圆角（9pt，与额度 / Token / 系统卡片同档）
+    static let cornerRadius: CGFloat = PaneCardStyle.cardRadius
 
     // MARK: 颜色
 
@@ -60,7 +65,7 @@ enum MenuPanelStyle {
     /// 次要文字 — 替代 secondaryLabelColor：后者在小字号（10-12pt）+
     /// windowBackgroundColor 上实测只有 ~3.9:1，达不到 4.5:1，故用 88% labelColor
     static var secondaryText: NSColor { dynamicLabel(alpha: 0.88) }
-    /// 三级文字（9pt 图表坐标等）— 62% labelColor
+    /// 三级文字（9-10pt 图表坐标等）— 62% labelColor
     static var tertiaryText: NSColor { dynamicLabel(alpha: 0.62) }
 
     static var downColor: NSColor { .systemGreen }

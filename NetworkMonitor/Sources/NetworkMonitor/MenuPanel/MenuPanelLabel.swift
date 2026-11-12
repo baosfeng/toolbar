@@ -7,7 +7,8 @@ import AppKit
 enum MenuPanelLabel {
 
     /// 普通标签
-    static func text(_ content: String, font: NSFont, color: NSColor = .labelColor) -> NSTextField {
+    static func text(_ content: String, font: NSFont,
+                     color: NSColor = PaneCardStyle.primaryText) -> NSTextField {
         let label = NSTextField(labelWithString: content)
         label.font = font
         label.textColor = color
@@ -37,7 +38,11 @@ enum MenuPanelLabel {
     }
 
     /// SF Symbol 图标视图（模板色随语义色，禁止 emoji）
-    static func symbol(_ name: String, pointSize: CGFloat = 12, color: NSColor = .secondaryLabelColor) -> NSImageView? {
+    ///
+    /// 默认色取面板统一的次级文字色：`secondaryLabelColor` 在 10–12pt 字号下
+    /// 实测约 3.9:1，达不到 4.5:1，且与其它页的文字色不是同一个取值。
+    static func symbol(_ name: String, pointSize: CGFloat = 12,
+                       color: NSColor = PaneCardStyle.secondaryText) -> NSImageView? {
         guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
         let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
         let imageView = NSImageView()

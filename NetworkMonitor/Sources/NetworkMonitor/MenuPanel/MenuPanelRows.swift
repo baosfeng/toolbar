@@ -217,10 +217,9 @@ final class MenuPanelHeaderRow: MenuPanelRow {
     private let trailingLabel: NSTextField
 
     init(title: String, trailing: String = "", onClick: (() -> Void)? = nil) {
-        trailingLabel = MenuPanelLabel.text(trailing, font: MenuPanelStyle.smallValueFont,
-                                            color: onClick == nil ? .tertiaryLabelColor : .secondaryLabelColor)
-        trailingLabel.font = MenuPanelStyle.smallValueFont
-        super.init(height: onClick == nil ? 16 : 20, onClick: onClick)
+        trailingLabel = MenuPanelLabel.text(trailing, font: PaneCardStyle.metaFont,
+                                            color: onClick == nil ? PaneCardStyle.tertiaryText : PaneCardStyle.secondaryText)
+        super.init(height: onClick == nil ? PaneCardStyle.cardHeadHeight : 18, onClick: onClick)
         contentStack.addArrangedSubview(MenuPanelLabel.section(title))
         contentStack.addArrangedSubview(MenuPanelLabel.spacer())
         trailingLabel.setContentHuggingPriority(.required, for: .horizontal)
@@ -232,11 +231,17 @@ final class MenuPanelHeaderRow: MenuPanelRow {
     }
 }
 
-/// 轻量卡片容器 — 圆角填充块（今日流量等分组）
+/// 轻量卡片容器 — 五页统一的卡片面（今日流量 / 进程 / 图表 / 列表分组）
 ///
+/// 底色与圆角**只从 `PaneCardStyle` 取**：此前这里是「半透明灰 + 8pt 圆角」，
+/// 与额度 / Token / 系统页的「实色面 + 9pt 圆角」是两套公式，同面板切页时看得出两套质感。
 /// 用 `draw` 阶段解析语义色，保证深浅色切换后即时跟随；
 /// 若改用 layer.backgroundColor 会在创建瞬间固化 CGColor，切换外观后不刷新。
 final class MenuPanelCardView: NSView {
+
+    /// 卡内内容内边距 —— 与 `PaneCardBackgroundView` 共用同一组值
+    static let contentInsetX: CGFloat = PaneCardStyle.cardPaddingX
+    static let contentInsetY: CGFloat = PaneCardStyle.cardPaddingY
 
     init() {
         super.init(frame: .zero)
@@ -247,9 +252,9 @@ final class MenuPanelCardView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        MenuPanelStyle.subtleFill.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: MenuPanelStyle.cornerRadius,
-                     yRadius: MenuPanelStyle.cornerRadius).fill()
+        PaneCardStyle.cardFill.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: PaneCardStyle.cardRadius,
+                     yRadius: PaneCardStyle.cardRadius).fill()
         super.draw(dirtyRect)
     }
 }
@@ -314,3 +319,4 @@ class MenuPanelPaneView: NSView {
     /// 键盘可达的卡片（自上而下）— 默认无，系统页按需给
     var focusableCards: [any MenuPanelCardFocusable] { [] }
 }
+
