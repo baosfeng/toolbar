@@ -39,7 +39,10 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
 
     // MARK: - 工具条布局
 
-    /// 选中态才显示工具条：默认贴选区下方居中，放不下就翻到上方
+    /// 选中态才显示工具条：位置由配置决定（自动 / 恒下方 / 恒上方）
+    ///
+    /// 视图高度包含上方气泡区（悬停档给气泡留 28pt），因此摆放时按「可视条」
+    /// 的上下边界计算，气泡区自动落在可视条之外、不压选区内容。
     func layoutToolBar() {
         guard let bar = toolbarView else { return }
         guard toolbarVisible, let selection = state.selection else {
@@ -47,23 +50,34 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
             return
         }
         bar.isHidden = false
-        let width = SnipToolBarView.preferredWidth
+        let size = SnipToolBarView.frameSize(for: bar.configuration)
+        let width = size.width
+        let outerHeight = size.height
+        let visibleHeight = bar.barHeight
+        let bubbleSpace = outerHeight - visibleHeight
         var originX = selection.midX - width / 2
         originX = min(max(originX, 8), max(bounds.width - width - 8, 8))
-        var originY = selection.maxY + 8
-        if originY + SnipToolBarView.height > bounds.height - 8 {
-            originY = selection.minY - SnipToolBarView.height - 8
+
+        // 可视条（不含气泡区）的顶部：先按位置档取候选，再统一夹进屏内
+        let below = selection.maxY + 8
+        let above = selection.minY - visibleHeight - 8
+        var visibleTop: CGFloat
+        switch bar.configuration.placement {
+        case .below:
+            visibleTop = below
+        case .above:
+            visibleTop = above
+        case .auto:
+            // 下方放不下就翻到上方
+            visibleTop = below + visibleHeight > bounds.height - 8 ? above : below
         }
-        originY = min(max(originY, 8), max(bounds.height - SnipToolBarView.height - 8, 8))
-        let frame = CGRect(x: originX, y: originY, width: width, height: SnipToolBarView.height)
+        visibleTop = min(max(visibleTop, bubbleSpace + 4),
+                         max(bounds.height - visibleHeight - 8, bubbleSpace + 4))
+        let frame = CGRect(x: originX, y: visibleTop - bubbleSpace, width: width, height: outerHeight)
         if bar.frame != frame {
             bar.frame = frame
         }
     }
-
-    // MARK: - 绘制
-
-    /// 在选区裁剪区内绘制已完成与正在绘制的标注
     func drawAnnotations(in context: CGContext, clip: CGRect) {
         guard !annotationStack.annotations.isEmpty || draftAnnotation != nil else { return }
         context.saveGState()

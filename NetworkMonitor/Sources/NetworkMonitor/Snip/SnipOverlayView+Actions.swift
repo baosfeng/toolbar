@@ -250,14 +250,19 @@ extension SnipOverlayView {
     }
 
     #if DEBUG
+    /// 仅 DEBUG：程序化摆出一级工具条的悬停态（气泡取证）
+    func debugHoverToolBar(_ item: SnipBarItem) {
+        layoutToolBar()
+        toolbarView?.debugHover(item)
+    }
     /// 仅 DEBUG：程序化弹出二级面板（工具 / 颜色 / 线宽），供实机取证核对面板定位
     func debugOpenPanel(_ content: SnipPanelContent) {
         guard let bar = toolbarView else { return }
         let anchor: CGRect
         switch content {
-        case .tools: anchor = bar.debugMoreRect
-        case .colors: anchor = bar.debugColorRect
-        case .widths, .styles: anchor = bar.debugWidthRect
+        case .tools: anchor = bar.debugRect(.more)
+        case .colors: anchor = bar.debugRect(.color)
+        case .widths, .styles: anchor = bar.debugRect(.width)
         }
         toolBarDidRequestPanel(content, anchor: anchor)
     }

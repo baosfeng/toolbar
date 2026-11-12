@@ -32,6 +32,11 @@ enum SnipOverlaySnapshot {
 
     private enum Phase { case idle, selected }
 
+    /// 取证用的工具条配置：与默认配置一致（悬停提示档），保证图面对应真实默认外观
+    private static func toolbarConfiguration() -> SnipToolBarConfiguration {
+        SnipToolBarConfigurationResolver.load(storage: AppContext.shared.storage)
+    }
+
     private static func renderToFile(at url: URL, phase: Phase) {
         guard let backdrop = makeBackdropImage() else { return }
         let view = SnipOverlayView(frame: NSRect(origin: .zero, size: canvasSize),
@@ -39,12 +44,15 @@ enum SnipOverlaySnapshot {
                                    windowInfos: [],
                                    displayOrigin: .zero,
                                    lastSelection: nil,
-                                   history: [])
+                                   history: [],
+                                   toolbarConfiguration: toolbarConfiguration())
         switch phase {
         case .idle:
             view.debugHover(atLocalPoint: CGPoint(x: 480, y: 300))
         case .selected:
             view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            // 摆出悬停气泡：默认档（悬停提示）的实际观感就靠这一张取证
+            view.debugHoverToolBar(.tool(.arrow))
             view.debugAddAnnotation(SnipAnnotation(kind: .rectangle,
                                                    start: CGPoint(x: 265, y: 195),
                                                    end: CGPoint(x: 455, y: 300),

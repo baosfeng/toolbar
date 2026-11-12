@@ -203,6 +203,9 @@ runSnipHotKeyPreferencesTests()
 // MARK: - 截图工具条布局（左右内边距恒等 / 组间带）
 runSnipToolBarLayoutTests()
 
+// MARK: - 截图工具条配置（文字提示档 / 组顺序与显隐 / 常驻工具 / 偏好往返）
+runSnipToolBarConfigurationTests()
+
 // MARK: - 截图覆盖层键位解析（⌘S / ⌘A 优先级）
 runSnipKeyCommandTests()
 

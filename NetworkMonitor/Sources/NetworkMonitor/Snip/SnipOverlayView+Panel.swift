@@ -16,13 +16,17 @@ extension SnipOverlayView {
         // （否则首次弹出时工具条 frame 还是零尺寸，面板会飘到屏幕左上角）
         layoutToolBar()
         closeToolPanel()
+        // 面板的文字提示档与一级工具条同源：设置页选了「常驻标签」面板也跟着带标签
+        let labelMode = toolbarView?.configuration.labelMode ?? .hover
         let panel = SnipToolPanelView(content: content,
-                                      selectedIndex: selectedIndex(in: content))
+                                      selectedIndex: selectedIndex(in: content),
+                                      labelMode: labelMode)
         panel.onPick = { [weak self] index in
             self?.pickPanelItem(in: content, index: index)
         }
-        let width = content.size.width
-        let height = content.size.height
+        let size = content.size(labelMode: labelMode)
+        let width = size.width
+        let height = size.height
         // anchor 是工具条自身的本地坐标，面板是覆盖层的子视图：先换算到覆盖层坐标再居中
         let barOriginX = toolbarView?.frame.minX ?? 0
         var originX = barOriginX + anchor.midX - width / 2
@@ -36,6 +40,8 @@ extension SnipOverlayView {
         panel.frame = CGRect(x: originX, y: originY, width: width, height: height)
         addSubview(panel)
         toolPanel = panel
+        // 面板展开期间不画工具条气泡：气泡位置正好被面板盖住
+        toolbarView?.isPanelOpen = true
         needsDisplay = true
     }
 
@@ -113,6 +119,8 @@ extension SnipOverlayView {
     func closeToolPanel() {
         toolPanel?.removeFromSuperview()
         toolPanel = nil
+        // 面板收掉后恢复气泡：用户还停在按钮上时仍能看到名称
+        toolbarView?.isPanelOpen = false
         needsDisplay = true
     }
 }

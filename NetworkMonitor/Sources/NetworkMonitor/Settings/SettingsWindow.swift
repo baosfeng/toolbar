@@ -114,6 +114,9 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     }
 #endif
 
+    /// 快照自证（仅 DEBUG）：当前页实例（探针要按页类型取控件状态）
+    var currentPaneForSnapshot: SettingsPaneView? { currentPane }
+
     /// 快照自证（仅 DEBUG）：切到指定分类并返回内容视图，供离屏渲染
     func prepareForSnapshot(_ section: SettingsSection) -> NSView? {
         // 上一次渲染把根视图借进了离屏容器并移除，这里先挂回去再切页

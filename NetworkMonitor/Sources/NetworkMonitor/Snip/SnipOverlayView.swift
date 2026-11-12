@@ -106,7 +106,8 @@ final class SnipOverlayView: NSView {
          displayOrigin: CGPoint,
          lastSelection: CGRect?,
          history: [CGRect],
-         initialStyle: SnipAnnotationStyle = SnipAnnotationStyle()) {
+         initialStyle: SnipAnnotationStyle = SnipAnnotationStyle(),
+         toolbarConfiguration: SnipToolBarConfiguration = .standard) {
         self.screenshot = screenshot
         self.windowInfos = windowInfos
         self.displayOrigin = displayOrigin
@@ -118,7 +119,8 @@ final class SnipOverlayView: NSView {
         // 初始样式来自设置页偏好（默认颜色 / 线宽 / 线型）：
         // 早期这三个偏好全仓没有消费方，用户改「默认颜色」对新建截图完全不生效。
         currentStyle = initialStyle
-        let bar = SnipToolBarView()
+        // 工具条按设置页的配置上屏：文字提示档、组顺序、组显隐、常驻工具都在配置里
+        let bar = SnipToolBarView(configuration: toolbarConfiguration)
         bar.delegate = self
         bar.updateStyle(initialStyle)
         bar.isHidden = true

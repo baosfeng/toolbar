@@ -10,7 +10,9 @@ import NetworkMonitorCore
 enum SnipBarDrawing {
 
     /// 画一个工具按钮（SF Symbol，白色）
-    static func drawTool(_ tool: SnipTool, in rect: CGRect, alpha: CGFloat) {
+    ///
+    /// inset 默认 6pt（30pt 按钮里图标 18pt）；常驻标签档按钮更大，传 1pt 让图标保持 20pt 左右。
+    static func drawTool(_ tool: SnipTool, in rect: CGRect, alpha: CGFloat, inset: CGFloat = 6) {
         let configuration = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
             .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
         guard let image = NSImage(systemSymbolName: tool.symbolName,
@@ -18,7 +20,20 @@ enum SnipBarDrawing {
             .withSymbolConfiguration(configuration) else {
             return
         }
-        image.draw(in: rect.insetBy(dx: 6, dy: 6), from: .zero, operation: .sourceOver, fraction: alpha)
+        image.draw(in: rect.insetBy(dx: inset, dy: inset), from: .zero, operation: .sourceOver, fraction: alpha)
+    }
+
+    /// 画一个 SF Symbol（白色，按 alpha 淡化）—— 「更多」等非工具图标共用
+    static func drawSymbol(_ name: String, in rect: CGRect, alpha: CGFloat,
+                           description: String, inset: CGFloat = 9) {
+        let configuration = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [.white]))
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: description)?
+            .withSymbolConfiguration(configuration) else {
+            return
+        }
+        image.draw(in: rect.insetBy(dx: inset, dy: inset), from: .zero,
+                   operation: .sourceOver, fraction: alpha)
     }
 
     /// 画一个颜色圆点（选中时加白色描边环）

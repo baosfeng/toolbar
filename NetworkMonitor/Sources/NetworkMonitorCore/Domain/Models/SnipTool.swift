@@ -27,10 +27,11 @@ public enum SnipTool: String, Equatable, Sendable, CaseIterable {
         }
     }
 
-    /// 一级工具条上常驻的高频工具
+    /// 一级工具条上常驻的高频工具（默认值；设置页可改成任意子集）
     ///
     /// 工具共 10 个，全摆在一级工具条上会挤到 800pt 宽（比半个屏幕还宽），
     /// 因此一级只留最常用的四个，其余收进「更多」二级面板。
+    /// 这里给出的是默认顺序：工具条上从左到右按本数组排列；设置页里新选的工具追加到最右。
     public static let primary: [SnipTool] = [.rectangle, .arrow, .text, .mosaic]
 
     /// 收进二级面板的工具（保持 allCases 里的相对顺序）

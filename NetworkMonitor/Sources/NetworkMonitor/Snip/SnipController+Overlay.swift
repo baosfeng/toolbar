@@ -17,6 +17,8 @@ extension SnipController {
             colorHex: storage.string(forKey: SnipPreferenceKey.annotationColor),
             lineWidth: (storage.object(forKey: SnipPreferenceKey.annotationLineWidth) as? Double).map { CGFloat($0) },
             dashed: storage.bool(forKey: SnipPreferenceKey.annotationDashed))
+        // 工具条配置来自设置页：文字提示档、组顺序、组显隐、常驻工具、动作按钮显隐
+        let toolbarConfiguration = SnipToolBarConfigurationResolver.load(storage: storage)
         overlays = result.map { captured in
             SnipOverlayWindow(display: captured.display,
                               screenshot: captured.image,
@@ -25,6 +27,7 @@ extension SnipController {
                               history: history,
                               primaryHeight: primaryHeight,
                               initialStyle: initialStyle,
+                              toolbarConfiguration: toolbarConfiguration,
                               delegate: self)
         }
         // 样式回写：覆盖层里调过的颜色 / 线宽 / 实虚线要落进偏好，下次截图还是这支笔

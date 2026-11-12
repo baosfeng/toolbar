@@ -32,6 +32,11 @@ enum SettingsSnapshot {
         let size = SettingsStyle.windowSize
         for section in SettingsSection.allCases {
             guard let view = settings.prepareForSnapshot(section) else { continue }
+            // 快照时把工具条卡片的控件勾选态与偏好真值打出来：核对两者一致
+            if section == .capture, let capture = settings.currentPaneForSnapshot as? SettingsCapturePane {
+                // 探针按页实例取控件状态：勾选态与偏好真值必须一致
+                capture.debugLogToolBarControlStates("snapshot")
+            }
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let suffix = appearance == .aqua ? "light" : "dark"
                 let url = directory.appendingPathComponent(

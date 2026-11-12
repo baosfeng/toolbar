@@ -30,6 +30,17 @@ final class SettingsCapturePane: SettingsPaneView {
     private var colorButtons: [NSButton] = []
     private var hotKeyRecorders: [SnipHotKeyAction: HotKeyRecorderView] = [:]
 
+    // MARK: 工具条自定义控件（组装与刷新在 SettingsCapturePane+ToolBar.swift 里）
+    /// 放宽为 internal：工具条卡片在扩展文件里组装
+    var toolBarLabelControl: NSSegmentedControl?
+    var toolBarLabelRow: SettingsRowView?
+    var toolBarPlacementControl: NSPopUpButton?
+    var toolBarPlacementRow: SettingsRowView?
+    var toolBarGroupToggles: [SnipToolBarGroup: NSSwitch] = [:]
+    var toolBarOrderRows: [SnipToolBarGroup: SettingsRowView] = [:]
+    var toolBarToolChips: [SnipTool: NSButton] = [:]
+    var toolBarActionToggles: [SnipBarAction: NSSwitch] = [:]
+
     /// 标注调色板 — hex 与 `SnipAnnotationColor` 一一对应（偏好里存 hex）
     private static let palette: [(hex: String, color: SnipAnnotationColor, name: String)] = [
         ("#EB3330", .red, "红色"),
@@ -58,6 +69,7 @@ final class SettingsCapturePane: SettingsPaneView {
 
     override func buildContent() {
         buildAnnotationSection()
+        buildToolBarCard()
         buildPinSection()
         buildSaveSection()
         buildHotKeySection()
@@ -197,6 +209,7 @@ final class SettingsCapturePane: SettingsPaneView {
         widthControl?.selectedSegment = lineWidth <= 2 ? 0 : (lineWidth >= 8 ? 2 : 1)
 
         refreshQuickSaveDirectory()
+        refreshToolBar()
         updateColorSelection()
         if let text = hotKeySummary?() { hotKeyRow?.update(subtitle: text) }
     }
