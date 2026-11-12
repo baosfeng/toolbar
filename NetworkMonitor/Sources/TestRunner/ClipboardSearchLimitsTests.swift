@@ -110,18 +110,18 @@ func runClipboardLimitsTests() {
         guard let oldest = db.fetchAllClipboardItems(kind: nil).last else { exit(1) }
         assertEqual(db.setClipboardItemPinned(id: oldest.id, isPinned: true), true, "置顶最早一条")
 
-        assertEqual(db.pruneClipboardItems(maxItems: 5, retentionDays: 30), 6, "超限清理删除 6 条非收藏")
+        assertEqual(db.pruneClipboardItems(maxItems: 5, retentionDays: 30).count, 6, "超限清理删除 6 条非收藏")
         assertEqual(db.clipboardItemCount(), 6, "剩余 5 条非收藏 + 1 条收藏")
         assertEqual(db.fetchClipboardItem(id: oldest.id) != nil, true, "收藏项豁免超限清理")
 
         // 保留天数：40 天前的非收藏项被清理
         _ = db.saveClipboardItem(ClipboardDraft(kind: .text, contentHash: "too-old", text: "old",
                                                 createdAt: base.addingTimeInterval(-40 * 86_400)))
-        assertEqual(db.pruneClipboardItems(maxItems: 500, retentionDays: 30), 1, "过期条目被按保留天数清理")
+        assertEqual(db.pruneClipboardItems(maxItems: 500, retentionDays: 30).count, 1, "过期条目被按保留天数清理")
         assertEqual(db.clipboardItemCount(), 6, "按天数清理后条数不变（收藏仍在）")
 
         // 非法入参：负数归一化为默认值，不崩溃
-        assertEqual(db.pruneClipboardItems(maxItems: -1, retentionDays: -1), 0, "负 maxItems / 负天数归一化后无删除")
+        assertEqual(db.pruneClipboardItems(maxItems: -1, retentionDays: -1).isEmpty, true, "负 maxItems / 负天数归一化后无删除")
         assertEqual(db.clipboardItemCount(), 6, "非法入参清理后条数不变")
 
         print("✅ Clipboard 超限清理（收藏豁免 / 负数归一化）works")

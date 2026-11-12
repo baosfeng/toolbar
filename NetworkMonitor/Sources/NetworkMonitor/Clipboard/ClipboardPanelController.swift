@@ -274,13 +274,13 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
 
     private func deleteSelected() {
         guard let item = selectedItem else { return }
-        repository.deleteClipboardItem(id: item.id)
+        ClipboardImageGC.delete(repository: repository, id: item.id, logger: logger)
         AppEvents.postClipboardChanged()
         reloadItems()
     }
 
     private func clearAll() {
-        let removed = repository.clearClipboardItems(keepingPinned: true)
+        let removed = ClipboardImageGC.clear(repository: repository, keepingPinned: true, logger: logger)
         logger.info("剪贴板历史已清空，删除 \(removed) 条（收藏保留）")
         AppEvents.postClipboardChanged()
         reloadItems()

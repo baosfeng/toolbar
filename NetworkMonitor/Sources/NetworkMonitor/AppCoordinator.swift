@@ -163,6 +163,8 @@ public final class AppCoordinator {
         startTrafficPersistence()
 
         // 9. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
+
+        ClipboardImageGC.sweepOrphansAfterLaunch(repository: databaseManager, logger: logger)
         logger.info("AppCoordinator 启动完成")
         return manager
     }
@@ -246,10 +248,8 @@ public final class AppCoordinator {
         registerClipboardHotKey(preferences.panelToggleHotKey, presentingAlert: true)
     }
 
-    /// 采集回调：落库 + 广播 + 超限清理
-    ///
-    /// 死锁红线：仓储方法全部是串行队列 sync，必须在主线程调用；
-    /// 禁止在 db.query(sql:handler:) 回调内或数据库串行队列上下文调用，否则立即死锁。
+    /// 采集回调：落库 + 广播 + 超限清理 + 图片回收
+    /// 死锁红线：仓储方法在串行队列 sync，须在主线程调用；禁止在 db.query(sql:handler:) 回调内调用。
     private func persistClipboardDraft(_ draft: ClipboardDraft) {
         guard let repository = database else { return }
         guard repository.saveClipboardItem(draft) != nil else {
@@ -257,9 +257,9 @@ public final class AppCoordinator {
             return
         }
         AppEvents.postClipboardChanged()
-        // 超限清理：条数超过上限或早于保留天数的非收藏项会被删除
-        _ = repository.pruneClipboardItems(maxItems: clipboardPreferences.maxItems,
-                                          retentionDays: clipboardPreferences.retentionDays)
+        // 超限清理后回收被删条目的落盘图片（文本条目零 IO，见 ClipboardImageGC）
+        ClipboardImageGC.prune(repository: repository, maxItems: clipboardPreferences.maxItems,
+                               retentionDays: clipboardPreferences.retentionDays, logger: logger)
     }
 
     /// 采集状态变化：权限被拒时明确告警（不静默）
