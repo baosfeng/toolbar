@@ -124,6 +124,12 @@ final class ClipboardCardFlowView: NSView {
         scrollToSelection()
     }
 
+    /// 某张卡片当前对应 items 中的全局下标（视图池复用后卡片与下标一一对应）
+    func indexOf(_ card: ClipboardCardView) -> Int? {
+        guard let slot = cardViews.firstIndex(where: { $0 === card }), slot < visibleCount() else { return nil }
+        return windowStart + slot
+    }
+
     // MARK: 布局
 
     override func layout() {

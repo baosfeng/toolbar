@@ -9,13 +9,13 @@ import NetworkMonitorCore
 final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanelViewDelegate {
 
     private let panel: ClipboardPanel
-    private let content: ClipboardPanelView
-    private let repository: any ClipboardRepository
+    let content: ClipboardPanelView
+    let repository: any ClipboardRepository
     private let captureService: any ClipboardCaptureService
     private let paster: ClipboardPaster
     private let stack: PasteStackController
     private let preferences: ClipboardPreferences
-    /// 放宽为 internal：贴图扩展文件要写日志
+    /// 放宽 internal：贴图扩展文件要写日志
     let logger: LoggingService
     /// ⌘, 打开剪贴板设置（组合根注入，复用既有设置窗打开路径）
     private let onRequestSettings: (() -> Void)?
@@ -25,9 +25,11 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     private var items: [ClipboardItem] = []
     /// 放宽为 internal：贴图扩展文件要按索引取条目
     var filteredItems: [ClipboardItem] = []
-    private var selectedIndex = -1
+    var selectedIndex = -1
     private var pendingHint: String?
     private var pendingReload = false
+    var singleDeleteConfirm = ClipboardDeleteConfirm()
+    var clearAllConfirm = ClipboardDeleteConfirm()
     nonisolated(unsafe) private var localKeyMonitor: Any?
     nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
 
@@ -127,6 +129,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     /// 收起面板；animated=false 用于粘贴路径 —— 立即 orderOut 让出 key，合成的 ⌘V 才落得到目标 App
     func hide(animated: Bool) {
         guard panel.isVisible else { return }
+        clearDeleteConfirmHint()
         guard animated else { panel.orderOut(nil); return }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.18
@@ -147,7 +150,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
                                                          position: position, mouse: mouse), display: false)
     }
 
-    private func reloadItems(preferredID: UUID? = nil) {
+    func reloadItems(preferredID: UUID? = nil) {
         items = repository.fetchAllClipboardItems(kind: nil)
         // 面板不可见时只标脏：收起状态下每次复制都渲染，等于白建上百个卡片视图
         guard panel.isVisible else { pendingReload = true; return }
@@ -167,9 +170,10 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
             selectedIndex = min(max(selectedIndex, 0), filteredItems.count - 1)
         }
         content.render(items: filteredItems, selectedIndex: selectedIndex)
+        content.updateCounts(total: filteredItems.count, pinned: filteredItems.filter { $0.isPinned }.count)
     }
 
-    private var selectedItem: ClipboardItem? {
+    var selectedItem: ClipboardItem? {
         selectedIndex >= 0 && selectedIndex < filteredItems.count ? filteredItems[selectedIndex] : nil
     }
 
@@ -178,7 +182,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         content.updatePermission(accessibilityGranted: stack.accessibilityGranted)
     }
 
-    /// 面板级按键拦截（先于 responder chain）：搜索框非空时 ⌫ 交还字段编辑器，Tab 只切过滤、不进焦点环
+    /// 面板级按键拦截（先于 responder chain）：搜索框非空时 ⌫ 交还字段编辑器
     private func handleKeyDown(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let isCommand = flags.contains(.command), isShift = flags.contains(.shift)
@@ -189,7 +193,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
             hide(animated: true)
         case kVK_Delete, kVK_ForwardDelete:
             if hasQuery { return false }
-            if isCommand, isShift { clearAll() } else if !isCommand { deleteSelected() } else { return false }
+            if isCommand, isShift { requestClearAll() } else if !isCommand { requestDeleteSelected() } else { return false }
         case kVK_Tab:
             cycleFilter(reverse: isShift)   // ⇧Tab 反向循环过滤
         case kVK_ANSI_Comma:
@@ -224,6 +228,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         if next >= filteredItems.count { next = 0 }
         selectedIndex = next
         content.updateSelection(next)
+        clearDeleteConfirmHint()
     }
 
     /// 过滤循环：⇧Tab 反向
@@ -234,14 +239,14 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         applyFilter(preferredID: selectedItem?.id)
     }
 
-    private func pasteSelected(asPlainText: Bool) {
+    func pasteSelected(asPlainText: Bool) {
         guard let item = selectedItem else { return }
         // 先收起面板让出 key，再走「写剪贴板 → 延迟 80ms → 合成 ⌘V」（见 ClipboardPaster）
         if paster.hasTargetApplication { hide(animated: false) }
         paster.paste(item, asPlainText: asPlainText) { [weak self] outcome in self?.handleOutcome(outcome) }
     }
 
-    private func copySelected() {
+    func copySelected() {
         guard let item = selectedItem else { return }
         handleOutcome(paster.copyOnly(item))
     }
@@ -265,27 +270,14 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         if panel.isVisible { content.showHint(message) } else { pendingHint = message }
     }
 
-    private func togglePin() {
+    func togglePin() {
         guard let item = selectedItem else { return }
         repository.setClipboardItemPinned(id: item.id, isPinned: !item.isPinned)
         AppEvents.postClipboardChanged()
         reloadItems(preferredID: item.id)
     }
 
-    private func deleteSelected() {
-        guard let item = selectedItem else { return }
-        ClipboardImageGC.delete(repository: repository, id: item.id, logger: logger)
-        AppEvents.postClipboardChanged()
-        reloadItems()
-    }
-
-    private func clearAll() {
-        let removed = ClipboardImageGC.clear(repository: repository, keepingPinned: true, logger: logger)
-        logger.info("剪贴板历史已清空，删除 \(removed) 条（收藏保留）")
-        AppEvents.postClipboardChanged()
-        reloadItems()
-        content.showHint("已清空历史（收藏项保留）")
-    }
+    // 删除 / 清空的动作体见 ClipboardPanelController+Delete.swift（含二次确认状态机）
 
     private func pushSelectedToStack() {
         guard let item = selectedItem else { return }
@@ -312,6 +304,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         guard index >= 0, index < filteredItems.count else { return }
         selectedIndex = index
         content.updateSelection(index)
+        clearDeleteConfirmHint()
     }
 
 

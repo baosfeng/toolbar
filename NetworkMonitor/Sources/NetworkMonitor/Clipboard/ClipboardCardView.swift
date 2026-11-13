@@ -94,16 +94,40 @@ final class ClipboardCardView: NSView {
         if event.clickCount >= 2 { onDoubleClick?(self) }
     }
 
+    /// 右键菜单 5 项（顺序固定）：复制 / 粘贴为纯文本 / 收藏 / 贴到屏幕 / 删除…
+    ///
+    /// 分发口径：除「贴到屏幕」沿用既有 onPin 贴图链路外，其余四项统一交给面板内容视图的
+    /// 菜单指令通道（响应链 → 控制器既有动作），保证不存在第二套复制 / 粘贴实现。
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
-        let pinItem = NSMenuItem(title: "贴到屏幕", action: #selector(menuPinToScreen), keyEquivalent: "")
-        pinItem.target = self
-        menu.addItem(pinItem)
+        menu.addItem(menuEntry(.copy, title: "复制"))
+        menu.addItem(menuEntry(.pastePlainText, title: "粘贴为纯文本"))
+        menu.addItem(menuEntry(.togglePin, title: isPinned ? "取消收藏" : "收藏", state: isPinned ? .on : .off))
+        let screenEntry = NSMenuItem(title: "贴到屏幕", action: #selector(menuPinToScreen), keyEquivalent: "")
+        screenEntry.target = self
+        menu.addItem(screenEntry)
+        menu.addItem(menuEntry(.delete, title: "删除…"))
         return menu
     }
 
+    /// 当前条目是否已收藏（菜单标题与勾选态据此决定）
+    private var isPinned: Bool { item?.isPinned ?? false }
+
     @objc private func menuPinToScreen() {
         onPin?(self)
+    }
+
+    /// 菜单项构造：target 置空 = 沿响应链找到面板内容视图，由其转交控制器既有动作
+    private func menuEntry(_ command: ClipboardCardMenuCommand, title: String,
+                           state: NSControl.StateValue = .off) -> NSMenuItem {
+        let entry = NSMenuItem(title: title,
+                               action: #selector(ClipboardPanelView.handleCardMenuCommand(_:)),
+                               keyEquivalent: "")
+        entry.target = nil
+        entry.tag = command.rawValue
+        entry.state = state
+        entry.representedObject = self
+        return entry
     }
 
     // MARK: 绘制
@@ -285,4 +309,19 @@ final class ClipboardCardView: NSView {
         NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
         badge.draw(at: NSPoint(x: rect.minX + 4, y: rect.minY + 1), withAttributes: attributes)
     }
+}
+// MARK: - 右键菜单命令
+
+/// 卡片右键菜单命令 — tag 值与面板内容视图的分发判据一一对应，顺序即菜单顺序
+enum ClipboardCardMenuCommand: Int, CaseIterable {
+    /// 复制到系统剪贴板（不粘贴）
+    case copy = 1
+    /// 以纯文本形式粘贴（去掉富文本样式）
+    case pastePlainText = 2
+    /// 收藏 / 取消收藏
+    case togglePin = 3
+    /// 贴到屏幕（沿用既有 onPin 贴图链路，不在此通道分发）
+    case pinToScreen = 4
+    /// 删除该条（先进入二次确认）
+    case delete = 5
 }
