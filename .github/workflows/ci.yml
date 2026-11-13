@@ -25,14 +25,16 @@ jobs:
           # 两个架构都跑满测试：x86_64 分支只有在 Intel runner 上才真的被编译过，
           # 只跑 arm64 时「x86 会不会编译失败」要到发版当天才知道
           - arch: arm64
-            runner: macos-15
+            runner: macos-26
           - arch: x86_64
-            runner: macos-15-intel
+            runner: macos-26-intel
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 工具链版本要在日志里显式可见：swift-tools-version 是 6.3，
+      # runner 默认 Xcode 低于 26 时会在 swift build 第一步直接报「installed version is 6.1.0」
       - name: Show toolchain
         run: |
           swift --version

@@ -22,12 +22,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # arm64：Apple Silicon 官方 runner
+          # arm64 / x86_64 都跑 macOS 26 镜像：只有它的默认 Xcode 是 26.6（Swift 6.3+），
+          # 才满足 swift-tools-version: 6.3；macos-15 系默认仍是 Xcode 16.4（Swift 6.1），
+          # 会在 swift build 第一步就报「using Swift tools version 6.3.0 but the installed version is 6.1.0」
           - arch: arm64
-            runner: macos-15
-          # x86_64：Intel runner（macos-15-intel 是当前唯一的 x64 标签）
+            runner: macos-26
           - arch: x86_64
-            runner: macos-15-intel
+            runner: macos-26-intel
     env:
       # 配置了签名证书则走证书签名，否则由脚本回退 ad-hoc
       HAS_SIGNING_CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
