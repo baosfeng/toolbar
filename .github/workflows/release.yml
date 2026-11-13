@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "要发布或重发的 tag（如 v1.3.1）"
+        description: "要发布或重发的 tag（如 v1.20.0）"
         required: true
 
 permissions:
@@ -15,9 +15,19 @@ permissions:
 
 jobs:
   package:
-    name: Package .app
-    runs-on: macos-latest
-    timeout-minutes: 30
+    name: Package ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # arm64：Apple Silicon 官方 runner
+          - arch: arm64
+            runner: macos-15
+          # x86_64：Intel runner（macos-15-intel 是当前唯一的 x64 标签）
+          - arch: x86_64
+            runner: macos-15-intel
     env:
       # 配置了签名证书则走证书签名，否则由脚本回退 ad-hoc
       HAS_SIGNING_CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
@@ -32,6 +42,7 @@ jobs:
         run: |
           swift --version
           xcodebuild -version || true
+          uname -m
 
       - name: Import signing certificate
         if: env.HAS_SIGNING_CERT == 'true'
@@ -51,8 +62,8 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-      # tag 与 App 内的 CFBundleShortVersionString 必须一致：发 v1.13.0 却忘改 plist 时
-      # Release 标题写 1.13.0、用户下载到的「关于」却显示 1.12.1，属于静默错版
+      # tag 与 App 内的 CFBundleShortVersionString 必须一致：发 v1.20.0 却忘改 plist 时
+      # Release 标题写 1.20.0、用户下载到的「关于」却显示旧版本，属于静默错版
       # （版本号唯一真源是 build-app.sh 里的内联 Info.plist，仓库中没有独立模板）
       - name: Version matches tag
         working-directory: NetworkMonitor
@@ -74,21 +85,57 @@ jobs:
         env:
           BUILD_SYSTEM: default
           SKIP_INSTALL: "1"
+          ARCH: ${{ matrix.arch }}
           SIGN_IDENTITY: ${{ secrets.SIGNING_IDENTITY || 'NetworkMonitor Local Signing' }}
         run: ./Scripts/build-app.sh release
 
+      # 产物架构自证：脚本按 ARCH 交叉构建时若参数没生效，这里会红而不是静默发出错包
+      - name: Verify binary architecture
+        working-directory: NetworkMonitor
+        run: |
+          BIN="dist/NetworkMonitor-${{ matrix.arch }}.app/Contents/MacOS/NetworkMonitor"
+          lipo -info "$BIN"
+          lipo -info "$BIN" | grep -q "${{ matrix.arch }}"
+
       - name: Show signature
-        working-directory: NetworkMonitor/dist
-        run: codesign -dv --verbose=2 NetworkMonitor.app 2>&1 | head -8
+        working-directory: NetworkMonitor
+        run: codesign -dv --verbose=2 "dist/NetworkMonitor-${{ matrix.arch }}.app" 2>&1 | head -8
 
       - name: Zip app bundle
-        working-directory: NetworkMonitor/dist
-        run: ditto -c -k --keepParent NetworkMonitor.app NetworkMonitor.app.zip
+        working-directory: NetworkMonitor
+        run: |
+          ditto -c -k --keepParent "dist/NetworkMonitor-${{ matrix.arch }}.app" \
+            "dist/NetworkMonitor-${{ matrix.arch }}.app.zip"
 
-      - name: Upload release assets
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetworkMonitor-${{ matrix.arch }}
+          path: NetworkMonitor/dist/NetworkMonitor-${{ matrix.arch }}.app.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # 两个架构各自上传 artifact，这里一次性取回再建 release：
+      # 让矩阵里的 job 各自 softprops/action-gh-release 会并发建同一个 release，撞 422
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: NetworkMonitor-*
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -lh artifacts
+
+      - name: Create or update release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: NetworkMonitor ${{ inputs.tag || github.ref_name }}
-          files: NetworkMonitor/dist/NetworkMonitor.app.zip
+          files: artifacts/*.zip
           generate_release_notes: true

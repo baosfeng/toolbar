@@ -15,9 +15,19 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: Build & Test
-    runs-on: macos-latest
+    name: Build & Test (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 两个架构都跑满测试：x86_64 分支只有在 Intel runner 上才真的被编译过，
+          # 只跑 arm64 时「x86 会不会编译失败」要到发版当天才知道
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
 
     steps:
       - name: Checkout
@@ -27,20 +37,21 @@ jobs:
         run: |
           swift --version
           xcodebuild -version || true
+          uname -m
 
       - name: Cache SwiftPM build
         uses: actions/cache@v4
         with:
           path: NetworkMonitor/.build
-          key: ${{ runner.os }}-${{ hashFiles('NetworkMonitor/Package.swift', 'NetworkMonitor/.swiftpm/**') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('NetworkMonitor/Package.swift', 'NetworkMonitor/.swiftpm/**') }}
           restore-keys: |
-            ${{ runner.os }}-
+            ${{ runner.os }}-${{ matrix.arch }}-
 
       - name: File size gate
         run: bash NetworkMonitor/Scripts/check-file-size.sh
 
-      # 与发版脚本走同一条后端：release.yml 用 build-app.sh（默认 --build-system native），
-      # 本机文档与项目 skill 也强制 native。CI 原先只跑默认后端，等于两条路径各自
+      # 与发版脚本走同一条后端：release.yml 用 build-app.sh（完整 Xcode 环境用默认后端），
+      # 本机文档与项目 skill 强制 native。CI 原先只跑默认后端，等于两条路径各自
       # 只验证一半——CI 绿不代表本机能打出的包能发。
       - name: Build (debug)
         working-directory: NetworkMonitor
@@ -54,5 +65,3 @@ jobs:
       - name: Test
         working-directory: NetworkMonitor
         run: swift run --disable-sandbox --build-system native TestRunner
-
-

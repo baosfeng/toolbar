@@ -2,6 +2,9 @@
 # 一键构建 + 打包 NetworkMonitor.app（含 macMonitor 本机监控功能）
 # Usage: ./Scripts/build-app.sh [debug|release]
 #
+# 架构：默认按本机架构构建；发版时用 ARCH=arm64|x86_64 指定（GitHub Actions 双架构矩阵就是这条通路），
+# 此时产物名为 NetworkMonitor-<arch>.app，且不会部署到 /Applications。
+#
 # 注意：下面两条构建命令都追加了 --build-system 参数（取值 native）。本机只装了 Command Line Tools
 # （无 Xcode.app），默认的 swiftbuild/XCBuild 后端在 session 初始化阶段就会失败
 # （SessionFailedError: Unknown error parsing property list），该参数用于绕开此故障。
@@ -14,9 +17,19 @@ cd "$(dirname "$0")/.."
 BUILD_MODE="${1:-debug}"
 
 APP_NAME="NetworkMonitor"
-APP_DIR="dist/${APP_NAME}.app"
+# 目标架构：显式指定则交叉 / 同架构构建，产物后缀区分；未指定即本机架构、产物名不变
+TARGET_ARCH="${ARCH:-}"
+HOST_ARCH="$(uname -m)"
+ARCH_TRIPLE="${TARGET_ARCH:-$HOST_ARCH}-apple-macosx"
+if [ -n "$TARGET_ARCH" ]; then
+    APP_DIR="dist/${APP_NAME}-${TARGET_ARCH}.app"
+    BUILD_ARCH_ARG="--arch ${TARGET_ARCH}"
+else
+    APP_DIR="dist/${APP_NAME}.app"
+    BUILD_ARCH_ARG=""
+fi
 
-echo "🔨 正在构建 ${APP_NAME}（${BUILD_MODE}）..."
+echo "🔨 正在构建 ${APP_NAME}（${BUILD_MODE}，架构 ${TARGET_ARCH:-$HOST_ARCH}）..."
 
 # 1. 使用 Swift PM 构建（完整构建，保证链接出可执行文件；--target 在 SwiftPM 6.3 下不产出二进制）
 # 构建后端：默认 native（本机仅有 Command Line Tools 时的绕行方案）；
@@ -27,14 +40,15 @@ if [ "${BUILD_SYSTEM:-native}" != "native" ]; then
 fi
 
 if [ "$BUILD_MODE" = "release" ]; then
-    # shellcheck disable=SC2086  # 允许为空，从而不追加任何构建后端参数
-    swift build -c release --disable-sandbox $BUILD_SYSTEM_ARG
-    BINARY_PATH=".build/arm64-apple-macosx/release/${APP_NAME}"
+    # shellcheck disable=SC2086  # 允许为空，从而不追加任何架构 / 构建后端参数
+    swift build -c release --disable-sandbox $BUILD_SYSTEM_ARG $BUILD_ARCH_ARG
+    BINARY_PATH=".build/${ARCH_TRIPLE}/release/${APP_NAME}"
 else
     # shellcheck disable=SC2086
-    swift build --disable-sandbox $BUILD_SYSTEM_ARG
-    BINARY_PATH=".build/arm64-apple-macosx/debug/${APP_NAME}"
+    swift build --disable-sandbox $BUILD_SYSTEM_ARG $BUILD_ARCH_ARG
+    BINARY_PATH=".build/${ARCH_TRIPLE}/debug/${APP_NAME}"
 fi
+
 
 # 2. 创建 .app 包结构
 rm -rf "$APP_DIR"
@@ -121,6 +135,12 @@ sign_app() {
         echo "      ⚠️  未找到证书 ${SIGN_IDENTITY}，回落 ad-hoc（每次构建权限会重新询问）"
     fi
 }
+# 指定了目标架构时一律不部署到本机 /Applications：交叉架构的包在本机跑不起来，
+# 部署只会把菜单栏上的可用实例换成一个启动不了的版本
+if [ -n "$TARGET_ARCH" ] && [ "$TARGET_ARCH" != "$HOST_ARCH" ]; then
+    SKIP_INSTALL=1
+fi
+
 # 7. 部署到 /Applications
 if [ "${SKIP_INSTALL:-0}" = "1" ]; then
     echo ""

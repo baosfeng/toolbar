@@ -37,15 +37,18 @@
 ## 系统要求
 
 - macOS 14 (Sonoma) 或更高
-- Apple Silicon（ARM64）
+- Apple Silicon（ARM64）或 Intel（x86_64）—— Release 为两个架构各出一个包，按机器型号选
 - 构建需要 Swift 6.3 工具链（Swift 6 严格并发）
 
 ## 安装
 
 ### 方式一：下载 Release（推荐）
 
-1. 打开 [Releases](https://github.com/baosfeng/toolbar/releases)，下载最新的 `NetworkMonitor.app.zip`
-2. 解压，把 `NetworkMonitor.app` 拖进「应用程序」
+1. 打开 [Releases](https://github.com/baosfeng/toolbar/releases)，按机器架构下载对应的包：
+   - Apple Silicon（M 系列芯片）：`NetworkMonitor-arm64.app.zip`
+   - Intel 芯片：`NetworkMonitor-x86_64.app.zip`
+   （不确定型号：苹果菜单 →「关于本机」，看「芯片 / 处理器」一行；Intel 机器会写具体的 Intel 型号）
+2. 解压，把解压出的 `NetworkMonitor.app` 拖进「应用程序」
 3. 首次启动：**右键点图标 → 打开**（应用未经过 Apple 公证，直接双击会被 Gatekeeper 拦下）
 4. 如果右键打开仍被拦：系统设置 → 隐私与安全性 → 页面底部点「仍要打开」
 5. 启动成功后**没有 Dock 图标、没有主窗口**，菜单栏右侧会出现网速数字，这就是应用
@@ -61,6 +64,17 @@ cd toolbar/NetworkMonitor
 ```
 
 脚本会编译、打包、签名并部署到 `/Applications/NetworkMonitor.app`，然后自动启动。
+
+只想要一个可分发的包、不动本机 `/Applications` 时，用 `SKIP_INSTALL=1`；交叉构建别的架构用 `ARCH`：
+
+```bash
+# 只出包不部署（产物在 NetworkMonitor/dist/）
+SKIP_INSTALL=1 ./Scripts/build-app.sh release
+
+# 指定架构：产物名为 NetworkMonitor-<arch>.app，且自动跳过部署（交叉架构在本机跑不起来）
+ARCH=x86_64 SKIP_INSTALL=1 ./Scripts/build-app.sh release
+ARCH=arm64  SKIP_INSTALL=1 ./Scripts/build-app.sh release
+```
 
 ## 使用
 
