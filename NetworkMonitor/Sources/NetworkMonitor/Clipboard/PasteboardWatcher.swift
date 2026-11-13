@@ -223,7 +223,7 @@ final class PasteboardWatcher: ClipboardCaptureService {
                                   createdAt: now)
         }
 
-        // 2) 图片（PNG 优先、TIFF 兜底，同一表示同时用于哈希与落盘）
+        // 2) 图片（按 ClipboardImageFormat 候选顺序取首个可读表示，同一表示用于哈希与落盘）
         if let imageDraft = makeImageDraft(pasteboardItems: pasteboardItems, bundleID: bundleID, appName: appName, now: now) {
             return imageDraft
         }
@@ -263,12 +263,12 @@ final class PasteboardWatcher: ClipboardCaptureService {
                                 appName: String?,
                                 now: Date) -> ClipboardDraft? {
         for pasteboardItem in pasteboardItems {
-            guard let representation = Self.imageRepresentation(of: pasteboardItem) else { continue }
-            guard let contentHash = ClipboardContentHasher.prepareImageData(representation.data) else {
+            guard let imageData = Self.imageRepresentation(of: pasteboardItem) else { continue }
+            guard let contentHash = ClipboardContentHasher.prepareImageData(imageData) else {
                 logger.debug("图片为空或超过压缩字节上限，跳过落库")
                 continue
             }
-            guard let outcome = ClipboardImageStore.store(data: representation.data,
+            guard let outcome = ClipboardImageStore.store(data: imageData,
                                                           contentHash: contentHash,
                                                           logger: logger) else { continue }
             switch outcome {
@@ -298,10 +298,15 @@ final class PasteboardWatcher: ClipboardCaptureService {
         return nil
     }
 
-    /// PNG 优先、缺失或不合法时兜底 TIFF；同一次复制只取一种表示
-    private static func imageRepresentation(of pasteboardItem: NSPasteboardItem) -> (data: Data, isPNG: Bool)? {
-        if let png = pasteboardItem.data(forType: .png) { return (png, true) }
-        if let tiff = pasteboardItem.data(forType: .tiff) { return (tiff, false) }
-        return nil
+    /// 按 ClipboardImageFormat 候选顺序取首个可读表示（同一次复制只取一种）
+    ///
+    /// 候选 = 白名单八类 + 白名单外图片类型兜底，前两项仍是 PNG / TIFF，既有语义不变；
+    /// 落盘扩展名仍由字节真实类型决定，像素守卫在落盘前生效。
+    private static func imageRepresentation(of pasteboardItem: NSPasteboardItem) -> Data? {
+        let typeNames = pasteboardItem.types.map(\.rawValue)
+        return ClipboardImageFormat.firstReadableCandidate(
+            in: typeNames,
+            read: { pasteboardItem.data(forType: NSPasteboard.PasteboardType($0)) }
+        )?.data
     }
 }

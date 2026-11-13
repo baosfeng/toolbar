@@ -48,6 +48,8 @@ protocol ClipboardPanelViewDelegate: AnyObject {
     func panelView(_ view: ClipboardPanelView, didActivate index: Int)
     /// 卡片右键「贴到屏幕」
     func panelView(_ view: ClipboardPanelView, didRequestPinAt index: Int)
+    /// 卡片右键菜单其余指令（复制 / 粘贴为纯文本 / 收藏 / 删除）；按条目 ID 定位，不依赖卡片视图位置
+    func panelView(_ view: ClipboardPanelView, didRequestMenuCommand command: ClipboardCardMenuCommand, itemID: UUID)
     /// 请求跳转辅助功能权限设置
     func panelViewDidRequestOpenAccessibilitySettings(_ view: ClipboardPanelView)
 }
@@ -105,14 +107,17 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
 
     weak var delegate: ClipboardPanelViewDelegate?
 
-    private let searchField = NSSearchField()
-    private let filterControl = NSSegmentedControl()
-    private let captureButton = NSButton()
-    private let stackLabel = NSTextField(labelWithString: "")
-    private let hintLabel = NSTextField(labelWithString: "")
-    private let accessibilityButton = NSButton()
+    /// 以下控件放宽为 internal：子视图构建与尺寸计算在 ClipboardPanelView+Subviews.swift
+    let searchField = NSSearchField()
+    let filterControl = NSSegmentedControl()
+    let captureButton = NSButton()
+    /// 底部件数计数（「N 条 · 收藏 M」）
+    let countLabel = NSTextField(labelWithString: "")
+    let stackLabel = NSTextField(labelWithString: "")
+    let hintLabel = NSTextField(labelWithString: "")
+    let accessibilityButton = NSButton()
     /// 卡片流（单行横向滚动 + 视图池 + 滑动窗口，见 ClipboardCardFlowView）
-    private let cardFlow = ClipboardCardFlowView()
+    let cardFlow = ClipboardCardFlowView()
 
     /// 当前搜索串
     private(set) var query: String = ""
@@ -227,7 +232,10 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
                                      width: captureWidth, height: Metrics.controlHeight)
     }
 
-    /// 提示行：左侧栈进度、右侧按键提示与「辅助功能权限」入口
+    /// 提示行：自左向右为「件数计数 → 栈进度 → 按键提示」，最右是「辅助功能权限」入口
+    ///
+    /// 宽度不足时先压缩提示行文案（计数与栈进度按内容定宽、不截断成半个）；左段确实占满
+    /// 整行时才退到紧凑布局：栈进度让位，计数与提示共享剩余空间，保证窄面板下计数不消失。
     private func layoutFooter(width: CGFloat, height: CGFloat) {
         let padding = Metrics.padding
         let textY = height - Metrics.footerHeight + (Metrics.footerHeight - Metrics.footerTextHeight) / 2
@@ -236,13 +244,27 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         accessibilityButton.frame = NSRect(x: permissionX, y: textY,
                                            width: permissionWidth, height: Metrics.footerTextHeight)
 
-        let stackWidth = stackLabel.isHidden
-            ? 0
-            : min(120, ceil(stackLabel.intrinsicContentSize.width))
-        stackLabel.frame = NSRect(x: padding, y: textY, width: stackWidth, height: Metrics.footerTextHeight)
-
-        let hintX = padding + stackWidth + (stackWidth > 0 ? Metrics.gap : 0)
+        let countWidth = countLabel.isHidden ? 0 : min(160, ceil(countLabel.intrinsicContentSize.width))
+        let stackWidth = stackLabel.isHidden ? 0 : min(120, ceil(stackLabel.intrinsicContentSize.width))
         let hintRight = permissionX - Metrics.gap
+        let countX = padding
+        let stackX = countX + (countWidth > 0 ? countWidth + Metrics.gap : 0)
+        let hintX = stackX + (stackWidth > 0 ? stackWidth + Metrics.gap : 0)
+
+        if hintX >= hintRight {
+            // 紧凑布局：栈进度让位（栈状态仍由卡片角标与面板提示兜底）
+            if countWidth > 0 {
+                countLabel.frame = NSRect(x: countX, y: textY, width: countWidth, height: Metrics.footerTextHeight)
+            }
+            stackLabel.frame = NSRect(x: stackX, y: textY, width: 0, height: Metrics.footerTextHeight)
+            hintLabel.frame = NSRect(x: stackX, y: textY,
+                                     width: max(0, hintRight - stackX), height: Metrics.footerTextHeight)
+            return
+        }
+        if countWidth > 0 {
+            countLabel.frame = NSRect(x: countX, y: textY, width: countWidth, height: Metrics.footerTextHeight)
+        }
+        stackLabel.frame = NSRect(x: stackX, y: textY, width: stackWidth, height: Metrics.footerTextHeight)
         hintLabel.frame = NSRect(x: hintX, y: textY,
                                  width: max(0, hintRight - hintX), height: Metrics.footerTextHeight)
     }
@@ -255,113 +277,19 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         NSRect(x: 0, y: bounds.height - Metrics.footerHeight, width: bounds.width, height: 1).fill()
     }
 
-    // MARK: 子视图构建
+    // MARK: 动作（子视图构建与菜单分发见 ClipboardPanelView+Subviews.swift）
 
-    private func buildSearchField() {
-        searchField.placeholderString = "搜索剪贴板"
-        searchField.delegate = self
-        searchField.font = NSFont.systemFont(ofSize: 13)
-        // 置空 nextKeyView：Tab 不进入搜索框焦点环（Tab 由面板统一拦截为切换过滤）
-        searchField.nextKeyView = nil
-        addSubview(searchField)
-    }
-
-    private func buildFilterControl() {
-        filterControl.segmentCount = ClipboardFilter.allCases.count
-        filterControl.segmentStyle = .texturedRounded
-        filterControl.trackingMode = .selectOne
-        filterControl.font = NSFont.systemFont(ofSize: 12)
-        for filter in ClipboardFilter.allCases {
-            filterControl.setLabel(filter.label, forSegment: filter.rawValue)
-            filterControl.setWidth(40, forSegment: filter.rawValue)
-            filterControl.setToolTip(filter.label, forSegment: filter.rawValue)
-        }
-        filterControl.selectedSegment = ClipboardFilter.all.rawValue
-        filterControl.target = self
-        filterControl.action = #selector(filterChanged)
-        addSubview(filterControl)
-    }
-
-    private func buildCaptureButton() {
-        captureButton.title = "采集当前剪贴板"
-        captureButton.bezelStyle = .rounded
-        captureButton.controlSize = .small
-        captureButton.font = NSFont.systemFont(ofSize: 12)
-        captureButton.target = self
-        captureButton.action = #selector(captureNow)
-        addSubview(captureButton)
-    }
-
-    private func buildFooter() {
-        stackLabel.font = NSFont.systemFont(ofSize: 11)
-        stackLabel.textColor = .secondaryLabelColor
-        stackLabel.lineBreakMode = .byTruncatingTail
-        stackLabel.isHidden = true
-        addSubview(stackLabel)
-
-        hintLabel.font = NSFont.systemFont(ofSize: 11)
-        hintLabel.textColor = .secondaryLabelColor
-        hintLabel.lineBreakMode = .byTruncatingTail
-        hintLabel.alignment = .right
-        hintLabel.stringValue = Self.keyHint
-        addSubview(hintLabel)
-
-        accessibilityButton.isBordered = false
-        accessibilityButton.target = self
-        accessibilityButton.action = #selector(openAccessibilitySettings)
-        applyPermissionStyle(accessibilityGranted: true)
-        addSubview(accessibilityButton)
-    }
-
-    /// 权限入口样式：有权限时 10pt muted，无权限时改为 systemOrange 并带警示符号（不得静默）
-    private func applyPermissionStyle(accessibilityGranted: Bool) {
-        let color: NSColor = accessibilityGranted ? .secondaryLabelColor : .systemOrange
-        accessibilityButton.attributedTitle = NSAttributedString(
-            string: "辅助功能权限",
-            attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: color])
-        accessibilityButton.image = accessibilityGranted
-            ? nil
-            : symbolImage(named: "exclamationmark.triangle", color: .systemOrange)
-        accessibilityButton.imagePosition = accessibilityGranted ? .noImage : .imageLeading
-    }
-
-    /// 卡片流：点击 / 双击动作全部转交控制器，视图不持有业务依赖
-    private func buildCardFlow() {
-        cardFlow.onSelect = { [weak self] index in
-            guard let self else { return }
-            self.delegate?.panelView(self, didSelect: index)
-        }
-        cardFlow.onActivate = { [weak self] index in
-            guard let self else { return }
-            self.delegate?.panelView(self, didActivate: index)
-        }
-        cardFlow.onPin = { [weak self] index in
-            guard let self else { return }
-            self.delegate?.panelView(self, didRequestPinAt: index)
-        }
-        addSubview(cardFlow)
-    }
-
-    private func symbolImage(named name: String, color: NSColor) -> NSImage? {
-        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
-        let configuration = NSImage.SymbolConfiguration(pointSize: 10, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-        return image.withSymbolConfiguration(configuration) ?? image
-    }
-
-    // MARK: 动作
-
-    @objc private func filterChanged() {
+    @objc func filterChanged() {
         guard let filter = ClipboardFilter(rawValue: filterControl.selectedSegment) else { return }
         self.filter = filter
         delegate?.panelView(self, didSelectFilter: filter)
     }
 
-    @objc private func captureNow() {
+    @objc func captureNow() {
         delegate?.panelViewDidRequestCapture(self)
     }
 
-    @objc private func openAccessibilitySettings() {
+    @objc func openAccessibilitySettings() {
         delegate?.panelViewDidRequestOpenAccessibilitySettings(self)
     }
 }

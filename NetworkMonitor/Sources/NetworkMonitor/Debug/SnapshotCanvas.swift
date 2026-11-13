@@ -44,6 +44,8 @@ final class SnapshotClipboardPanel {
         let panelView = ClipboardPanelView(frame: NSRect(origin: .zero, size: size))
         panelView.autoresizingMask = [.width, .height]
         panelView.render(items: items, selectedIndex: items.isEmpty ? -1 : 0)
+        // 底部件数计数由控制器在 applyFilter 后灌入；快照直接按同口径补一次，保证截图与真机一致
+        panelView.updateCounts(total: items.count, pinned: items.filter(\.isPinned).count)
         effect.addSubview(panelView)
         return effect
     }

@@ -77,6 +77,9 @@ runClipboardImageGCTests()
 // MARK: - 剪贴板：文件条目类型细分（卡片图标 / 无障碍标签）
 runClipboardFileClassifierTests()
 
+// MARK: - 剪贴板：图片格式兼容（白名单 / 归一化 / 兜底 / 三表示编码）
+runClipboardImageFormatTests()
+
 // MARK: - 菜单面板取数口径
 runMenuPanelMetricsTests()
 runSystemMetricsTests()
@@ -246,6 +249,12 @@ runPaneHeightBudgetTests()
 
 // MARK: - 剪贴板动态轮询调度（三档边界 / 归一化 / 停止后不再重排）
 runClipboardPollScheduleTests()
+
+// MARK: - 剪贴板缩略图加载闸门（并发上限 / 在途去重 / 额度归还幂等 / reset）
+runClipboardThumbnailGateTests()
+
+// MARK: - 剪贴板删除二次确认（首次 / 窗口内二次 / 超窗 / 打断 / 互不串味）
+runClipboardDeleteConfirmTests()
 
 // MARK: - Done
 print("\n🎉 所有测试通过！")
