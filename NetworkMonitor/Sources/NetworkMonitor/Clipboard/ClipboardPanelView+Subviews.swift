@@ -125,9 +125,8 @@ extension ClipboardPanelView {
     /// 不在此处实现第二套粘贴逻辑。
     @objc func handleCardMenuCommand(_ sender: NSMenuItem) {
         guard let command = ClipboardCardMenuCommand(rawValue: sender.tag),
-              let card = sender.representedObject as? ClipboardCardView,
-              let index = cardFlow.indexOf(card) else { return }
-        delegate?.panelView(self, didRequestMenuCommand: command, at: index)
+              let itemID = sender.representedObject as? UUID else { return }
+        delegate?.panelView(self, didRequestMenuCommand: command, itemID: itemID)
     }
 }
 

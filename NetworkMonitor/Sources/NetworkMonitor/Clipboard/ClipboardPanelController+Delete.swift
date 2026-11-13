@@ -60,8 +60,8 @@ extension ClipboardPanelController {
     /// 卡片右键菜单：复制 / 粘贴为纯文本 / 收藏 / 删除，全部复用本控制器既有动作
     ///
     /// 「贴到屏幕」不经此通道（卡片 onPin → 贴图链路），此处只处理其余四项。
-    func panelView(_ view: ClipboardPanelView, didRequestMenuCommand command: ClipboardCardMenuCommand, at index: Int) {
-        guard filteredItems.indices.contains(index) else { return }
+    func panelView(_ view: ClipboardPanelView, didRequestMenuCommand command: ClipboardCardMenuCommand, itemID: UUID) {
+        guard let index = filteredItems.firstIndex(where: { $0.id == itemID }) else { return }
         if index != selectedIndex {
             selectedIndex = index
             content.updateSelection(index)

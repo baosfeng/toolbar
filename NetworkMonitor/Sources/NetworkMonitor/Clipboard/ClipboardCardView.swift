@@ -117,7 +117,8 @@ final class ClipboardCardView: NSView {
         onPin?(self)
     }
 
-    /// 菜单项构造：target 置空 = 沿响应链找到面板内容视图，由其转交控制器既有动作
+    /// 菜单项构造：target 置空 = 沿响应链找到面板内容视图；representedObject 带条目 ID，
+    /// 由控制器按 ID 换算下标，避免依赖卡片池的视图位置
     private func menuEntry(_ command: ClipboardCardMenuCommand, title: String,
                            state: NSControl.StateValue = .off) -> NSMenuItem {
         let entry = NSMenuItem(title: title,
@@ -126,7 +127,7 @@ final class ClipboardCardView: NSView {
         entry.target = nil
         entry.tag = command.rawValue
         entry.state = state
-        entry.representedObject = self
+        entry.representedObject = item?.id
         return entry
     }
 

@@ -48,8 +48,8 @@ protocol ClipboardPanelViewDelegate: AnyObject {
     func panelView(_ view: ClipboardPanelView, didActivate index: Int)
     /// 卡片右键「贴到屏幕」
     func panelView(_ view: ClipboardPanelView, didRequestPinAt index: Int)
-    /// 卡片右键菜单其余指令（复制 / 粘贴为纯文本 / 收藏 / 删除）
-    func panelView(_ view: ClipboardPanelView, didRequestMenuCommand command: ClipboardCardMenuCommand, at index: Int)
+    /// 卡片右键菜单其余指令（复制 / 粘贴为纯文本 / 收藏 / 删除）；按条目 ID 定位，不依赖卡片视图位置
+    func panelView(_ view: ClipboardPanelView, didRequestMenuCommand command: ClipboardCardMenuCommand, itemID: UUID)
     /// 请求跳转辅助功能权限设置
     func panelViewDidRequestOpenAccessibilitySettings(_ view: ClipboardPanelView)
 }
