@@ -51,4 +51,21 @@ public enum AppEvents {
     public static func postMenuBarDisplayChanged() {
         NotificationCenter.default.post(name: menuBarDisplayChanged, object: nil)
     }
+
+    /// 剪贴图缩略图已在后台解码完成（增量规格 2.2）— 订阅方只对该哈希命中的可见卡片置重绘
+    ///
+    /// 通知只在主线程发出（解码回到主线程、写好缓存之后），userInfo 带 `contentHash`：
+    /// 卡片流据此定位需要重绘的卡片，不做整片重建、不改选中态。
+    public static let clipboardThumbnailReady = Notification.Name("AppEvents.clipboardThumbnailReady")
+
+    /// 缩略图通知里哈希的 userInfo 键
+    public static let clipboardThumbnailHashKey = "contentHash"
+
+    /// 发布缩略图就绪通知（主线程调用；hash 为空时不发）
+    public static func postClipboardThumbnailReady(contentHash: String) {
+        let hash = contentHash.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !hash.isEmpty else { return }
+        NotificationCenter.default.post(name: clipboardThumbnailReady, object: nil,
+                                        userInfo: [clipboardThumbnailHashKey: hash])
+    }
 }
