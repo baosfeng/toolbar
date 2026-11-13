@@ -253,5 +253,8 @@ runClipboardPollScheduleTests()
 // MARK: - 剪贴板缩略图加载闸门（并发上限 / 在途去重 / 额度归还幂等 / reset）
 runClipboardThumbnailGateTests()
 
+// MARK: - 剪贴板删除二次确认（首次 / 窗口内二次 / 超窗 / 打断 / 互不串味）
+runClipboardDeleteConfirmTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")

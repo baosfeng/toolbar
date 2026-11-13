@@ -130,6 +130,8 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     func hide(animated: Bool) {
         guard panel.isVisible else { return }
         clearDeleteConfirmHint()
+        // 收起后不再需要缩略图：丢弃在途回调（已入队任务允许跑完，缓存与磁盘文件不删）
+        ClipboardThumbnailLoader.shared.cancelAll()
         guard animated else { panel.orderOut(nil); return }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.18
