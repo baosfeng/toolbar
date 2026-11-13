@@ -140,10 +140,29 @@ public enum ClipboardImageDecoder {
 
     /// CGImage 编成 PNG 字节（回写剪贴板用）
     public static func pngData(from image: CGImage) -> Data? {
+        encode(image, as: .png)
+    }
+
+    /// CGImage 编成 TIFF 字节（回写剪贴板用，供只认 TIFF 的老 App 粘贴）
+    public static func tiffData(from image: CGImage) -> Data? {
+        encode(image, as: .tiff)
+    }
+
+    /// CGImage 编成 JPEG 字节（回写剪贴板用，质量 0.9）
+    public static func jpegData(from image: CGImage, compressionQuality: Double = 0.9) -> Data? {
+        let quality = min(max(compressionQuality, 0), 1)
+        let options = [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary
+        return encode(image, as: .jpeg, options: options)
+    }
+
+    // MARK: 内部实现（编码）
+
+    /// 统一 ImageIO 编码入口：三种表示复用同一条目的地管线，只有目标类型与选项不同
+    private static func encode(_ image: CGImage, as type: UTType, options: CFDictionary? = nil) -> Data? {
         let buffer = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
-            buffer, UTType.png.identifier as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, image, nil)
+            buffer, type.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, options)
         guard CGImageDestinationFinalize(destination) else { return nil }
         return buffer as Data
     }

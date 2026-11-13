@@ -52,12 +52,10 @@ final class PasteboardWriter: ClipboardWriter {
         if asPlainText { return writeText(item.text ?? item.preview) }
         switch item.kind {
         case .image:
-            guard let data = Self.pngData(at: item.imagePath) else {
-                logger.warning("图片条目写回失败：原图缺失、无法解码或超过像素上限")
+            guard let pasteboardItem = Self.imagePasteboardItem(at: item.imagePath, logger: logger) else {
+                logger.warning("图片条目写回失败：原图缺失、无法解码、超过像素上限或三种表示均编码失败")
                 return false
             }
-            let pasteboardItem = NSPasteboardItem()
-            pasteboardItem.setData(data, forType: .png)
             return write([pasteboardItem])
         case .file:
             return writeFileURLs(from: item.text ?? "")
@@ -115,14 +113,50 @@ final class PasteboardWriter: ClipboardWriter {
         return write(pasteboardItems)
     }
 
-    /// 读取落盘原图并转 PNG 字节
+    /// 读取落盘原图并构造多表示的剪贴板载体（PNG + TIFF 并存，JPEG 按条件补一份）
     ///
-    /// 用 ImageIO 直读 CGImage：NSImage + tiffRepresentation 会把整张位图展开（12000×12000 实测峰值 2764MB），
-    /// ImageIO 走同一条解码管线但不产生 NSImage 中间态，且像素守卫会拒掉超大图（此时提示原图不可用）。
-    private static func pngData(at path: String?) -> Data? {
+    /// 一次 guardedCGImage 解码供三种编码复用，不重复解码；像素守卫会拒掉超大图（此时提示原图不可用）。
+    /// 任一编码失败只记 warning 并继续写其余表示，三种全部失败才返回 nil 走既有降级。
+    /// 多表示并存用于兼容只认 TIFF 的老 App（对标 OneClip 的 TIFF + PNG + JPEG 并存）。
+    private static func imagePasteboardItem(at path: String?, logger: LoggingService) -> NSPasteboardItem? {
         guard let path, !path.isEmpty,
               let image = ClipboardImageDecoder.guardedCGImage(fromFileAt: path) else { return nil }
-        return ClipboardImageDecoder.pngData(from: image)
+        let png = ClipboardImageDecoder.pngData(from: image)
+        let tiff = ClipboardImageDecoder.tiffData(from: image)
+        // 原图本身就是 JPEG 时额外保一份 JPEG；PNG / TIFF 都编不出来时同样由 JPEG 兜底
+        let wantsJPEG = ClipboardImageFormat.shouldWriteJPEG(
+            sourceIsJPEG: ClipboardImageFormat.isJPEGType(ClipboardImageDecoder.typeIdentifier(ofFileAt: path)),
+            pngAvailable: png != nil,
+            tiffAvailable: tiff != nil)
+        let jpeg = wantsJPEG ? ClipboardImageDecoder.jpegData(from: image) : nil
+
+        let pasteboardItem = NSPasteboardItem()
+        var writtenCount = 0
+        if let png {
+            pasteboardItem.setData(png, forType: .png)
+            writtenCount += 1
+        } else {
+            logger.warning("剪贴板图片回写：PNG 表示编码失败，继续写其余表示")
+        }
+        if let tiff {
+            pasteboardItem.setData(tiff, forType: .tiff)
+            writtenCount += 1
+        } else {
+            logger.warning("剪贴板图片回写：TIFF 表示编码失败，继续写其余表示")
+        }
+        if wantsJPEG {
+            if let jpeg {
+                pasteboardItem.setData(jpeg, forType: NSPasteboard.PasteboardType(ClipboardImageFormat.jpegTypeName))
+                writtenCount += 1
+            } else {
+                logger.warning("剪贴板图片回写：JPEG 表示编码失败，继续写其余表示")
+            }
+        }
+        guard writtenCount > 0 else {
+            logger.warning("剪贴板图片回写：PNG / TIFF / JPEG 三种表示全部编码失败")
+            return nil
+        }
+        return pasteboardItem
     }
 }
 

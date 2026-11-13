@@ -77,6 +77,9 @@ runClipboardImageGCTests()
 // MARK: - 剪贴板：文件条目类型细分（卡片图标 / 无障碍标签）
 runClipboardFileClassifierTests()
 
+// MARK: - 剪贴板：图片格式兼容（白名单 / 归一化 / 兜底 / 三表示编码）
+runClipboardImageFormatTests()
+
 // MARK: - 菜单面板取数口径
 runMenuPanelMetricsTests()
 runSystemMetricsTests()
