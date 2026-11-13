@@ -55,28 +55,18 @@ extension ClipboardCardView {
         return image.withSymbolConfiguration(configuration) ?? image
     }
 
-    /// 缩略图（懒加载 + 按解码字节计费的缓存）
+    /// 缩略图：只同步查缓存，未命中则交给后台解码器并返回 nil（增量规格 2.2）
     ///
-    /// 只读 <hash>_thumb.png；缩略图缺失时用 ImageIO 从原图降采样补生成（内存与缩略图尺寸成正比）。
-    /// 禁止回退整张原图解码：那会把 60–300MB 位图常驻进缓存（本次修复的根因之一）。
+    /// 绘制路径上**不得**出现同步解码：首帧先画占位符号，后台解完写缓存并发
+    /// `AppEvents.clipboardThumbnailReady`，由卡片流对该哈希置重绘后再画真图。
+    /// 缓存口径不变（仍只缓存缩略图，cost = 解码后像素字节数，见 ClipboardImagePolicy）。
+    /// 补生成缩略图（原图 → <hash>_thumb.png）也整体搬到了后台，见 `ClipboardThumbnailLoader`。
     static func thumbnail(for item: ClipboardItem) -> NSImage? {
         let key = item.contentHash as NSString
         if let cached = thumbnailCache.object(forKey: key) { return cached }
-        let url = ClipboardImageStore.thumbnailURL(for: item.contentHash)
-        var cgImage = ClipboardImageDecoder.thumbnail(fromFileAt: url.path)
-        if cgImage == nil, let imagePath = item.imagePath,
-           ClipboardImageStore.regenerateThumbnail(contentHash: item.contentHash,
-                                                    imagePath: imagePath,
-                                                    logger: AppContext.shared.logger) {
-            cgImage = ClipboardImageDecoder.thumbnail(fromFileAt: url.path)
-        }
-        guard let cgImage else { return nil }
-        let image = NSImage(cgImage: cgImage,
-                            size: NSSize(width: cgImage.width, height: cgImage.height))
-        // cost = 解码后像素字节数：缩略图正常 320×320×4 ≈ 400KB，64MB 预算约容 160 张
-        let cost = ClipboardImagePolicy.decodedBytes(width: cgImage.width, height: cgImage.height)
-        thumbnailCache.setObject(image, forKey: key, cost: cost)
-        return image
+        ClipboardThumbnailLoader.shared.request(contentHash: item.contentHash,
+                                                imagePath: item.imagePath)
+        return nil
     }
 
     /// 来源 App 图标（缓存；取不到时返回 nil，右侧只留时间）
