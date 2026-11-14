@@ -43,6 +43,11 @@ enum SettingsSnapshot {
                let clipboard = settings.currentPaneForSnapshot as? SettingsClipboardPane {
                 clipboard.debugLogFeedbackControlStates("snapshot")
             }
+            // 通知与音效页同理：六行开关的勾选态与偏好真值并排落盘
+            if section == .notifications,
+               let pane = settings.currentPaneForSnapshot as? SettingsNotificationPane {
+                pane.debugLogControlStates("snapshot")
+            }
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let suffix = appearance == .aqua ? "light" : "dark"
                 let url = directory.appendingPathComponent(
@@ -54,6 +59,7 @@ enum SettingsSnapshot {
         // 首次打开路径（不做任何显式布局）：复现「第一次进设置页中间一大片空白」，
         // 每次快照都重出，作为该版式问题的回归证据
         captureScrolledClipboard(directory: directory, settings: settings)
+        captureScrolledNotifications(directory: directory, settings: settings)
         captureFirstOpen(directory: directory, settings: settings)
     }
 
@@ -67,6 +73,18 @@ enum SettingsSnapshot {
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let suffix = appearance == .aqua ? "light" : "dark"
             let url = directory.appendingPathComponent("settings-clipboard-storage-\(suffix).png")
+            MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
+                                     appearanceName: appearance, to: url)
+        }
+    }
+
+    /// 通知与音效页滚动到底部（音效库 / 重置卡在首屏之外，单独出一组作为可见性证据）
+    static func captureScrolledNotifications(directory: URL, settings: SettingsWindow?) {
+        guard let settings else { return }
+        guard let view = settings.prepareForSnapshotScrolledToBottom(.notifications) else { return }
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let suffix = appearance == .aqua ? "light" : "dark"
+            let url = directory.appendingPathComponent("settings-notifications-library-\(suffix).png")
             MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
                                      appearanceName: appearance, to: url)
         }

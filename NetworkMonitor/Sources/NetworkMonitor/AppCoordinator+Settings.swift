@@ -40,7 +40,20 @@ extension AppCoordinator {
                     return Self.unavailable(.transfer,
                                              message: "互传服务未启动：端口被占用或未授予本地网络权限。")
                 }
-                return SettingsTransferPane(service: service, logger: self.logger)
+                let pane = SettingsTransferPane(service: service, logger: self.logger)
+                // 提示音已统一到「通知与音效」页：传输页只留一个入口，避免两处各写一份开关
+                pane.onOpenNotificationSettings = { [weak self] in
+                    self?.settingsWindow?.show(section: .notifications)
+                }
+                return pane
+            },
+            .notifications: { [weak self] in
+                guard let self else { return Self.unavailable(.notifications) }
+                return SettingsNotificationPane(preferences: self.notificationPreferences,
+                                               player: self.soundPlayer,
+                                               library: self.soundLibrary,
+                                               service: self.notificationService,
+                                               logger: self.logger)
             },
             // 系统监控：偏好走 Core 的 SystemMonitorPreferences（与面板共用同一实现）
             .system: { SettingsSystemPane(preferences: SystemMonitorPreferences()) },

@@ -11,6 +11,7 @@ enum SettingsSection: CaseIterable {
     case clipboard
     case capture
     case transfer
+    case notifications
     case system
     case about
 
@@ -22,6 +23,7 @@ enum SettingsSection: CaseIterable {
         case .clipboard: return "剪贴板"
         case .capture:   return "截图与贴图"
         case .transfer:  return "局域网互传"
+        case .notifications: return "通知与音效"
         case .system:    return "系统"
         case .about:     return "关于"
         }
@@ -35,6 +37,7 @@ enum SettingsSection: CaseIterable {
         case .clipboard: return "doc.on.clipboard"
         case .capture:   return "camera.viewfinder"
         case .transfer:  return "arrow.left.arrow.right"
+        case .notifications: return "bell.badge"
         case .system:    return "gauge.with.dots.needle.67percent"
         case .about:     return "info.circle"
         }
@@ -48,6 +51,7 @@ enum SettingsSection: CaseIterable {
         case .clipboard: return "clipboard"
         case .capture:   return "capture"
         case .transfer:  return "transfer"
+        case .notifications: return "notifications"
         case .system:    return "system"
         case .about:     return "about"
         }
@@ -61,6 +65,7 @@ enum SettingsSection: CaseIterable {
         case .clipboard: return "面板唤起、采集范围与系统权限。"
         case .capture:   return "截图、标注与贴图的默认参数。"
         case .transfer:  return "接收目录、免配对窗口与提示音。"
+        case .notifications: return "按事件配置声音、提醒方式与触控板手感。"
         case .system:    return "采样周期与面板显示项。"
         case .about:     return "版本信息与项目地址。"
         }
