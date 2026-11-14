@@ -61,6 +61,8 @@ final class ClipboardPreferences: Sendable {
         static let ignoredApps = "clipboard.ignoredBundleIDs"
         static let lastExternalApp = "clipboard.lastExternalBundleID"
         static let guidedAccess = "clipboard.hasGuidedAccess"
+        static let soundEffects = "clipboard.soundEffectsEnabled"
+        static let haptics = "clipboard.hapticsEnabled"
     }
 
     private let storage: any KeyValueStorage
@@ -120,6 +122,20 @@ final class ClipboardPreferences: Sendable {
             return value > 0 ? value : 260
         }
         set { storage.set(newValue, forKey: Key.panelHeight) }
+    }
+
+    // MARK: 操作反馈
+
+    /// 操作音效开关（默认关闭；开启后复制 / 粘贴 / 收藏 / 删除 / 失败会响）
+    var soundEffectsEnabled: Bool {
+        get { storage.object(forKey: Key.soundEffects) == nil ? false : storage.bool(forKey: Key.soundEffects) }
+        set { storage.set(newValue, forKey: Key.soundEffects) }
+    }
+
+    /// 触觉反馈开关（默认开启；无触控板时系统自行忽略）
+    var hapticsEnabled: Bool {
+        get { storage.object(forKey: Key.haptics) == nil ? true : storage.bool(forKey: Key.haptics) }
+        set { storage.set(newValue, forKey: Key.haptics) }
     }
 
     // MARK: 存储上限

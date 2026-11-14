@@ -62,3 +62,59 @@ enum ClipboardPanelGeometry {
         return NSRect(x: origin.x, y: origin.y, width: width, height: height)
     }
 }
+
+// MARK: - 快捷键帮助键位
+
+/// 快捷键帮助 — 面板「?」浮层展示的全部键位（纯数据，界面与读屏共用一份口径）
+///
+/// 顺序与面板实际按键拦截一致：直选 → 粘贴 → Paste Stack → 过滤 → 收藏 → 删除 → 收起 → 移动 → 设置。
+enum ClipboardShortcutHelp {
+
+    /// 一条键位：键帽 + 作用
+    struct Entry: Equatable, Sendable {
+        /// 键帽文字（如「⌘⇧⌫」）
+        let keys: String
+        /// 键位作用
+        let action: String
+    }
+
+    /// 浮层标题（同时用作悬浮层的无障碍标签）
+    static let title = "快捷键帮助"
+
+    /// 全部键位（12 条，浮层按两列 × 6 行排布）
+    static let entries: [Entry] = [
+        Entry(keys: "⌘1–9", action: "快速粘贴第 N 条"),
+        Entry(keys: "↵", action: "粘贴并收起"),
+        Entry(keys: "⌥↵", action: "粘贴为纯文本"),
+        Entry(keys: "⌘S", action: "加入 Paste Stack"),
+        Entry(keys: "⌘⇧S", action: "清空 Paste Stack"),
+        Entry(keys: "⇧Tab", action: "反向切换过滤"),
+        Entry(keys: "⌘D", action: "收藏 / 取消收藏"),
+        Entry(keys: "⌘⌫", action: "删除选中项"),
+        Entry(keys: "⌘⇧⌫", action: "清空全部"),
+        Entry(keys: "Esc", action: "收起面板"),
+        Entry(keys: "← →", action: "切换条目"),
+        Entry(keys: "⌘,", action: "打开剪贴板设置"),
+    ]
+}
+
+// MARK: - 首次引导文案
+
+/// 首次引导态文案 — 图标 + 两句话 + 三条快捷键胶囊
+///
+/// 与「没有匹配的剪贴板条目」空态的分工：空态解释「为什么没内容」，引导态解释「这里是什么、怎么用」，
+/// 只在「未被引导过 + 历史为空」时出现（判定在面板控制器，标记写 ClipboardPreferences.hasGuidedClipboardAccess）。
+enum ClipboardGuideText {
+    /// 引导图标（SF Symbol）
+    static let symbolName = "doc.on.clipboard"
+    /// 第一句：说明会自动收录
+    static let firstLine = "复制任意内容后，这里会自动收录"
+    /// 第二句：说明怎么用
+    static let secondLine = "选中一条即可粘贴回刚才的应用"
+    /// 关闭按钮文案
+    static let dismissTitle = "知道了"
+    /// 唤起键未知时的回退文案（正常情况下由面板按偏好传入真实组合键）
+    static let toggleFallbackText = "⌥⌘V"
+    /// 唤起胶囊的作用文案
+    static let toggleAction = "唤起面板"
+}

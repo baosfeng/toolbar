@@ -42,6 +42,7 @@ enum MenuPanelSnapshot {
                        tokenSnapshot: tokenSnapshot, settings: settings)
             TokenPaneSnapshot.capture(directory: directory, tokenSnapshot: tokenSnapshot)
             await SnapshotClipboardEvidence.captureIfRequested(directory: directory)
+            SnapshotClipboardGuide.captureIfRequested(directory: directory)
             NSApp.terminate(nil)
         }
     }

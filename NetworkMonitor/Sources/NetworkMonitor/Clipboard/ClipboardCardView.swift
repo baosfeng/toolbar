@@ -5,14 +5,19 @@ import NetworkMonitorCore
 
 /// 剪贴板卡片 — 176 × 198，圆角 12，内边距 10
 ///
-/// 视觉口径：内容区垂直居中，底部单行 meta（左：类型图标 + ⌘N + 收藏星；右：相对时间 + 来源 App 图标），
-/// 选中态为 controlAccentColor 1.5pt 描边 + accent 5% 底色（不缩放、不加阴影）。
+/// 视觉分层（自下而上）：
+/// 1. `backgroundView` — 半透明内衬底色（`controlBackgroundColor` 0.72），阴影挂在它的图层上；
+/// 2. `hoverHighlight` / `selectionHighlight` — 提亮与 accent 5% 叠色 + 加粗描边，
+///    状态切换只过渡各自 `alphaValue`（`MotionKit.crossFade(view:)`，0.12s 交叉溶解）；
+/// 3. `contentView` — 正文 / 占位符号 / meta 行 / 栈角标；
+/// 4. `thumbnailView` — 缩略图真图，就绪后 0.2s 淡入占位符号之上；
+/// 5. `starView` — 收藏星，切换时 0.7→1.15→1 弹入。
+/// 阴影走 `CALayer.shadow*`（radius 6 / opacity 0.12 / offset (0,-1)），只在 hover 与选中时出现。
 /// 仅使用 SF Symbols 与系统语义色，浅色 / 深色自适应，禁止 emoji。
-/// 静态资源（符号 / 缩略图 / 来源 App 图标）见 `ClipboardCardView+Resources.swift`。
 @MainActor
 final class ClipboardCardView: NSView {
 
-    /// 卡片尺寸（设计规格：176 × 198）
+    /// 卡片尺寸（设计规格：176 × 198，动效不改变尺寸）
     static let cardSize = NSSize(width: 176, height: 198)
     /// 卡片圆角
     static let cornerRadius: CGFloat = 12
@@ -26,19 +31,25 @@ final class ClipboardCardView: NSView {
     static let metaFontSize: CGFloat = 11
     /// 类型图标尺寸
     static let typeIconSize: CGFloat = 14
-
     /// meta 行高
-    private static let metaHeight: CGFloat = 16
+    static let metaHeight: CGFloat = 16
     /// 内容区与 meta 行间距
-    private static let bodyGap: CGFloat = 6
+    static let bodyGap: CGFloat = 6
     /// 正文最大行数
-    private static let maxTextLines = 7
+    static let maxTextLines = 7
     /// meta 行内元素间距
-    private static let metaGap: CGFloat = 6
+    static let metaGap: CGFloat = 6
     /// 来源 App 图标尺寸
-    private static let appIconSize: CGFloat = 12
+    static let appIconSize: CGFloat = 12
     /// 收藏星尺寸
-    private static let starSize: CGFloat = 12
+    static let starSize: CGFloat = 12
+    /// 缩略图圆角
+    static let thumbnailCornerRadius: CGFloat = 6
+    /// 缩略图就绪后的淡入时长（设计规格 §3.5 B5：0.2s）
+    static let thumbnailFadeDuration: TimeInterval = 0.2
+
+    /// hover 到弹出全文浮层的等待时长（设计规格 §2.3 A3：0.45s）
+    private static let hoverOverlayDelay: TimeInterval = 0.45
 
     /// 缩略图缓存（卡片只持有缩略图，原图从不进缓存）
     ///
@@ -60,29 +71,124 @@ final class ClipboardCardView: NSView {
     var onDoubleClick: ((ClipboardCardView) -> Void)?
     /// 右键「贴到屏幕」回调
     var onPin: ((ClipboardCardView) -> Void)?
+    /// hover 满 0.45s / 移出（true = 请求弹出全文浮层，false = 收起）
+    var onHoverStateChange: ((ClipboardCardView, Bool) -> Void)?
 
     private(set) var item: ClipboardItem?
     private(set) var isSelected = false
     /// 卡片在匹配列表中的序号（1…9 显示 ⌘N，超出不显示）
     private(set) var shortcutNumber: Int?
+    /// 是否正在播放删除动效（卡片流据此跳过复用，避免动效中途换内容）
+    private(set) var isRemoving = false
+
+    /// 底色内衬（承载阴影）
+    private let backgroundView = ClipboardCardBackgroundView()
+    /// hover 高亮（白色 6% 叠色＝底色微提亮，浅色更白、深色更亮；描边 1pt → 1.5pt 加粗）
+    private let hoverHighlight = ClipboardCardHighlightView(
+        fill: NSColor.white.withAlphaComponent(0.06),
+        stroke: NSColor.labelColor.withAlphaComponent(0.45), width: 1.5)
+    /// 选中高亮（accent 5% 叠色 + accent 1.5pt 描边）
+    private let selectionHighlight = ClipboardCardHighlightView(
+        fill: NSColor.controlAccentColor.withAlphaComponent(0.05),
+        stroke: NSColor.controlAccentColor, width: 1.5)
+    /// 常态描边
+    private let borderHighlight = ClipboardCardHighlightView(
+        fill: nil, stroke: NSColor.separatorColor, width: 1)
+    /// 内容层（正文 + 占位 + meta + 栈角标）
+    let contentView = ClipboardCardContentView()
+    /// 缩略图真图（就绪后淡入，等比填充裁剪）
+    let thumbnailView = ClipboardCardThumbnailView()
+    /// 收藏星（切换时弹入）
+    let starView = NSImageView()
+    /// 栈角标（栈粘贴推进时弹入）
+    let stackBadgeView = ClipboardCardStackBadgeView()
+
+    /// hover 态
+    private var isHovering = false
+    /// 悬停计时（0.45s 后请求全文浮层）
+    private var hoverTimer: DispatchWorkItem?
+    /// hover 追踪区
+    private var hoverTrackingArea: NSTrackingArea?
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { false }
 
+    /// 装饰性子视图（底色 / 高亮 / 内容 / 缩略图 / 收藏星）一律不接鼠标：
+    /// 点击、双击与右键菜单必须落在卡片本体（它们的 trackingArea 也归卡片所有）
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        super.hitTest(point) == nil ? nil : self
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        buildSubviews()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("不支持从 nib 初始化") }
+
+    // MARK: 配置
+
     /// 配置内容与序号（视图池复用：内容变化必须无条件重绘）
     func configure(with item: ClipboardItem, isSelected: Bool, number: Int) {
+        let contentChanged = self.item != item || self.shortcutNumber != number
+        let selectionChanged = self.isSelected != isSelected
+        let wasPinned = self.item?.isPinned ?? false
         self.item = item
         self.shortcutNumber = number
         self.isSelected = isSelected
+        isRemoving = false
+        // 复用的卡片可能刚播完删除动效，先落回常态再上新内容
+        alphaValue = 1
+        layer?.transform = CATransform3DIdentity
         setAccessibilityLabel(Self.accessibilityLabel(for: item))
-        needsDisplay = true
+        setAccessibilityValue(isSelected ? "已选中" : "")
+        contentView.update(with: item, number: number)
+        applySelection(selected: isSelected, animated: selectionChanged)
+        refreshPinnedStar(animated: contentChanged && wasPinned != item.isPinned)
+        refreshStackBadge()
+        refreshThumbnail(animated: false)
+        needsLayout = true
+        if isHovering { scheduleOverlay() }
     }
 
-    /// 设置选中态：描边 + 底色重绘（不缩放、不改阴影）
+    /// 设置选中态：描边与底色走 0.12s 交叉过渡（不缩放、不改尺寸）
     func setSelected(_ selected: Bool) {
         guard isSelected != selected else { return }
         isSelected = selected
-        needsDisplay = true
+        // 选中态对读屏可见：方向键移动时没有鼠标悬停，只能靠这句「已选中」判断当前位置
+        setAccessibilityValue(selected ? "已选中" : "")
+        applySelection(selected: selected, animated: true)
+    }
+
+    /// 删除动效：0.15s 缩小 + 淡出（结束回调由卡片流接管重排）
+    func playRemoval(completion: @escaping () -> Void) {
+        isRemoving = true
+        cancelHover()
+        MotionKit.press(self, scale: 0.9)
+        MotionKit.fadeOut(self, duration: MotionKit.durations.close) { [weak self] in
+            self?.alphaValue = 1
+            self?.layer?.transform = CATransform3DIdentity
+            self?.isRemoving = false
+            completion()
+        }
+    }
+
+    /// 缩略图：缓存命中即上真图（就绪后 0.2s 淡入），未命中保持占位并继续走后台解码
+    func refreshThumbnail(animated: Bool) {
+        guard let item, item.kind == .image, let image = Self.thumbnail(for: item) else {
+            thumbnailView.isHidden = true
+            MotionKit.crossFade(view: thumbnailView, duration: 0, to: 0)
+            contentView.thumbnailReady = false
+            contentView.needsDisplay = true
+            return
+        }
+        thumbnailView.image = image
+        thumbnailView.isHidden = false
+        contentView.thumbnailReady = true
+        contentView.needsDisplay = true
+        MotionKit.crossFade(view: thumbnailView,
+                            duration: animated ? Self.thumbnailFadeDuration : 0, to: 1)
     }
 
     // MARK: 鼠标
@@ -94,235 +200,162 @@ final class ClipboardCardView: NSView {
         if event.clickCount >= 2 { onDoubleClick?(self) }
     }
 
-    /// 右键菜单 5 项（顺序固定）：复制 / 粘贴为纯文本 / 收藏 / 贴到屏幕 / 删除…
-    ///
-    /// 分发口径：除「贴到屏幕」沿用既有 onPin 贴图链路外，其余四项统一交给面板内容视图的
-    /// 菜单指令通道（响应链 → 控制器既有动作），保证不存在第二套复制 / 粘贴实现。
-    override func menu(for event: NSEvent) -> NSMenu? {
-        let menu = NSMenu()
-        menu.addItem(menuEntry(.copy, title: "复制"))
-        menu.addItem(menuEntry(.pastePlainText, title: "粘贴为纯文本"))
-        menu.addItem(menuEntry(.togglePin, title: isPinned ? "取消收藏" : "收藏", state: isPinned ? .on : .off))
-        let screenEntry = NSMenuItem(title: "贴到屏幕", action: #selector(menuPinToScreen), keyEquivalent: "")
-        screenEntry.target = self
-        menu.addItem(screenEntry)
-        menu.addItem(menuEntry(.delete, title: "删除…"))
-        return menu
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverTrackingArea = area
     }
 
-    /// 当前条目是否已收藏（菜单标题与勾选态据此决定）
-    private var isPinned: Bool { item?.isPinned ?? false }
-
-    @objc private func menuPinToScreen() {
-        onPin?(self)
+    override func mouseEntered(with event: NSEvent) {
+        guard !isRemoving, !isHovering else { return }
+        isHovering = true
+        applyHover(true, animated: true)
+        scheduleOverlay()
     }
 
-    /// 菜单项构造：target 置空 = 沿响应链找到面板内容视图；representedObject 带条目 ID，
-    /// 由控制器按 ID 换算下标，避免依赖卡片池的视图位置
-    private func menuEntry(_ command: ClipboardCardMenuCommand, title: String,
-                           state: NSControl.StateValue = .off) -> NSMenuItem {
-        let entry = NSMenuItem(title: title,
-                               action: #selector(ClipboardPanelView.handleCardMenuCommand(_:)),
-                               keyEquivalent: "")
-        entry.target = nil
-        entry.tag = command.rawValue
-        entry.state = state
-        entry.representedObject = item?.id
-        return entry
+    override func mouseExited(with event: NSEvent) {
+        cancelHover()
     }
 
-    // MARK: 绘制
+    // MARK: 布局
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let item else { return }
-        // 描边内缩半个线宽，避免被视图边界裁掉
-        let strokeInset: CGFloat = isSelected ? 0.75 : 0.5
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: strokeInset, dy: strokeInset),
-                                xRadius: Self.cornerRadius, yRadius: Self.cornerRadius)
-        drawBackground(path)
+    override func layout() {
+        super.layout()
+        backgroundView.frame = bounds
+        borderHighlight.frame = bounds
+        hoverHighlight.frame = bounds
+        selectionHighlight.frame = bounds
+        contentView.frame = bounds
+        thumbnailView.frame = ClipboardCardLayout.bodyRect(in: bounds)
+        starView.frame = ClipboardCardLayout.starRect(in: bounds, number: shortcutNumber)
+        layoutStackBadge()
+    }
 
-        let content = bounds.insetBy(dx: Self.padding, dy: Self.padding)
-        let body = bodyRect(in: content)
-        if item.kind == .image {
-            drawThumbnail(item: item, in: body)
-        } else {
-            drawText(item: item, in: body)
+    // MARK: 状态
+
+    /// 选中切换：accent 叠色与描边交叉溶解，阴影随后按「选中或 hover」重算
+    private func applySelection(selected: Bool, animated: Bool) {
+        let duration = animated ? MotionKit.durations.state : 0
+        MotionKit.crossFade(view: selectionHighlight, duration: duration, to: selected ? 1 : 0)
+        updateShadow()
+    }
+
+    /// hover 切换：提亮 + 加粗描边交叉溶解
+    private func applyHover(_ hovering: Bool, animated: Bool) {
+        let duration = animated ? MotionKit.durations.state : 0
+        MotionKit.crossFade(view: hoverHighlight, duration: duration, to: hovering ? 1 : 0)
+        updateShadow()
+    }
+
+    /// 阴影只在 hover 或选中时出现（其余时间 0，避免整屏投影噪声）
+    private func updateShadow() {
+        backgroundView.setShadowVisible(isSelected || isHovering)
+    }
+
+    /// 栈角标：编号变化时更新，栈推进（编号变大）时弹入
+    private func refreshStackBadge() {
+        let position = item?.stackPosition ?? 0
+        guard stackBadgeView.update(position: position) else { return }
+        layoutStackBadge()
+        MotionKit.popIn(stackBadgeView)
+    }
+
+    /// 角标贴内容区右上角（尺寸随编号宽度，不挤占正文布局）
+    private func layoutStackBadge() {
+        let content = ClipboardCardLayout.contentRect(in: bounds)
+        let size = stackBadgeView.intrinsicContentSize
+        stackBadgeView.frame = NSRect(x: content.maxX - size.width, y: content.minY,
+                                      width: size.width, height: size.height)
+    }
+
+    /// 收藏星：切换时弹入（0.7 → 1.15 → 1），外观跟随条目收藏态
+    private func refreshPinnedStar(animated: Bool) {
+        guard let item else {
+            starView.isHidden = true
+            return
         }
+        starView.image = Self.symbolImage(named: item.isPinned ? "star.fill" : "star",
+                                          color: item.isPinned ? .systemYellow : .secondaryLabelColor,
+                                          pointSize: Self.starSize)
+        starView.isHidden = false
+        starView.alphaValue = 1
+        guard animated else { return }
+        MotionKit.popIn(starView)
+    }
 
-        NSColor.separatorColor.setStroke()
-        path.lineWidth = 1
-        if isSelected {
-            NSColor.controlAccentColor.setStroke()
-            path.lineWidth = 1.5
+    // MARK: hover 浮层
+
+    /// 悬停满 0.45s 通知外层弹全文浮层（期间移出即取消）
+    private func scheduleOverlay() {
+        hoverTimer?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isHovering else { return }
+            self.onHoverStateChange?(self, true)
         }
-        path.stroke()
-
-        drawMeta(item: item, in: content)
-        if let position = item.stackPosition { drawStackBadge(position, in: content) }
+        hoverTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.hoverOverlayDelay, execute: work)
     }
 
-    /// 卡片底色：选中 = 常规底色 + accent 5% 叠加
-    private func drawBackground(_ path: NSBezierPath) {
-        NSColor.controlBackgroundColor.withAlphaComponent(isSelected ? 1 : 0.72).setFill()
-        path.fill()
-        guard isSelected else { return }
-        NSColor.controlAccentColor.withAlphaComponent(0.05).setFill()
-        path.fill()
+    /// 移出卡片 / 播放删除动效时收起 hover 态并通知外层收浮层
+    private func cancelHover() {
+        hoverTimer?.cancel()
+        hoverTimer = nil
+        guard isHovering else { return }
+        isHovering = false
+        applyHover(false, animated: true)
+        onHoverStateChange?(self, false)
     }
 
-    /// 内容区（去掉底部 meta 行）
-    private func bodyRect(in content: NSRect) -> NSRect {
-        NSRect(x: content.minX, y: content.minY, width: content.width,
-               height: max(0, content.height - Self.metaHeight - Self.bodyGap))
+    // MARK: 子视图构建
+
+    private func buildSubviews() {
+        wantsLayer = true
+        configureCardLayer()
+
+        // 常态描边常显（1pt separator）；hover 与选中各自叠一条更粗的描边
+        borderHighlight.alphaValue = 1
+        addSubview(backgroundView)
+        addSubview(borderHighlight)
+        addSubview(hoverHighlight)
+        addSubview(selectionHighlight)
+        addSubview(contentView)
+
+        thumbnailView.wantsLayer = true
+        thumbnailView.layer?.cornerRadius = Self.thumbnailCornerRadius
+        thumbnailView.layer?.masksToBounds = true
+        thumbnailView.isHidden = true
+        thumbnailView.setAccessibilityLabel("图片缩略图")
+        addSubview(thumbnailView)
+
+        starView.imageScaling = .scaleProportionallyUpOrDown
+        starView.wantsLayer = true
+        starView.isHidden = true
+        addSubview(starView)
+
+        stackBadgeView.isHidden = true
+        addSubview(stackBadgeView)
+
+        // 读屏：卡片是面板里唯一「可点即生效」的元素（单击选中、双击粘贴），
+        // 只设 label 不设 role 的话读屏能念出内容却按不动（与 MenuPanelRow 同口径）。
+        // 显式 setAccessibilityElement(true)：自绘装饰层默认不产生无障碍节点，只设文案可能整张卡片落空
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
     }
 
-    /// 文本卡：可断行正文垂直居中，最多 7 行，超出尾部省略
-    private func drawText(item: ClipboardItem, in body: NSRect) {
-        let monospaced = ClipboardCardTextStyle.isMonospaced(item.preview)
-        let font = monospaced
-            ? NSFont.monospacedSystemFont(ofSize: Self.monospacedFontSize, weight: .regular)
-            : NSFont.systemFont(ofSize: Self.bodyFontSize)
-
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byWordWrapping
-        paragraph.lineSpacing = 2
-        paragraph.alignment = .left
-
-        let text = item.preview.isEmpty ? "（空内容）" : item.preview
-        let attributed = NSAttributedString(
-            string: ClipboardCardTextStyle.breakable(text, monospaced: monospaced),
-            attributes: [.font: font,
-                         .foregroundColor: NSColor.labelColor,
-                         .paragraphStyle: paragraph])
-
-        let lineHeight = ceil(font.ascender - font.descender + paragraph.lineSpacing)
-        let maxHeight = lineHeight * CGFloat(Self.maxTextLines)
-        let measured = attributed.boundingRect(
-            with: NSSize(width: body.width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]).height
-        let drawHeight = min(maxHeight, ceil(measured))
-        let rect = NSRect(x: body.minX,
-                          y: body.minY + max(0, (body.height - drawHeight) / 2),
-                          width: body.width,
-                          height: drawHeight)
-        attributed.draw(with: rect,
-                        options: [.usesLineFragmentOrigin, .usesFontLeading, .truncatesLastVisibleLine])
+    /// 读屏激活 = 鼠标单击（选中该条），双击粘贴仍由键盘 ↵ 承担
+    override func accessibilityPerformPress() -> Bool {
+        guard onClick != nil else { return false }
+        onClick?(self)
+        return true
     }
 
-    /// 图片卡：缩略图为主体（圆角 6，等比填充裁剪），取不到图时降级为占位符号
-    private func drawThumbnail(item: ClipboardItem, in body: NSRect) {
-        guard body.width > 0, body.height > 0 else { return }
-        let path = NSBezierPath(roundedRect: body, xRadius: 6, yRadius: 6)
-        NSGraphicsContext.saveGraphicsState()
-        path.addClip()
-        NSColor.underPageBackgroundColor.setFill()
-        body.fill()
-        if let image = Self.thumbnail(for: item) {
-            Self.drawAspectFill(image: image, in: body)
-        } else {
-            Self.symbolImage(named: "photo", color: .secondaryLabelColor, pointSize: 24)?
-                .draw(in: NSRect(x: body.midX - 12, y: body.midY - 12, width: 24, height: 24))
-            // 原图拒绝落盘（像素超限 / 解码失败）时补一行原因，避免用户以为图片丢了
-            if item.imagePath == nil {
-                drawPlaceholderCaption(item.preview, in: body)
-            }
-        }
-        NSGraphicsContext.restoreGraphicsState()
+    /// 卡片外框：圆角与卡片一致；不裁切自身（阴影要溢出到卡片外），缩略图自带圆角裁切
+    private func configureCardLayer() {
+        layer?.cornerRadius = Self.cornerRadius
+        layer?.masksToBounds = false
     }
-
-    /// 占位降级说明（单行居中、中间截断；空文案不绘制）
-    private func drawPlaceholderCaption(_ caption: String, in body: NSRect) {
-        let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, body.height > 60 else { return }
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingMiddle
-        paragraph.alignment = .center
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 10),
-            .foregroundColor: NSColor.secondaryLabelColor,
-            .paragraphStyle: paragraph
-        ]
-        let rect = NSRect(x: body.minX + 6,
-                          y: body.midY + 18,
-                          width: body.width - 12,
-                          height: 14)
-        (text as NSString).draw(in: rect, withAttributes: attributes)
-    }
-
-    /// 底部单行 meta：左「类型图标 + ⌘N + 收藏星」，右「相对时间 + 来源 App 图标」
-    ///
-    /// 不渲染来源 App 名与复制次数（设计稿口径：元信息降级）。
-    private func drawMeta(item: ClipboardItem, in content: NSRect) {
-        let rowY = content.maxY - Self.metaHeight
-        let metaAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: Self.metaFontSize, weight: .regular),
-            .foregroundColor: NSColor.secondaryLabelColor
-        ]
-
-        // 左：类型图标
-        var leftX = content.minX
-        Self.symbolImage(named: Self.symbolName(for: item), color: .secondaryLabelColor,
-                         pointSize: Self.typeIconSize)?
-            .draw(in: NSRect(x: leftX, y: rowY + (Self.metaHeight - Self.typeIconSize) / 2,
-                             width: Self.typeIconSize, height: Self.typeIconSize))
-        leftX += Self.typeIconSize + Self.metaGap
-
-        // 左：⌘N 直选提示（只有 1…9 有位）
-        if let number = shortcutNumber, (1...9).contains(number) {
-            let label = "⌘\(number)" as NSString
-            let size = label.size(withAttributes: metaAttributes)
-            label.draw(at: NSPoint(x: leftX, y: rowY + (Self.metaHeight - size.height) / 2),
-                       withAttributes: metaAttributes)
-            leftX += size.width + Self.metaGap
-        }
-
-        // 左：收藏星（未收藏空心、已收藏实心）
-        let starName = item.isPinned ? "star.fill" : "star"
-        let starColor = item.isPinned ? NSColor.systemYellow : NSColor.secondaryLabelColor
-        Self.symbolImage(named: starName, color: starColor, pointSize: Self.starSize)?
-            .draw(in: NSRect(x: leftX, y: rowY + (Self.metaHeight - Self.starSize) / 2,
-                             width: Self.starSize, height: Self.starSize))
-
-        // 右：来源 App 图标（12pt、75% 不透明度，不显示 App 名） + 相对时间
-        var rightX = content.maxX
-        if let icon = Self.applicationIcon(bundleID: item.sourceBundleID) {
-            icon.draw(in: NSRect(x: rightX - Self.appIconSize,
-                                 y: rowY + (Self.metaHeight - Self.appIconSize) / 2,
-                                 width: Self.appIconSize, height: Self.appIconSize),
-                      from: .zero, operation: .sourceOver, fraction: 0.75)
-            rightX -= Self.appIconSize + Self.metaGap
-        }
-        let time = ClipboardRelativeTime.string(from: item.createdAt) as NSString
-        let timeSize = time.size(withAttributes: metaAttributes)
-        time.draw(at: NSPoint(x: rightX - timeSize.width, y: rowY + (Self.metaHeight - timeSize.height) / 2),
-                  withAttributes: metaAttributes)
-    }
-
-    /// Paste Stack 角标（右上角 ①②③，按 stack_position 编号）
-    private func drawStackBadge(_ position: Int, in content: NSRect) {
-        let badge = Self.badgeText(position) as NSString
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-                                                         .foregroundColor: NSColor.white]
-        let size = badge.size(withAttributes: attributes)
-        let rect = NSRect(x: content.maxX - size.width - 8, y: content.minY,
-                          width: size.width + 8, height: size.height + 2)
-        NSColor.controlAccentColor.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
-        badge.draw(at: NSPoint(x: rect.minX + 4, y: rect.minY + 1), withAttributes: attributes)
-    }
-}
-// MARK: - 右键菜单命令
-
-/// 卡片右键菜单命令 — tag 值与面板内容视图的分发判据一一对应，顺序即菜单顺序
-enum ClipboardCardMenuCommand: Int, CaseIterable {
-    /// 复制到系统剪贴板（不粘贴）
-    case copy = 1
-    /// 以纯文本形式粘贴（去掉富文本样式）
-    case pastePlainText = 2
-    /// 收藏 / 取消收藏
-    case togglePin = 3
-    /// 贴到屏幕（沿用既有 onPin 贴图链路，不在此通道分发）
-    case pinToScreen = 4
-    /// 删除该条（先进入二次确认）
-    case delete = 5
 }

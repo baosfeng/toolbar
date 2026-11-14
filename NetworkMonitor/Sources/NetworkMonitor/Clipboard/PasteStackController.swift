@@ -28,6 +28,11 @@ final class PasteStackController {
     private(set) var accessibilityGranted = false
     /// 状态变化回调（栈进度 / 权限状态变化）
     var onStateChange: (() -> Void)?
+    /// 栈推进回调（仅「⌘V 贴出队首」时触发；入栈 / 重载 / 清空不触发）
+    ///
+    /// 与 onStateChange 分开的原因：后者被入栈、重载、清空共用，
+    /// 触觉反馈只该在真正推进（队首被贴出）时打一次，否则每次打开面板都会被震一下。
+    var onAdvance: (() -> Void)?
 
     init(repository: any ClipboardRepository,
          writer: any ClipboardWriter,
@@ -106,6 +111,7 @@ final class PasteStackController {
         positions.removeFirst()
         itemsByID[id] = nil
         persist()
+        onAdvance?()
         guard let item else { return }
         if !writer.write(item, asPlainText: false) {
             logger.warning("Paste Stack 队首内容写回剪贴板失败（图片可能已丢失）")

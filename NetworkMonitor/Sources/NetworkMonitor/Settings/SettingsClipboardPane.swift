@@ -19,7 +19,8 @@ final class SettingsClipboardPane: SettingsPaneView {
     /// 跨文件访问：忽略应用列表扩展需要通知采集器忽略集合变化
     weak var settingsDelegate: ClipboardSettingsDelegate?
 
-    private let logger: LoggingService
+    /// 跨文件访问：存储卡与权限扩展要写日志
+    let logger: LoggingService
 
     private let hotKeyRecorder = HotKeyRecorderView()
     private let positionPopup = NSPopUpButton()
@@ -27,6 +28,9 @@ final class SettingsClipboardPane: SettingsPaneView {
     private let heightValueLabel = MenuPanelLabel.text("", font: SettingsStyle.rowValueFont,
                                                       color: .secondaryLabelColor)
     private let quickPasteSwitch = NSSwitch()
+    // 操作反馈（跨文件访问：SettingsClipboardPane+Feedback.swift）
+    let soundEffectsSwitch = NSSwitch()
+    let hapticsSwitch = NSSwitch()
     private let captureModePopup = NSPopUpButton()
     private let maxItemsField = NSTextField()
     private let retentionField = NSTextField()
@@ -38,14 +42,23 @@ final class SettingsClipboardPane: SettingsPaneView {
     let ignoredListStack = NSStackView()
     var ignoredExpanded = false
 
-    private let clipboardDot = SettingsStatusDotView()
-    private let clipboardStateLabel = MenuPanelLabel.text("", font: .systemFont(ofSize: 12),
-                                                         color: .secondaryLabelColor)
-    private var clipboardSettingsButton = NSButton()
-    private let accessibilityDot = SettingsStatusDotView()
-    private let accessibilityStateLabel = MenuPanelLabel.text("", font: .systemFont(ofSize: 12),
-                                                             color: .secondaryLabelColor)
-    private var accessibilityButton = NSButton()
+    // 图片存储（跨文件访问：SettingsClipboardPane+Storage.swift 构建与动作）
+    let usageLabel = MenuPanelLabel.text("", font: SettingsStyle.rowValueFont, color: .labelColor)
+    let usageDetailLabel = MenuPanelLabel.text("", font: SettingsStyle.rowSubtitleFont,
+                                               color: .secondaryLabelColor)
+    var openDirectoryButton = NSButton()
+    var clearStorageButton = NSButton()
+    var storageActionRow: SettingsRowView?
+
+    // 权限状态控件与按钮（跨文件访问：SettingsClipboardPane+Permission.swift 只读状态与显隐）
+    let clipboardDot = SettingsStatusDotView()
+    let clipboardStateLabel = MenuPanelLabel.text("", font: .systemFont(ofSize: 12),
+                                                 color: .secondaryLabelColor)
+    var clipboardSettingsButton = NSButton()
+    let accessibilityDot = SettingsStatusDotView()
+    let accessibilityStateLabel = MenuPanelLabel.text("", font: .systemFont(ofSize: 12),
+                                                     color: .secondaryLabelColor)
+    var accessibilityButton = NSButton()
 
     init(preferences: ClipboardPreferences = ClipboardPreferences(),
          delegate: ClipboardSettingsDelegate? = nil,
@@ -98,6 +111,9 @@ final class SettingsClipboardPane: SettingsPaneView {
         accessibilityRow.trailingStack.addArrangedSubview(accessibilityDot)
         accessibilityRow.trailingStack.addArrangedSubview(accessibilityStateLabel)
         accessibilityRow.trailingStack.addArrangedSubview(accessibilityButton)
+
+        buildFeedbackCard()
+        buildStorageCard()
 
         let permissionCard = SettingsCardView()
         [clipboardRow, accessibilityRow].forEach(permissionCard.addRow)
@@ -216,49 +232,13 @@ final class SettingsClipboardPane: SettingsPaneView {
         maxItemsField.stringValue = "\(preferences.maxItems)"
         retentionField.stringValue = "\(preferences.retentionDays)"
         reloadIgnoredApps()
+        refreshFeedbackSwitches()
+        refreshStorageCard()
         refreshPermissionStatus()
     }
 
     private func index(of rawValue: String, in popup: NSPopUpButton) -> Int {
         popup.itemArray.firstIndex { ($0.representedObject as? String) == rawValue } ?? 0
-    }
-
-    /// 权限状态：无权限时必须显式呈现并提供跳转（不得静默失败）
-    private func refreshPermissionStatus() {
-        let granted = settingsDelegate?.settingsAccessibilityGranted() ?? false
-        accessibilityDot.setColor(granted ? .systemGreen : .systemOrange)
-        accessibilityStateLabel.stringValue = granted ? "已授权" : "待授权"
-        accessibilityButton.isHidden = granted
-
-        // 文案与色调是 Core 纯规则（ClipboardAccessState），这里只做 API 读取与色值映射
-        let access = Self.clipboardAccessState()
-        clipboardDot.setColor(Self.color(for: access.tone))
-        clipboardStateLabel.stringValue = access.label
-        clipboardSettingsButton.isHidden = !access.needsSettingsJump
-    }
-
-    // MARK: - 权限映射
-
-    /// 读取系统剪贴板访问行为（15.4+ 才有该 API，低版本返回未知）
-    private static func clipboardAccessState() -> ClipboardAccessState {
-        if #available(macOS 15.4, *) {
-            switch NSPasteboard.general.accessBehavior {
-            case .alwaysAllow: return .allowed
-            case .alwaysDeny:  return .denied
-            case .ask:         return .ask
-            default:           return .unspecified
-            }
-        }
-        return .unknown
-    }
-
-    /// 语义色调 → 状态点颜色（与设置页其余状态点一致）
-    private static func color(for tone: ClipboardAccessTone) -> NSColor {
-        switch tone {
-        case .ok:      return .systemGreen
-        case .warning: return .systemOrange
-        case .muted:   return .tertiaryLabelColor
-        }
     }
 
     // MARK: - 动作
@@ -304,14 +284,6 @@ final class SettingsClipboardPane: SettingsPaneView {
         settingsDelegate?.settingsDidChangeCaptureMode()
     }
 
-    @objc private func requestAccessibility() {
-        settingsDelegate?.settingsDidRequestAccessibilityPermission()
-        refreshPermissionStatus()
-    }
-
-    @objc private func requestClipboardAccess() {
-        settingsDelegate?.settingsDidRequestClipboardSettings()
-    }
 }
 
 // MARK: - 文本字段提交

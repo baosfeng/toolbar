@@ -8,6 +8,23 @@ import NetworkMonitorCore
 
 extension ClipboardPanelView {
 
+    // MARK: 两级材质与发丝分隔线（视图定义见 ClipboardPanelChrome.swift）
+
+    /// 面板内衬：两级材料的里层，挂成首个（最底层）子视图
+    /// 层次因此是「外层 .hudWindow → 内衬 → 发丝分隔线 → 控件与卡片 → 浮层」，内容仍铺满可用区
+    func buildInnerMaterial() {
+        let inset = ClipboardPanelInnerMaterialView.inset
+        innerMaterial.frame = bounds.insetBy(dx: inset, dy: inset)
+        addSubview(innerMaterial)
+    }
+
+    /// 发丝分隔线层：内衬作为子视图会盖住父视图自绘的线条，故单独成层；
+    /// 位置紧跟内衬（在所有控件与卡片之下），与改动前父视图自绘的层次保持一致
+    func buildSeparatorLayer() {
+        separatorView.frame = bounds
+        addSubview(separatorView)
+    }
+
     func buildSearchField() {
         searchField.placeholderString = "搜索剪贴板"
         searchField.delegate = self
@@ -71,6 +88,51 @@ extension ClipboardPanelView {
         addSubview(accessibilityButton)
     }
 
+    /// 工具条「?」按钮：键盘快捷键自身没有自述入口，靠它弹出键位浮层
+    func buildHelpButton() {
+        helpButton.isBordered = false
+        helpButton.controlSize = .small
+        // 不参与焦点环：点「?」后搜索框仍是第一响应者，弹出浮层不打断输入
+        helpButton.refusesFirstResponder = true
+        // 图标单独按 13pt 配置：10pt 符号在 24pt 按钮里点击目标过小
+        helpButton.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [NSColor.secondaryLabelColor])))
+        helpButton.imagePosition = .imageOnly
+        helpButton.toolTip = "快捷键帮助"
+        helpButton.setAccessibilityLabel("快捷键帮助")
+        helpButton.target = self
+        helpButton.action = #selector(toggleShortcutHelp)
+        addSubview(helpButton)
+    }
+
+    /// 首次引导态与快捷键帮助浮层：都挂在面板最上层，帮助浮层压在引导态之上
+    func buildOverlays() {
+        guideView.onDismiss = { [weak self] in
+            guard let self else { return }
+            self.delegate?.panelViewDidDismissGuide(self)
+        }
+        // 引导态由控制器按「未引导过 + 历史为空」显式打开，视图自己不猜
+        guideView.isHidden = true
+        // 可读名与角色由 ClipboardGuideView.build 自己给（一句完整说明），此处不再覆盖
+        addSubview(guideView)
+
+        helpOverlay.onDismiss = { [weak self] in self?.hideShortcutHelp() }
+        helpOverlay.isHidden = true
+        addSubview(helpOverlay)
+    }
+
+    /// 引导态与「无匹配结果」空态互斥：引导态出现时空态不再显示同一句「没有匹配…」
+    ///
+    /// 判定条件由控制器给出（未引导过 + 历史为空），视图只负责呈现，不关心偏好从哪来。
+    func updateGuideState(visible: Bool, toggleHotKey: String) {
+        guideView.updateToggleHotKey(toggleHotKey)
+        guideView.isHidden = !visible
+        // 引导态独占卡片区：历史为空，卡片流里只有空态文案，隐藏后不与引导文案叠字
+        cardFlow.isHidden = visible
+        needsLayout = true
+    }
+
     /// 权限入口样式：有权限时 10pt muted，无权限时改为 systemOrange 并带警示符号（不得静默）
     func applyPermissionStyle(accessibilityGranted: Bool) {
         let color: NSColor = accessibilityGranted ? .secondaryLabelColor : .systemOrange
@@ -96,6 +158,11 @@ extension ClipboardPanelView {
         cardFlow.onPin = { [weak self] index in
             guard let self else { return }
             self.delegate?.panelView(self, didRequestPinAt: index)
+        }
+        // 选中切换的触觉在视图层直接打：方向键连按时这条路径最敏感，
+        // 不必绕回控制器再打一次（控制器只负责业务，反馈依赖已注入本视图）
+        cardFlow.onSelectionChanged = { [weak self] in
+            self?.feedback.haptics.tap(.selection)
         }
         addSubview(cardFlow)
     }
@@ -142,5 +209,30 @@ enum ClipboardPanelFooterText {
     /// 读屏文案「共 N 条，其中收藏 M 条」
     static func countsAccessibilityLabel(total: Int, pinned: Int) -> String {
         "共 \(total) 条，其中收藏 \(pinned) 条"
+    }
+}
+
+// MARK: - 快捷键帮助浮层显隐
+
+/// 帮助浮层的开合放在扩展里：面板视图只负责绘制与布局，显隐口径集中一处
+extension ClipboardPanelView {
+
+    /// 帮助浮层是否可见
+    var isShortcutHelpVisible: Bool { !helpOverlay.isHidden }
+
+    /// 弹出帮助浮层：不 makeFirstResponder，搜索框焦点不丢（面板本就是非激活面板）
+    func showShortcutHelp() {
+        helpOverlay.isHidden = false
+        // 浮层与父视图都要重排：浮层铺满内容区、卡片按当前尺寸居中
+        helpOverlay.needsLayout = true
+        needsLayout = true
+    }
+
+    /// 收起帮助浮层；返回是否真的收起过（供控制器判断 Esc 是否已被消费）
+    @discardableResult
+    func hideShortcutHelp() -> Bool {
+        guard !helpOverlay.isHidden else { return false }
+        helpOverlay.isHidden = true
+        return true
     }
 }

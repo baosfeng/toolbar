@@ -1,5 +1,4 @@
 import AppKit
-import Carbon
 import NetworkMonitorCore
 
 // MARK: - 面板控制器
@@ -8,21 +7,36 @@ import NetworkMonitorCore
 @MainActor
 final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanelViewDelegate {
 
+    /// 面板展开 / 收起动效口径（设计规格 §3 B2：0.18s、展开位移 14pt）
+    ///
+    /// 动效本体一律走 `MotionKit`（跟随「减弱动态效果」），本处只留时长与位移两个数值。
+    private enum Motion {
+        static let duration: TimeInterval = 0.18
+        static let offsetY: CGFloat = 14
+    }
+
     private let panel: ClipboardPanel
     let content: ClipboardPanelView
     let repository: any ClipboardRepository
     private let captureService: any ClipboardCaptureService
-    private let paster: ClipboardPaster
-    private let stack: PasteStackController
-    private let preferences: ClipboardPreferences
+    /// 放宽 internal：复制 / 粘贴 / 收藏 / 栈推进的反馈在 ClipboardPanelController+Feedback.swift
+    let paster: ClipboardPaster
+    /// 放宽 internal：Paste Stack 动作在 ClipboardPanelController+Stack.swift，需访问 stack
+    let stack: PasteStackController
+    /// 放宽 internal：首次引导与 Paste Stack 扩展文件要读写偏好
+    let preferences: ClipboardPreferences
     /// 放宽 internal：贴图扩展文件要写日志
     let logger: LoggingService
+    /// 操作反馈（音效 + 触觉）— 组合根注入，面板视图与控制器共用同一份
+    let feedback: ClipboardFeedback
     /// ⌘, 打开剪贴板设置（组合根注入，复用既有设置窗打开路径）
-    private let onRequestSettings: (() -> Void)?
+    /// 放宽 internal：按键拦截在 ClipboardPanelController+Keyboard.swift
+    let onRequestSettings: (() -> Void)?
     /// 把某条历史贴到屏幕（组合根注入到截图链路）
     var onRequestPin: ((ClipboardItem) -> Void)?
 
-    private var items: [ClipboardItem] = []
+    /// 放宽 internal：首次引导判定要看「历史是否为空」
+    var items: [ClipboardItem] = []
     /// 放宽为 internal：贴图扩展文件要按索引取条目
     var filteredItems: [ClipboardItem] = []
     var selectedIndex = -1
@@ -34,19 +48,24 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
 
     init(repository: any ClipboardRepository, captureService: any ClipboardCaptureService,
-         paster: ClipboardPaster, stack: PasteStackController, onRequestSettings: (() -> Void)? = nil,
+         paster: ClipboardPaster, stack: PasteStackController, feedback: ClipboardFeedback,
+         onRequestSettings: (() -> Void)? = nil,
          preferences: ClipboardPreferences, logger: LoggingService = AppContext.shared.logger) {
         self.repository = repository; self.captureService = captureService
-        self.paster = paster; self.stack = stack; self.onRequestSettings = onRequestSettings
+        self.paster = paster; self.stack = stack; self.feedback = feedback
+        self.onRequestSettings = onRequestSettings
         self.preferences = preferences; self.logger = logger
         let rect = NSRect(x: 0, y: 0, width: 640, height: 260)
         self.panel = ClipboardPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel],
                                     backing: .buffered, defer: false)
-        self.content = ClipboardPanelView(frame: rect)
+        // 反馈按构造器注入交给面板视图：选中切换的触觉由卡片流回调直接打，不经控制器转一圈
+        self.content = ClipboardPanelView(frame: rect, feedback: feedback)
         super.init()
         configurePanel()
         observeClipboardChanges()
         stack.onStateChange = { [weak self] in self?.syncStackState() }
+        // 栈推进（⌘V 贴出队首）单独反馈：onStateChange 还覆盖入栈 / 重载 / 清空，不能一律打触觉
+        stack.onAdvance = { [weak self] in self?.reportStackAdvanced() }
     }
 
     nonisolated deinit {
@@ -114,32 +133,27 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         if let hint = pendingHint { content.showHint(hint); pendingHint = nil }
         positionPanel()
         let finalFrame = panel.frame
-        panel.alphaValue = 0
-        panel.setFrame(finalFrame.offsetBy(dx: 0, dy: -14), display: false)
+        // 起始态先进 MotionKit：允许动效是「透明 + 下移 14pt」，减弱动态效果时直接落终态
+        MotionKit.stageWindowEntrance(panel, fromOffsetY: Motion.offsetY, toFrame: finalFrame)
         panel.makeKeyAndOrderFront(nil)
         content.focusSearchField()
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.18
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 1
-            panel.animator().setFrame(finalFrame, display: true)
-        }, completionHandler: nil)
+        // 动画在 makeKeyAndOrderFront 之后执行：位移回落与淡入都发生在面板已成为 key 之后
+        MotionKit.fadeIn(window: panel, toFrame: finalFrame, duration: Motion.duration)
     }
 
     /// 收起面板；animated=false 用于粘贴路径 —— 立即 orderOut 让出 key，合成的 ⌘V 才落得到目标 App
     func hide(animated: Bool) {
         guard panel.isVisible else { return }
+        // 帮助浮层不跨次留存：收起面板时一并关掉，下次打开是干净的面板
+        content.hideShortcutHelp()
         clearDeleteConfirmHint()
         // 收起后不再需要缩略图：丢弃在途回调（已入队任务允许跑完，缓存与磁盘文件不删）
         ClipboardThumbnailLoader.shared.cancelAll()
+        // animated=false 不套动效：立即 orderOut 让出 key（粘贴路径依赖这一点）
         guard animated else { panel.orderOut(nil); return }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.18
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            Task { @MainActor in self?.panel.orderOut(nil) }
-        })
+        MotionKit.fadeOut(window: panel, duration: Motion.duration) { [weak self] in
+            self?.panel.orderOut(nil)
+        }
     }
 
     func windowDidResignKey(_ notification: Notification) { hide(animated: true) }
@@ -159,7 +173,8 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         applyFilter(preferredID: preferredID)
     }
 
-    private func applyFilter(preferredID: UUID? = nil) {
+    /// 放宽 internal：过滤循环在 ClipboardPanelController+Keyboard.swift
+    func applyFilter(preferredID: UUID? = nil) {
         // 检索/过滤纯逻辑见 ClipboardPanelSearch；此处不截断 —— filteredItems 持全部匹配项，屏幕卡片数由滑动窗口控制
         filteredItems = ClipboardPanelSearch.match(query: content.query, filter: content.filter,
                                                    repository: repository, items: items,
@@ -173,6 +188,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         }
         content.render(items: filteredItems, selectedIndex: selectedIndex)
         content.updateCounts(total: filteredItems.count, pinned: filteredItems.filter { $0.isPinned }.count)
+        refreshGuideState()
     }
 
     var selectedItem: ClipboardItem? {
@@ -184,88 +200,23 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         content.updatePermission(accessibilityGranted: stack.accessibilityGranted)
     }
 
-    /// 面板级按键拦截（先于 responder chain）：搜索框非空时 ⌫ 交还字段编辑器
-    private func handleKeyDown(_ event: NSEvent) -> Bool {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let isCommand = flags.contains(.command), isShift = flags.contains(.shift)
-        let isOption = flags.contains(.option), hasQuery = !content.query.isEmpty
-
-        switch Int(event.keyCode) {
-        case kVK_Escape:
-            hide(animated: true)
-        case kVK_Delete, kVK_ForwardDelete:
-            if hasQuery { return false }
-            if isCommand, isShift { requestClearAll() } else if !isCommand { requestDeleteSelected() } else { return false }
-        case kVK_Tab:
-            cycleFilter(reverse: isShift)   // ⇧Tab 反向循环过滤
-        case kVK_ANSI_Comma:
-            guard isCommand else { return false }
-            hide(animated: false)
-            onRequestSettings?()
-        case kVK_Return, kVK_ANSI_KeypadEnter:
-            isCommand ? copySelected() : pasteSelected(asPlainText: isOption)
-        // 单行横向流：←/→ 连续前后移动，↑/↓ 等价映射为前后
-        case kVK_LeftArrow: moveSelection(-1)
-        case kVK_RightArrow: moveSelection(1)
-        case kVK_UpArrow: moveSelection(-1)
-        case kVK_DownArrow: moveSelection(1)
-        default:
-            guard isCommand, let characters = event.charactersIgnoringModifiers?.lowercased() else { return false }
-            switch characters {
-            case "d": togglePin()
-            case "s": isShift ? clearStack() : pushSelectedToStack()
-            case "1", "2", "3", "4", "5", "6", "7", "8", "9": quickPaste(Int(characters) ?? 0)
-            default: return false
-            }
-        }
-        return true
-    }
-
-    /// 方向键移动：单行卡片流上连续前后移动；无选中时向前落第一条、向后落最后一条
-    private func moveSelection(_ delta: Int) {
-        guard !filteredItems.isEmpty else { return }
-        let base = selectedIndex < 0 ? (delta > 0 ? -1 : 0) : selectedIndex
-        var next = base + delta
-        if next < 0 { next = filteredItems.count - 1 }
-        if next >= filteredItems.count { next = 0 }
-        selectedIndex = next
-        content.updateSelection(next)
-        clearDeleteConfirmHint()
-    }
-
-    /// 过滤循环：⇧Tab 反向
-    private func cycleFilter(reverse: Bool) {
-        let all = ClipboardFilter.allCases
-        let step = reverse ? all.count - 1 : 1
-        content.selectFilter(all[(content.filter.rawValue + step) % all.count])
-        applyFilter(preferredID: selectedItem?.id)
-    }
 
     func pasteSelected(asPlainText: Bool) {
         guard let item = selectedItem else { return }
         // 先收起面板让出 key，再走「写剪贴板 → 延迟 80ms → 合成 ⌘V」（见 ClipboardPaster）
         if paster.hasTargetApplication { hide(animated: false) }
-        paster.paste(item, asPlainText: asPlainText) { [weak self] outcome in self?.handleOutcome(outcome) }
+        paster.paste(item, asPlainText: asPlainText) { [weak self] outcome in
+            self?.reportPasteOutcome(outcome)
+        }
     }
 
     func copySelected() {
         guard let item = selectedItem else { return }
-        handleOutcome(paster.copyOnly(item))
+        reportCopyOutcome(paster.copyOnly(item))
     }
 
-    private func quickPaste(_ number: Int) {
-        guard preferences.quickPasteEnabled else {
-            content.showHint("快速粘贴已关闭（可在剪贴板设置中开启）")
-            return
-        }
-        let index = number - 1
-        guard index >= 0, index < filteredItems.count else { return }
-        selectedIndex = index
-        content.updateSelection(index)
-        pasteSelected(asPlainText: false)
-    }
-
-    private func handleOutcome(_ outcome: ClipboardPasteOutcome) {
+    /// 放宽 internal：复制 / 粘贴的反馈接线在 ClipboardPanelController+Feedback.swift
+    func handleOutcome(_ outcome: ClipboardPasteOutcome) {
         let message = outcome.message
         guard !message.isEmpty else { return }
         logger.info("剪贴板粘贴：\(message)")
@@ -274,27 +225,15 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
 
     func togglePin() {
         guard let item = selectedItem else { return }
-        repository.setClipboardItemPinned(id: item.id, isPinned: !item.isPinned)
+        let target = !item.isPinned
+        repository.setClipboardItemPinned(id: item.id, isPinned: target)
+        // 反馈只在此处打一次：卡片刷新只重建视图，不再重复触发
+        reportPinToggled(to: target)
         AppEvents.postClipboardChanged()
         reloadItems(preferredID: item.id)
     }
 
     // 删除 / 清空的动作体见 ClipboardPanelController+Delete.swift（含二次确认状态机）
-
-    private func pushSelectedToStack() {
-        guard let item = selectedItem else { return }
-        // 无辅助功能权限：不得静默，给出文案与跳转入口
-        guard stack.push(id: item.id) else {
-            content.showHint("缺少辅助功能权限，无法使用 Paste Stack，请前往系统设置授权")
-            return
-        }
-        content.showHint("已加入 Paste Stack（第 \(stack.remainingCount) 项）")
-    }
-
-    private func clearStack() {
-        stack.removeAll()
-        content.showHint("Paste Stack 已清空")
-    }
 
     func panelViewDidRequestCapture(_ view: ClipboardPanelView) { captureService.captureNow() }
 
@@ -308,7 +247,6 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         content.updateSelection(index)
         clearDeleteConfirmHint()
     }
-
 
     func panelView(_ view: ClipboardPanelView, didActivate index: Int) {
         panelView(view, didSelect: index)

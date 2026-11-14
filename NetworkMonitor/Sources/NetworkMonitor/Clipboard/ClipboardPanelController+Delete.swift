@@ -12,7 +12,16 @@ extension ClipboardPanelController {
     func requestDeleteSelected() {
         guard let item = selectedItem else { return }
         guard requestSingleDeleteConfirm(for: item) else { return }
-        ClipboardImageGC.delete(repository: repository, id: item.id, logger: logger)
+        guard ClipboardImageGC.delete(repository: repository, id: item.id, logger: logger) else {
+            // 删除没命中（条目已被别的路径删掉）：给失败音，不谎报成功
+            feedback.sound.play(.error)
+            logger.warning("剪贴板单条删除失败：条目已不存在")
+            AppEvents.postClipboardChanged()
+            reloadItems()
+            content.showHint("该条目已不存在")
+            return
+        }
+        feedback.sound.play(.delete)
         logger.info("剪贴板单条已删除（二次确认通过）")
         AppEvents.postClipboardChanged()
         reloadItems()
@@ -23,6 +32,12 @@ extension ClipboardPanelController {
     func requestClearAll() {
         guard clearAllConfirm.requestDelete(id: Self.clearAllConfirmKey, now: Date().timeIntervalSince1970) else {
             let removed = ClipboardImageGC.clear(repository: repository, keepingPinned: true, logger: logger)
+            if removed == 0 {
+                // 本来就没有可清空的内容：不打删除音，避免「点了没反应却有声音」的错觉
+                logger.debug("剪贴板历史清空：没有可删除的条目（收藏保留）")
+            } else {
+                feedback.sound.play(.delete)
+            }
             logger.info("剪贴板历史已清空，删除 \(removed) 条（收藏保留）")
             AppEvents.postClipboardChanged()
             reloadItems()
