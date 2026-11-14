@@ -12,6 +12,10 @@ extension AppCoordinator {
         snipController.onOpenSettings = { [weak self] in
             self?.settingsWindow?.show(section: .capture)
         }
+        // 截图完成提示音：走统一事件表（截图完成一行），默认关
+        snipController.onCaptureCompleted = { [weak self] in
+            self?.soundFeedback.play(.snipCapture)
+        }
         snipController.start()
         // 启动预热：完整走一遍「切前台 → 退回菜单栏态」
         //

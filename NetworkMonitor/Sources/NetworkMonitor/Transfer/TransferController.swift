@@ -36,12 +36,16 @@ final class TransferController {
     init(service: TransferService,
          registry: DeviceRegistry,
          preferences: TransferPreferences = TransferPreferences(),
+         notifications: any NotificationServicing,
+         soundPlayer: NotificationSoundPlayer,
          logger: LoggingService = AppContext.shared.logger) {
         self.service = service
         self.registry = registry
         self.preferences = preferences
         self.logger = logger
-        self.notification = TransferNotification(preferences: preferences, logger: logger)
+        self.notification = TransferNotification(notifications: notifications,
+                                                 soundPlayer: soundPlayer,
+                                                 logger: logger)
     }
 
     /// 绑定面板并安装交互回调（`MenuPanelController` 装配时调用一次）
@@ -173,15 +177,13 @@ final class TransferController {
                       statusText: statusText,
                       autoAcceptText: windowActive ? preferences.windowRemainingText() : "",
                       autoAcceptActive: windowActive)
-        notifyNewDevices()
+        trackNewDevices()
     }
 
-    /// 新设备首次出现在列表时给轻提示（音效默认关闭，由设置开启）
-    private func notifyNewDevices() {
+    /// 新设备首次出现在列表时记一笔（提示音并入「传输完成」事件行，不再单独出声）
+    private func trackNewDevices() {
         for device in devices where device.isOnline {
-            if appearedDeviceIds.insert(device.deviceId).inserted, started {
-                notification.deviceAppeared(device)
-            }
+            appearedDeviceIds.insert(device.deviceId)
         }
     }
 
@@ -299,7 +301,6 @@ final class TransferController {
                 }
                 guard offer.sessionId != self.currentPendingOfferId else { return }
                 self.currentPendingOfferId = offer.sessionId
-                self.notification.pairingCodeGenerated()
                 self.presentReceivePIN(offer)
             }
         }

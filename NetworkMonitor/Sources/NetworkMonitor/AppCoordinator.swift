@@ -59,6 +59,14 @@ public final class AppCoordinator {
     // 操作反馈实例（放宽为 internal：AppCoordinator+Feedback 装配扩展要写）
     var soundFeedback: SoundFeedback!
     var hapticFeedback: HapticFeedback!
+    /// 通知与音效偏好（事件表六行的唯一读写入口）
+    var notificationPreferences: NotificationPreferences!
+    /// 应用内音效库（系统音效清单 + 自定义音效目录）
+    var soundLibrary: NotificationSoundLibrary!
+    /// 应用内音效播放器
+    var soundPlayer: NotificationSoundPlayer!
+    /// 系统通知入口（额度 / 传输等全部系统通知的唯一出口）
+    var notificationService: any NotificationServicing!
 
     /// 局域网互传面板控制器
     // 放宽为 internal：AppCoordinator+Transfer 装配扩展要写
@@ -98,6 +106,10 @@ public final class AppCoordinator {
         // 3. 流量追踪
         trafficTracker = TrafficTracker(monitor: networkMonitor)
 
+        // 3b. 通知与音效（偏好 / 音效库 / 播放器 / 系统通知服务 / 触觉；
+        //     必须早于剪贴板与额度链路，它们都从这里取实例）
+        setupNotificationAndFeedback()
+
         // 4. 剪贴板历史链路
         setupClipboard(database: database)
 
@@ -121,7 +133,10 @@ public final class AppCoordinator {
         // 旧明文迁移：按注册表全量走一遍，不等用户点开某个 provider（详见该方法的说明）
         billingCredentials.migrateLegacyPlaintext(for: billingRegistry.all.map(\.id))
         // 额度阈值提醒（5%/4%/3%/2%/1%）：应用启动时请求通知权限
-        let billingAlerts = BillingAlertService(storage: AppContext.shared.storage, logger: logger)
+        let billingAlerts = BillingAlertService(storage: AppContext.shared.storage,
+                                               notifications: notificationService,
+                                               soundPlayer: soundPlayer,
+                                               logger: logger)
         billingAlerts.requestAuthorizationIfNeeded()
         let billingMonitor = BillingMonitor(registry: billingRegistry,
                                             credentialStore: billingCredentials,

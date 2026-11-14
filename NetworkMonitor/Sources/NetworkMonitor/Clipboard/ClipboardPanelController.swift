@@ -139,6 +139,9 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         content.focusSearchField()
         // 动画在 makeKeyAndOrderFront 之后执行：位移回落与淡入都发生在面板已成为 key 之后
         MotionKit.fadeIn(window: panel, toFrame: finalFrame, duration: Motion.duration)
+        // 展开提示音（默认关；设置页「面板展开收起」一行开）。
+        // 放在最后：先让面板出来再响，听感上才是「打开」而不是「点击」
+        feedback.sound.play(.panelToggle)
     }
 
     /// 收起面板；animated=false 用于粘贴路径 —— 立即 orderOut 让出 key，合成的 ⌘V 才落得到目标 App
@@ -151,6 +154,8 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         ClipboardThumbnailLoader.shared.cancelAll()
         // animated=false 不套动效：立即 orderOut 让出 key（粘贴路径依赖这一点）
         guard animated else { panel.orderOut(nil); return }
+        // 收起提示音：只在「用户主动收起」这条路上响，粘贴路径（animated=false）不响
+        feedback.sound.play(.panelToggle)
         MotionKit.fadeOut(window: panel, duration: Motion.duration) { [weak self] in
             self?.panel.orderOut(nil)
         }
