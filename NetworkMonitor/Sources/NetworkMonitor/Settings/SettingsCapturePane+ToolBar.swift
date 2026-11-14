@@ -58,20 +58,22 @@ extension SettingsCapturePane {
 
         page.addCard(card, sectionTitle: "工具条显示")
 
-        // 排列顺序：上移 / 下移（顺序即工具条上从左到右的顺序）
-        let orderCard = SettingsCardView()
+        // 排列顺序：交给通用可排序卡片（行尾上移 / 下移 + 标题行「恢复默认」）
+        let ordered = SettingsOrderedCardView(orderKey: SnipToolBarPreferenceKey.groupOrder,
+                                              defaultOrder: SnipToolBarGroup.allCases.map(\.rawValue),
+                                              storage: storage,
+                                              onChange: { [weak self] _ in self?.refreshToolBar() })
         for group in SnipToolBarGroup.allCases {
             let row = SettingsRowView(title: group.displayName, subtitle: "工具条上的位置")
-            let up = SettingsLinkButton.make("上移", target: self, action: #selector(toolBarGroupMoveUp(_:)))
-            up.tag = SnipToolBarGroup.allCases.firstIndex(of: group) ?? 0
-            let down = SettingsLinkButton.make("下移", target: self, action: #selector(toolBarGroupMoveDown(_:)))
-            down.tag = SnipToolBarGroup.allCases.firstIndex(of: group) ?? 0
-            row.trailingStack.addArrangedSubview(up)
-            row.trailingStack.addArrangedSubview(down)
-            toolBarOrderRows[group] = row
-            orderCard.addRow(row)
+            ordered.addRow(id: group.rawValue,
+                           row: row,
+                           accessibilityPrefix: group.displayName) { [weak row] position in
+                row?.update(subtitle: "工具条上第 \(position) 组")
+            }
         }
-        page.addCard(orderCard, sectionTitle: "排列顺序")
+        ordered.finish()
+        toolBarOrderCard = ordered
+        page.addCard(ordered.card, sectionTitle: "排列顺序", trailingAccessory: ordered.resetButton)
 
         // 常驻工具：10 个 chip 分两行，点一下切换；未选的收进「更多」面板
         let toolsCard = SettingsCardView()
@@ -143,11 +145,6 @@ extension SettingsCapturePane {
         for (group, toggle) in toolBarGroupToggles {
             toggle.state = config.isVisible(group) ? .on : .off
         }
-        // 顺序行副标题直接写出当前是第几组，避免「点了上移看不出变化」
-        for (group, row) in toolBarOrderRows {
-            let position = (config.groupOrder.firstIndex(of: group) ?? 0) + 1
-            row.update(subtitle: "工具条上第 \(position) 组")
-        }
         for (tool, chip) in toolBarToolChips {
             chip.state = config.primaryTools.contains(tool) ? .on : .off
         }
@@ -202,22 +199,6 @@ extension SettingsCapturePane {
             return
         }
         config.visibleGroups = nextGroups
-        applyToolBarConfiguration(config)
-    }
-
-    @objc func toolBarGroupMoveUp(_ sender: NSButton) { toolBarGroupMove(sender, offset: -1) }
-    @objc func toolBarGroupMoveDown(_ sender: NSButton) { toolBarGroupMove(sender, offset: 1) }
-
-    private func toolBarGroupMove(_ sender: NSButton, offset: Int) {
-        guard SnipToolBarGroup.allCases.indices.contains(sender.tag) else { return }
-        let group = SnipToolBarGroup.allCases[sender.tag]
-        var config = currentToolBarConfiguration()
-        var order = config.groupOrder
-        guard let index = order.firstIndex(of: group) else { return }
-        let target = index + offset
-        guard order.indices.contains(target) else { return }
-        order.swapAt(index, target)
-        config.groupOrder = order
         applyToolBarConfiguration(config)
     }
 

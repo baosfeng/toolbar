@@ -3,49 +3,8 @@ import NetworkMonitorCore
 
 // MARK: - 菜单栏显示偏好
 
-/// 菜单栏显示的指标与展示方式（KeyValueStorage）
-enum MenuBarMetric: String, CaseIterable {
-    // 网络
-    case upSpeed, downSpeed, peakUp, peakDown, todayTraffic, weekTraffic
-    // 系统
-    case cpu, gpu, memory, memoryPressure, diskFree, diskIO, thermal, wifi, battery, load
-    // Token
-    case tokenToday, tokenCacheHit, tokenWeek
-    // 额度
-    case billingRemaining
-
-    var displayName: String {
-        switch self {
-        case .upSpeed: return "上传速度"
-        case .downSpeed: return "下载速度"
-        case .peakUp: return "峰值上行"
-        case .peakDown: return "峰值下行"
-        case .todayTraffic: return "今日流量"
-        case .weekTraffic: return "本周流量"
-        case .cpu: return "CPU"
-        case .gpu: return "GPU"
-        case .memory: return "内存"
-        case .memoryPressure: return "内存压力"
-        case .diskFree: return "磁盘空闲"
-        case .diskIO: return "磁盘 I/O"
-        case .thermal: return "温度/功耗"
-        case .wifi: return "Wi-Fi"
-        case .battery: return "电量"
-        case .load: return "负载"
-        case .tokenToday: return "Token 今日"
-        case .tokenCacheHit: return "缓存命中率"
-        case .tokenWeek: return "Token 7 天"
-        case .billingRemaining: return "额度剩余"
-        }
-    }
-
-    var defaultEnabled: Bool {
-        switch self {
-        case .upSpeed, .downSpeed: return true
-        default: return false
-        }
-    }
-}
+// 菜单栏指标枚举与其默认上屏顺序已下沉到 Core（`MenuBarMetric`）：
+// 默认顺序要被 TestRunner 直接断言，可执行 target 无法被测试 target 引入。
 
 enum MenuBarDensity: String, CaseIterable { case compact, comfortable, relaxed }
 enum MenuBarLayout: String, CaseIterable { case singleLine, twoLine, card }
@@ -63,6 +22,11 @@ enum MenuBarUnitStyle: String, CaseIterable {
     }
 }
 
+/// 菜单栏显示偏好（KeyValueStorage）
+///
+/// 两组键分工：`menuBar.metrics` 决定「显示哪些指标」，`settings.order.menuBar.metrics`
+/// 决定「按什么顺序上屏」。顺序缺键时回落到 `MenuBarMetric.defaultOrder`（= 接入排序前的渲染顺序），
+/// 读路径不回写，老用户升级后外观不变。
 final class MenuBarDisplayPreferences {
     private let storage: any KeyValueStorage
     init(storage: any KeyValueStorage = AppContext.shared.storage) { self.storage = storage }
@@ -98,6 +62,45 @@ final class MenuBarDisplayPreferences {
         if enabled { set.insert(metric) } else { set.remove(metric) }
         if set.isEmpty { set.insert(.downSpeed) }
         enabledMetrics = set
+    }
+
+    // MARK: - 指标顺序
+
+    /// 菜单栏上屏顺序；缺键 / 空串回落 `MenuBarMetric.defaultOrder`
+    var metricOrder: [MenuBarMetric] {
+        get {
+            SettingsOrderStore.order(forKey: SettingsOrderKey.menuBarMetrics,
+                                      known: MenuBarMetric.stableIDs,
+                                      defaultOrder: MenuBarMetric.defaultOrderIDs,
+                                      storage: storage)
+                .compactMap(MenuBarMetric.init(rawValue:))
+        }
+        set {
+            // 统一过一遍整理：调用方传进来的顺序可能缺项或含未知 id
+            let ids = SettingsOrderCoding.normalize(newValue.map(\.rawValue),
+                                                    known: MenuBarMetric.stableIDs,
+                                                    defaultOrder: MenuBarMetric.defaultOrderIDs)
+            SettingsOrderStore.save(ids, forKey: SettingsOrderKey.menuBarMetrics, storage: storage)
+        }
+    }
+
+    /// 移动一个指标（-1 上移 / +1 下移），越界时不动
+    func moveMetric(_ metric: MenuBarMetric, offset: Int) {
+        let current = metricOrder.map(\.rawValue)
+        let moved = SettingsOrderStore.moved(current, id: metric.rawValue, offset: offset)
+        guard moved != current else { return }
+        SettingsOrderStore.save(moved, forKey: SettingsOrderKey.menuBarMetrics, storage: storage)
+    }
+
+    /// 恢复默认顺序：删键后回落 `MenuBarMetric.defaultOrder`
+    func resetMetricOrder() {
+        SettingsOrderStore.reset(forKey: SettingsOrderKey.menuBarMetrics, storage: storage)
+    }
+
+    /// 是否已被用户改过顺序（设置页「恢复默认」按钮的可用态判据）
+    var hasCustomMetricOrder: Bool {
+        guard let raw = storage.string(forKey: SettingsOrderKey.menuBarMetrics) else { return false }
+        return !raw.isEmpty
     }
 
     var density: MenuBarDensity {
@@ -143,12 +146,13 @@ final class MenuBarDisplayPreferences {
         set { storage.set(newValue, forKey: Key.memoryAlert) }
     }
 
+    /// 快捷模板：只改「显示哪些」，不改顺序（顺序是用户自己的排布，模板不覆盖）
     func applyTemplate(_ name: String) {
         let set: Set<MenuBarMetric>
         switch name {
         case "performance": set = [.downSpeed, .upSpeed, .cpu, .memory, .memoryPressure]
         case "token": set = [.downSpeed, .upSpeed, .tokenToday, .tokenCacheHit]
-        case "network": set = [.upSpeed, .downSpeed, .peakUp, .peakDown, .todayTraffic]
+        case "network": set = [.upSpeed, .downSpeed, .todayTraffic, .weekTraffic]
         case "full": set = Set(MenuBarMetric.allCases)
         default: set = Set(MenuBarMetric.allCases.filter { $0.defaultEnabled })
         }
