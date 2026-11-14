@@ -7,12 +7,16 @@ import NetworkMonitorCore
 ///
 /// 迁移自已下线的 `SnipSettingsWindow`：存储键沿用 `SnipPreferenceKey`，老设置继续生效。
 /// 快速保存目录可自定义（偏好 `snip.quickSaveDirectoryPath`），未自定义时回落到默认目录。
-final class SettingsCapturePane: SettingsPaneView {
+///
+/// 「截图完成」的通知行也放本页：截图这件事的声音与触觉跟着截图设置走。
+final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHosting {
 
     /// 放宽为 internal：内容源与恢复池偏好控件在 SettingsCapturePane+Pin.swift 里组装
     let storage: any KeyValueStorage
     /// 放宽为 internal：同上（偏好变更要记日志）
     let logger: LoggingService
+    /// 截图完成的通知行（放宽为 internal：DEBUG 快照要按协议取到它）
+    let notificationCard: SettingsNotificationEventCard
     /// 只读的截图热键摘要（组合根注入；nil 时不显示「控制」分组）
     private let hotKeyDelegate: (any SnipSettingsDelegate)?
     private let hotKeySummary: (() -> String)?
@@ -66,9 +70,12 @@ final class SettingsCapturePane: SettingsPaneView {
     init(storage: any KeyValueStorage = AppContext.shared.storage,
          hotKeyDelegate: (any SnipSettingsDelegate)? = nil,
          hotKeySummary: (() -> String)? = nil,
+         notificationContext: SettingsNotificationEventContext,
          logger: LoggingService = AppContext.shared.logger) {
         self.storage = storage
         self.hotKeyDelegate = hotKeyDelegate
+        self.notificationCard = SettingsNotificationEventCard(events: [.snipCaptured],
+                                                              context: notificationContext)
         self.hotKeySummary = hotKeySummary
         self.logger = logger
         super.init(section: .capture)
@@ -82,6 +89,7 @@ final class SettingsCapturePane: SettingsPaneView {
         buildPinSection()
         buildRecognizeSection()
         buildSaveSection()
+        page.addCard(notificationCard.card, sectionTitle: "通知与音效")
         buildHotKeySection()
         page.addNote("「选择…」切换快速保存目录后只影响之后的截图落盘，已保存的文件不会迁移；"
                      + "标注默认颜色与线宽对新截图生效。")
@@ -217,6 +225,7 @@ final class SettingsCapturePane: SettingsPaneView {
         refreshToolBar()
         ocrPinSwitch?.state = storage.bool(forKey: SnipPreferenceKey.ocrPinResult) ? .on : .off
         updateColorSelection()
+        notificationCard.refresh()
         if let text = hotKeySummary?() { hotKeyRow?.update(subtitle: text) }
     }
 

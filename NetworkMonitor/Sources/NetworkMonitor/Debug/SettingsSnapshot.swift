@@ -37,22 +37,17 @@ enum SettingsSnapshot {
                 // 探针按页实例取控件状态：勾选态与偏好真值必须一致
                 capture.debugLogToolBarControlStates("snapshot")
             }
-            // 剪贴板页的「操作音效 / 触觉反馈」同样是 NSSwitch：离屏渲染看不出 on/off，
-            // 状态判定以 settings-clipboard-states.txt 为准（见踩坑记录「离屏快照看不出开关状态」）
-            if section == .clipboard,
-               let clipboard = settings.currentPaneForSnapshot as? SettingsClipboardPane {
-                clipboard.debugLogFeedbackControlStates("snapshot")
+            // 含通知事件行的页（额度 / 截图 / 剪贴板 / 互传 / 通用）：开关与下拉的选中项
+            // 离屏渲染看不出来，状态判定以 settings-notification-events-<页>.txt 为准
+            // （见踩坑记录「离屏快照看不出开关状态」）
+            if let host = settings.currentPaneForSnapshot as? SettingsNotificationEventHosting {
+                host.notificationCard.debugLogStates(section.fileSuffix)
             }
             // 外观页的玻璃开关同样是 NSSwitch：图上只看版式，三项状态判定以
             // settings-appearance-states.txt 为准（偏好真值 / 控件勾选态并排 + 一致判定）
             if section == .appearance,
                let appearancePane = settings.currentPaneForSnapshot as? SettingsAppearancePane {
                 appearancePane.debugLogAppearanceControlStates("snapshot")
-            }
-            // 通知与音效页同理：七行开关的勾选态与偏好真值并排落盘
-            if section == .notifications,
-               let pane = settings.currentPaneForSnapshot as? SettingsNotificationPane {
-                pane.debugLogControlStates("snapshot")
             }
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let suffix = appearance == .aqua ? "light" : "dark"
@@ -67,6 +62,7 @@ enum SettingsSnapshot {
         captureScrolledCapture(directory: directory, settings: settings)
         captureScrolledClipboard(directory: directory, settings: settings)
         captureScrolledNotifications(directory: directory, settings: settings)
+        captureNotificationCards(directory: directory, settings: settings)
         captureFirstOpen(directory: directory, settings: settings)
     }
 
@@ -125,6 +121,29 @@ enum SettingsSnapshot {
             let url = directory.appendingPathComponent("settings-notifications-library-\(suffix).png")
             MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
                                      appearanceName: appearance, to: url)
+        }
+    }
+
+    /// 各功能页的「通知事件卡」可见性证据
+    ///
+    /// 事件行已下沉到各功能页（额度 / 截图 / 剪贴板 / 互传 / 通用），在页内位置靠后，
+    /// 首屏图看不出它在哪一段；这里按卡片实际坐标滚一段，图能直接证明「行确实在这页」。
+    /// 只对含事件卡的页出图（协议 `SettingsNotificationEventHosting`），其余页跳过。
+    static func captureNotificationCards(directory: URL, settings: SettingsWindow?) {
+        guard let settings else { return }
+        for section in SettingsSection.allCases {
+            guard let view = settings.prepareForSnapshotShowingNotificationCard(section),
+                  let host = settings.currentPaneForSnapshot as? SettingsNotificationEventHosting else {
+                continue
+            }
+            host.notificationCard.debugLogStates("card-\(section.fileSuffix)")
+            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+                let suffix = appearance == .aqua ? "light" : "dark"
+                let url = directory.appendingPathComponent(
+                    "settings-\(section.fileSuffix)-notification-card-\(suffix).png")
+                MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
+                                         appearanceName: appearance, to: url)
+            }
         }
     }
 

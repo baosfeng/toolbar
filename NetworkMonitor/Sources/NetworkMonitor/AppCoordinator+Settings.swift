@@ -15,20 +15,26 @@ extension AppCoordinator {
     /// - Parameter billingMonitor: 计费状态管理器（额度页开关与凭据编辑直接用它的 API）
     func makeSettingsWindow(billingMonitor: BillingMonitor) -> SettingsWindow {
         let factories: [SettingsSection: SettingsWindow.PaneFactory] = [
-            .general: {
-                SettingsGeneralPane(
+            .general: { [weak self] in
+                guard let self else { return Self.unavailable(.general) }
+                return SettingsGeneralPane(
                     launchAtStartup: LaunchAtStartupService(logger: AppContext.shared.logger),
-                    alertPreferences: BillingAlertPreferences(storage: AppContext.shared.storage))
+                    alertPreferences: BillingAlertPreferences(storage: AppContext.shared.storage),
+                    notificationContext: self.settingsNotificationContext)
             },
             .appearance: {
                 SettingsAppearancePane(logger: AppContext.shared.logger)
             },
-            .providers: {
-                SettingsProvidersPane(monitor: billingMonitor)
+            .providers: { [weak self] in
+                guard let self else { return Self.unavailable(.providers) }
+                return SettingsProvidersPane(monitor: billingMonitor,
+                                             notificationContext: self.settingsNotificationContext)
             },
             .clipboard: { [weak self] in
                 guard let self else { return Self.unavailable(.clipboard) }
-                return SettingsClipboardPane(delegate: self, logger: self.logger)
+                return SettingsClipboardPane(delegate: self,
+                                             notificationContext: self.settingsNotificationContext,
+                                             logger: self.logger)
             },
             .capture: { [weak self] in
                 guard let self else { return Self.unavailable(.capture) }
@@ -36,19 +42,18 @@ extension AppCoordinator {
                 return SettingsCapturePane(hotKeyDelegate: self,
                                          hotKeySummary: { [weak self] in
                     self?.snipController?.hotKeySummary ?? "热键尚未注册"
-                }, logger: self.logger)
+                },
+                                         notificationContext: self.settingsNotificationContext,
+                                         logger: self.logger)
             },
             .transfer: { [weak self] in
                 guard let self, let service = self.transferService else {
                     return Self.unavailable(.transfer,
                                              message: "互传服务未启动：端口被占用或未授予本地网络权限。")
                 }
-                let pane = SettingsTransferPane(service: service, logger: self.logger)
-                // 提示音已统一到「通知与音效」页：传输页只留一个入口，避免两处各写一份开关
-                pane.onOpenNotificationSettings = { [weak self] in
-                    self?.settingsWindow?.show(section: .notifications)
-                }
-                return pane
+                return SettingsTransferPane(service: service,
+                                            notificationContext: self.settingsNotificationContext,
+                                            logger: self.logger)
             },
             .notifications: { [weak self] in
                 guard let self else { return Self.unavailable(.notifications) }
@@ -63,6 +68,18 @@ extension AppCoordinator {
             .about: { SettingsAboutPane() },
         ]
         return SettingsWindow(factories: factories, logger: logger)
+    }
+
+    /// 通知事件行的共享依赖 — 各功能页注入同一份
+    ///
+    /// 四个依赖同源（同一份 `NotificationPreferences`）：事件配置在各页改都写同一把键，
+    /// 所以「下沉」只换位置、不改读写路径，老用户的历史配置原样生效。
+    var settingsNotificationContext: SettingsNotificationEventContext {
+        SettingsNotificationEventContext(preferences: notificationPreferences,
+                                         player: soundPlayer,
+                                         library: soundLibrary,
+                                         service: notificationService,
+                                         logger: logger)
     }
 
     /// 依赖未就绪时的占位页
