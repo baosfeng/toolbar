@@ -1,19 +1,24 @@
 import AppKit
+import NetworkMonitorCore
 
 // MARK: - 面板共用卡片语言（唯一来源）
 
-/// 面板卡片语言 —— 额度页与 Token 页共用同一套底色 / 圆角 / 内边距 / 间距 / 字号梯度
+/// 面板卡片语言 —— 六页共用同一套底色 / 圆角 / 内边距 / 间距 / 字号梯度
 ///
-/// 存在理由：两页此前各写一份（`MenuPanelStyle.subtleFill`+8pt 圆角 vs
+/// 分层（改造后）：
+/// - **几何与字号**只在这里定义（历史原因：本文件是 331 处引用的唯一真源，
+///   把它们搬去主题层只会多出第二份，故几何继续留在这里）；
+/// - **颜色**一律转发 `ThemeStyle`（语义角色 → 动态 `NSColor`）：换主题只改
+///   `ThemeCatalog` 的色表，本文件一行颜色都不写；
+/// - `TokenPaneStyle` / `BillingPaneStyle` 保留同名成员作为**转发**，调用点零改动。
+///
+/// 存在理由（历史）：两页此前各写一份（`MenuPanelStyle.subtleFill`+8pt 圆角 vs
 /// `TokenPaneStyle.cardFill`+9pt 圆角、16 vs 24 的最大字号），同一屏两套公式，
-/// 用户实测反馈「两个页面的风格不搭配」。收敛后：
-/// - 颜色 / 字号 / 尺寸**只在这里定义一次**；
-/// - `TokenPaneStyle` 与 `BillingPaneStyle` 保留同名成员作为**转发**，调用点不必改；
-/// - 新增取值一律先来这里加，禁止在页面里另写一份。
+/// 用户实测反馈「两个页面的风格不搭配」。收敛后颜色 / 字号 / 尺寸只在令牌层定义一次。
 @MainActor
 enum PaneCardStyle {
 
-    // MARK: 卡片几何（两页完全一致）
+    // MARK: 卡片几何（六页完全一致）
 
     /// 卡片圆角
     static let cardRadius: CGFloat = 9
@@ -28,12 +33,14 @@ enum PaneCardStyle {
     /// 自适应卡片（二级页 / 展开区）内边距
     static let boxPaddingX: CGFloat = 9
     static let boxPaddingY: CGFloat = 7
+    /// 自适应卡片（二级页）额外内缩 —— 原 `TokenPaneStyle.cardInset`
+    static let cardInset: CGFloat = 10
     /// 卡头行高
     static let cardHeadHeight: CGFloat = 13
 
-    // MARK: 字号梯度（两页同一张表）
+    // MARK: 字号梯度（六页同一张表）
 
-    /// Hero 主数值（24pt 等宽粗体）— 两页各自的最大字号
+    /// Hero 主数值（24pt 等宽粗体）— 各页最大的字号
     static let heroFont = NSFont.monospacedDigitSystemFont(ofSize: 24, weight: .bold)
     /// Hero 单位（11pt 等宽半粗）
     static let heroUnitFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
@@ -66,8 +73,12 @@ enum PaneCardStyle {
     /// 分段按钮（10.5pt 半粗 / 选中粗体）
     static let segmentFont = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
     static let segmentSelectedFont = NSFont.systemFont(ofSize: 10.5, weight: .bold)
+    /// 说明段落 / 状态页正文（12pt）—— 原 `TokenPaneStyle.stateBodyFont`
+    static let bodyFont = NSFont.systemFont(ofSize: 12)
+    /// 模型名（10.5pt 等宽）—— 原 `BillingPaneStyle.modelNameFont`
+    static let modelNameFont = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
 
-    // MARK: 五页统一令牌（v2：网络 / 剪贴板 / 传送 / 额度 / Token / 系统共用）
+    // MARK: 六页统一令牌
 
     /// 分区标题 === 卡片标题（统一 11pt 粗体）
     ///
@@ -85,7 +96,7 @@ enum PaneCardStyle {
 
     // MARK: 页面尺寸
 
-    /// 页头行高（五页一致：主体名 + 弹簧 + 页级分段 / 时间戳 / 刷新）
+    /// 页头行高（六页一致：主体名 + 弹簧 + 页级分段 / 时间戳 / 刷新）
     static let pageHeadHeight: CGFloat = 22
     /// 页头 / 状态带左右内边距（此前 7 / 8 / 12 混用）
     static let bandPaddingX: CGFloat = 7
@@ -106,76 +117,75 @@ enum PaneCardStyle {
     /// 迷你折线高度 / 宽度
     static let sparkHeight: CGFloat = 12
     static let sparkWidth: CGFloat = 54
-    /// 缓存屏大命中环（主面板卡片内仍是 34pt 小环）
+    /// 缓存命中环（主面板卡内 / 二级页大环）
+    static let ringSize: CGFloat = 34
+    static let ringWidth: CGFloat = 3.6
     static let bigRingSize: CGFloat = 72
     static let bigRingWidth: CGFloat = 7
-    /// 用量屏主图 / 天趋势高度（整屏独占，第三轮再放大：主图 160 / 趋势 120）
+    /// 用量屏主图 / 天趋势高度（整屏独占）
     static let usageChartHeight: CGFloat = 160
     static let usageTrendHeight: CGFloat = 120
 
-    // MARK: 卡片底色
+    // MARK: 卡片底色（转发主题）
 
-    /// 卡片底（实色面，深浅各写一次）
-    static var cardFill: NSColor { dynamic(light: 0xF5F5F7, dark: 0x26262A) }
+    /// 卡片底（实色面）
+    static var cardFill: NSColor { ThemeStyle.color(.cardFill) }
     /// 状态带 / 胶囊底
-    static var bandFill: NSColor { dynamic(light: 0xEEEFF2, dark: 0x2B2B30) }
+    static var bandFill: NSColor { ThemeStyle.color(.bandFill) }
     /// 图表轨道
-    static var trackColor: NSColor { dynamic(light: 0xE4E4EA, dark: 0x39393F) }
+    static var trackColor: NSColor { ThemeStyle.color(.track) }
     /// 强轨道（分布条剩余段）
-    static var trackStrong: NSColor { dynamic(light: 0xD6D6DE, dark: 0x43434A) }
+    static var trackStrong: NSColor { ThemeStyle.color(.trackStrong) }
     /// 1pt 分隔线
-    static var hairline: NSColor { dynamic(light: 0xE8E8ED, dark: 0x313136) }
+    static var hairline: NSColor { ThemeStyle.color(.hairline) }
     /// 图表网格线
-    static var gridLine: NSColor { dynamic(light: 0xECECF1, dark: 0x3A3A40) }
+    static var gridLine: NSColor { ThemeStyle.color(.grid) }
     /// 选中态底（分段 / 悬停）
-    static var selectedFill: NSColor { MenuPanelStyle.subtleFill }
-    /// 四族卡底（Token 页用）
-    static var uncachedCardFill: NSColor { dynamic(light: 0xEBF1FA, dark: 0x262E39) }
-    static var cacheCardFill: NSColor { dynamic(light: 0xE9F2F1, dark: 0x243130) }
-    static var outputCardFill: NSColor { dynamic(light: 0xEEEDF8, dark: 0x2D2B39) }
-    static var requestCardFill: NSColor { dynamic(light: 0xF8EFEB, dark: 0x332C27) }
+    static var selectedFill: NSColor { ThemeStyle.color(.selectedFill) }
+    /// 输入框边框
+    static var fieldBorder: NSColor { .separatorColor }
+    /// 四族卡底
+    static var uncachedCardFill: NSColor { ThemeStyle.color(.family1Fill) }
+    static var cacheCardFill: NSColor { ThemeStyle.color(.family2Fill) }
+    static var outputCardFill: NSColor { ThemeStyle.color(.family3Fill) }
+    static var requestCardFill: NSColor { ThemeStyle.color(.family4Fill) }
 
-    // MARK: 四族语义色 + 告警色（两页共用）
+    // MARK: 四族语义色 + 告警色
 
-    static var uncachedColor: NSColor { dynamic(light: 0x0071E3, dark: 0x409CFF) }
-    static var uncachedInk: NSColor { dynamic(light: 0x0058B3, dark: 0x6FB6FF) }
-    static var cacheColor: NSColor { dynamic(light: 0x0D9488, dark: 0x2DD4BF) }
-    static var cacheInk: NSColor { dynamic(light: 0x0B6D64, dark: 0x5CE3D2) }
-    static var outputColor: NSColor { dynamic(light: 0x5B5BD6, dark: 0xA89DFF) }
-    static var outputInk: NSColor { dynamic(light: 0x4A44B8, dark: 0xBFB6FF) }
-    static var requestColor: NSColor { dynamic(light: 0xC2410C, dark: 0xFF8A4C) }
-    static var requestInk: NSColor { dynamic(light: 0xA83A0B, dark: 0xFFAB7D) }
-    static var cacheStackFill: NSColor { dynamic(light: 0x8FC7C3, dark: 0x2C6B65) }
+    static var uncachedColor: NSColor { ThemeStyle.color(.family1) }
+    static var uncachedInk: NSColor { ThemeStyle.color(.family1Ink) }
+    static var cacheColor: NSColor { ThemeStyle.color(.family2) }
+    static var cacheInk: NSColor { ThemeStyle.color(.family2Ink) }
+    static var outputColor: NSColor { ThemeStyle.color(.family3) }
+    static var outputInk: NSColor { ThemeStyle.color(.family3Ink) }
+    static var requestColor: NSColor { ThemeStyle.color(.family4) }
+    static var requestInk: NSColor { ThemeStyle.color(.family4Ink) }
+    static var cacheStackFill: NSColor { ThemeStyle.color(.cacheStack) }
     /// 对照 / 占位灰
-    static var ghostColor: NSColor { dynamic(light: 0xB4B4BE, dark: 0x6A6A72) }
+    static var ghostColor: NSColor { ThemeStyle.color(.ghost) }
     /// 告警墨色（额度不足一半）
-    static var warnInk: NSColor { dynamic(light: 0x8A5A06, dark: 0xF0CF82) }
+    static var warnInk: NSColor { ThemeStyle.color(.warnInk) }
     /// 正常墨色（额度充足 / 同比下行）
-    static var okInk: NSColor { dynamic(light: 0x116F33, dark: 0x6EE7B7) }
+    static var okInk: NSColor { ThemeStyle.color(.okInk) }
     /// 达标主色（进度条正常段）
-    static var okColor: NSColor { dynamic(light: 0x14913F, dark: 0x34D399) }
+    static var okColor: NSColor { ThemeStyle.color(.ok) }
 
-    // MARK: 文本（沿用面板语义色）
+    // MARK: 浅底 / 柔和底色（原页级样式自造值，收敛到这里）
 
-    static var primaryText: NSColor { .labelColor }
-    static var secondaryText: NSColor { MenuPanelStyle.secondaryText }
-    static var tertiaryText: NSColor { MenuPanelStyle.tertiaryText }
-    static var accentText: NSColor { MenuPanelStyle.accentColor }
-
-    // MARK: 工具
-
-    /// 色值 → 动态 NSColor（深浅各写一次；视图在 draw 阶段解析，切换外观实时跟随）
-    static func dynamic(light: UInt32, dark: UInt32) -> NSColor {
-        NSColor(name: nil) { appearance in
-            let darkMode = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return hex(darkMode ? dark : light)
-        }
+    /// 强调色浅底（分段选中 15%）
+    static var accentSoft: NSColor { NSColor.controlAccentColor.withAlphaComponent(0.15) }
+    /// 强调色极浅底（当前小时柱 10%）
+    static var accentWash: NSColor {
+        // 强调色是动态色：包一层动态闭包，每次解析都重新取，避免创建瞬间固化
+        NSColor(name: nil) { _ in NSColor.controlAccentColor.withAlphaComponent(0.10) }
     }
+    /// 危险色浅底（错误条 10%）
+    static var dangerSoft: NSColor { NSColor.systemRed.withAlphaComponent(0.10) }
 
-    static func hex(_ value: UInt32) -> NSColor {
-        NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
-                green: CGFloat((value >> 8) & 0xFF) / 255,
-                blue: CGFloat(value & 0xFF) / 255,
-                alpha: 1)
-    }
+    // MARK: 文本
+
+    static var primaryText: NSColor { ThemeStyle.color(.textPrimary) }
+    static var secondaryText: NSColor { ThemeStyle.color(.textSecondary) }
+    static var tertiaryText: NSColor { ThemeStyle.color(.textTertiary) }
+    static var accentText: NSColor { ThemeStyle.color(.accent) }
 }

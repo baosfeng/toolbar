@@ -46,7 +46,7 @@ enum TokenPaneStyle {
     static let heroClockFont: NSFont = PaneCardStyle.metaFont
     /// 兼容旧成员（状态页 / 分段控件仍引用）
     static let miniValueFont: NSFont = PaneCardStyle.rowValueStrongFont
-    static let stateBodyFont: NSFont = NSFont.systemFont(ofSize: 12)
+    static let stateBodyFont: NSFont = PaneCardStyle.bodyFont
     static let stateNoteFont: NSFont = PaneCardStyle.metaFont
 
     // MARK: 颜色（四族 / 轨道 / 文本）
@@ -79,21 +79,22 @@ enum TokenPaneStyle {
     static var secondaryText: NSColor { PaneCardStyle.secondaryText }
     static var tertiaryText: NSColor { PaneCardStyle.tertiaryText }
     static var selectedFill: NSColor { PaneCardStyle.selectedFill }
-    static var currentHourWash: NSColor { MenuPanelStyle.accentColor.withAlphaComponent(0.10) }
+    static var currentHourWash: NSColor { PaneCardStyle.accentWash }
     static var accentText: NSColor { PaneCardStyle.accentText }
 
     // MARK: 尺寸
 
-    static let cardInset: CGFloat = 10
+    static let cardInset: CGFloat = PaneCardStyle.cardInset
     static let cardRadius: CGFloat = PaneCardStyle.cardRadius
     static let cardPaddingX: CGFloat = PaneCardStyle.cardPaddingX
     static let cardPaddingY: CGFloat = PaneCardStyle.cardPaddingY
     static let detailChartHeight: CGFloat = 70
     static let sparkHeight: CGFloat = PaneCardStyle.sparkHeight
-    static let cardSparkWidth: CGFloat = PaneCardStyle.sparkWidth
+    /// 卡内迷你折线宽度 —— 随渲染档（省电档收窄到 40pt，减少同一行的重绘面积）
+    static var cardSparkWidth: CGFloat { CGFloat(ThemeStyle.profile.sparkWidth) }
     static let stateBandHeight: CGFloat = PaneCardStyle.stateBandHeight
-    static let ringSize: CGFloat = 34
-    static let ringWidth: CGFloat = 3.6
+    static let ringSize: CGFloat = PaneCardStyle.ringSize
+    static let ringWidth: CGFloat = PaneCardStyle.ringWidth
     static let bigRingSize: CGFloat = PaneCardStyle.bigRingSize
     static let bigRingWidth: CGFloat = PaneCardStyle.bigRingWidth
     static let usageChartHeight: CGFloat = PaneCardStyle.usageChartHeight
