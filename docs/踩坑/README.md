@@ -10,6 +10,7 @@
 
 - [Swift 6 @unchecked Sendable 标记需求](swift-并发/unchecked-sendable.md)
 - [@MainActor 类适配协议需要 @preconcurrency](swift-并发/preconcurrency-mainactor.md)
+- [@Sendable 闭包标志位用锁盒承载](swift-并发/@Sendable闭包标志位用锁盒.md) — `@Sendable` 闭包里的可变标志位改用 `OSAllocatedUnfairLock` 锁盒；隔离诊断优先 `nonisolated` / `MainActor.assumeIsolated`，后者是运行时断言，只用于有 AppKit 文档依据的主线程回调
 - [os_log_with_type 宏在 Swift 中不可用](swift-并发/os_log_swift_api.md)
 
 ### 接口
