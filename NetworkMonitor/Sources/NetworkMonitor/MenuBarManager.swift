@@ -280,9 +280,14 @@ final class MenuBarManager: NSObject {
     @objc func update() {
         monitor.poll()
         let enabled = displayPreferences.enabledMetrics
+        // 本周流量要读近 7 日日志，只在启用该指标时才算（不白跑存储读取）
+        let weekTraffic = enabled.contains(.weekTraffic)
+            ? trafficTracker.weekEntries.reduce(UInt64(0)) { $0 + $1.rx + $1.tx }
+            : 0
         let parts = makeStatusParts(enabled: enabled,
                                     snapshot: systemMonitor?.snapshot,
                                     todayTraffic: trafficTracker.todayRx + trafficTracker.todayTx,
+                                    weekTraffic: weekTraffic,
                                     tokenTotals: harnessUsage?.snapshot().totals,
                                     unitStyle: MenuBarDisplayLogic.unitStyle(
                                         fromRawValue: displayPreferences.unitStyle.rawValue))
