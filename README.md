@@ -127,8 +127,8 @@
 
 ### 方式一：下载 Release（推荐）
 
-1. 打开 [Releases](https://github.com/baosfeng/toolbar/releases)，按架构下载：Apple Silicon 取 `NetworkMonitor-arm64.app.zip`，Intel 取 `NetworkMonitor-x86_64.app.zip`（型号看苹果菜单 →「关于本机」）。
-2. 解压后把 `NetworkMonitor.app` 拖进「应用程序」。**显示名是「一览」，磁盘文件名仍是 `NetworkMonitor.app`**——刻意不改，换路径会让系统权限与登录项重新授权。
+1. 打开 [Releases](https://github.com/baosfeng/toolbar/releases)，按架构下载：Apple Silicon 取 `Yilan-arm64.app.zip`，Intel 取 `Yilan-x86_64.app.zip`（型号看苹果菜单 →「关于本机」）。zip 名用英文只为下载链接干净，解压出来就是「一览.app」。
+2. 解压后把 **「一览.app」** 拖进「应用程序」（完整路径 `/Applications/一览.app`）。包内的可执行文件仍叫 `NetworkMonitor`，所以活动监视器里看到的进程名是 NetworkMonitor。
 3. 首次启动 **右键点图标 → 打开**（未公证，双击会被 Gatekeeper 拦）；仍被拦就去系统设置 → 隐私与安全性 → 「仍要打开」。
 4. 启动后没有 Dock 图标、没有主窗口，菜单栏右侧出现网速数字，这就是它。
 
@@ -176,12 +176,13 @@ ARCH=arm64 SKIP_INSTALL=1 ./Scripts/build-app.sh release   # 交叉构建另一�
 
 - 数据：`~/Library/Application Support/macMonitor/monitor.db`（SQLite，含剪贴板历史、流量与 Token 索引）
 - 截图默认存 `~/Pictures/NetworkMonitor Snips`，互传接收默认在 `~/Downloads/局域网互传`
-- 卸载：先退出应用，删除 `/Applications/NetworkMonitor.app`；要清数据再删上面的 `macMonitor` 目录
+- 数据目录 `macMonitor` **不随包名变化**：从旧版 `NetworkMonitor.app` 升级到「一览.app」后历史数据与偏好原样继续用
+- 卸载：先退出应用，删除 `/Applications/一览.app`（旧版是 `/Applications/NetworkMonitor.app`，升级时脚本会自动删掉旧包）；要清数据再删上面的 `macMonitor` 目录
 
 ## 常见问题
 
-**应用叫「一览」，为什么文件是 NetworkMonitor.app？**
-显示名（菜单栏、通知、权限列表）是「一览」；可执行文件与目录名保持 `NetworkMonitor`，因为改路径会让系统重新授权屏幕录制等权限、并让开机自启动项失效。
+**「一览.app」包内的可执行文件为什么还叫 NetworkMonitor？**
+Finder 里的包名与菜单栏、通知、权限列表的显示名都是「一览」；包内可执行文件（`Contents/MacOS/NetworkMonitor`）与 bundle id `com.example.NetworkMonitor` 保持英文——系统授权（TCC）判据认 identifier 与签名证书、不认路径，换二进制名没有收益；数据目录 `macMonitor` 也不变。改包名的唯一副作用是旧的登录项登记指向旧路径，应用启动时会自动重新登记（失败则把「开机自启动」开关回滚为关，不会显示虚假的已开启）。
 
 **双击提示「无法验证开发者」？** 右键 → 打开；或系统设置 → 隐私与安全性 →「仍要打开」。
 

@@ -34,7 +34,8 @@ else
 fi
 
 if [ -z "$TARGET_PID" ]; then
-    TARGET_PID=$(pgrep -f "NetworkMonitor.app/Contents/MacOS/NetworkMonitor" | head -1 || true)
+    # 判据只认包内可执行文件名，不认包名：.app 改名成「一览.app」后旧判据会 0 命中
+    TARGET_PID=$(pgrep -f "/Contents/MacOS/NetworkMonitor( |$)" | head -1 || true)
 fi
 if [ -z "$TARGET_PID" ]; then
     echo "未找到 NetworkMonitor 进程（可显式传 pid）" >&2

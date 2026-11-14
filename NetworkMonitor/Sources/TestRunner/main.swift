@@ -42,6 +42,9 @@ runLogRedactionTests()
 // MARK: - 额度时间格式（跟随系统 12/24 小时制）
 runBillingTimeFormatTests()
 
+// MARK: - 开机自启动登记自愈（判定矩阵 / 隔离 suite 上的重新登记与回滚）
+runLaunchAtStartupTests()
+
 // MARK: - 通知与音效（事件表 / 声音解析 / 偏好合并 / 音效文件校验 / 额度恢复）
 runNotificationTests()
 runBillingNotificationMappingTests()
