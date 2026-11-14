@@ -82,6 +82,8 @@ public enum DrawnRowLayout {
     ///   - gap: 名称 / 进度条 / 数值之间的最小间距
     ///   - hasProgress: 这一行是否有进度条
     ///   - minBarWidth: 进度条可画的最小宽度，低于它就不画
+    ///   - leadingWidth: 行名左侧固定占用宽度（如进程图标列；0 = 无），
+    ///     它之后再吃掉一个 `gap` 作为与行名的间距
     public static func metrics(rowWidth: CGFloat,
                                leadingInset: CGFloat,
                                trailingInset: CGFloat,
@@ -89,11 +91,16 @@ public enum DrawnRowLayout {
                                valueWidth: CGFloat,
                                gap: CGFloat,
                                hasProgress: Bool,
-                               minBarWidth: CGFloat) -> Metrics {
+                               minBarWidth: CGFloat,
+                               leadingWidth: CGFloat = 0) -> Metrics {
         let content = max(rowWidth - leadingInset - trailingInset, 0)
+        // 左侧附加块（图标列）挤出的宽度：图标列 + 它后面的一个间距
+        // 图标列再宽也不超过内容宽——否则整行会被挤成负宽度
+        let leading = leadingWidth > 0 ? min(leadingWidth + gap, content) : 0
+        let available = max(content - leading, 0)
         // 数值优先：它最不该被截断
-        let value = min(valueWidth, content)
-        let afterValue = max(content - value - gap, 0)
+        let value = min(valueWidth, available)
+        let afterValue = max(available - value - gap, 0)
         guard afterValue > 0 else {
             return Metrics(titleWidth: 0, valueWidth: value, barWidth: 0)
         }

@@ -87,6 +87,34 @@ func runDrawnRowLayoutTests() {
     assertEqual(degenerate.titleWidth >= 0 && degenerate.valueWidth >= 0 && degenerate.barWidth >= 0,
                 true, "任何情况下不出现负宽度")
 
+    // 4b. 行前图标列（进程榜）：图标 + 一个间距从左侧先扣掉，其余分配不变
+    let withIcon = DrawnRowLayout.metrics(rowWidth: 300,
+                                         leadingInset: 4,
+                                         trailingInset: 4,
+                                         titleWidth: 120,
+                                         valueWidth: 60,
+                                         gap: 8,
+                                         hasProgress: false,
+                                         minBarWidth: 24,
+                                         leadingWidth: 20)
+    assertEqual(withIcon.valueWidth, 60, "有图标列时数值仍完整")
+    assertEqual(withIcon.titleWidth, 120, "图标列不挤压未超宽的标题")
+    // 292 - (20+8) = 264，减去数值 60 与一个间距 8 = 196
+    assertEqual(withIcon.titleWidth <= 264 - 60 - 8, true, "标题可用宽度已扣除图标列")
+
+    // 4c. 图标列比内容还宽：夹到内容宽，不产生负宽度
+    let iconTooWide = DrawnRowLayout.metrics(rowWidth: 30,
+                                            leadingInset: 4,
+                                            trailingInset: 4,
+                                            titleWidth: 50,
+                                            valueWidth: 20,
+                                            gap: 8,
+                                            hasProgress: false,
+                                            minBarWidth: 24,
+                                            leadingWidth: 100)
+    assertEqual(iconTooWide.titleWidth >= 0 && iconTooWide.valueWidth >= 0,
+                true, "图标列过宽时宽度不为负")
+
     // 5. 内容总高
     assertEqual(DrawnRowLayout.contentHeight(rowCount: 0, rowHeight: 28, rowSpacing: 2), 0, "0 行高为 0")
     assertEqual(DrawnRowLayout.contentHeight(rowCount: 1, rowHeight: 28, rowSpacing: 2), 28, "1 行不含尾部空隙")

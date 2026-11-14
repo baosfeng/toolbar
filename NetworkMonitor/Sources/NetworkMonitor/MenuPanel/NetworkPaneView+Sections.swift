@@ -106,14 +106,13 @@ extension NetworkPaneView {
 
     /// 活跃进程区：表头 + Top5 列表 + 空态
     func makeProcessSection() -> NSView {
-        processStack.orientation = .vertical
-        processStack.alignment = .leading
-        processStack.spacing = 0
         processEmptyLabel.isHidden = false
         // 空态统一 18pt 行高（此前被 NSStackView 拉伸显得偏大）
         processEmptyLabel.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        // 榜本身是一个自绘视图：无数据时整块隐藏，空态文案顶上来
+        processList.isHidden = true
 
-        let section = NSStackView(views: [processHeader, processStack, processEmptyLabel])
+        let section = NSStackView(views: [processHeader, processList, processEmptyLabel])
         section.orientation = .vertical
         section.alignment = .leading
         section.spacing = 4

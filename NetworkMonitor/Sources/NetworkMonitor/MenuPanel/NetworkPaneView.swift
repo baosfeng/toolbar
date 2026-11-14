@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 网络页
 
@@ -31,7 +32,11 @@ final class NetworkPaneView: MenuPanelPaneView {
     // MARK: 活跃进程 / 图表
 
     let processHeader = MenuPanelHeaderRow(title: "活跃进程", trailing: "0 个")
-    let processStack = NSStackView()
+    /// 活跃进程榜 — **整块 1 个视图**，Top5 由 `DrawnRowList` 一次画完
+    ///
+    /// 改造前每行是一个 `MenuPanelProcessRow`：图标 + 名称 + 撑满的 spacer + 速率，
+    /// 一行 4 个视图 + 5 条约束（5 行 = 26 个视图），且每 5 秒刷新时整栈重建。
+    let processList = DrawnRowList()
     // 放宽为 internal：区块装配拆到 NetworkPaneView+Sections.swift
     let processEmptyLabel: NSTextField = {
         let label = MenuPanelLabel.text("当前没有进程在使用网络",
@@ -97,6 +102,18 @@ final class NetworkPaneView: MenuPanelPaneView {
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+
+        // 进程榜：行高与改造前同档（26pt，左右内边距 4、图标与文字间距 8）
+        processList.rowHeight = MenuPanelStyle.compactRowHeight
+        processList.rowSpacing = 0
+        processList.horizontalInset = 4
+        processList.elementGap = 8
+        processList.iconSize = 20
+        processList.iconTint = MenuPanelStyle.tertiaryText
+        processList.titleFont = MenuPanelStyle.bodyFont
+        processList.valueFont = MenuPanelStyle.smallValueFont
+        processList.highlightsHover = false
+        processList.setAccessibilityLabel("活跃进程")
 
         let todayBox = makeTodayBox()
         // 顶部页头 → 内容 → 页脚状态带：与其余四页同一顺序（此前网络页两头都没有）
@@ -196,15 +213,19 @@ final class NetworkPaneView: MenuPanelPaneView {
         guard signature != processSignature else { return }
         processSignature = signature
 
-        for view in processStack.arrangedSubviews {
-            processStack.removeArrangedSubview(view)
-            view.removeFromSuperview()
+        // 一行 = 一个 DrawnRowSpec（显示名 + 上下行速率）；图标按行索引取，走 AppIconProvider 缓存
+        processList.rows = top.map { process in
+            DrawnRowSpec(title: AppProcessName.displayName(process.name, pid: process.pid),
+                         value: "↓" + formatSpeedShort(Double(process.bytesIn))
+                             + "  ↑" + formatSpeedShort(Double(process.bytesOut)))
         }
+        processList.rowIcon = { index in
+            guard index < top.count else { return nil }
+            let process = top[index]
+            return AppIconProvider.icon(forProcess: process.name, pid: process.pid, size: 20)
+                ?? AppIconProvider.placeholderIcon(size: 20)
+        }
+        processList.isHidden = top.isEmpty
         processEmptyLabel.isHidden = !top.isEmpty
-        for process in top {
-            let row = MenuPanelProcessRow(process: process)
-            processStack.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: processStack.widthAnchor).isActive = true
-        }
     }
 }

@@ -61,6 +61,12 @@ final class DrawnRowList: NSView {
     var fixedTitleWidth: CGFloat? { didSet { needsDisplay = true } }
     /// 行悬停提示（返回空串则不提示）
     var rowToolTip: ((Int) -> String)?
+    /// 行前图标（网络页的进程图标；返回 nil 则这一行不画图标）
+    var rowIcon: ((Int) -> NSImage?)?
+    /// 行前图标边长（0 = 不画图标列，行名从最左开始）
+    var iconSize: CGFloat = 0 { didSet { needsDisplay = true } }
+    /// 模板图标的上色（nil = 原样绘制）
+    var iconTint: NSColor? { didSet { needsDisplay = true } }
     /// 行名颜色（默认主文字；系统页等按需覆盖）
     var titleColor: NSColor = PaneCardStyle.primaryText { didSet { needsDisplay = true } }
     /// 进度条轨道色
@@ -144,6 +150,8 @@ final class DrawnRowList: NSView {
         let valueRun = DrawnTextRun(string: row.value,
                                     font: row.tone == .strong ? PaneCardStyle.rowValueStrongFont : valueFont,
                                     color: toneColor(row.tone))
+        // 图标列先占位：图标宽 + 一个间距，行名从它右侧开始
+        let iconWidth = iconSize > 0 ? iconSize : 0
         let metrics = DrawnRowLayout.metrics(rowWidth: rect.width,
                                              leadingInset: horizontalInset,
                                              trailingInset: horizontalInset,
@@ -151,8 +159,19 @@ final class DrawnRowList: NSView {
                                              valueWidth: valueRun.width(),
                                              gap: elementGap,
                                              hasProgress: row.progress != nil,
-                                             minBarWidth: minBarWidth)
+                                             minBarWidth: minBarWidth,
+                                             leadingWidth: iconWidth)
         var cursorX = rect.minX + horizontalInset
+        if iconWidth > 0 {
+            // 图标列始终占位（这行取不到图标也留空），保证行名左对齐整齐
+            if let image = rowIcon?(index) {
+                drawIcon(image, at: CGRect(x: cursorX,
+                                           y: rect.midY - iconWidth / 2,
+                                           width: iconWidth,
+                                           height: iconWidth))
+            }
+            cursorX += iconWidth + elementGap
+        }
         if metrics.titleWidth > 0 {
             titleRun.draw(in: CGRect(x: cursorX,
                                      y: rect.minY,
@@ -190,6 +209,44 @@ final class DrawnRowList: NSView {
                 ctx.strokePath()
             }
         }
+    }
+
+    // MARK: - 图标
+
+    /// 画行前图标：等比缩放到 iconSize 方框内并居中
+    ///
+    /// 模板图（SF Symbol 占位）按 `iconTint` 上色后再画 —— 自绘不走
+    /// `NSImageView.contentTintColor`，模板图原样画出来会是纯黑块。
+    private func drawIcon(_ image: NSImage, at rect: CGRect) {
+        let shown = tintedIcon(image)
+        let scale = min(rect.width / max(shown.size.width, 1),
+                        rect.height / max(shown.size.height, 1))
+        let drawRect = CGRect(x: rect.midX - shown.size.width * scale / 2,
+                              y: rect.midY - shown.size.height * scale / 2,
+                              width: shown.size.width * scale,
+                              height: shown.size.height * scale)
+        shown.draw(in: drawRect,
+                   from: .zero,
+                   operation: .sourceOver,
+                   fraction: 1,
+                   respectFlipped: true,
+                   hints: [.interpolation: NSImageInterpolation.high])
+    }
+
+    /// 模板图标上色（按图标对象缓存，图标由 AppIconProvider 复用，对象身份稳定）
+    private func tintedIcon(_ image: NSImage) -> NSImage {
+        guard image.isTemplate, let tint = iconTint else { return image }
+        let key = ObjectIdentifier(image)
+        if let hit = tintedIcons[key] { return hit }
+        let tinted = NSImage(size: image.size, flipped: false) { rect in
+            image.draw(in: rect)
+            tint.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        if tintedIcons.count >= 64 { tintedIcons.removeAll(keepingCapacity: true) }
+        tintedIcons[key] = tinted
+        return tinted
     }
 
     private func toneColor(_ tone: DrawnRowSpec.Tone) -> NSColor {
@@ -256,6 +313,8 @@ final class DrawnRowList: NSView {
     // MARK: - 无障碍
 
     private var axElements: [DrawnRowAccessibilityElement] = []
+    /// 模板图标的上色缓存（键 = 图标对象身份）
+    private var tintedIcons: [ObjectIdentifier: NSImage] = [:]
 
     private func rebuildAccessibilityElements() {
         axElements = rows.enumerated().map { index, row in
