@@ -41,9 +41,12 @@ extension MenuPanelController {
         // 网络页的 Wi-Fi 链路条与系统页同源：同一份快照、同一 5 秒节拍，
         // 不另起采样器（否则两处 RSSI 会各读各的）
         content.updateWiFiLink(snapshot?.wifi)
+        // 懒装配：系统页还没进过视图树时不必推历史与卡显隐（历史在控制器里持续累积，不丢）。
+        // 切到系统页会先装配该页，再由 menuPanelViewDidSelectTab 拉一次全量补上。
+        guard let systemPane = content.systemPaneIfLoaded else { return }
         // 两处必须同时改：这里少补一位，对应曲线就永远拿不到点（不显示、也不报错）
         let diskBusy = historyValues { $0.disk?.busyFraction }
-        content.systemPane.updateHistories(
+        systemPane.updateHistories(
             cpu: historyValues { $0.cpu?.totalUsage },
             cpuSystem: historyValues { $0.cpu?.systemUsage },
             gpu: historyValues { $0.gpu?.utilization },
@@ -70,15 +73,15 @@ extension MenuPanelController {
             loadMedium: historyValues { $0.load?.load5 },
             loadLong: historyValues { $0.load?.load15 }
         )
-        content.systemPane.updateDiskBusyTip(busyPeakPercent: diskBusy.max().map {
+        systemPane.updateDiskBusyTip(busyPeakPercent: diskBusy.max().map {
             Int(($0 * 100).rounded())
         })
         // 温度段显隐由设置页开关驱动（v4 起温度卡已下线，开关语义变成
         // 「底部状态带里的温度是否显示」；偏好默认开启，取不到按 nil 降级）
         if let systemPreferences {
-            content.systemPane.setShowsThermalCard(systemPreferences.isPanelItemVisible(.thermal))
+            systemPane.setShowsThermalCard(systemPreferences.isPanelItemVisible(.thermal))
             // 详情页「采样」行跟随真实偏好，不硬编码 1 秒
-            content.systemPane.updateSampleInterval(systemPreferences.sampleInterval)
+            systemPane.updateSampleInterval(systemPreferences.sampleInterval)
         }
     }
 

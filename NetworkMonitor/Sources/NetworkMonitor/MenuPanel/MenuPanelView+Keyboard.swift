@@ -27,12 +27,13 @@ extension MenuPanelView {
 
         switch Int(event.keyCode) {
         case 53:  // Esc：二级页先返回主面板，否则收起面板
-            if currentTab == .system, systemPane.isShowingDetail {
-                systemPane.showOverview()
-            } else if currentTab == .token, tokenPane.isShowingDetail {
+            // 先取已装配实例：未装配页没有二级页，也不会因为读属性被建出来
+            if currentTab == .system, let system = systemPaneIfLoaded, system.isShowingDetail {
+                system.showOverview()
+            } else if currentTab == .token, let token = tokenPaneIfLoaded, token.isShowingDetail {
                 // Token 二级页原先没有 Esc 分支：按 Esc 直接把面板收起，
                 // 再打开时 detailKind 已被 applyState 复位，页面上下文丢失
-                tokenPane.closeDetail()
+                token.closeDetail()
             } else {
                 delegate?.menuPanelViewDidRequestClose(self)
             }

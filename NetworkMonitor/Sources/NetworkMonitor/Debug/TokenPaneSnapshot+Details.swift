@@ -30,7 +30,7 @@ extension TokenPaneSnapshot {
         for kind in TokenDetailKind.allCases {
             let slug = detailSlug(kind)
             for suffix in ["top", "bottom"] {
-                let panel = MenuPanelView()
+                let panel = MenuPanelView.evidencePanel()
                 panel.updateToken(snapshot, notifySize: false)
                 panel.select(tab: .token)
                 panel.tokenPane.openDetailForSnapshot(kind)
@@ -45,7 +45,7 @@ extension TokenPaneSnapshot {
                     })
             }
             // 指标用独立实例量（渲染实例已被移出视图层级）
-            let metricsPanel = MenuPanelView()
+            let metricsPanel = MenuPanelView.evidencePanel()
             metricsPanel.updateToken(snapshot, notifySize: false)
             metricsPanel.select(tab: .token)
             metricsPanel.tokenPane.openDetailForSnapshot(kind)
@@ -58,7 +58,7 @@ extension TokenPaneSnapshot {
         }
         // 视口压到 300pt 的强制滚动自证，证明能滚到底
         for suffix in ["top", "bottom"] {
-            let panel = MenuPanelView()
+            let panel = MenuPanelView.evidencePanel()
             panel.updateToken(snapshot, notifySize: false)
             panel.select(tab: .token)
             panel.tokenPane.openDetailForSnapshot(.hourly)
@@ -85,7 +85,7 @@ extension TokenPaneSnapshot {
     /// 小时卡独立渲染（指定内容宽）+ 导出 head / meta 两行各元素 frame 与所需宽度
     static func captureHourCard(directory: URL, snapshot: HarnessUsageSnapshot,
                                         width: CGFloat, name: String) {
-        let panel = MenuPanelView()
+        let panel = MenuPanelView.evidencePanel()
         panel.updateToken(snapshot, notifySize: false)
         panel.select(tab: .token)
         panel.layoutSubtreeIfNeeded()

@@ -8,7 +8,7 @@ extension TokenPaneSnapshot {
 
     /// 导出 r3 可读性度量：字号 / 区块高度 / 内容总高 vs 520 / 分布行名称可用宽度与截断
     static func writeReadabilityMetrics(directory: URL, snapshot: HarnessUsageSnapshot) {
-        let panel = MenuPanelView()
+        let panel = MenuPanelView.evidencePanel()
         panel.updateToken(snapshot, notifySize: false)
         panel.select(tab: .token)
         panel.layoutSubtreeIfNeeded()

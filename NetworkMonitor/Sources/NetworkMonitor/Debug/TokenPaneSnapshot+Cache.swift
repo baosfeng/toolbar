@@ -39,7 +39,7 @@ extension TokenPaneSnapshot {
 
     /// 选好范围并切到缓存屏的面板（截图与台账共用同一条链路）
     private static func makeCachePanel(snapshot: HarnessUsageSnapshot, range: TokenRange) -> MenuPanelView {
-        let panel = MenuPanelView()
+        let panel = MenuPanelView.evidencePanel()
         panel.updateToken(snapshot, notifySize: false)
         panel.select(tab: .token)
         panel.tokenPane.applyStateForSnapshot(range: range, hourScope: .today, trendMode: .stack)

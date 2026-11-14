@@ -78,6 +78,11 @@ extension MenuPanelController: MenuPanelViewDelegate {
     }
 
     func menuPanelViewDidSelectTab(_ view: MenuPanelView) {
+        // 懒装配：某页首次切到才进视图树，它的首屏数据要在这一刻补一次，
+        // 否则要等下一个刷新节拍（最坏 5 秒）才有内容 —— 表现为「切过去是空的」
+        if view.didAssembleCurrentPane {
+            refreshPaneFirstDisplay(view.currentTab)
+        }
         // 切到 Token 页时按需增量刷新（服务内部串行、不重入；数据未变则快速返回）
         if view.currentTab == .token {
             harnessUsage?.refreshIfNeeded()
@@ -87,6 +92,48 @@ extension MenuPanelController: MenuPanelViewDelegate {
             systemMonitor?.poll()
             refreshSystem()
         }
+    }
+
+    /// 某分页首次装配后的首屏数据（每页只补一次；之后的刷新仍走常规节拍）
+    ///
+    /// 懒装配把「建页」与「推数据」拆开了：常规刷新链路只更新已装配页，
+    /// 所以首次切页必须在这里把该页该有的数据一次性补齐。
+    private func refreshPaneFirstDisplay(_ tab: MenuPanelTab) {
+        switch tab {
+        case .network:
+            // 补的是 5 秒档的流量 / 柱图 / 进程，以及与系统页同源的 Wi-Fi 链路条；
+            // 速率与折线本来由 1 秒 tick 每秒推，这里顺手补一帧避免首屏「0 B/s」
+            refreshMidFrequency()
+            content.updateSpeeds(down: max(monitor.downloadSpeed, 0),
+                                 up: max(monitor.uploadSpeed, 0),
+                                 downHistory: downHistory,
+                                 upHistory: upHistory)
+            content.updateWiFiLink(systemMonitor?.snapshot?.wifi)
+        case .clipboard:
+            refreshClipboard()
+        case .transfer:
+            // attach 时已渲染一次，这里强制补推一次（收起期间的数据变化不能漏）
+            transferController?.refreshNow()
+        case .credits:
+            renderBillingSnapshot()
+        case .token:
+            refreshToken()
+        case .system:
+            // 系统页的首屏由 didSelectTab 里的 poll + refreshSystem 补齐（每次切到都会走）
+            break
+        }
+    }
+
+    /// 用状态管理器当前快照立即渲染额度页
+    ///
+    /// 额度是推送式回调（`billingMonitor.onUpdate`）：该页还没装配时收到的推送会被跳过，
+    /// 切回来时必须用最后一帧状态补一次，否则要等下一轮刷新（最坏 60 秒节流）。
+    private func renderBillingSnapshot() {
+        guard let billingMonitor else { return }
+        let snapshot = BillingMonitor.Snapshot.make(from: billingMonitor.states,
+                                                    enabledProviderCount: billingMonitor.states.count,
+                                                    isPaused: billingMonitor.isPaused)
+        content.updateBilling(snapshot, notifySize: popover.isShown)
     }
 
     func menuPanelViewDidRequestClose(_ view: MenuPanelView) {

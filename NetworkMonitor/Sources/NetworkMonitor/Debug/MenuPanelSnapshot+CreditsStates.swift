@@ -39,7 +39,7 @@ extension MenuPanelSnapshot {
             CreditsStateCase(suffix: "empty", empty: true),
         ]
         for item in cases {
-            let panel = MenuPanelView()
+            let panel = MenuPanelView.evidencePanel()
             panel.billingPane.injectPreview(configured: item.configured,
                                             errorMessage: item.error,
                                             legacyUsage: item.legacyUsage,
@@ -79,7 +79,7 @@ extension MenuPanelSnapshot {
     private static func captureCreditsExpanded(directory: URL) {
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let name = appearance == .aqua ? "light" : "dark"
-            let panel = MenuPanelView()
+            let panel = MenuPanelView.evidencePanel()
             panel.billingPane.injectPreview(openDesign: true)
             panel.select(tab: .credits)
             // 展开第一块（Ollama）：验证完整柱图 + 轴 + 图例 + 模型 Top3
@@ -93,7 +93,7 @@ extension MenuPanelSnapshot {
 
     /// 三 provider 档的滚动版本（另起一份视图，避免复用已渲染实例的布局状态）
     private static func makeCreditsPanelForScroll(_ item: CreditsStateCase) -> MenuPanelView {
-        let panel = MenuPanelView()
+        let panel = MenuPanelView.evidencePanel()
         panel.billingPane.injectPreview(openDesign: item.openDesign,
                                         opencodeGo: item.opencodeGo)
         panel.select(tab: .credits)

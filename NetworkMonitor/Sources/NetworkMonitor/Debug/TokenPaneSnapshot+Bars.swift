@@ -20,7 +20,7 @@ extension TokenPaneSnapshot {
             ("compare", .compare, .total),
         ]
         for state in states {
-            let panel = MenuPanelView()
+            let panel = MenuPanelView.evidencePanel()
             panel.updateToken(snapshot, notifySize: false)
             panel.select(tab: .token)
             panel.tokenPane.applyStateForSnapshot(range: .today, hourScope: .today,
@@ -32,7 +32,7 @@ extension TokenPaneSnapshot {
             appendLegendLine(&lines, legend: panel.tokenPane.hourLegend)
         }
 
-        let detailPanel = MenuPanelView()
+        let detailPanel = MenuPanelView.evidencePanel()
         detailPanel.updateToken(snapshot, notifySize: false)
         detailPanel.select(tab: .token)
         detailPanel.tokenPane.openDetailForSnapshot(.hourly)
@@ -52,7 +52,7 @@ extension TokenPaneSnapshot {
     static func writeKeyRowMetrics(directory: URL, snapshot: HarnessUsageSnapshot) {
         var lines: [String] = []
         for kind in TokenDetailKind.allCases {
-            let panel = MenuPanelView()
+            let panel = MenuPanelView.evidencePanel()
             panel.updateToken(snapshot, notifySize: false)
             panel.select(tab: .token)
             panel.tokenPane.openDetailForSnapshot(kind)

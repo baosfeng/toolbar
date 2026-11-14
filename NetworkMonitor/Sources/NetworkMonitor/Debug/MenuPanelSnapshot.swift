@@ -119,7 +119,7 @@ enum MenuPanelSnapshot {
     static func makeMenuPanel(tab: MenuPanelTab, items: [ClipboardItem],
                                       processCount: Int = 5,
                                       tokenSnapshot: HarnessUsageSnapshot? = nil) -> MenuPanelView {
-        let panel = MenuPanelView()
+        let panel = MenuPanelView.evidencePanel()
         panel.updateSpeeds(down: 1_200_000, up: 340_000,
                            downHistory: SnapshotFixtures.history(base: 900_000, amplitude: 700_000),
                            upHistory: SnapshotFixtures.history(base: 180_000, amplitude: 260_000))

@@ -25,7 +25,7 @@ extension MenuPanelSnapshot {
             ("visibility-all-configured", [true, true, true]),
         ]
         for item in cases {
-            let panel = MenuPanelView()
+            let panel = MenuPanelView.evidencePanel()
             let states = item.configured.enumerated().map { index, configured in
                 makeState(index: index, isConfigured: configured)
             }

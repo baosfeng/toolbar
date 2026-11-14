@@ -40,7 +40,7 @@ enum TokenPaneSnapshot {
                                                        state: .failed(message: missing.displayMessage))),
         ]
         for state in states {
-            let panel = MenuPanelView()
+            let panel = MenuPanelView.evidencePanel()
             panel.updateToken(state.snapshot, notifySize: false)
             panel.select(tab: .token)
             let height = min(max(panel.desiredContentHeight, 180), MenuPanelStyle.maxHeight)
@@ -55,7 +55,7 @@ enum TokenPaneSnapshot {
         if let tokenSnapshot {
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let name = appearance == .aqua ? "light" : "dark"
-                let panel = MenuPanelView()
+                let panel = MenuPanelView.evidencePanel()
                 panel.updateToken(tokenSnapshot, notifySize: false)
                 panel.select(tab: .token)
                 let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
@@ -69,7 +69,7 @@ enum TokenPaneSnapshot {
 
         // 折叠区块展开态（手风琴详情布局自证）
         if let tokenSnapshot {
-            let panel = MenuPanelView()
+            let panel = MenuPanelView.evidencePanel()
             panel.updateToken(tokenSnapshot, notifySize: false)
             panel.select(tab: .token)
             panel.tokenPane.openDetailForSnapshot(.hourly)
@@ -84,7 +84,7 @@ enum TokenPaneSnapshot {
         // 交互状态：近 7 天 + 折线 + 比昨日（覆盖范围切换与两种图标形态）
         // 主图与天趋势现在都在「用量」屏，取证必须先切屏再截
         if let tokenSnapshot {
-            let panel = MenuPanelView()
+            let panel = MenuPanelView.evidencePanel()
             panel.updateToken(tokenSnapshot, notifySize: false)
             panel.select(tab: .token)
             panel.tokenPane.applyStateForSnapshot(range: .d7, hourScope: .yesterday, trendMode: .line)
@@ -98,7 +98,7 @@ enum TokenPaneSnapshot {
         if let tokenSnapshot {
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let name = appearance == .aqua ? "light" : "dark"
-                let panel = MenuPanelView()
+                let panel = MenuPanelView.evidencePanel()
                 panel.updateToken(tokenSnapshot, notifySize: false)
                 panel.select(tab: .token)
                 panel.tokenPane.applyStateForSnapshot(range: .today, hourScope: .today,
@@ -115,7 +115,7 @@ enum TokenPaneSnapshot {
         if let tokenSnapshot {
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let name = appearance == .aqua ? "light" : "dark"
-                let panel = MenuPanelView()
+                let panel = MenuPanelView.evidencePanel()
                 panel.updateToken(tokenSnapshot, notifySize: false)
                 panel.select(tab: .token)
                 let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
@@ -127,7 +127,7 @@ enum TokenPaneSnapshot {
 
         // 定稿画布 320×600：主面板整幅（面板默认 clamp 520，这里按原型画布取证）
         if let tokenSnapshot {
-            let panel = MenuPanelView()
+            let panel = MenuPanelView.evidencePanel()
             panel.updateToken(tokenSnapshot, notifySize: false)
             panel.select(tab: .token)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: 600)
@@ -186,7 +186,7 @@ enum TokenPaneSnapshot {
 
     /// 导出关键区块几何（与原型 CSS 值逐项对照）
     private static func writeLayoutMetrics(directory: URL, snapshot: HarnessUsageSnapshot) {
-        let panel = MenuPanelView()
+        let panel = MenuPanelView.evidencePanel()
         panel.updateToken(snapshot, notifySize: false)
         panel.select(tab: .token)
         panel.layoutSubtreeIfNeeded()

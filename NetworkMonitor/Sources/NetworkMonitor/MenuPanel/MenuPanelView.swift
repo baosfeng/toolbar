@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 面板根视图代理
 
@@ -50,12 +51,23 @@ final class MenuPanelView: NSView {
     let tabBar = MenuTabBarView()
     /// 设置菜单入口（标题栏右侧齿轮：传送设置 / 开机自启动 / 退出）
     let settingsButton = NSPopUpButton(frame: .zero, pullsDown: true)
-    let networkPane = NetworkPaneView()
-    let clipboardPane = ClipboardPaneView()
-    let transferPane = TransferPaneView()
-    let billingPane = BillingPaneView()
-    let tokenPane = TokenPaneView()
-    let systemPane = SystemPaneView()
+
+    // MARK: 分页（懒装配：首次切到才建，见 MenuPanelView+Panes.swift）
+
+    /// 已装配分页 —— 键 = 分页；没切到过的页不在这里，也没进视图树
+    // 放宽为 internal：懒装配扩展（MenuPanelView+Panes）与数据转发扩展要读写
+    var assembledPanes: [MenuPanelTab: MenuPanelPaneView] = [:]
+    /// 分页装配记账 —— 「建过没有 / 要不要新建」的判据（纯逻辑，TestRunner 直接断言）
+    var paneAssembly = PaneAssemblyLedger<MenuPanelTab>()
+    /// 分页首次装配回调 —— 控制器在这里挂动作回调并补该页首屏数据，不必提前把页建出来
+    var onPaneAssembled: ((MenuPanelTab, MenuPanelPaneView) -> Void)? {
+        didSet {
+            // 回调装上之前可能已装配了首屏分页：补放一次，否则它永远拿不到回调
+            for (tab, pane) in assembledPanes { onPaneAssembled?(tab, pane) }
+        }
+    }
+    /// 本次切页是否首次装配了当前分页（控制器据此补一次该页全量刷新，避免切过去是空的）
+    var didAssembleCurrentPane = false
 
     /// 开机自启动当前状态（设置菜单勾选态，由控制器同步）
     var launchAtStartupEnabled = false
@@ -86,12 +98,7 @@ final class MenuPanelView: NSView {
         paneStack.orientation = .vertical
         paneStack.alignment = .leading
         paneStack.spacing = 0
-        paneStack.addArrangedSubview(networkPane)
-        paneStack.addArrangedSubview(clipboardPane)
-        paneStack.addArrangedSubview(transferPane)
-        paneStack.addArrangedSubview(billingPane)
-        paneStack.addArrangedSubview(tokenPane)
-        paneStack.addArrangedSubview(systemPane)
+        // 分页不再一次全装：applyTab() 只装配当前页，其余页首次切到时才进栈
         paneStack.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.hasVerticalScroller = true
@@ -137,10 +144,7 @@ final class MenuPanelView: NSView {
         // 设置入口已隐藏到状态栏右键菜单，分段控件占满标题栏
         tabBar.widthAnchor.constraint(equalTo: headerStack.widthAnchor).isActive = true
         scrollView.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
-        // 各页都撑满面板内容宽度（NSStackView 的 leading 对齐不会自动拉伸子视图）
-        for pane in [networkPane, clipboardPane, transferPane, billingPane, tokenPane, systemPane] {
-            pane.widthAnchor.constraint(equalTo: paneStack.widthAnchor).isActive = true
-        }
+        // 各页宽度约束改为该页装配时再加（见 MenuPanelView+Panes.swift）
 
         tabBar.visibleTabs = panelTabPreferences.orderedVisibleTabs
         if !tabBar.visibleTabs.contains(currentTab) {
@@ -149,18 +153,8 @@ final class MenuPanelView: NSView {
         tabBar.onSelect = { [weak self] tab in
             self?.select(tab: tab)
         }
-        // 系统页进出详情：面板高度重算 + 滚动归零 + 返回时把焦点还给卡片
-        systemPane.onContentHeightChange = { [weak self] in
-            guard let self else { return }
-            // 二级详情是结构变化：立即重算，避免高度滞后于翻页
-            self.delegate?.menuPanelViewDidChangeHeight(self)
-        }
-        systemPane.onRequestScrollToTop = { [weak self] in
-            self?.scrollToTop()
-        }
-        systemPane.onRestoreCardFocus = { [weak self] card in
-            self?.focus(card: card)
-        }
+        // 系统页回调（高度重算 / 滚回顶部 / 焦点还给卡片）改在该页首次装配时挂：
+        // 这里直接读 systemPane 会把系统页提前建出来（见 MenuPanelView+Panes.swift）
         applyTab()
         observePanelTabChanges()
         installBackdrop()
@@ -225,30 +219,7 @@ final class MenuPanelView: NSView {
         select(tab: all[next])
     }
 
-    /// 应用当前分页：仅显示选中页（隐藏的 arranged subview 由 NSStackView 折叠）
-    // 放宽为 internal：分页偏好事件驱动切页后要重应用，见 MenuPanelView+TabPreferences.swift
-    func applyTab() {
-        networkPane.isHidden = currentTab != .network
-        clipboardPane.isHidden = currentTab != .clipboard
-        transferPane.isHidden = currentTab != .transfer
-        billingPane.isHidden = currentTab != .credits
-        tokenPane.isHidden = currentTab != .token
-        systemPane.isHidden = currentTab != .system
-        tabBar.selected = currentTab
-    }
-
-    /// 当前页
-    /// 当前可见分页（键盘遍历在 MenuPanelView+Keyboard.swift，故为 internal）
-    var activePane: MenuPanelPaneView {
-        switch currentTab {
-        case .network: return networkPane
-        case .clipboard: return clipboardPane
-        case .transfer: return transferPane
-        case .credits: return billingPane
-        case .token: return tokenPane
-        case .system: return systemPane
-        }
-    }
+    // 分页装配与切页（applyTab / activePane）在 MenuPanelView+Panes.swift
 
     // MARK: - 数据更新（由控制器调用）
     //
@@ -260,9 +231,9 @@ final class MenuPanelView: NSView {
         setFocus(index: nil)
     }
 
-    /// 剪贴板页行内提示
+    /// 剪贴板页行内提示（该页未装配时直接丢弃：提示只在该页可见时才有意义）
     func showClipboardHint(_ message: String) {
-        clipboardPane.showHint(message)
+        clipboardPaneIfLoaded?.showHint(message)
     }
 
     /// 内容滚动回顶部（进出系统页详情时都从顶部开始读）

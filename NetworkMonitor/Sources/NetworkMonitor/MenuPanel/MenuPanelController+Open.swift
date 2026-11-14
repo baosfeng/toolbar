@@ -298,12 +298,14 @@ extension MenuPanelController {
     /// 取证专用（仅 DEBUG）：分段条当前可见分页（隐藏分页后应少一段）
     var visibleTabsForEvidence: [MenuPanelTab] { content.tabBar.visibleTabs }
 
-    /// 取证专用（仅 DEBUG）：系统页二级详情是否展开
-    var systemDetailShownForEvidence: Bool { content.systemPane.isShowingDetail }
+    /// 取证专用（仅 DEBUG）：系统页二级详情是否展开（未装配视为未展开）
+    var systemDetailShownForEvidence: Bool { content.systemPaneIfLoaded?.isShowingDetail ?? false }
 
     /// 取证专用（仅 DEBUG）：进入系统页二级详情（CPU），用于验证隐藏分页时详情收起
     func showSystemDetailForEvidence() {
         content.select(tab: .system)
+        // 取证路径显式装配：这里不依赖 select 的副作用，读 pane 前先把系统页建出来
+        content.ensurePaneLoaded(.system)
         content.systemPane.showDetail(.cpu)
         updateContentSize(force: true)
     }

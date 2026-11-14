@@ -9,6 +9,19 @@ import AppKit
 #if DEBUG
 extension MenuPanelView {
 
+    /// 取证专用构造：建面板并把六个分页一次装配好
+    ///
+    /// 离线取证普遍是「先推数据、再切页」（`updateToken` → `select(tab:)`），懒装配会把
+    /// 未切到页的数据丢掉，取出来的图就是空的；取证路径显式装配全部六页，
+    /// 保持与改造前一致的取图结果（真实运行路径仍是首次切到才建）。
+    static func evidencePanel() -> MenuPanelView {
+        let panel = MenuPanelView()
+        for tab in MenuPanelTab.allCases {
+            panel.ensurePaneLoaded(tab)
+        }
+        return panel
+    }
+
     /// 返回（文档高度, 滚动视口高度）
     func snapshotScrollMetrics() -> (document: CGFloat, viewport: CGFloat) {
         layoutSubtreeIfNeeded()

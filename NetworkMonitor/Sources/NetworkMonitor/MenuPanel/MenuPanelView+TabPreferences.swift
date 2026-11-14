@@ -39,8 +39,9 @@ extension MenuPanelView {
             setFocus(index: nil)
         }
         // 系统页二级详情是覆盖式页面，所在分页被隐藏后必须收起，否则下次进来还停在详情
+        // （未装配则无需收拾：它下次首次装配时本就停在首屏）
         if !visible.contains(.system) {
-            systemPane.showOverview()
+            systemPaneIfLoaded?.showOverview()
         }
         if tabChanged {
             delegate?.menuPanelViewDidSelectTab(self)
