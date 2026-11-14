@@ -264,7 +264,7 @@ final class TokenKeyRowView: NSView {
 
 #if DEBUG
 /// 标签的可绘制文字宽度（去掉 cell 内边距）
-/// 由 fileprivate 放宽为 internal：排行行（TokenRankingRowView）在另一个文件复用同一度量
+/// 本文件内多个行视图（分布行 / 列表行）共用同一份度量口径，故保持 internal
 @MainActor func snapshotTextArea(_ label: NSTextField) -> CGFloat {
     label.cell?.drawingRect(forBounds: label.bounds).width ?? label.bounds.width
 }

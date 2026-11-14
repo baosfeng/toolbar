@@ -21,6 +21,11 @@ final class DrawnRowAccessibilityElement: NSAccessibilityElement {
 /// - 行名 / 行值 / 进度条三者由一次 `draw` 完成，视图数恒为 1；
 /// - 交互（悬停高亮、点击、键盘焦点、无障碍）由本视图自己维护；
 /// - 视觉令牌全部取自 `PaneCardStyle`，与现有面板逐像素同源、换主题零改动。
+///
+/// 行有两种排法（由 `DrawnRowSpec.isStacked` 决定）：
+/// - 单行式：行名 → 进度条 → 行值（系统页进程榜、网络页进程榜）；
+/// - 两行式：色点 + 行名 + 右侧两列，副文本整行，底部整行微条（Token 排行屏）。
+/// 绘制实现在 `DrawnRowList+Drawing.swift`，本文件只管数据、几何、交互与无障碍。
 @MainActor
 final class DrawnRowList: NSView {
 
@@ -67,6 +72,18 @@ final class DrawnRowList: NSView {
     var iconSize: CGFloat = 0 { didSet { needsDisplay = true } }
     /// 模板图标的上色（nil = 原样绘制）
     var iconTint: NSColor? { didSet { needsDisplay = true } }
+    /// 行前色点取色（两行式）；同一行底部微条也用它取色，保证点与条对得上
+    var rowSwatchColor: ((Int) -> NSColor?)? { didSet { needsDisplay = true } }
+    /// 色点边长（6pt：与 Token 页图例色点同形）
+    var swatchSize: CGFloat = 6 { didSet { needsDisplay = true } }
+    /// 副文本字体（两行式的第二行）
+    var detailFont: NSFont = PaneCardStyle.metaFont { didSet { needsDisplay = true } }
+    /// 副文本颜色
+    var detailColor: NSColor = PaneCardStyle.tertiaryText { didSet { needsDisplay = true } }
+    /// 右侧第二列字体（两行式的占比等）
+    var secondaryFont: NSFont = PaneCardStyle.metaFont { didSet { needsDisplay = true } }
+    /// 右侧第二列颜色
+    var secondaryColor: NSColor = PaneCardStyle.tertiaryText { didSet { needsDisplay = true } }
     /// 行名颜色（默认主文字；系统页等按需覆盖）
     var titleColor: NSColor = PaneCardStyle.primaryText { didSet { needsDisplay = true } }
     /// 进度条轨道色
@@ -82,7 +99,6 @@ final class DrawnRowList: NSView {
     /// 进度条高度
     var barHeight: CGFloat = 5 { didSet { needsDisplay = true } }
 
-
     // MARK: - 交互
 
     /// 点击某行（下标）
@@ -93,9 +109,12 @@ final class DrawnRowList: NSView {
     }
     /// 是否绘制悬停高亮（纯展示列表可关掉）
     var highlightsHover = true
-    private var hoverIndex: Int? {
+    /// 悬停行 —— 跨文件绘制实现要读，故放宽为 internal
+    var hoverIndex: Int? {
         didSet { if hoverIndex != oldValue { needsDisplay = true } }
     }
+    /// 模板图标的上色缓存（键 = 图标对象身份；绘制实现跨文件使用，故 internal）
+    var tintedIcons: [ObjectIdentifier: NSImage] = [:]
 
     // MARK: - 布局
 
@@ -103,13 +122,13 @@ final class DrawnRowList: NSView {
 
     override var intrinsicContentSize: NSSize {
         let h = DrawnRowLayout.contentHeight(rowCount: rows.count,
-                                             rowHeight: rowHeight,
-                                             rowSpacing: rowSpacing)
+                                              rowHeight: rowHeight,
+                                              rowSpacing: rowSpacing)
         return NSSize(width: NSView.noIntrinsicMetric, height: h)
     }
 
     /// 第 index 行的矩形（flipped 坐标，自上而下）
-    private func rowRect(_ index: Int) -> CGRect {
+    func rowRect(_ index: Int) -> CGRect {
         CGRect(x: 0,
                y: CGFloat(index) * (rowHeight + rowSpacing),
                width: bounds.width,
@@ -126,7 +145,7 @@ final class DrawnRowList: NSView {
         return point.y - CGFloat(index) * step <= rowHeight ? index : nil
     }
 
-    // MARK: - 绘制
+    // MARK: - 绘制入口
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
@@ -137,124 +156,6 @@ final class DrawnRowList: NSView {
             drawRow(row, index: index, in: rect)
         }
         ctx.restoreGState()
-    }
-
-    private func drawRow(_ row: DrawnRowSpec, index: Int, in rect: CGRect) {
-        // 悬停 / 焦点底
-        if highlightsHover, hoverIndex == index {
-            DrawnInk.fill(rect.insetBy(dx: 0, dy: 1), radius: 4, color: PaneCardStyle.selectedFill)
-        }
-        let titleRun = DrawnTextRun(string: row.title,
-                                    font: titleFont,
-                                    color: titleColor)
-        let valueRun = DrawnTextRun(string: row.value,
-                                    font: row.tone == .strong ? PaneCardStyle.rowValueStrongFont : valueFont,
-                                    color: toneColor(row.tone))
-        // 图标列先占位：图标宽 + 一个间距，行名从它右侧开始
-        let iconWidth = iconSize > 0 ? iconSize : 0
-        let metrics = DrawnRowLayout.metrics(rowWidth: rect.width,
-                                             leadingInset: horizontalInset,
-                                             trailingInset: horizontalInset,
-                                             titleWidth: fixedTitleWidth ?? titleRun.width(),
-                                             valueWidth: valueRun.width(),
-                                             gap: elementGap,
-                                             hasProgress: row.progress != nil,
-                                             minBarWidth: minBarWidth,
-                                             leadingWidth: iconWidth)
-        var cursorX = rect.minX + horizontalInset
-        if iconWidth > 0 {
-            // 图标列始终占位（这行取不到图标也留空），保证行名左对齐整齐
-            if let image = rowIcon?(index) {
-                drawIcon(image, at: CGRect(x: cursorX,
-                                           y: rect.midY - iconWidth / 2,
-                                           width: iconWidth,
-                                           height: iconWidth))
-            }
-            cursorX += iconWidth + elementGap
-        }
-        if metrics.titleWidth > 0 {
-            titleRun.draw(in: CGRect(x: cursorX,
-                                     y: rect.minY,
-                                     width: metrics.titleWidth,
-                                     height: rect.height))
-            cursorX += metrics.titleWidth + elementGap
-        }
-        if metrics.showsBar {
-            let barRect = CGRect(x: cursorX,
-                                 y: rect.midY - barHeight / 2,
-                                 width: metrics.barWidth,
-                                 height: barHeight)
-            if row.isEmptyBar {
-                DrawnInk.outlineBar(in: barRect, color: trackColor)
-            } else if let progress = row.progress {
-                DrawnInk.progressBar(in: barRect,
-                                     progress: progress,
-                                     track: trackColor,
-                                     fill: row.tone == .warning ? PaneCardStyle.warnInk : barColor)
-            }
-        }
-        if metrics.valueWidth > 0 {
-            valueRun.draw(in: CGRect(x: rect.maxX - horizontalInset - metrics.valueWidth,
-                                     y: rect.minY,
-                                     width: metrics.valueWidth,
-                                     height: rect.height),
-                           alignment: .right)
-        }
-        // 键盘焦点环（自绘，不依赖系统 focus ring）
-        if focusedIndex == index {
-            if let ctx = NSGraphicsContext.current?.cgContext {
-                ctx.addPath(DrawnInk.roundedPath(rect.insetBy(dx: 1, dy: 1.5), radius: 4))
-                ctx.setStrokeColor(NSColor.controlAccentColor.cgColor)
-                ctx.setLineWidth(1.5)
-                ctx.strokePath()
-            }
-        }
-    }
-
-    // MARK: - 图标
-
-    /// 画行前图标：等比缩放到 iconSize 方框内并居中
-    ///
-    /// 模板图（SF Symbol 占位）按 `iconTint` 上色后再画 —— 自绘不走
-    /// `NSImageView.contentTintColor`，模板图原样画出来会是纯黑块。
-    private func drawIcon(_ image: NSImage, at rect: CGRect) {
-        let shown = tintedIcon(image)
-        let scale = min(rect.width / max(shown.size.width, 1),
-                        rect.height / max(shown.size.height, 1))
-        let drawRect = CGRect(x: rect.midX - shown.size.width * scale / 2,
-                              y: rect.midY - shown.size.height * scale / 2,
-                              width: shown.size.width * scale,
-                              height: shown.size.height * scale)
-        shown.draw(in: drawRect,
-                   from: .zero,
-                   operation: .sourceOver,
-                   fraction: 1,
-                   respectFlipped: true,
-                   hints: [.interpolation: NSImageInterpolation.high])
-    }
-
-    /// 模板图标上色（按图标对象缓存，图标由 AppIconProvider 复用，对象身份稳定）
-    private func tintedIcon(_ image: NSImage) -> NSImage {
-        guard image.isTemplate, let tint = iconTint else { return image }
-        let key = ObjectIdentifier(image)
-        if let hit = tintedIcons[key] { return hit }
-        let tinted = NSImage(size: image.size, flipped: false) { rect in
-            image.draw(in: rect)
-            tint.set()
-            rect.fill(using: .sourceAtop)
-            return true
-        }
-        if tintedIcons.count >= 64 { tintedIcons.removeAll(keepingCapacity: true) }
-        tintedIcons[key] = tinted
-        return tinted
-    }
-
-    private func toneColor(_ tone: DrawnRowSpec.Tone) -> NSColor {
-        switch tone {
-        case .normal: return PaneCardStyle.secondaryText
-        case .strong: return PaneCardStyle.primaryText
-        case .warning: return PaneCardStyle.warnInk
-        }
     }
 
     // MARK: - 鼠标
@@ -313,15 +214,13 @@ final class DrawnRowList: NSView {
     // MARK: - 无障碍
 
     private var axElements: [DrawnRowAccessibilityElement] = []
-    /// 模板图标的上色缓存（键 = 图标对象身份）
-    private var tintedIcons: [ObjectIdentifier: NSImage] = [:]
 
     private func rebuildAccessibilityElements() {
         axElements = rows.enumerated().map { index, row in
             let element = DrawnRowAccessibilityElement()
             element.setAccessibilityParent(self)
             element.setAccessibilityRole(row.isActionable ? .button : .staticText)
-            element.setAccessibilityLabel(row.value.isEmpty ? row.title : "\(row.title) \(row.value)")
+            element.setAccessibilityLabel(accessibilityText(for: row))
             if row.isActionable {
                 element.activate = { [weak self] in self?.onRowAction?(index) }
             }
@@ -330,6 +229,15 @@ final class DrawnRowList: NSView {
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel("列表")
+    }
+
+    /// 一行的读屏文案：两行式把副文本也读出来，否则占比 / 会话数读屏就丢了
+    private func accessibilityText(for row: DrawnRowSpec) -> String {
+        var parts = [row.title]
+        if !row.value.isEmpty { parts.append(row.value) }
+        if !row.secondary.isEmpty { parts.append(row.secondary) }
+        if !row.detail.isEmpty { parts.append(row.detail) }
+        return parts.joined(separator: " ")
     }
 
     override func accessibilityChildren() -> [Any]? {

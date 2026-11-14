@@ -82,10 +82,10 @@ extension TokenPaneView {
             if let lastModel { rankScreen.update(model: lastModel) }
             layoutSubtreeIfNeeded()
             let prefix = dimension == .projects ? "project" : "model"
-            for (index, row) in rankScreen.rowsForSnapshot.enumerated() where !row.isHidden {
-                let metric = row.metricsForSnapshot(in: self)
-                result.append((prefix + "-" + String(index + 1), metric.available, metric.needed,
-                               metric.needed > metric.available + 0.5, metric.text + " | " + metric.value))
+            for (index, row) in rankScreen.rowProbesForSnapshot().enumerated() {
+                result.append((prefix + "-" + String(index + 1), row.titleAvailable, row.titleNeeded,
+                               row.titleNeeded > row.titleAvailable + 0.5,
+                               row.title + " | " + row.value + "  " + row.secondary))
             }
         }
         rankScreen.setDimensionForSnapshot(original)

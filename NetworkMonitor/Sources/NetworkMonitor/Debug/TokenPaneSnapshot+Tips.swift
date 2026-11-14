@@ -28,10 +28,10 @@ extension TokenPaneSnapshot {
             if let model = panel.tokenPane.lastModel { panel.tokenPane.rankScreen.update(model: model) }
             panel.layoutSubtreeIfNeeded()
             let screen = panel.tokenPane.rankScreen
-            let rows = screen.rowsForSnapshot.filter { !$0.isHidden }
+            let rows = screen.rowProbesForSnapshot()
             lines.append("# 排行屏 · " + dimension.title + " · " + String(rows.count) + " 行")
             for (index, row) in rows.enumerated() {
-                lines.append(singleLine(index + 1, tip: row.toolTipForSnapshot))
+                lines.append(singleLine(index + 1, tip: row.tip))
             }
             lines.append("# 排行屏 · 占比条整条")
             lines.append("bar: " + flatten(screen.barForSnapshot.toolTipForSnapshot))

@@ -63,6 +63,35 @@ enum DrawnInk {
         ctx.restoreGState()
     }
 
+    // MARK: 色点 / 分段条
+
+    /// 行前色点（6pt 圆角块，与 Token 页图例色点同形）
+    static func swatch(in rect: CGRect, color: NSColor, radius: CGFloat = 1.5) {
+        guard rect.width > 0, rect.height > 0 else { return }
+        fill(rect, radius: radius, color: color)
+    }
+
+    /// 分段占比条（轨道 + 若干段，整体两端圆角、段内直角）
+    ///
+    /// 份额之和不要求等于 1：超出部分按顺序排在右侧被裁掉，不足则露出右侧轨道。
+    static func stackedBar(in rect: CGRect, shares: [Double], colors: [NSColor], track: NSColor) {
+        guard rect.width > 0, rect.height > 0, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        ctx.saveGState()
+        ctx.addPath(roundedPath(rect, radius: rect.height / 2))
+        ctx.clip()
+        ctx.setFillColor(track.cgColor)
+        ctx.fill(rect)
+        var offset = rect.minX
+        for (index, share) in shares.enumerated() where share > 0 {
+            let width = CGFloat(share) * rect.width
+            guard width > 0.5 else { continue }
+            ctx.setFillColor((index < colors.count ? colors[index] : track).cgColor)
+            ctx.fill(CGRect(x: offset, y: rect.minY, width: width, height: rect.height))
+            offset += width
+        }
+        ctx.restoreGState()
+    }
+
     // MARK: 小色块
 
     /// 圆点（状态指示灯）

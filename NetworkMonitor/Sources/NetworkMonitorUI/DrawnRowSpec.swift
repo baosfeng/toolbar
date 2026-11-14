@@ -29,20 +29,35 @@ public struct DrawnRowSpec: Equatable {
     public var isEmptyBar: Bool
     /// 是否可点击（决定无障碍角色与鼠标悬停高亮）
     public var isActionable: Bool
+    /// 第二行副文本（空串 = 单行式行；非空时这一行按两行式排，进度条改画整行底部）
+    public var detail: String
+    /// 右侧第二列（如占比；空串 = 不画；画在行值右边、贴最右）
+    public var secondary: String
+    /// 是否在行前画 6pt 色点（排行行的「与占比条同色」标记）
+    public var showsSwatch: Bool
 
     public init(title: String,
                 value: String,
                 progress: Double? = nil,
                 tone: Tone = .normal,
                 isActionable: Bool = false,
-                isEmptyBar: Bool = false) {
+                isEmptyBar: Bool = false,
+                detail: String = "",
+                secondary: String = "",
+                showsSwatch: Bool = false) {
         self.title = title
         self.value = value
         self.progress = progress
         self.tone = tone
         self.isActionable = isActionable
         self.isEmptyBar = isEmptyBar
+        self.detail = detail
+        self.secondary = secondary
+        self.showsSwatch = showsSwatch
     }
+
+    /// 是否两行式（有副文本）
+    public var isStacked: Bool { !detail.isEmpty }
 }
 
 // MARK: - 宽度分配（纯计算）

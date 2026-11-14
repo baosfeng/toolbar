@@ -22,10 +22,10 @@ extension TokenPaneSnapshot {
             let panel = makeRankingPanel(snapshot: snapshot, dimension: dimension)
             panel.layoutSubtreeIfNeeded()
             let screen = panel.tokenPane.rankScreen
-            let rows = screen.rowsForSnapshot.filter { !$0.isHidden }
+            let rows = screen.rowProbesForSnapshot()
             lines.append("# 排行屏 " + distroSlug(dimension) + " 整宽列表：" + String(rows.count) + " 行")
             for (index, row) in rows.enumerated() {
-                lines.append(metricLine(index + 1, row.metricsForSnapshot(in: screen)))
+                lines.append(metricLine(index + 1, row))
             }
         }
 
@@ -33,7 +33,8 @@ extension TokenPaneSnapshot {
         let probePanel = makeRankingPanel(snapshot: snapshot, dimension: .models)
         probePanel.layoutSubtreeIfNeeded()
         let probeScreen = probePanel.tokenPane.rankScreen
-        let rowWidth = probeScreen.rowsForSnapshot.first?.bounds.width ?? MenuPanelStyle.contentWidth
+        let rowWidth = probeScreen.rowListForSnapshot.bounds.width > 0
+            ? probeScreen.rowListForSnapshot.bounds.width : MenuPanelStyle.contentWidth
         let rowHeight = TokenPaneStyle.distroDetailRowHeight
         let container = NSView(frame: NSRect(x: 0, y: 0, width: rowWidth, height: rowHeight))
         let probe = TokenDistroRowView(height: rowHeight, stacked: false)
@@ -78,6 +79,18 @@ extension TokenPaneSnapshot {
     }
 
     /// 单行度量文本（名称 / 数值各给可用与所需宽度，超出即截断）
+    private static func metricLine(_ index: Int, _ m: TokenRankingScreenView.RankingRowProbe) -> String {
+        var line = "row-" + String(index) + ": rowW=" + fmt(m.rowWidth) + " rowH=" + fmt(m.rowHeight)
+        line += " | name [" + m.title + "] " + fmt(m.titleAvailable) + "/" + fmt(m.titleNeeded)
+        line += " h=" + fmt(m.titleHeight)
+        line += " truncated=" + (m.titleNeeded > m.titleAvailable + 0.5 ? "YES" : "NO")
+        let valueText = m.value + "  " + m.secondary
+        line += " | value [" + valueText + "] " + fmt(m.valueAvailable) + "/" + fmt(m.valueNeeded)
+        line += " truncated=" + (m.valueNeeded > m.valueAvailable + 0.5 ? "YES" : "NO")
+        return line
+    }
+
+    /// 二级页整宽列表行的度量文本（TokenDistroRowView 仍是视图树，按旧口径量）
     private static func metricLine(_ index: Int,
                                    _ m: (available: CGFloat, needed: CGFloat, text: String, value: String,
                                          rowWidth: CGFloat, rowHeight: CGFloat, nameHeight: CGFloat,
