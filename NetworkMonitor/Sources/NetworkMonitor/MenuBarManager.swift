@@ -11,7 +11,8 @@ import NetworkMonitorUI
 @MainActor
 final class MenuBarManager: NSObject {
 
-    // 放宽为 internal：DEBUG 取证扩展（MenuBarManager+Evidence）要读状态栏按钮文本
+    /// 放宽为 internal：DEBUG 取证扩展（MenuBarManager+Evidence）要读状态栏按钮文本，
+    /// 状态栏文本组装拆在 MenuBarManager+StatusTitle.swift
     let statusItem: NSStatusItem
     /// 放宽为 internal：状态栏文本组装拆在 MenuBarManager+StatusTitle.swift
     let monitor: any NetworkMonitoringService
@@ -172,12 +173,11 @@ final class MenuBarManager: NSObject {
         onOpenSettings?(nil)
     }
 
-    // 放宽为 internal：DEBUG 取证扩展要复用同一条 toggle 路径
+    /// 展开 / 收起面板（状态栏点击与 DEBUG 取证扩展共用这一条路径，故放宽为 internal）
     @objc func togglePanel() {
         guard let button = statusItem.button else { return }
         panel.toggle(relativeTo: button.bounds, of: button)
     }
-
 
     // MARK: - 预热
 
