@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorCore
 
 // MARK: - 全 App 统一动效入口
 
@@ -32,8 +33,33 @@ enum MotionKit {
                                         overlay: 0.22, close: 0.15, stagger: 0.024)
     }
 
-    /// 全局时长令牌
-    static let durations = Durations.standard
+    /// 全局时长令牌 —— **可变**：渲染帧率档切换会重写它（原先是 `static let`，
+    /// 换档后动效永远停在默认值，正是「设置页切了但没反应」那类问题的成因）
+    private(set) static var durations = Durations.standard
+
+    /// 当前渲染档是否允许播放动效
+    ///
+    /// 与系统的「减弱动态效果」是**或**的关系：任一路要求降级，动效就落终态。
+    private(set) static var tierAllowsMotion = true
+
+    /// 按渲染档更新动效参数（切档时由 `RenderTierCoordinator` 调用）
+    ///
+    /// 只改「展开 / 弹层 / 错峰」三档，状态档（0.12s）与关闭档（0.15s）保持系统惯例值：
+    /// 这两档是「按下松开」「收起来」这类即时反馈，改长只会显得拖沓。
+    static func apply(profile: RenderTierProfile) {
+        tierAllowsMotion = profile.motionEnabled
+        durations = Durations(state: Durations.standard.state,
+                              expand: profile.motionExpand,
+                              overlay: profile.motionOverlay,
+                              close: Durations.standard.close,
+                              stagger: profile.motionStagger)
+    }
+
+    /// 恢复默认时长（标准档 / 测试用）
+    static func resetDurations() {
+        tierAllowsMotion = true
+        durations = Durations.standard
+    }
 
     /// 错峰累计上限（每张 0.024s，总时长封顶 0.3s）
     private static let staggerLimit: TimeInterval = 0.3
@@ -41,9 +67,9 @@ enum MotionKit {
     /// 图层交叉过渡的动画键（同一图层重复过渡时先摘旧动画）
     private static let crossFadeKey = "motion.crossFade"
 
-    /// 是否允许动效（跟随系统「减弱动态效果」开关）
+    /// 是否允许动效：系统「减弱动态效果」与渲染档位任一要求降级时落终态
     static var isEnabled: Bool {
-        !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        tierAllowsMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
     // MARK: 通用

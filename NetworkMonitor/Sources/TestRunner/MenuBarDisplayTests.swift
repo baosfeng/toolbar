@@ -9,10 +9,12 @@ func runMenuBarDisplayTests() {
     print("\n🧪 Testing MenuBarDisplayLogic...")
 
     // 夹取：沿用 1...10 秒；非有限值 / 非正数回落下界
-    assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(0), 1, "0 秒回落到 1 秒")
-    assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(-3), 1, "负数回落到 1 秒")
-    assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(.nan), 1, "NaN 回落到 1 秒")
-    assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(.infinity), 1, "无穷大视为非法输入，回落到 1 秒")
+    // 下界 0.5 秒：极致档要用 0.5 秒周期，非法输入仍回落到下界
+    assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(0), 0.5, "0 秒回落到下界 0.5 秒")
+    assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(-3), 0.5, "负数回落到下界 0.5 秒")
+    assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(.nan), 0.5, "NaN 回落到下界 0.5 秒")
+    assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(.infinity), 0.5, "无穷大视为非法输入，回落到下界 0.5 秒")
+    assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(0.5), 0.5, "极致档 0.5 秒不得被夹回 1 秒")
     assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(2), 2, "设置页 2 秒档原样生效")
     assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(5), 5, "设置页 5 秒档原样生效")
     assertEqual(MenuBarDisplayLogic.clampedRefreshInterval(60), 10, "超出上界夹到 10 秒")

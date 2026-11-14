@@ -271,5 +271,13 @@ runClipboardThumbnailDecodeTests()
 // MARK: - 剪贴板删除二次确认（首次 / 窗口内二次 / 超窗 / 打断 / 互不串味）
 runClipboardDeleteConfirmTests()
 
+// MARK: - 外观（主题令牌 / 深浅对比度 / 渲染帧率档 / 外观偏好）
+runThemeTokenTests()
+runThemeContrastTests()
+runRenderTierTests()
+runRenderTierGlassTests()
+runRenderTierGateTests()
+runAppearancePreferencesTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")

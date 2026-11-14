@@ -9,21 +9,23 @@ import AppKit
 @MainActor
 enum TransferMotion {
 
-    /// 状态变化（进度 / 掉线）
-    static let stateDuration: TimeInterval = 0.12
-    /// 展开 / 淡入
-    static let pageDuration: TimeInterval = 0.34
-    /// 弹层出现
-    static let overlayDuration: TimeInterval = 0.22
-    /// 弹层关闭
-    static let closeDuration: TimeInterval = 0.15
-    /// 列表逐项延迟
-    static let stagger: TimeInterval = 0.024
+    // 五个时长与开关**全部转发 `MotionKit`**：取值本来就同口径（同一张设计表），
+    // 各写一份的后果是渲染帧率档只改到面板、互传页仍按旧时长播放。
+    // 保留同名成员是为了让 Transfer 目录的调用点零改动。
 
-    /// 是否允许动效（跟随系统「减弱动态效果」）
-    static var isEnabled: Bool {
-        !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-    }
+    /// 状态变化（进度 / 掉线）
+    static var stateDuration: TimeInterval { MotionKit.durations.state }
+    /// 展开 / 淡入
+    static var pageDuration: TimeInterval { MotionKit.durations.expand }
+    /// 弹层出现
+    static var overlayDuration: TimeInterval { MotionKit.durations.overlay }
+    /// 弹层关闭
+    static var closeDuration: TimeInterval { MotionKit.durations.close }
+    /// 列表逐项延迟
+    static var stagger: TimeInterval { MotionKit.durations.stagger }
+
+    /// 是否允许动效（系统减弱动态效果 与 渲染档位 任一要求降级即落终态）
+    static var isEnabled: Bool { MotionKit.isEnabled }
 
     // MARK: - 通用
 

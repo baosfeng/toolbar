@@ -22,13 +22,22 @@ extension MenuBarManager {
     }
 
     /// 应用最新偏好：刷新周期变了就重建定时器，然后立即重渲染一次状态栏
-    func applyDisplayPreferences() {
-        let desired = displayPreferences.refreshInterval
+    ///
+    /// 周期**取自渲染帧率档**（标准 1s / 极致 0.5s / 省电 2s），不再读「间隔」偏好：
+    /// 档位与间隔是同一维度上的两个旋钮，并存会出现「选了省电还是 1 秒刷」的矛盾。
+    /// 系统指标采样周期同样随档位改写（`systemSampleInterval`）。
+    /// - Parameter tierOverride: 显式档位（结构自证与测试用）；nil = 读偏好（生产路径）
+    func applyDisplayPreferences(tierOverride: RenderTier? = nil) {
+        let tier = tierOverride ?? appearancePreferences.renderTier
+        let profile = RenderTierLogic.profile(for: tier)
+        systemSampleInterval = profile.sampleInterval
+        let desired = profile.tickInterval
         // 周期没变就保留正在跑的定时器，避免每次改布局都把刷新节拍重置一遍
         if MenuBarDisplayLogic.needsTimerRebuild(currentInterval: timerInterval, desiredInterval: desired) {
             setupTimer(interval: desired)
         } else {
             update()
         }
+        logger.info("渲染档生效：\(RenderTierLogic.summary(for: tier))")
     }
 }
