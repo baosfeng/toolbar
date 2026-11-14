@@ -37,7 +37,8 @@ final class SettingsCapturePane: SettingsPaneView {
     var toolBarPlacementControl: NSPopUpButton?
     var toolBarPlacementRow: SettingsRowView?
     var toolBarGroupToggles: [SnipToolBarGroup: NSSwitch] = [:]
-    var toolBarOrderRows: [SnipToolBarGroup: SettingsRowView] = [:]
+    /// 组顺序卡片的装配器（行内上移 / 下移由 SettingsOrderedCardView 负责）
+    var toolBarOrderCard: SettingsOrderedCardView?
     var toolBarToolChips: [SnipTool: NSButton] = [:]
     var toolBarActionToggles: [SnipBarAction: NSSwitch] = [:]
 

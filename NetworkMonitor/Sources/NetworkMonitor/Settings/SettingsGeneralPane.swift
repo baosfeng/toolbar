@@ -3,7 +3,8 @@ import NetworkMonitorCore
 
 // MARK: - 通用设置页
 
-/// 通用设置 — 启动行为、额度提醒与数值单位
+/// 通用设置 —— 启动行为、额度提醒、数值单位，以及可自定义排序的
+/// 「菜单栏指标 / 面板分页 / 菜单栏显示方式」三块（排序构建与刷新拆在 +Ordering.swift）
 ///
 /// 开关类写进既有偏好实现（`LaunchAtStartupService` / `BillingAlertPreferences`），
 /// 与菜单栏齿轮菜单读同一份状态，避免两处勾选态不一致。
@@ -24,30 +25,42 @@ final class SettingsGeneralPane: SettingsPaneView {
     private let alertSwitch = NSSwitch()
     private let unitControl = NSPopUpButton(frame: .zero, pullsDown: false)
 
-    private let panelTabPreferences = PanelTabPreferences()
-    private var tabToggles: [MenuPanelTab: NSSwitch] = [:]
+    // MARK: 排序相关（放宽为 internal：构建与刷新在 SettingsGeneralPane+Ordering.swift）
 
-    private let displayPreferences = MenuBarDisplayPreferences()
-    private var metricToggles: [MenuBarMetric: NSSwitch] = [:]
-    private var templateControl: NSSegmentedControl?
-    private var densityControl = NSPopUpButton(frame: .zero, pullsDown: false)
-    private var unitControl2 = NSPopUpButton(frame: .zero, pullsDown: false)
-    private var layoutControl = NSPopUpButton(frame: .zero, pullsDown: false)
-    private var intervalControl = NSPopUpButton(frame: .zero, pullsDown: false)
+    /// 键值存储（菜单栏显示偏好与面板分页偏好共用同一份，禁止各页自己 new）
+    let storage: any KeyValueStorage
+    let displayPreferences: MenuBarDisplayPreferences
+    let panelTabPreferences: PanelTabPreferences
+    /// 菜单栏指标开关 → 指标（不用 tag 反查：tag 只能存 Int，hashValue 跨启动不稳定）
+    var metricByToggle: [NSSwitch: MenuBarMetric] = [:]
+    /// 面板分页开关 → 分页
+    var tabByToggle: [NSSwitch: MenuPanelTab] = [:]
+    var templateControl: NSSegmentedControl?
+    var densityControl = NSPopUpButton(frame: .zero, pullsDown: false)
+    var unitControl2 = NSPopUpButton(frame: .zero, pullsDown: false)
+    var layoutControl = NSPopUpButton(frame: .zero, pullsDown: false)
+    var intervalControl = NSPopUpButton(frame: .zero, pullsDown: false)
     /// 菜单栏「单位」行（副标题随档位变化，refresh 时要更新）
-    private let unit2Row = SettingsRowView(title: "单位")
+    let unit2Row = SettingsRowView(title: "单位")
+    /// 可排序卡片的装配器（恢复默认按钮挂在卡片标题行右侧）
+    var metricsOrderCard: SettingsOrderedCardView?
+    var panelTabsOrderCard: SettingsOrderedCardView?
 
     /// 快捷模板内部名（`MenuBarDisplayPreferences.applyTemplate` 认这份名字）
-    private static let templateNames = ["minimal", "performance", "token", "network", "full"]
+    static let templateNames = ["minimal", "performance", "token", "network", "full"]
     /// 快捷模板分段标题（与内部名一一对应）
-    private static let templateTitles = ["默认", "性能", "Token", "网络", "全部"]
+    static let templateTitles = ["默认", "性能", "Token", "网络", "全部"]
 
     init(launchAtStartup: LaunchAtStartupService = LaunchAtStartupService(),
          alertPreferences: BillingAlertPreferences = BillingAlertPreferences(),
-         unitPreferences: NumberUnitPreferences = NumberUnitPreferences()) {
+         unitPreferences: NumberUnitPreferences = NumberUnitPreferences(),
+         storage: any KeyValueStorage = AppContext.shared.storage) {
         self.launchAtStartup = launchAtStartup
         self.alertPreferences = alertPreferences
         self.unitPreferences = unitPreferences
+        self.storage = storage
+        self.displayPreferences = MenuBarDisplayPreferences(storage: storage)
+        self.panelTabPreferences = PanelTabPreferences(storage: storage)
         super.init(section: .general)
     }
 
@@ -80,162 +93,10 @@ final class SettingsGeneralPane: SettingsPaneView {
         page.addCard(launchCard, sectionTitle: "启动")
         page.addCard(alertCard, sectionTitle: "额度提醒")
         page.addCard(unitCard, sectionTitle: "显示")
-        buildPanelTabsCard()
-        buildMenuBarMetricsCard()
-        page.addNote("设置会立即生效；开机自启动依赖应用签名，未签名构建可能被系统拒绝。")
-    }
 
-    private func buildMenuBarMetricsCard() {
-        let card = SettingsCardView()
-        for metric in MenuBarMetric.allCases {
-            let toggle = NSSwitch()
-            toggle.target = self
-            toggle.action = #selector(menuBarMetricToggled(_:))
-            toggle.tag = metric.hashValue
-            metricToggles[metric] = toggle
-            let row = SettingsRowView(title: metric.displayName, subtitle: "菜单栏显示")
-            row.trailingStack.addArrangedSubview(toggle)
-            card.addRow(row)
-        }
-        // 模板快速切换
-        let template = NSSegmentedControl(labels: Self.templateTitles, trackingMode: .selectOne,
-                                          target: self, action: #selector(menuBarTemplateChanged))
-        template.tag = 0
-        templateControl = template
-        let templateRow = SettingsRowView(title: "快捷模板")
-        templateRow.trailingStack.addArrangedSubview(template)
-        card.addRow(templateRow)
-
-        densityControl.addItems(withTitles: MenuBarDensity.allCases.map(\.rawValue))
-        densityControl.target = self
-        densityControl.action = #selector(menuBarDensityChanged)
-        let densityRow = SettingsRowView(title: "密度")
-        densityRow.trailingStack.addArrangedSubview(densityControl)
-        card.addRow(densityRow)
-
-        // 菜单栏单位档：custom 目前没有自定义单位表（按 short 回落），
-        // 直接标在标题里，避免用户选了「自定义」却看不到任何变化
-        unitControl2.addItems(withTitles: MenuBarUnitStyle.allCases.map(\.title))
-        unitControl2.target = self
-        unitControl2.action = #selector(menuBarUnitChanged)
-        unit2Row.trailingStack.addArrangedSubview(unitControl2)
-        card.addRow(unit2Row)
-
-        layoutControl.addItems(withTitles: MenuBarLayout.allCases.map(\.rawValue))
-        layoutControl.target = self
-        layoutControl.action = #selector(menuBarLayoutChanged)
-        let layoutRow = SettingsRowView(title: "布局")
-        layoutRow.trailingStack.addArrangedSubview(layoutControl)
-        card.addRow(layoutRow)
-
-        intervalControl.addItems(withTitles: ["1s", "2s", "5s"])
-        intervalControl.target = self
-        intervalControl.action = #selector(menuBarIntervalChanged)
-        let intervalRow = SettingsRowView(title: "间隔")
-        intervalRow.trailingStack.addArrangedSubview(intervalControl)
-        card.addRow(intervalRow)
-
-        page.addCard(card, sectionTitle: "菜单栏显示")
-    }
-
-    @objc private func menuBarDensityChanged() {
-        let idx = densityControl.indexOfSelectedItem
-        guard MenuBarDensity.allCases.indices.contains(idx) else { return }
-        displayPreferences.density = MenuBarDensity.allCases[idx]
-        AppEvents.postMenuBarDisplayChanged()
-    }
-
-    @objc private func menuBarUnitChanged() {
-        let idx = unitControl2.indexOfSelectedItem
-        guard MenuBarUnitStyle.allCases.indices.contains(idx) else { return }
-        displayPreferences.unitStyle = MenuBarUnitStyle.allCases[idx]
-        unit2Row.update(subtitle: Self.menuBarUnitSubtitle(displayPreferences.unitStyle))
-        AppEvents.postMenuBarDisplayChanged()
-    }
-
-    /// 菜单栏单位行副标题 — 直接写出各档的实际效果，避免「选了自定义却看不出变化」
-    private static func menuBarUnitSubtitle(_ style: MenuBarUnitStyle) -> String {
-        switch style {
-        case .short: return "紧凑写法，如 1.2M"
-        case .full: return "带空格全称，如 1.2 MB/s"
-        case .custom: return "自定义单位表暂未提供，当前按紧凑写法显示"
-        }
-    }
-
-    @objc private func menuBarLayoutChanged() {
-        let idx = layoutControl.indexOfSelectedItem
-        guard MenuBarLayout.allCases.indices.contains(idx) else { return }
-        displayPreferences.layout = MenuBarLayout.allCases[idx]
-        AppEvents.postMenuBarDisplayChanged()
-    }
-
-    @objc private func menuBarIntervalChanged() {
-        let titles = ["1s", "2s", "5s"]
-        let idx = intervalControl.indexOfSelectedItem
-        guard titles.indices.contains(idx) else { return }
-        let vals: [TimeInterval] = [1, 2, 5]
-        displayPreferences.refreshInterval = vals[idx]
-        AppEvents.postMenuBarDisplayChanged()
-    }
-
-    @objc private func menuBarMetricToggled(_ sender: NSSwitch) {
-        // 反查 metric
-        for (metric, toggle) in metricToggles where toggle === sender {
-            displayPreferences.setMetric(metric, enabled: sender.state == .on)
-        }
-        AppEvents.postMenuBarDisplayChanged()
-    }
-
-    @objc private func menuBarTemplateChanged() {
-        let index = templateControl?.selectedSegment ?? 0
-        guard Self.templateNames.indices.contains(index) else { return }
-        displayPreferences.applyTemplate(Self.templateNames[index])
-        // 同步 toggle
-        for (metric, toggle) in metricToggles {
-            toggle.state = displayPreferences.enabledMetrics.contains(metric) ? .on : .off
-        }
-        AppEvents.postMenuBarDisplayChanged()
-    }
-
-    private func buildPanelTabsCard() {
-        let card = SettingsCardView()
-        for tab in MenuPanelTab.allCases {
-            let toggle = NSSwitch()
-            toggle.target = self
-            toggle.action = #selector(panelTabToggled(_:))
-            toggle.tag = tab.rawValue
-            tabToggles[tab] = toggle
-            let row = SettingsRowView(title: tab.title, subtitle: "显示面板分页；至少保留 1 个")
-            row.trailingStack.addArrangedSubview(toggle)
-            let up = SettingsLinkButton.make("上移", target: self, action: #selector(panelTabMoveUp(_:)))
-            up.tag = tab.rawValue
-            let down = SettingsLinkButton.make("下移", target: self, action: #selector(panelTabMoveDown(_:)))
-            down.tag = tab.rawValue
-            row.trailingStack.addArrangedSubview(up)
-            row.trailingStack.addArrangedSubview(down)
-            card.addRow(row)
-        }
-        page.addCard(card, sectionTitle: "面板分页")
-    }
-
-    @objc private func panelTabToggled(_ sender: NSSwitch) {
-        guard let tab = MenuPanelTab(rawValue: sender.tag) else { return }
-        panelTabPreferences.setVisible(sender.state == .on, for: tab)
-        // 至少保留一项：存储侧已拦，这里把界面勾选态拉回真实值
-        sender.state = panelTabPreferences.visibleTabs.contains(tab) ? .on : .off
-        AppEvents.postPanelTabsChanged()
-    }
-
-    @objc private func panelTabMoveUp(_ sender: NSButton) {
-        guard let tab = MenuPanelTab(rawValue: sender.tag) else { return }
-        panelTabPreferences.move(tab, offset: -1)
-        AppEvents.postPanelTabsChanged()
-    }
-
-    @objc private func panelTabMoveDown(_ sender: NSButton) {
-        guard let tab = MenuPanelTab(rawValue: sender.tag) else { return }
-        panelTabPreferences.move(tab, offset: 1)
-        AppEvents.postPanelTabsChanged()
+        buildOrderableCards()
+        page.addNote("设置会立即生效；菜单栏指标与面板分页的顺序用行尾「上移 / 下移」调整，"
+                     + "标题右侧可一键恢复默认。开机自启动依赖应用签名，未签名构建可能被系统拒绝。")
     }
 
     override func refresh() {
@@ -248,22 +109,7 @@ final class SettingsGeneralPane: SettingsPaneView {
         launchRow.update(subtitle: launchAtStartup.isEnabled
                          ? "登录后自动启动 NetworkMonitor"
                          : "当前未登记开机自启动")
-        for (tab, toggle) in tabToggles {
-            toggle.state = panelTabPreferences.visibleTabs.contains(tab) ? .on : .off
-        }
-        for (metric, toggle) in metricToggles {
-            toggle.state = displayPreferences.enabledMetrics.contains(metric) ? .on : .off
-        }
-        // 模板选中段回灌：点完模板再进设置页时不能显示成「默认」（-1 = 与应用内模板名不匹配）
-        if let templateControl {
-            templateControl.selectedSegment = Self.templateNames.firstIndex(of: displayPreferences.template) ?? -1
-        }
-        if let i = MenuBarDensity.allCases.firstIndex(of: displayPreferences.density) { densityControl.selectItem(at: i) }
-        if let i = MenuBarUnitStyle.allCases.firstIndex(of: displayPreferences.unitStyle) { unitControl2.selectItem(at: i) }
-        unit2Row.update(subtitle: Self.menuBarUnitSubtitle(displayPreferences.unitStyle))
-        if let i = MenuBarLayout.allCases.firstIndex(of: displayPreferences.layout) { layoutControl.selectItem(at: i) }
-        let vals: [TimeInterval] = [1, 2, 5]
-        if let i = vals.firstIndex(of: displayPreferences.refreshInterval) { intervalControl.selectItem(at: i) }
+        refreshOrderableControls()
     }
 
     // MARK: - 动作
