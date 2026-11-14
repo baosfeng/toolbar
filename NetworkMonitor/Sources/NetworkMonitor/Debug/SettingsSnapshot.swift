@@ -49,6 +49,11 @@ enum SettingsSnapshot {
                let appearancePane = settings.currentPaneForSnapshot as? SettingsAppearancePane {
                 appearancePane.debugLogAppearanceControlStates("snapshot")
             }
+            // 通知与音效页同理：七行开关的勾选态与偏好真值并排落盘
+            if section == .notifications,
+               let pane = settings.currentPaneForSnapshot as? SettingsNotificationPane {
+                pane.debugLogControlStates("snapshot")
+            }
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let suffix = appearance == .aqua ? "light" : "dark"
                 let url = directory.appendingPathComponent(
@@ -61,6 +66,7 @@ enum SettingsSnapshot {
         // 单独出一组作为其可见性证据；版式基线仍是上面的首屏图
         captureScrolledCapture(directory: directory, settings: settings)
         captureScrolledClipboard(directory: directory, settings: settings)
+        captureScrolledNotifications(directory: directory, settings: settings)
         captureFirstOpen(directory: directory, settings: settings)
     }
 
@@ -105,6 +111,18 @@ enum SettingsSnapshot {
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let suffix = appearance == .aqua ? "light" : "dark"
             let url = directory.appendingPathComponent("settings-clipboard-storage-\(suffix).png")
+            MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
+                                     appearanceName: appearance, to: url)
+        }
+    }
+
+    /// 通知与音效页滚动到底部（音效库 / 重置卡在首屏之外，单独出一组作为可见性证据）
+    static func captureScrolledNotifications(directory: URL, settings: SettingsWindow?) {
+        guard let settings else { return }
+        guard let view = settings.prepareForSnapshotScrolledToBottom(.notifications) else { return }
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let suffix = appearance == .aqua ? "light" : "dark"
+            let url = directory.appendingPathComponent("settings-notifications-library-\(suffix).png")
             MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
                                      appearanceName: appearance, to: url)
         }

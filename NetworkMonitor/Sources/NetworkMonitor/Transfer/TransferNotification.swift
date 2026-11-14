@@ -1,33 +1,34 @@
 import AppKit
 import NetworkMonitorCore
-import UserNotifications
 
 // MARK: - 传输通知与音效
 
-/// 传输通知 — 完成 / 失败的系统通知与系统音效
+/// 传输通知 — 完成 / 失败的系统通知与提示音
 ///
-/// 策略（设计文档 §7.3）：
-/// - 默认只开「传输完成」音效，其余默认关闭，可在设置里逐项打开
-/// - 同一事件 500ms 内去重，多文件连续完成不连响
-/// - 音效走 `/System/Library/Sounds` 系统音，不打包音频资源
+/// 策略（统一到「通知与音效」设置页的传输完成一行）：
+/// - 通知走 NotificationCenterService，声音与提醒方式由设置页决定；
+/// - 系统通知未授权时退化为应用内提示音（否则用户什么都收不到）；
+/// - 同一事件 500ms 内去重，多文件连续完成不连响；
+/// - 「新设备出现」「配对码生成」两个旧开关并入传输完成一行：
+///   它们默认关闭、且与传输完成同一时机，独立成行只会让设置页多两行没人调的开关。
 @MainActor
 final class TransferNotification {
 
     // MARK: - 依赖
 
-    /// 设置（提示音开关统一由 `TransferPreferences` 提供）
-    private let preferences: TransferPreferences
+    private let notifications: any NotificationServicing
+    private let soundPlayer: NotificationSoundPlayer
     private let logger: LoggingService
-    private let center = UNUserNotificationCenter.current()
     private var lastPlayed: [String: Date] = [:]
     /// 去重窗口（秒）
     private static let dedupeWindow: TimeInterval = 0.5
 
-    init(preferences: TransferPreferences = TransferPreferences(),
+    init(notifications: any NotificationServicing,
+         soundPlayer: NotificationSoundPlayer,
          logger: LoggingService = AppContext.shared.logger) {
-        self.preferences = preferences
+        self.notifications = notifications
+        self.soundPlayer = soundPlayer
         self.logger = logger
-        requestAuthorization()
     }
 
     // MARK: - 文案
@@ -51,74 +52,40 @@ final class TransferNotification {
 
     // MARK: - 事件
 
-    /// 会话结束：发通知 + 播对应音效
+    /// 会话结束：发通知（系统通知可用）或播应用内提示音（不可用）
     func sessionFinished(_ session: TransferSession) {
         let message = Self.message(for: session)
         switch session.state {
         case .completed:
-            post(title: "传输完成", body: message)
-            playIfEnabled(session.direction == .send ? .send : .receive,
-                          soundName: session.direction == .send ? "Tink" : "Glass")
+            deliver(title: "传输完成", body: message)
         case .failed:
-            post(title: "传输失败", body: message)
-            playIfEnabled(.failure, soundName: "Basso")
-        case .cancelled:
-            break
-        default:
+            deliver(title: "传输失败", body: message)
+        case .cancelled, .pending, .offering, .awaitingConfirm, .transferring, .verifying:
             break
         }
     }
 
-    /// 新设备出现（默认关闭）
-    func deviceAppeared(_ device: RemoteDevice) {
-        playIfEnabled(.deviceAppeared, soundName: "Pop")
+    // MARK: - 内部
+
+    /// 发通知；未授权时退化为应用内提示音（同一事件 500ms 内只响一次）
+    private func deliver(title: String, body: String) {
+        if notifications.authorizationState == .authorized {
+            notifications.post(NotificationMessage(event: .transferFinished,
+                                                   title: title, body: body))
+            return
+        }
+        guard passesDedupe() else { return }
+        soundPlayer.play(event: .transferFinished, cue: .transferFinished)
+        logger.debug("系统通知未授权，改为应用内提示音：\(title)")
     }
 
-    /// 配对码生成（默认关闭）
-    func pairingCodeGenerated() {
-        playIfEnabled(.pairingCode, soundName: "Morse")
-    }
-
-    // MARK: - 音效
-
-    /// 按开关与去重窗口播放系统音
-    private func playIfEnabled(_ event: TransferPreferences.SoundEvent, soundName: String) {
-        guard preferences.soundEnabled(event) else { return }
+    /// 去重：多文件连续完成时只响一次
+    private func passesDedupe() -> Bool {
         let now = Date()
-        if let last = lastPlayed[event.rawValue], now.timeIntervalSince(last) < Self.dedupeWindow {
-            return
+        if let last = lastPlayed["transferFinished"], now.timeIntervalSince(last) < Self.dedupeWindow {
+            return false
         }
-        lastPlayed[event.rawValue] = now
-        guard let sound = NSSound(named: soundName) else {
-            logger.debug("系统音效缺失：\(soundName)")
-            return
-        }
-        sound.play()
-    }
-
-    // MARK: - 系统通知
-
-    private func requestAuthorization() {
-        center.requestAuthorization(options: [.alert, .sound]) { [logger] granted, error in
-            if let error {
-                logger.debug("通知授权失败（可能未签名）：\(error.localizedDescription)")
-            } else if !granted {
-                logger.debug("用户未授权传输完成通知")
-            }
-        }
-    }
-
-    private func post(title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = nil
-        let request = UNNotificationRequest(identifier: "transfer-\(UUID().uuidString)",
-                                            content: content, trigger: nil)
-        center.add(request) { [logger] error in
-            if let error {
-                logger.debug("通知投递失败：\(error.localizedDescription)")
-            }
-        }
+        lastPlayed["transferFinished"] = now
+        return true
     }
 }

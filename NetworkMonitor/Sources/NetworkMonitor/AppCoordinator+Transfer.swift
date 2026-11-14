@@ -30,7 +30,10 @@ extension AppCoordinator {
                                       knownPeers: knownPeers,
                                       logger: logger)
         let controller = TransferController(service: service, registry: registry,
-                                            preferences: preferences, logger: logger)
+                                            preferences: preferences,
+                                            notifications: notificationService,
+                                            soundPlayer: soundPlayer,
+                                            logger: logger)
         transferController = controller
         // 设置页要用同一实例做目录占用统计与清理，避免再建一个服务
         transferService = service

@@ -45,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let manager = menuBarManager {
             AppearanceEvidence.runIfRequested(manager: manager)
         }
+        // 仅 DEBUG：NM_NOTIFY_SELFCHECK=<file> 时跑一遍通知与音效自检并退出（取证用）
+        NotificationSelfCheck.runIfRequested(coordinator: coordinator)
         // 仅 DEBUG：--measure-panel-open 时逐阶段计时并退出（性能回归取证）
         PanelOpenMeasure.runIfRequested(manager: menuBarManager)
         // 仅 DEBUG：NM_SHOW_PANEL=1 时走真实路径展开 popover 并保持打开（实机截图取证）

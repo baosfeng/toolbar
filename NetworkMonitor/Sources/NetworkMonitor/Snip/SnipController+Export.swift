@@ -39,6 +39,8 @@ extension SnipController {
         let image = NSImage(cgImage: cropped, size: target.globalRect.size)
         pasteboard.writeObjects([image])
         logger.info("已复制选区 \(Int(target.globalRect.width))×\(Int(target.globalRect.height))")
+        // 截图完成提示音（默认关；设置页「截图完成」一行开）
+        onCaptureCompleted?()
     }
 
     // MARK: - 保存

@@ -33,19 +33,22 @@ final class TransferController {
     let notification: TransferNotification
     private var currentPendingOfferId: String?
     private var pollTimer: Timer?
-    var appearedDeviceIds: Set<String> = []
 
     // MARK: - 初始化
 
     init(service: TransferService,
          registry: DeviceRegistry,
          preferences: TransferPreferences = TransferPreferences(),
+         notifications: any NotificationServicing,
+         soundPlayer: NotificationSoundPlayer,
          logger: LoggingService = AppContext.shared.logger) {
         self.service = service
         self.registry = registry
         self.preferences = preferences
         self.logger = logger
-        self.notification = TransferNotification(preferences: preferences, logger: logger)
+        self.notification = TransferNotification(notifications: notifications,
+                                                 soundPlayer: soundPlayer,
+                                                 logger: logger)
     }
 
     /// 绑定面板并安装交互回调（`MenuPanelController` 装配时调用一次）
@@ -175,7 +178,6 @@ final class TransferController {
     /// 面板收起期间数据变过：下次可见时补推一次，避免开面板看到旧状态带
     var pendingVisibleRender = false
 
-
     private func select(_ device: RemoteDevice) {
         selectedDeviceId = device.deviceId
         panel?.showHint(device.isOnline ? "已选择 \(device.alias)，拖文件或点「选择文件…」发送"
@@ -290,7 +292,6 @@ final class TransferController {
                 }
                 guard offer.sessionId != self.currentPendingOfferId else { return }
                 self.currentPendingOfferId = offer.sessionId
-                self.notification.pairingCodeGenerated()
                 self.presentReceivePIN(offer)
             }
         }

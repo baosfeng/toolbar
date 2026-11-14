@@ -27,7 +27,6 @@ extension TransferController {
         ].joined(separator: "|")
         guard force || signature != renderSignature || (panelVisible && pendingVisibleRender) else { return }
         renderSignature = signature
-        notifyNewDevices()
         guard force || panelVisible else {
             pendingVisibleRender = true
             return
@@ -44,14 +43,5 @@ extension TransferController {
     /// 面板刚打开时补推一次（MenuPanelController.refreshAll 调用）：收起期间的数据变化不能漏
     func refreshNow() {
         render(force: true)
-    }
-
-    /// 新设备首次出现在列表时给轻提示（音效默认关闭，由设置开启）
-    func notifyNewDevices() {
-        for device in devices where device.isOnline {
-            if appearedDeviceIds.insert(device.deviceId).inserted, started {
-                notification.deviceAppeared(device)
-            }
-        }
     }
 }

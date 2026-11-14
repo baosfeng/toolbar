@@ -42,6 +42,10 @@ runLogRedactionTests()
 // MARK: - 额度时间格式（跟随系统 12/24 小时制）
 runBillingTimeFormatTests()
 
+// MARK: - 通知与音效（事件表 / 声音解析 / 偏好合并 / 音效文件校验 / 额度恢复）
+runNotificationTests()
+runBillingNotificationMappingTests()
+
 // MARK: - 本地加密凭据存储（密文落盘 / 历史明文就地加密 / 换机器降级）
 runEncryptedSecretStoreTests()
 runLocalKeyMaterialTests()

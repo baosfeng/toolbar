@@ -26,6 +26,8 @@ let package = Package(
                 .linkedFramework("AppKit"),
                 .linkedFramework("Foundation"),
                 .linkedFramework("ServiceManagement"),
+                // 自定义音效导入：AVAudioFile 解码 mp3 / m4a 并转成系统通知能用的 AIFF
+                .linkedFramework("AVFoundation"),
                 .linkedFramework("CoreWLAN"),
                 // 全局快捷键（剪贴板历史）依赖 Carbon 的 RegisterEventHotKey
                 .linkedFramework("Carbon"),

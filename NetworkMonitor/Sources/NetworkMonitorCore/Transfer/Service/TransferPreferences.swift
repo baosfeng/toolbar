@@ -16,54 +16,10 @@ public final class TransferPreferences: @unchecked Sendable {
         public static let autoAcceptWindowStart = "transfer.autoAccept.windowStart"
         public static let sizeThresholdMB = "transfer.autoAccept.sizeThresholdMB"
         public static let receiveDirectoryPath = "transfer.receiveDirectoryPath"
-        public static let soundReceive = "transfer.sound.receive"
-        public static let soundSend = "transfer.sound.send"
-        public static let soundFailure = "transfer.sound.failure"
-        public static let soundDeviceAppeared = "transfer.sound.deviceAppeared"
-        public static let soundPairingCode = "transfer.sound.pairingCode"
     }
 
     /// 免配对窗口可选时长（分钟）
     public static let windowOptions = [5, 10, 30]
-
-    /// 提示音事件
-    public enum SoundEvent: String, CaseIterable, Sendable {
-        case receive
-        case send
-        case failure
-        case deviceAppeared
-        case pairingCode
-
-        /// 默认值：完成类默认开，其余默认关（设计文档 §7.3）
-        public var defaultEnabled: Bool {
-            switch self {
-            case .receive, .send: return true
-            case .failure, .deviceAppeared, .pairingCode: return false
-            }
-        }
-
-        /// 设置窗标签
-        public var label: String {
-            switch self {
-            case .receive: return "接收完成"
-            case .send: return "发送完成"
-            case .failure: return "传输失败"
-            case .deviceAppeared: return "新设备出现"
-            case .pairingCode: return "配对码生成"
-            }
-        }
-
-        /// 存储键
-        public var key: String {
-            switch self {
-            case .receive: return Key.soundReceive
-            case .send: return Key.soundSend
-            case .failure: return Key.soundFailure
-            case .deviceAppeared: return Key.soundDeviceAppeared
-            case .pairingCode: return Key.soundPairingCode
-            }
-        }
-    }
 
     // MARK: 依赖
 
@@ -184,14 +140,12 @@ public final class TransferPreferences: @unchecked Sendable {
 
     // MARK: - 提示音
 
-    /// 某事件提示音是否开启（未设置时取默认值）
-    public func soundEnabled(_ event: SoundEvent) -> Bool {
-        guard storage.object(forKey: event.key) != nil else { return event.defaultEnabled }
-        return storage.bool(forKey: event.key)
-    }
-
-    /// 设置某事件提示音
-    public func setSoundEnabled(_ enabled: Bool, for event: SoundEvent) {
-        storage.set(enabled, forKey: event.key)
+    /// 旧「transfer.sound.*」五把键是否还在（迁移提示用；声音已统一到 NotificationPreferences）
+    ///
+    /// 只读不写：旧键留着不删，用户回退旧版本时设置仍在；新版本只读它们给一次性迁移提示。
+    public func legacySoundKeysPresent() -> Bool {
+        ["transfer.sound.receive", "transfer.sound.send", "transfer.sound.failure",
+         "transfer.sound.deviceAppeared", "transfer.sound.pairingCode"]
+            .contains { storage.object(forKey: $0) != nil }
     }
 }

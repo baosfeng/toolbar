@@ -60,6 +60,8 @@ final class SnipController: SnipOverlayViewDelegate {
 
     /// 打开设置窗（⌥⇧,） — 由组合根注入
     var onOpenSettings: (() -> Void)?
+    /// 截图完成（内容已复制进剪贴板） — 由组合根注入，用于播「截图完成」提示音
+    var onCaptureCompleted: (() -> Void)?
     /// 设置窗热键
     /// 放宽为 internal：热键扩展文件要用
     static let settingsCombo = HotKeyCombo(keyCode: UInt32(kVK_ANSI_Comma),

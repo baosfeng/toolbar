@@ -38,8 +38,8 @@ extension AppCoordinator {
     func setupClipboard(database: any AppDatabase) {
         let preferences = ClipboardPreferences()
         clipboardPreferences = preferences
-        // 音效与触觉按偏好装配：偏好改完立即生效，服务每次调用现读开关
-        setupFeedback(preferences: preferences)
+        // 音效与触觉已在 setupNotificationAndFeedback 里按统一偏好装配，
+        // 这里只做引用：偏好改完立即生效（播放器每次调用现读配置）。
 
         let writer = PasteboardWriter()
         let paster = ClipboardPaster(writer: writer, preferences: preferences)
