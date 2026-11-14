@@ -134,6 +134,9 @@ runMenuBarDisplayTests()
 // MARK: - 额度阈值提醒（5%/4%/3%/2%/1%）
 runBillingAlertTests()
 
+// MARK: - 额度恢复通知（窗口重置 / 余额回升 / 同周期去重 / 冷却）
+runBillingRecoveryTests()
+
 // MARK: - Open Design 额度（归一化 / 工作区发现 / 窗口映射 / 用量聚合）
 runOpenDesignBillingTests()
 runOpenDesignUsageTests()
