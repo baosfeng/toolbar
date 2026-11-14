@@ -12,6 +12,7 @@ import NetworkMonitorUI
 enum DrawnUIProbe {
 
     static func runIfRequested() {
+        if ClipboardCardProbe.runIfRequested() { return }
         if ClipboardPerfProbe.runIfRequested() { return }
         if runViewAuditIfRequested() { return }
         if runTwoTimesRenderIfRequested() { return }
