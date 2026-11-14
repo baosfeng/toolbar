@@ -6,8 +6,10 @@ import NetworkMonitorCore
 /// 面板根视图事件回调
 @MainActor
 protocol MenuPanelViewDelegate: AnyObject {
-    /// 内容尺寸可能变化（切页 / 数据条数变化）— 控制器据此调整 popover 高度
+    /// 内容数据变化（每秒刷新数字）— 高度通常不变，控制器可节流后复核
     func menuPanelViewDidChangeContent(_ view: MenuPanelView)
+    /// 内容结构变化（切页 / 进出二级详情 / 列表条数变化）— 高度需立即重算
+    func menuPanelViewDidChangeHeight(_ view: MenuPanelView)
     /// 选中分页变化 — 控制器据此做按页刷新（如 Token 页按需索引）
     func menuPanelViewDidSelectTab(_ view: MenuPanelView)
     /// 请求收起面板（Esc）
@@ -150,7 +152,8 @@ final class MenuPanelView: NSView {
         // 系统页进出详情：面板高度重算 + 滚动归零 + 返回时把焦点还给卡片
         systemPane.onContentHeightChange = { [weak self] in
             guard let self else { return }
-            self.delegate?.menuPanelViewDidChangeContent(self)
+            // 二级详情是结构变化：立即重算，避免高度滞后于翻页
+            self.delegate?.menuPanelViewDidChangeHeight(self)
         }
         systemPane.onRequestScrollToTop = { [weak self] in
             self?.scrollToTop()
@@ -182,9 +185,20 @@ final class MenuPanelView: NSView {
     /// 控制器据此设置 popover.contentSize（clamp ≤ MenuPanelStyle.maxHeight）；
     /// 超出上限时由内部 NSScrollView 接管滚动，不做硬截断。
     var desiredContentHeight: CGFloat {
-        layoutSubtreeIfNeeded()
+        // 只布局当前页子树：分段条与其余五页不参与高度计算，
+        // 原先的整树 layoutSubtreeIfNeeded 在展开态是 AutoLayout 的第一大来源
+        activePane.layoutSubtreeIfNeeded()
         let paneHeight = activePane.fittingSize.height
         return 10 + MenuTabBarView.barHeight + 12 + paneHeight + MenuPanelStyle.inset
+    }
+
+    /// 轻量高度签名（不触发布局）
+    ///
+    /// 高度 = 固定前缀 + 当前页 fittingSize，而当前页高度只在结构变化时才变：
+    /// 切页、进出二级详情、列表条数变化。用「分页 + 可交互行数」作签名即可覆盖这些场景，
+    /// 而纯数据刷新（数字变了、行数没变）签名不变，控制器据此跳过布局。
+    var contentHeightSignature: String {
+        "\(currentTab.rawValue)#\(activePane.focusableRows.count)"
     }
 
     // MARK: - 分页切换
@@ -196,7 +210,8 @@ final class MenuPanelView: NSView {
         tabBar.selected = tab
         applyTab()
         setFocus(index: nil)
-        delegate?.menuPanelViewDidChangeContent(self)
+        // 切页一定会改高度：走立即重算通道，不等节流（否则切页瞬间高度会滞后）
+        delegate?.menuPanelViewDidChangeHeight(self)
         delegate?.menuPanelViewDidSelectTab(self)
     }
 
