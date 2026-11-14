@@ -1,5 +1,6 @@
 import Foundation
 import NetworkMonitorCore
+import os
 
 // MARK: - 时区 / 货币配置与 AppEvents（从 main.swift 拆出）
 
@@ -33,56 +34,58 @@ func runDatabaseConfigTests() {
 
 func runAppEventsTests() {
     do {
-        var received = false
+        // NotificationCenter 的观察闭包是 @Sendable：跨闭包传递的标志位用锁盒承载，
+        // 既不依赖「通知同步派发」这一隐含前提，也不必引入 @unchecked Sendable 断言
+        let received = OSAllocatedUnfairLock(initialState: false)
         let observer = NotificationCenter.default.addObserver(
             forName: AppEvents.clipboardChanged,
             object: nil,
             queue: nil
         ) { _ in
-            received = true
+            received.withLock { $0 = true }
         }
         AppEvents.postClipboardChanged()
         NotificationCenter.default.removeObserver(observer)
-        assertEqual(received, true, "clipboardChanged 事件已发布并接收")
+        assertEqual(received.withLock { $0 }, true, "clipboardChanged 事件已发布并接收")
 
         // 数值单位切档事件：设置页写入偏好后发布，菜单面板靠它立刻重渲染两页数值
-        var unitReceived = false
+        let unitReceived = OSAllocatedUnfairLock(initialState: false)
         let unitObserver = NotificationCenter.default.addObserver(
             forName: AppEvents.numberUnitStyleChanged,
             object: nil,
             queue: nil
         ) { _ in
-            unitReceived = true
+            unitReceived.withLock { $0 = true }
         }
         AppEvents.postNumberUnitStyleChanged()
         NotificationCenter.default.removeObserver(unitObserver)
-        assertEqual(unitReceived, true, "numberUnitStyleChanged 事件已发布并接收")
+        assertEqual(unitReceived.withLock { $0 }, true, "numberUnitStyleChanged 事件已发布并接收")
 
         // 分页可见性变更：设置页写存储后发布，面板靠它重排分段 / 切页 / 收起二级详情
-        var panelTabsReceived = false
+        let panelTabsReceived = OSAllocatedUnfairLock(initialState: false)
         let panelTabsObserver = NotificationCenter.default.addObserver(
             forName: AppEvents.panelTabsChanged,
             object: nil,
             queue: nil
         ) { _ in
-            panelTabsReceived = true
+            panelTabsReceived.withLock { $0 = true }
         }
         AppEvents.postPanelTabsChanged()
         NotificationCenter.default.removeObserver(panelTabsObserver)
-        assertEqual(panelTabsReceived, true, "panelTabsChanged 事件已发布并接收")
+        assertEqual(panelTabsReceived.withLock { $0 }, true, "panelTabsChanged 事件已发布并接收")
 
         // 菜单栏显示偏好变更：设置页写存储后发布，菜单栏靠它重建定时器并重渲染
-        var menuBarReceived = false
+        let menuBarReceived = OSAllocatedUnfairLock(initialState: false)
         let menuBarObserver = NotificationCenter.default.addObserver(
             forName: AppEvents.menuBarDisplayChanged,
             object: nil,
             queue: nil
         ) { _ in
-            menuBarReceived = true
+            menuBarReceived.withLock { $0 = true }
         }
         AppEvents.postMenuBarDisplayChanged()
         NotificationCenter.default.removeObserver(menuBarObserver)
-        assertEqual(menuBarReceived, true, "menuBarDisplayChanged 事件已发布并接收")
+        assertEqual(menuBarReceived.withLock { $0 }, true, "menuBarDisplayChanged 事件已发布并接收")
 
         print("✅ AppEvents 事件总线 works")
     }
