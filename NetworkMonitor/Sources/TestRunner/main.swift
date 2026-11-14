@@ -23,8 +23,9 @@ runCoreFormattingTests()
 // MARK: - 每日流量追踪
 runTrafficTrackerTests()
 
-// MARK: - 性能热点修复（状态带签名早退）
+// MARK: - 性能热点修复（状态带签名早退 / 心跳退避）
 runTransferBandSignatureTests()
+runDiscoveryHeartbeatPolicyTests()
 
 // MARK: - 时区与货币配置
 runDatabaseConfigTests()
