@@ -65,7 +65,12 @@ extension AppCoordinator {
             },
             // 系统监控：偏好走 Core 的 SystemMonitorPreferences（与面板共用同一实现）
             .system: { SettingsSystemPane(preferences: SystemMonitorPreferences()) },
-            .about: { SettingsAboutPane() },
+            .about: { [weak self] in
+                guard let self, let updateCheck = self.updateCheck else {
+                    return Self.unavailable(.about, message: "更新检查服务尚未就绪。")
+                }
+                return SettingsAboutPane(updateCheck: updateCheck)
+            },
         ]
         return SettingsWindow(factories: factories, logger: logger)
     }

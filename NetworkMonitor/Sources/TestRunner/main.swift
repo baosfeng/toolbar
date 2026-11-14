@@ -11,6 +11,12 @@ if CommandLine.arguments.contains("--harness-index") {
     exit(0)
 }
 
+// MARK: - 人工触发的真实网络自证（不参与默认测试流程）
+if CommandLine.arguments.contains("--update-check-live") {
+    runUpdateCheckLiveProbe()
+    exit(0)
+}
+
 // MARK: - 人工触发的单位对照表（改前 → 改后，不参与默认测试流程）
 if CommandLine.arguments.contains("--number-unit-table") {
     runNumberUnitTable()
@@ -307,6 +313,11 @@ runDrawnInteractionTests()
 
 // MARK: - 自绘绘制层纯口径（层不透明度 / 阴影换算 / 焦点环路径 / 符号缓存键 / 读屏文案）
 runDrawnSurfaceMathTests()
+
+// MARK: - 版本检测（语义化比较 / 状态文案 / 24 小时限频 / Releases 解码与偏好）
+runUpdateVersionTests()
+runUpdateCheckStateTests()
+runUpdateCheckerTests()
 
 
 // MARK: - 剪贴板缩略图加载闸门（并发上限 / 在途去重 / 额度归还幂等 / reset）

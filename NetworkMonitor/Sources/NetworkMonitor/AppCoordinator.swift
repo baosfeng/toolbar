@@ -52,6 +52,8 @@ public final class AppCoordinator {
     var clipboardPanel: ClipboardPanelController!
     /// 统一设置窗口（长期持有）
     var settingsWindow: SettingsWindow?
+    /// 更新检查服务（关于页与启动自动检查共用同一实例）
+    var updateCheck: UpdateCheckService?
     /// 全局热键（放宽为 internal：设置页重新录制快捷键要重注册）
     var globalHotKey: GlobalHotKeyCenter!
     /// 截图 / 贴图链路（放宽为 internal：截图装配扩展文件要写）
@@ -166,7 +168,10 @@ public final class AppCoordinator {
                                                 billingKinds.first { $0.kindID == kindID }?.make()
                                             },
                                             logger: logger)
-        // 6c. 统一设置窗口（六个分类页；额度页直接用上面这个 billingMonitor）
+        // 6c. 更新检查（设置页「关于」的数据源；启动 5 秒后自动查一次，24 小时限频）
+        updateCheck = makeUpdateCheckService()
+
+        // 6d. 统一设置窗口（六个分类页；额度页直接用上面这个 billingMonitor）
         settingsWindow = makeSettingsWindow(billingMonitor: billingMonitor)
 
         // 锁屏 / 休眠期间暂停额度后台轮询，解锁后立即刷新一次
@@ -190,7 +195,7 @@ public final class AppCoordinator {
         let harnessUsage = HarnessUsageService(scanner: harnessScanner, store: databaseManager, logger: logger)
         harnessUsageService = harnessUsage
 
-        // 6d. 系统监控链路（CPU / GPU / 内存 / 磁盘 / 温度；采样由菜单栏 1 秒链驱动）
+        // 6e. 系统监控链路（CPU / GPU / 内存 / 磁盘 / 温度；采样由菜单栏 1 秒链驱动）
         let systemContext = makeSystemMonitor()
         systemMonitor = systemContext.monitor
 
@@ -212,6 +217,9 @@ public final class AppCoordinator {
 
         // 8. 累计流量定期落盘（崩溃 / 强杀时也能保住当日基准）
         startTrafficPersistence()
+
+        // 8b. 更新检查：启动 5 秒后自动查一次（受 24 小时限频）
+        scheduleAutoUpdateCheck()
 
         // 9. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
 
