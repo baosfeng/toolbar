@@ -23,17 +23,20 @@ extension ClipboardCardView {
 
     /// 整卡绘制入口（由 DrawnCanvasLayer 在翻转上下文里回调）
     func drawCard(in bounds: CGRect) {
-        drawCardBackground(in: bounds)
-        drawBorder(inset: Self.borderWidth / 2, width: Self.borderWidth,
-                   stroke: NSColor.separatorColor, fill: nil, alpha: 1)
-        drawBorder(inset: Self.activeBorderWidth / 2, width: Self.activeBorderWidth,
-                   stroke: NSColor.labelColor.withAlphaComponent(Self.hoverStrokeAlpha),
-                   fill: NSColor.white.withAlphaComponent(Self.hoverFillAlpha),
-                   alpha: hoverBlend.value)
-        drawBorder(inset: Self.activeBorderWidth / 2, width: Self.activeBorderWidth,
-                   stroke: .controlAccentColor,
-                   fill: NSColor.controlAccentColor.withAlphaComponent(Self.selectionFillAlpha),
-                   alpha: selectionBlend.value)
+        // 卡底层（DrawnCardSurface：圆角 / 填充 / 叠色 / 描边三处卡片共用）
+        DrawnCardSurface(rect: bounds,
+                         radius: Self.cornerRadius,
+                         fill: NSColor.controlBackgroundColor.withAlphaComponent(Self.backgroundAlpha)).draw()
+        layer(inset: Self.borderWidth / 2, width: Self.borderWidth,
+              stroke: NSColor.separatorColor, fill: nil, alpha: 1).draw()
+        layer(inset: Self.activeBorderWidth / 2, width: Self.activeBorderWidth,
+              stroke: NSColor.labelColor.withAlphaComponent(Self.hoverStrokeAlpha),
+              fill: NSColor.white.withAlphaComponent(Self.hoverFillAlpha),
+              alpha: hoverBlend.value).draw()
+        layer(inset: Self.activeBorderWidth / 2, width: Self.activeBorderWidth,
+              stroke: .controlAccentColor,
+              fill: NSColor.controlAccentColor.withAlphaComponent(Self.selectionFillAlpha),
+              alpha: selectionBlend.value).draw()
         guard let item else { return }
 
         let body = ClipboardCardGeometry.bodyRect(in: bounds)
@@ -49,16 +52,7 @@ extension ClipboardCardView {
         drawStackBadge(item: item, in: bounds)
     }
 
-    // MARK: 底与描边
-
-    /// 卡底：圆角 12 + 半透明内衬
-    private func drawCardBackground(in bounds: CGRect) {
-        let path = NSBezierPath(roundedRect: bounds,
-                                xRadius: Self.cornerRadius,
-                                yRadius: Self.cornerRadius)
-        NSColor.controlBackgroundColor.withAlphaComponent(Self.backgroundAlpha).setFill()
-        path.fill()
-    }
+    // MARK: 叠色与描边层
 
     /// 一层「叠色 + 描边」——对应改造前的 ClipboardCardHighlightView.draw
     ///
@@ -68,18 +62,13 @@ extension ClipboardCardView {
     ///   - stroke: 描边色
     ///   - fill: 叠色（nil = 不叠色）
     ///   - alpha: 整层不透明度（过渡值；改造前是视图 alphaValue）
-    private func drawBorder(inset: CGFloat, width: CGFloat, stroke: NSColor,
-                            fill: NSColor?, alpha: CGFloat) {
-        guard alpha > 0.001 else { return }
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset),
-                                xRadius: Self.cornerRadius,
-                                yRadius: Self.cornerRadius)
-        if let fill {
-            fill.withAlphaComponent(fill.alphaComponent * alpha).setFill()
-            path.fill()
-        }
-        stroke.withAlphaComponent(stroke.alphaComponent * alpha).setStroke()
-        path.lineWidth = width
-        path.stroke()
+    private func layer(inset: CGFloat, width: CGFloat, stroke: NSColor,
+                       fill: NSColor?, alpha: CGFloat) -> DrawnCardSurface {
+        DrawnCardSurface(rect: bounds.insetBy(dx: inset, dy: inset),
+                         radius: Self.cornerRadius,
+                         fill: fill,
+                         stroke: stroke,
+                         lineWidth: width,
+                         alpha: alpha)
     }
 }

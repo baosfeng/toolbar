@@ -23,37 +23,25 @@ final class ClipboardCardFlowContainer: NSView {
 
     override var isFlipped: Bool { true }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard !shadowRects.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
-        for rect in shadowRects {
-            drawShadow(around: rect, in: ctx)
-        }
+    /// 卡片投影参数（与改造前底色视图图层上的 CALayer 阴影同源：radius 6 / opacity 0.12 / 向下 1pt）
+    ///
+    /// 换算口径在 `DrawnCardShadow` 里：CGContext 的 blur 是模糊核尺度（= shadowRadius × 2 才等于可见扩散跨度）、
+    /// 阴影强度会按绘制内容 alpha 打折（opacity ÷ backgroundAlpha 反算回等效值）。
+    private var cardShadow: DrawnCardShadow {
+        DrawnCardShadow(radius: ClipboardCardView.cornerRadius,
+                        opacity: CGFloat(ClipboardCardView.shadowOpacity),
+                        contentAlpha: ClipboardCardView.backgroundAlpha,
+                        blur: ClipboardCardView.shadowRadius * 2,
+                        offset: CGSize(width: 0, height: 1),
+                        fillColor: .controlBackgroundColor)
     }
 
-    /// 只保留卡片外区域：卡片内由卡片自己画卡底，重复填一次会让卡底变深
-    private func drawShadow(around rect: NSRect, in ctx: CGContext) {
-        let radius = ClipboardCardView.cornerRadius
-        let shape = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5),
-                                 xRadius: radius, yRadius: radius)
-        let outside = NSBezierPath(rect: bounds)
-        outside.append(shape)
-        outside.windingRule = .evenOdd
-
-        ctx.saveGState()
-        outside.addClip()
-        // 参数与改造前底色视图图层上的 CALayer 阴影同源：radius 6 / opacity 0.12 / 向下 1pt
-        // 阴影强度：CALayer 的 shadowOpacity 不受内容 alpha 调制，而 CGContext 阴影会按绘制内容
-        // 的 alpha 打折；这里把 alpha 反算回去（0.12 / 0.72），叠加后才与改造前的投影深浅一致。
-        let shadowAlpha = CGFloat(ClipboardCardView.shadowOpacity) / ClipboardCardView.backgroundAlpha
-        // CGContext 的 blur 是模糊核尺度，CALayer.shadowRadius 是可见扩散半径（约 2 倍关系），
-        // 用 shadowRadius × 2 才能复刻改造前的扩散跨度。
-        ctx.setShadow(offset: CGSize(width: 0, height: 1),
-                      blur: ClipboardCardView.shadowRadius * 2,
-                      color: NSColor.black.withAlphaComponent(shadowAlpha).cgColor)
-        // 阴影强度随绘制内容的 alpha 调制：用与卡底相同的不透明度，投影深浅与改造前一致
-        NSColor.controlBackgroundColor.withAlphaComponent(ClipboardCardView.backgroundAlpha).setFill()
-        shape.fill()
-        ctx.restoreGState()
+    override func draw(_ dirtyRect: NSRect) {
+        guard !shadowRects.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let shadow = cardShadow
+        for rect in shadowRects {
+            shadow.draw(around: rect, in: ctx, clippingTo: bounds)
+        }
     }
 }
 
@@ -90,10 +78,7 @@ final class ClipboardEmptyStateView: NSView {
         let totalHeight = iconSize + iconGap + textSize.height
         let top = max(0, (bounds.height - totalHeight) / 2)
 
-        let configuration = NSImage.SymbolConfiguration(pointSize: iconSize, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [NSColor.tertiaryLabelColor]))
-        NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
-            .withSymbolConfiguration(configuration)?
+        DrawnSymbolRun.symbol(named: symbolName, color: .tertiaryLabelColor, pointSize: iconSize)?
             .draw(in: NSRect(x: bounds.midX - iconSize / 2, y: top, width: iconSize, height: iconSize))
         text.draw(at: NSPoint(x: bounds.midX - textSize.width / 2, y: top + iconSize + iconGap),
                   withAttributes: attributes)

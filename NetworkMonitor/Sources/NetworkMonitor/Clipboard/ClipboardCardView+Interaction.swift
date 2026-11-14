@@ -58,8 +58,9 @@ extension ClipboardCardView {
     }
 
     /// 进入 hover 态：提亮 0.12s 交叉过渡 + 起 0.45s 浮层计时
+    ///
+    /// 状态推进与过渡都在 applyHover 里（一个入口：改标志、起过渡、重算阴影），本方法只管计时。
     private func setHovering(_ hovering: Bool) {
-        updateHovering(hovering)
         applyHover(hovering, animated: true)
         if hovering { scheduleOverlay() }
     }
@@ -80,7 +81,6 @@ extension ClipboardCardView {
         hoverTimer?.cancel()
         hoverTimer = nil
         guard isHovering else { return }
-        updateHovering(false)
         applyHover(false, animated: true)
         onHoverStateChange?(self, false)
     }

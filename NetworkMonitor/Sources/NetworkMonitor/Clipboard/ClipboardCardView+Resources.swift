@@ -48,14 +48,6 @@ extension ClipboardCardView {
         return category.map { "\($0)：\(body)" } ?? body
     }
 
-    /// SF Symbol 着色图（禁止 emoji，全部使用系统符号）
-    static func symbolImage(named name: String, color: NSColor, pointSize: CGFloat) -> NSImage? {
-        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
-        let configuration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
-        return image.withSymbolConfiguration(configuration) ?? image
-    }
-
     /// 缩略图：只同步查缓存，未命中则交给后台解码器并返回 nil（增量规格 2.2）
     ///
     /// 绘制路径上**不得**出现同步解码：首帧先画占位符号，后台解完写缓存并发

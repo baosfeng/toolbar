@@ -80,7 +80,7 @@ class SystemCardView: NSView {
     var onTap: (() -> Void)? {
         didSet {
             window?.invalidateCursorRects(for: self)
-            setAccessibilityRole(onTap == nil ? .group : .button)
+            DrawnAccessibilityReporter.setRole(onTap == nil ? .group : .button, for: self)
         }
     }
 
@@ -95,6 +95,11 @@ class SystemCardView: NSView {
 
     /// 键盘焦点态（由面板根视图设置；决定是否画焦点环）
     private(set) var isCardKeyboardFocused = false
+
+    /// 卡内无障碍子元素台账（卡头按钮 + 内容读数）
+    ///
+    /// 存储留在类里（Swift 扩展不能声明存储属性），构建与刷新在 SystemPaneView+CardAccessibility.swift。
+    var accessibilityElements = DrawnCardAccessibilityElements()
 
     // MARK: 子类钩子
 
@@ -116,8 +121,8 @@ class SystemCardView: NSView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
-        setAccessibilityRole(.group)
-        setAccessibilityLabel(title)
+        // 卡级单元素：整卡是一个无障碍节点，卡内读数 / 卡头按钮另行作为子元素挂上去
+        DrawnAccessibilityReporter.configure(self, role: .group, label: title)
     }
 
     @available(*, unavailable)
@@ -139,7 +144,8 @@ class SystemCardView: NSView {
     }
 
     /// 内容区矩形（flipped 坐标）
-    private var contentRect: CGRect {
+    /// internal：无障碍扩展要拿它当内容读数的元素框（跨文件访问，private 放宽）
+    var contentRect: CGRect {
         SystemCardLayout.contentRect(width: bounds.width,
                                      contentHeight: contentHeight,
                                      headHeight: Self.headHeight,
@@ -202,11 +208,8 @@ class SystemCardView: NSView {
         // 卡内文字与原生标签同一套字形渲染（字体平滑会参与抗锯齿，关掉字形会偏细一档）
         NSGraphicsContext.current?.cgContext.setShouldSubpixelPositionFonts(false)
         NSGraphicsContext.current?.cgContext.setAllowsFontSubpixelPositioning(false)
-        let shape = NSBezierPath(roundedRect: bounds,
-                                 xRadius: PaneCardStyle.cardRadius,
-                                 yRadius: PaneCardStyle.cardRadius)
-        washColor.setFill()
-        shape.fill()
+        // 卡底（表面层：圆角 9 + 语义 wash）
+        DrawnCardSurface(rect: bounds, radius: PaneCardStyle.cardRadius, fill: washColor).draw()
         drawHead()
         let content = contentRect
         if content.height > 0 { drawContent(in: content) }
@@ -242,14 +245,11 @@ class SystemCardView: NSView {
         }
     }
 
-    /// 键盘焦点环（与改造前同一段绘制：2pt 内缩，CPU 蓝 50%）
+    /// 键盘焦点环（与改造前同一段绘制：2pt 内缩，CPU 蓝 50%；绘制在 DrawnFocusRing.drawCard）
     private func drawFocusRing() {
-        let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
-                                xRadius: PaneCardStyle.cardRadius - 1,
-                                yRadius: PaneCardStyle.cardRadius - 1)
-        ring.lineWidth = 2
-        SystemPalette.cpu.withAlphaComponent(0.5).setStroke()
-        ring.stroke()
+        DrawnFocusRing.drawCard(in: bounds,
+                                radius: PaneCardStyle.cardRadius,
+                                color: SystemPalette.cpu.withAlphaComponent(0.5))
     }
 
     // MARK: 焦点 / 激活
@@ -274,7 +274,8 @@ class SystemCardView: NSView {
             return
         }
         // 卡头按钮与整卡同一入口，但先给按钮（压力卡两者都进压力详情，语义仍分开）
-        if let action = headAction, headActionRect.contains(convert(event.locationInWindow, from: nil)) {
+        if let action = headAction,
+           DrawnHitRegions.contains(convert(event.locationInWindow, from: nil), in: headActionRect) {
             action.activate()
             return
         }
@@ -288,7 +289,8 @@ class SystemCardView: NSView {
     }
 
     /// 卡头按钮的矩形（flipped 坐标，命中与无障碍框共用）
-    private var headActionRect: CGRect {
+    /// internal：命中在 mouseDown、元素框在 +CardAccessibility（跨文件访问，private 放宽）
+    var headActionRect: CGRect {
         guard let action = headAction else { return .zero }
         let centerY = PaneCardStyle.cardPaddingY + Self.headHeight / 2
         let run = DrawnTextRun(string: action.title, font: action.font, color: action.color)
@@ -298,59 +300,11 @@ class SystemCardView: NSView {
                       height: max(run.labelHeight, Self.headHeight - 4))
     }
 
+    /// 读屏按下 = 整卡点击（鼠标单击走 mouseDown，两者同一个入口）
     override func accessibilityPerformPress() -> Bool {
         guard let onTap else { return false }
         onTap()
         return true
-    }
-
-    // MARK: 无障碍
-
-    private var actionElement: DrawnRowAccessibilityElement?
-    private var contentElement: DrawnRowAccessibilityElement?
-
-    /// 卡内读数与卡头按钮在无障碍树里各是一个元素（整卡是按钮 / 组）
-    private func rebuildAccessibilityElements() {
-        if let action = headAction {
-            let element = DrawnRowAccessibilityElement()
-            element.setAccessibilityParent(self)
-            element.setAccessibilityRole(.button)
-            element.setAccessibilityLabel(action.title)
-            element.activate = action.activate
-            actionElement = element
-        } else {
-            actionElement = nil
-        }
-        let text = contentAccessibilityText
-        if text.isEmpty {
-            contentElement = nil
-        } else if contentElement == nil {
-            let element = DrawnRowAccessibilityElement()
-            element.setAccessibilityParent(self)
-            element.setAccessibilityRole(.staticText)
-            contentElement = element
-        }
-        contentElement?.setAccessibilityLabel(text)
-    }
-
-    override func accessibilityChildren() -> [Any]? {
-        rebuildAccessibilityElements()
-        var elements: [Any] = []
-        if let actionElement {
-            actionElement.setAccessibilityFrame(screenFrame(of: headActionRect))
-            elements.append(actionElement)
-        }
-        if let contentElement {
-            contentElement.setAccessibilityFrame(screenFrame(of: contentRect))
-            elements.append(contentElement)
-        }
-        return elements.isEmpty ? nil : elements
-    }
-
-    /// 视图内矩形 → 屏幕矩形
-    private func screenFrame(of rect: CGRect) -> CGRect {
-        guard let window else { return rect }
-        return window.convertToScreen(convert(rect, to: nil))
     }
 }
 

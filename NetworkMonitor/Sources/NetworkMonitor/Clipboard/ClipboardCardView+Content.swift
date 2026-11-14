@@ -82,7 +82,7 @@ extension ClipboardCardView {
         NSColor.underPageBackgroundColor.setFill()
         body.fill()
         let symbolSize: CGFloat = 24
-        Self.symbolImage(named: "photo", color: .secondaryLabelColor, pointSize: symbolSize)?
+        DrawnSymbolRun.symbol(named: "photo", color: .secondaryLabelColor, pointSize: symbolSize)?
             .draw(in: CGRect(x: body.midX - symbolSize / 2, y: body.midY - symbolSize / 2,
                              width: symbolSize, height: symbolSize))
         // 原图拒绝落盘（像素超限 / 解码失败）时补一行原因，避免用户以为图片丢了；
@@ -138,7 +138,9 @@ extension ClipboardCardView {
         // 左：类型图标
         var leftX = content.minX
         let typeIcon = Self.typeIconSize
-        Self.symbolImage(named: Self.symbolName(for: item), color: .secondaryLabelColor, pointSize: typeIcon)?
+        DrawnSymbolRun.symbol(named: Self.symbolName(for: item),
+                              color: .secondaryLabelColor,
+                              pointSize: typeIcon)?
             .draw(in: CGRect(x: leftX,
                              y: rowY + (Self.metaHeight - typeIcon) / 2,
                              width: typeIcon, height: typeIcon))
@@ -172,9 +174,9 @@ extension ClipboardCardView {
     /// 收藏星：始终绘制（star / star.fill），切换收藏态时按弹入曲线缩放
     func drawStar(item: ClipboardItem, in bounds: CGRect) {
         let rect = ClipboardCardGeometry.starRect(in: bounds, shortcutWidth: shortcutWidth)
-        let image = Self.symbolImage(named: item.isPinned ? "star.fill" : "star",
-                                     color: item.isPinned ? .systemYellow : .secondaryLabelColor,
-                                     pointSize: Self.starSize)
+        let image = DrawnSymbolRun.symbol(named: item.isPinned ? "star.fill" : "star",
+                                          color: item.isPinned ? .systemYellow : .secondaryLabelColor,
+                                          pointSize: Self.starSize)
         drawPop(image, in: rect, progress: starPopBlend.value)
     }
 
@@ -205,7 +207,7 @@ extension ClipboardCardView {
         guard let image else { return }
         let scale = MotionKit.popScale(progress)
         guard abs(scale - 1) > 0.001 else {
-            drawSymbol(image, in: rect)
+            DrawnSymbolRun.drawNative(image, in: rect)
             return
         }
         let center = CGPoint(x: rect.midX, y: rect.midY)
@@ -213,19 +215,7 @@ extension ClipboardCardView {
         NSGraphicsContext.current?.cgContext.translateBy(x: center.x, y: center.y)
         NSGraphicsContext.current?.cgContext.scaleBy(x: scale, y: scale)
         NSGraphicsContext.current?.cgContext.translateBy(x: -center.x, y: -center.y)
-        drawSymbol(image, in: rect)
+        DrawnSymbolRun.drawNative(image, in: rect)
         NSGraphicsContext.restoreGraphicsState()
-    }
-
-    /// 符号图按「铺满标签框」绘制 —— 与改造前 NSImageView 的 .scaleProportionallyUpOrDown 等效：
-    /// 符号图自带留白，等比缩放到 12×12 框内后字形才是原来的大小。
-    private func drawSymbol(_ image: NSImage, in rect: CGRect) {
-        // 不缩放：符号图按自身点尺寸绘制并居中到标签框。
-        // 改造前 NSImageView 的 .scaleProportionallyUpOrDown 在 12pt 符号图上也是 1:1（实测星形
-        // 9×9），把它放大铺满 12×12 会让字形边缘更实、整体偏「粗」一档。
-        let size = image.size
-        let box = CGRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2,
-                         width: size.width, height: size.height)
-        image.draw(in: box)
     }
 }

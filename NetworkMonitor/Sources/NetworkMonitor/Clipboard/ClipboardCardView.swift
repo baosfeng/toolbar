@@ -113,13 +113,10 @@ final class ClipboardCardView: NSView {
     private(set) var shortcutNumber: Int?
     /// 是否正在播放删除动效（卡片流据此跳过复用，避免动效中途换内容）
     private(set) var isRemoving = false
-    /// hover 态（setter internal：hover 进入 / 退出在 ClipboardCardView+Interaction.swift 里成对维护）
-    private(set) var isHovering = false
-
-    /// 供交互扩展切换 hover 态（与 applyHover 成对调用，避免外部只改标志不重绘）
-    func updateHovering(_ hovering: Bool) {
-        isHovering = hovering
-    }
+    /// 悬停目标推进（卡片是单元素：目标只有「0 = 卡内」与「nil = 卡外」，归零与变化判定在状态机里）
+    private var hoverState = DrawnHoverState()
+    /// 是否处于 hover 态（卡片流据此决定要不要画投影）
+    var isHovering: Bool { hoverState.isHovering }
     /// 缩略图（nil = 画占位符号；就绪后覆盖在正文区上）
     private(set) var thumbnail: NSImage?
 
@@ -240,9 +237,12 @@ final class ClipboardCardView: NSView {
         updateShadow()
     }
 
-    /// hover 切换：提亮 + 加粗描边交叉溶解
+    /// hover 切换：提亮 + 加粗描边交叉溶解（目标推进走 DrawnHoverState，过渡值走 DrawnBlend）
+    ///
+    /// 目标没变时直接返回：进入 / 退出各只有一条路径，不会重复起过渡。
     func applyHover(_ hovering: Bool, animated: Bool) {
-        hoverBlend.animate(to: hovering ? 1 : 0,
+        guard hoverState.move(to: hovering ? 0 : nil).isChanged else { return }
+        hoverBlend.animate(to: hoverState.blendTarget,
                            duration: transitionDuration(MotionKit.durations.state, animated: animated),
                            onChange: redraw)
         updateShadow()
@@ -314,10 +314,10 @@ final class ClipboardCardView: NSView {
 
     /// 读屏：卡片是面板里唯一「可点即生效」的元素（单击选中、双击粘贴），
     /// 只设 label 不设 role 的话读屏能念出内容却按不动（与 MenuPanelRow 同口径）。
-    /// 显式 setAccessibilityElement(true)：自绘视图默认不产生无障碍节点，只设文案可能整张卡片落空。
+    /// 元素化（含 frame 口径）统一走 DrawnAccessibilityReporter 的「卡级单元素」模式。
     private func configureAccessibility() {
-        setAccessibilityElement(true)
-        setAccessibilityRole(.button)
+        // 卡级单元素模式：整卡在这个面板里就是唯一「可点即生效」的节点（label / value 随条目刷新）
+        DrawnAccessibilityReporter.configure(self, role: .button)
     }
 
     /// 读屏激活 = 鼠标单击（选中该条），双击粘贴仍由键盘 ↵ 承担

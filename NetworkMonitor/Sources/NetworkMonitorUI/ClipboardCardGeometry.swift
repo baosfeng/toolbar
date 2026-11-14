@@ -142,12 +142,12 @@ public enum ClipboardCardHitTest {
                               isImage: Bool, metrics: ClipboardCardGeometry.Metrics = .standard)
     -> ClipboardCardHitRegion {
         guard bounds.contains(point) else { return .body }
-        if ClipboardCardGeometry.starRect(in: bounds, shortcutWidth: shortcutWidth, metrics: metrics).contains(point) {
-            return .star
-        }
-        if badgeSize.width > 0, badgeSize.height > 0,
-           ClipboardCardGeometry.badgeRect(in: bounds, badgeSize: badgeSize, metrics: metrics).contains(point) {
-            return .badge
+        // 星标 / 角标压在正文与 meta 之上：按优先级查表（顺序即优先级，空矩形不参与命中）
+        let star = ClipboardCardGeometry.starRect(in: bounds, shortcutWidth: shortcutWidth, metrics: metrics)
+        let badge = badgeSize.width > 0 && badgeSize.height > 0
+            ? ClipboardCardGeometry.badgeRect(in: bounds, badgeSize: badgeSize, metrics: metrics) : .zero
+        if let index = DrawnHitRegions.priorityIndex(at: point, in: [star, badge]) {
+            return index == 0 ? .star : .badge
         }
         if point.y >= ClipboardCardGeometry.metaRowY(in: bounds, metrics: metrics) {
             return .meta

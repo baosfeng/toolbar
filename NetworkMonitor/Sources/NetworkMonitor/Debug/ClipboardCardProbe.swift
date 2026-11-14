@@ -44,6 +44,13 @@ enum ClipboardCardProbe {
                                  size: NSSize(width: 4 * 186, height: 210),
                                  appearanceName: .aqua,
                                  to: url.appendingPathComponent("clipboard-card-probe.png"))
+        // 第二张：第 3 张卡进入 hover 态（提亮 + 加粗描边 + 容器投影）
+        cards[2].applyHover(true, animated: false)
+        cards[2].onShadowStateChange?()
+        MenuPanelSnapshot.render(view: canvas,
+                                 size: NSSize(width: 4 * 186, height: 210),
+                                 appearanceName: .aqua,
+                                 to: url.appendingPathComponent("clipboard-card-probe-hover.png"))
         exit(0)
     }
 
@@ -183,6 +190,19 @@ enum ClipboardCardProbe {
         lines.append("")
         lines.append("## 选中切换（setSelected(true)，离屏不播过渡直接落终态）")
         lines.append("- 卡片 2 selected=\(target.isSelected)，selectionBlend=\(String(format: "%.2f", target.selectionBlend.value))")
+
+        // hover 推进：目标走 DrawnHoverState（进入 / 退出各一条路径），过渡值走 DrawnBlend
+        lines.append("")
+        lines.append("## hover 推进（目标：DrawnHoverState，过渡：DrawnBlend）")
+        let hoverCard = cards[2]
+        hoverCard.applyHover(true, animated: false)
+        lines.append("- 进入 hover：isHovering=\(hoverCard.isHovering)，"
+                     + "hoverBlend=\(String(format: "%.2f", hoverCard.hoverBlend.value))（期望 true / 1.00）")
+        hoverCard.applyHover(true, animated: false)
+        lines.append("- 重复进入（目标未变）：hoverBlend=\(String(format: "%.2f", hoverCard.hoverBlend.value))（期望 1.00，不重启过渡）")
+        hoverCard.applyHover(false, animated: false)
+        lines.append("- 退出 hover：isHovering=\(hoverCard.isHovering)，"
+                     + "hoverBlend=\(String(format: "%.2f", hoverCard.hoverBlend.value))（期望 false / 0.00）")
         return lines.joined(separator: "\n") + "\n"
     }
 }
