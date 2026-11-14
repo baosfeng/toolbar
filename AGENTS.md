@@ -1,7 +1,7 @@
 # 一览（NetworkMonitor / macMonitor）— macOS 菜单栏监控
 
 ## 项目简介
-- **版本:** 1.24.1
+- **版本:** 1.24.2
 - **语言:** Swift 工具链 6.4 / `swift-tools-version` 6.3（本机实测 6.4，CI 与发版跑 6.3；包清单暂不抬到 6.4）
 - **类型:** 业务应用
 - **技术栈:** Swift 6（严格并发）, Swift PM, AppKit, macOS 14+, arm64 + x86_64
