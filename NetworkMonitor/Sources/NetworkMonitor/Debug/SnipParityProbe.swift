@@ -70,25 +70,43 @@ enum SnipParityProbe {
 
     // MARK: 序号
 
+    /// 序号：真实走覆盖层的点击落点链路（只把 AppKit 的鼠标事件派发换成直接调用）
+    ///
+    /// 真链路：state.select → activeTool = .number → handleAnnotationMouseDown（生产方法，
+    /// 内部负责命中判定 / 编号递增 / 建标注入栈）→ 读 annotationStack → SnipAnnotationComposer 合成。
+    /// 探针替代的只有「NSWindow 把鼠标事件派给视图」这一段。
     private static func runNumber() {
         Task { @MainActor in
             let size = CGSize(width: 420, height: 220)
             guard let base = makeBase(size: size) else { exit(2) }
-            var style = SnipAnnotationStyle()
-            style.color = .red
-            style.lineWidth = 4
-            let annotations = [1, 2, 3].enumerated().map { index, value -> SnipAnnotation in
-                let center = CGPoint(x: 70 + CGFloat(index) * 110, y: 110)
-                let radius = SnipNumberAnnotation.radius(forLineWidth: index == 2 ? 8 : 4)
-                return SnipAnnotation(kind: .number,
-                                      start: CGPoint(x: center.x - radius, y: center.y - radius),
-                                      end: CGPoint(x: center.x + radius, y: center.y + radius),
-                                      text: String(value),
-                                      style: style)
+            let view = SnipOverlayView(frame: NSRect(origin: .zero, size: size),
+                                       screenshot: base,
+                                       windowInfos: [],
+                                       displayOrigin: .zero,
+                                       lastSelection: nil,
+                                       history: [])
+            view.state.select(CGRect(x: 10, y: 10, width: 400, height: 200))
+            view.activeTool = .number
+            view.currentStyle.color = .red
+            view.currentStyle.lineWidth = 4
+            let points = [CGPoint(x: 70, y: 110), CGPoint(x: 180, y: 110), CGPoint(x: 290, y: 110)]
+            for (index, point) in points.enumerated() {
+                if index == 2 {
+                    // 第三个用粗笔：验证半径随线宽变大（同一支笔的样式通路）
+                    view.currentStyle.lineWidth = 8
+                }
+                let handled = view.handleAnnotationMouseDown(at: point)
+                let count = view.annotationStack.annotations.count
+                print("number probe: 点击 (\(Int(point.x)), \(Int(point.y))) handled=\(handled) 标注数=\(count)")
             }
+            for (index, annotation) in view.annotationStack.annotations.enumerated() {
+                print("number probe: #\(index) text=\(annotation.text) rect=\(annotation.boundingRect)")
+            }
+            let values = SnipNumberSequence.values(in: view.annotationStack.annotations)
+            print("number probe: 编号序列=\(values) 下一个=\(SnipNumberSequence.next(after: values))")
             guard let composed = SnipAnnotationComposer.compose(base: base,
                                                                cropRect: CGRect(origin: .zero, size: size),
-                                                               annotations: annotations,
+                                                               annotations: view.annotationStack.annotations,
                                                                selectionOrigin: .zero,
                                                                scale: 1) else {
                 print("number probe: 合成失败")
@@ -104,6 +122,7 @@ enum SnipParityProbe {
             exit(0)
         }
     }
+
 
     private static func makeBase(size: CGSize) -> CGImage? {
         let width = Int(size.width)

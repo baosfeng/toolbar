@@ -11,16 +11,18 @@ import NetworkMonitorUI
 @MainActor
 final class MenuBarManager: NSObject {
 
-    /// 放宽为 internal：状态栏文本组装与 DEBUG 取证钩子拆在 MenuBarManager+StatusTitle / +Evidence
+    /// 放宽为 internal：DEBUG 取证扩展（MenuBarManager+Evidence）要读状态栏按钮文本，
+    /// 状态栏文本组装拆在 MenuBarManager+StatusTitle.swift
     let statusItem: NSStatusItem
     /// 放宽为 internal：状态栏文本组装拆在 MenuBarManager+StatusTitle.swift
     let monitor: any NetworkMonitoringService
     // 放宽为 internal：采样节流拆在 MenuBarManager+Sampling.swift（读两个服务 + 面板可见性）
     let processMonitor: any ProcessNetworkMonitoringService
     private let trafficTracker: any TrafficTrackingService
-    // 放宽为 internal：采样节流要读 panel.isShown
+    // 放宽为 internal：采样节流要读 panel.isShown；DEBUG 取证与测量扩展要直接驱动面板
     let panel: MenuPanelController
-    private let logger: LoggingService
+    // 放宽为 internal：显示偏好扩展（+DisplayPreferences）切档后要打生效日志
+    let logger: LoggingService
     /// 系统指标采样服务（nil = 未装配；采样频率跟随偏好周期）
     // 放宽为 internal：采样节流扩展要读它
     let systemMonitor: (any SystemMonitoringService)?
@@ -30,9 +32,12 @@ final class MenuBarManager: NSObject {
     /// 注入的键值存储（菜单栏偏好与面板分页偏好共用同一份，测试 / 取证可写隔离 suite）
     let storage: any KeyValueStorage
     private let harnessUsage: (any HarnessUsageServicing)?
-    /// 系统指标采样周期（秒）— 由偏好给出，1 秒链按此节流
-    // 放宽为 internal：采样节流扩展（+Sampling）要读它
-    let systemSampleInterval: TimeInterval
+    /// 外观偏好（主题 / 玻璃 / 渲染档）— 与菜单栏偏好共用同一份存储实例
+    let appearancePreferences: AppearancePreferences
+    /// 系统指标采样周期（秒）— 由渲染档给出（原为只读偏好值，现随档位变）
+    // 放宽为 internal：渲染档切换在 +DisplayPreferences 扩展里改写它；
+    // 采样节流扩展（+Sampling）要读它
+    var systemSampleInterval: TimeInterval
     // 放宽为 internal：采样节流扩展（MenuBarManager+Sampling）要读写这两个时刻
     var lastSystemPoll: Date = .distantPast
     /// 上次发起进程网速采样的时间（收起时降频用）
@@ -71,8 +76,10 @@ final class MenuBarManager: NSObject {
         self.storage = storage
         self.displayPreferences = MenuBarDisplayPreferences(storage: storage)
         self.harnessUsage = harnessUsage
-        self.systemSampleInterval = systemPreferences?.sampleInterval
-            ?? SystemMonitorPreferences.defaultSampleInterval
+        let appearance = AppearancePreferences(storage: storage)
+        self.appearancePreferences = appearance
+        // 采样周期以渲染档为准（设置页的系统页下拉标注为「由渲染档接管」）
+        self.systemSampleInterval = appearance.renderProfile.sampleInterval
         self.logger = logger
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.panel = MenuPanelController(networkMonitor: networkMonitor,
@@ -92,7 +99,7 @@ final class MenuBarManager: NSObject {
         configureStatusItem()
         panel.onOpenClipboardHistory = { [weak self] in self?.onOpenClipboardHistory?() }
         panel.onOpenSettings = { [weak self] section in self?.onOpenSettings?(section) }
-        setupTimer(interval: displayPreferences.refreshInterval)
+        setupTimer(interval: appearance.renderProfile.tickInterval)
         observeDisplayPreferenceChanges()
 #if DEBUG
         runStatusEvidenceIfRequested()
@@ -166,7 +173,7 @@ final class MenuBarManager: NSObject {
         onOpenSettings?(nil)
     }
 
-    /// 展开 / 收起面板（README 与取证钩子都走这一条路径，故放宽为 internal）
+    /// 展开 / 收起面板（状态栏点击与 DEBUG 取证扩展共用这一条路径，故放宽为 internal）
     @objc func togglePanel() {
         guard let button = statusItem.button else { return }
         panel.toggle(relativeTo: button.bounds, of: button)
@@ -194,7 +201,10 @@ final class MenuBarManager: NSObject {
 
     // MARK: - 定时器
 
-    /// 启动 / 重建状态栏刷新定时器（周期来自「间隔」偏好，1...10 秒）
+    /// 启动 / 重建状态栏刷新定时器（周期来自渲染帧率档：标准 1s / 极致 0.5s / 省电 2s）
+    ///
+    /// 同一个 Timer 同时驱动状态栏标题与面板 `tick()`，所以档位只需要改这一处周期，
+    /// 状态栏与面板的节拍天然一致（改造前周期来自「间隔」偏好，与档位是两套旋钮）。
     ///
     /// 重建前先停掉旧定时器并从 RunLoop 移除：否则同一时刻会有两个定时器各跑一份 update，
     /// 旧的那个永远不会被释放。

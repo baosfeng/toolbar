@@ -18,8 +18,13 @@ final class TokenRankingScreenView: NSStackView {
     /// 维度切换回调：由 TokenPaneView 接到同一条 render 路径（不各走一套刷新）
     var onDimensionChange: (() -> Void)?
 
-    /// Top 行数（屏内可见 8 行）
-    static let topRowCount = 8
+    /// 预建行数上限（标准 / 极致档都用满，省电档截断显示）
+    ///
+    /// 预建只建一次、数量固定，切档只改「显示几行」——预建按档位建会让「省电切回标准」
+    /// 少一半行视图，且不会自愈。
+    static let maxRowCount = 8
+    /// 当前档位允许的可见行数（标准 / 极致 8 行，省电 4 行）
+    static var topRowCount: Int { min(maxRowCount, ThemeStyle.profile.rankingLimit) }
     /// 行高上下限（pt）
     static let minRowHeight: CGFloat = 34
     static let maxRowHeight: CGFloat = 48
@@ -32,7 +37,7 @@ final class TokenRankingScreenView: NSStackView {
     private let head = TokenCardHead(title: TokenDistroDimension.projects.title)
     private let bar = TokenStackBarView(height: 8)
     private let rowsStack = NSStackView()
-    private let rowViews = (0..<TokenRankingScreenView.topRowCount).map { _ in TokenRankingRowView() }
+    private let rowViews = (0..<TokenRankingScreenView.maxRowCount).map { _ in TokenRankingRowView() }
     private let emptyRow = TokenKeyRowView()
     /// 汇总块：总 tok / 缓存读 / 未缓存 / 输出 / 请求数（取该维度合计，与占比分母同源）
     private let summaryRows = (0..<5).map { _ in TokenKeyRowView() }
@@ -151,14 +156,16 @@ final class TokenRankingScreenView: NSStackView {
         head.update(title: dimension.title, meta: copy.rangeTitle + " "
             + String(rows.count) + " 个")
 
-        let barRows = Array(rows.prefix(TokenRankingScreenView.topRowCount))
+        // 可见行数受渲染档限制（省电档 Top 4）；占比条与行用同一份切片，上下数据对得上
+        let limit = Self.topRowCount
+        let barRows = Array(rows.prefix(limit))
         bar.update(shares: barRows.map { $0.share },
                    colors: barRows.map { TokenPaneStyle.distroColor($0.colorIndex + offset) },
                    accessibility: dimension.barAccessibility(range: model.range),
                    tip: TokenDerive.stackBarTip(barRows, hiddenCount: rows.count - barRows.count))
 
         for (index, view) in rowViews.enumerated() {
-            if index < rows.count {
+            if index < min(rows.count, limit) {
                 view.isHidden = false
                 // 色点与占比条同一取色函数，行与条能一一对上（不再需要图例）
                 view.update(row: rows[index],
@@ -173,8 +180,10 @@ final class TokenRankingScreenView: NSStackView {
         bar.isHidden = rows.isEmpty
 
         // 行多时先让汇总块、再让口径说明让位，保证行高不低于 34pt
-        summaryGrid.isHidden = rows.count > 7
-        noteView.isHidden = rows.count > 7
+        // 判据用**可见行数**（受档位限制）而不是数据行数：省电档只显示 4 行时汇总块该留着
+        let visibleRowCount = min(rows.count, limit)
+        summaryGrid.isHidden = visibleRowCount > 7
+        noteView.isHidden = visibleRowCount > 7
         updateSummary(totals)
         noteView.update(dimension == .projects ? copy.projectsNote : copy.modelsNote)
         setAccessibilityLabel(dimension.cardAccessibility(range: model.range))

@@ -79,12 +79,21 @@ extension MenuPanelController {
 
     // MARK: - 刷新
 
-    /// 每秒调用（由状态栏定时器驱动）：速率必刷，其余按 5 秒节流
+    /// 每次 tick 调用（周期由渲染档决定：标准 1s / 极致 0.5s / 省电 2s）
+    ///
+    /// 分层不变：速率必刷、其余按中频节流（`midInterval` 随档位变）。
+    /// 省电档额外做一件事：**面板收起时整轮 tick 直接停摆**（连计费也不拉）——
+    /// 代价是收起态不再做额度阈值提醒，打开面板时会 force 刷新补上。
     func tick() {
-        // 计费刷新与面板是否展开无关：收起时也要拉余额做阈值提醒
-        // （60s 节流与 429 退避在 BillingMonitor 内部，这里每秒调用是安全的）
-        billingMonitor?.refresh()
-        guard popover.isShown else { return }
+        let tier = currentRenderTier
+        let profile = RenderTierLogic.profile(for: tier)
+        let visible = popover.isShown
+        // 计费刷新：标准 / 极致档收起时保持（额度阈值提醒依赖它）；
+        // 省电档收起时停掉，换取真正的空闲（BillingMonitor 内部另有 60s 节流与锁屏暂停）
+        if visible || !profile.stopsTickWhenClosed {
+            billingMonitor?.refresh()
+        }
+        guard RenderTierLogic.shouldRefreshPanel(tier: tier, panelVisible: visible), visible else { return }
         sampleHistory()
         // 系统页：每秒推进历史，视图按 5 秒节流刷新（内部再判一次展开态，重复无害）
         systemTick()
@@ -93,7 +102,7 @@ extension MenuPanelController {
                              downHistory: downHistory,
                              upHistory: upHistory)
         let now = Date()
-        guard now.timeIntervalSince(lastMidRefresh) >= Self.midInterval else { return }
+        guard now.timeIntervalSince(lastMidRefresh) >= midInterval else { return }
         lastMidRefresh = now
         refreshMidFrequency()
     }
@@ -102,8 +111,8 @@ extension MenuPanelController {
     func sampleHistory() {
         downHistory.append(max(monitor.downloadSpeed, 0))
         upHistory.append(max(monitor.uploadSpeed, 0))
-        if downHistory.count > Self.maxHistory { downHistory.removeFirst(downHistory.count - Self.maxHistory) }
-        if upHistory.count > Self.maxHistory { upHistory.removeFirst(upHistory.count - Self.maxHistory) }
+        if downHistory.count > maxHistory { downHistory.removeFirst(downHistory.count - maxHistory) }
+        if upHistory.count > maxHistory { upHistory.removeFirst(upHistory.count - maxHistory) }
     }
 
     /// 全量刷新（面板打开时调用一次）
