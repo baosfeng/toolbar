@@ -14,7 +14,8 @@ let package = Package(
         // 与 AppKit / Core 都无关的展示纯逻辑（Hero 派生、单位排版等），
         // 让 TestRunner 能直接断言 UI 口径而不必 import 可执行 target。
         .target(
-            name: "NetworkMonitorUI"
+            name: "NetworkMonitorUI",
+            dependencies: ["NetworkMonitorCore"]
         ),
         .executableTarget(
             name: "NetworkMonitor",
