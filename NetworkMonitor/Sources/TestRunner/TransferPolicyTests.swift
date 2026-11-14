@@ -86,10 +86,9 @@ func testTransferPreferencesWindow() {
     assertEqual(preferences.autoAcceptMinutes, 10, "默认 10 分钟")
     assertEqual(preferences.sizeThresholdMB, 0, "默认关闭体积阈值")
     assertEqual(preferences.isWindowActive(), false, "默认无窗口")
-    assertEqual(preferences.soundEnabled(.receive), true, "接收完成音默认开")
-    assertEqual(preferences.soundEnabled(.send), true, "发送完成音默认开")
-    assertEqual(preferences.soundEnabled(.failure), false, "失败音默认关")
-    assertEqual(preferences.soundEnabled(.deviceAppeared), false, "新设备音默认关")
+    // 提示音已迁到统一事件表（NotificationPreferences.transferFinished），
+    // 这里只校验旧键是否留下的迁移探测（声音开关的默认值由 NotificationTests 覆盖）
+    assertEqual(preferences.legacySoundKeysPresent(), false, "新安装没有旧提示音键")
 
     let base = Date(timeIntervalSince1970: 1_700_000_000)
     preferences.autoAcceptEnabled = true
@@ -117,11 +116,9 @@ func testTransferPreferencesWindow() {
     preferences.sizeThresholdMB = 0
     assertEqual(preferences.allowsSize(0), false, "0 = 关闭")
 
-    // 提示音开关持久化
-    preferences.setSoundEnabled(true, for: .failure)
-    assertEqual(preferences.soundEnabled(.failure), true, "失败音可开启")
-    preferences.setSoundEnabled(false, for: .receive)
-    assertEqual(TransferPreferences(storage: storage).soundEnabled(.receive), false, "开关持久化")
+    // 旧提示音键探测：写过旧版本留下的键时能识别出来（用于升级提示，不再驱动播放）
+    storage.set(true, forKey: "transfer.sound.failure")
+    assertEqual(preferences.legacySoundKeysPresent(), true, "旧提示音键可被识别")
 }
 
 /// 服务层策略集成（直接调用 handleOffer，不起 HTTP）

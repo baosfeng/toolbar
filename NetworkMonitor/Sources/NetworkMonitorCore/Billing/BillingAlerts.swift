@@ -75,6 +75,56 @@ public struct BillingAlert: Sendable, Equatable {
     }
 }
 
+// MARK: - 恢复
+
+/// 额度恢复原因
+public enum BillingRecoveryReason: String, Sendable {
+    /// 剩余回升到最高阈值以上
+    case recovered
+    /// 周期重置（新的计费周期开始，额度重新给满）
+    case cycleReset
+
+    /// 通知标题后缀
+    var titleSuffix: String {
+        switch self {
+        case .recovered: return "额度已恢复"
+        case .cycleReset: return "额度周期已重置"
+        }
+    }
+}
+
+/// 一条「额度恢复」提醒
+public struct BillingRecovery: Sendable, Equatable {
+    /// 状态键（providerID.resourceID）
+    public let key: String
+    public let providerID: String
+    /// 额度名称（会话 / 每周 / 内含）
+    public let resourceTitle: String
+    /// 当前剩余百分比
+    public let remainingPercent: Double
+    /// 恢复原因
+    public let reason: BillingRecoveryReason
+
+    public init(key: String, providerID: String, resourceTitle: String,
+                remainingPercent: Double, reason: BillingRecoveryReason) {
+        self.key = key
+        self.providerID = providerID
+        self.resourceTitle = resourceTitle
+        self.remainingPercent = remainingPercent
+        self.reason = reason
+    }
+
+    /// 通知标题：`Ollama · 会话额度已恢复`
+    public func title(providerName: String) -> String {
+        "\(providerName) · \(resourceTitle)\(reason.titleSuffix)"
+    }
+
+    /// 通知正文：`当前剩余 42.1%`
+    public var bodyText: String {
+        "当前剩余 \(formatExactNumber(max(0, remainingPercent)))%"
+    }
+}
+
 // MARK: - 评估器
 
 /// 额度提醒评估器 — 输入余额快照与已提醒状态，输出本次应发提醒与更新后的状态
@@ -86,10 +136,15 @@ public struct BillingAlert: Sendable, Equatable {
 public enum BillingAlertEvaluator {
 
     /// 评估一次余额快照
+    ///
+    /// 返回三个结果：本次要发的提醒、本次要发的「恢复」通知、更新后的状态。
+    /// 恢复与提醒共用一份状态（notifiedThreshold != 0 即「这个额度曾处在告警区」），
+    /// 因此不需要再存一份独立的恢复标记。
     public static func evaluate(balance: BillingBalance,
                                 providerID: String,
-                                state: [String: BillingAlertState]) -> (alerts: [BillingAlert], state: [String: BillingAlertState]) {
+                                state: [String: BillingAlertState]) -> (alerts: [BillingAlert], recoveries: [BillingRecovery], state: [String: BillingAlertState]) {
         var alerts: [BillingAlert] = []
+        var recoveries: [BillingRecovery] = []
         var updated = state
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
@@ -98,10 +153,18 @@ public enum BillingAlertEvaluator {
                       cycleID: String?, resetAt: Date?) {
             let key = "\(providerID).\(resourceID)"
             let previous = state[key]
+            // 曾在告警区（提醒过至少一档）才算「恢复」，首次采集不到 5% 时不庆祝
+            let wasAlerting = (previous?.notifiedThreshold ?? 0) != 0
             // 周期变化：重新开始记录
             var current = BillingAlertState(cycleID: cycleID)
             if let previous, previous.cycleID == cycleID {
                 current.notifiedThreshold = previous.notifiedThreshold
+            } else if wasAlerting {
+                // 换了周期且上周期提醒过：这是一次「额度重置」，单独发一条恢复
+                recoveries.append(BillingRecovery(key: key, providerID: providerID,
+                                                  resourceTitle: title,
+                                                  remainingPercent: fraction * 100,
+                                                  reason: .cycleReset))
             }
 
             guard let threshold = BillingAlertThresholds.reachedThreshold(remainingFraction: fraction) else {
@@ -109,6 +172,14 @@ public enum BillingAlertEvaluator {
                 if current.notifiedThreshold != 0 {
                     current.notifiedThreshold = 0
                     updated[key] = current
+                }
+                // 同一周期内回升才发「已恢复」；换周期的那条已经在上面按「周期重置」发过了，
+                // 否则余额重置后剩余也变高，用户会连收两条恢复通知
+                if wasAlerting, previous?.cycleID == cycleID {
+                    recoveries.append(BillingRecovery(key: key, providerID: providerID,
+                                                      resourceTitle: title,
+                                                      remainingPercent: fraction * 100,
+                                                      reason: .recovered))
                 }
                 return
             }
@@ -138,6 +209,6 @@ public enum BillingAlertEvaluator {
                      cycleID: limit.resetsAt.map { formatter.string(from: $0) },
                      resetAt: limit.resetsAt)
         }
-        return (alerts, updated)
+        return (alerts, recoveries, updated)
     }
 }
