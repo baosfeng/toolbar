@@ -20,6 +20,9 @@ extension AppCoordinator {
                     launchAtStartup: LaunchAtStartupService(logger: AppContext.shared.logger),
                     alertPreferences: BillingAlertPreferences(storage: AppContext.shared.storage))
             },
+            .appearance: {
+                SettingsAppearancePane(logger: AppContext.shared.logger)
+            },
             .providers: {
                 SettingsProvidersPane(monitor: billingMonitor)
             },

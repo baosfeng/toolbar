@@ -53,6 +53,7 @@ enum MenuPanelSnapshot {
                                    tokenSnapshot: HarnessUsageSnapshot?,
                                    settings: SettingsWindow?) {
         prepareUnitStyleForSnapshot()
+        prepareAppearanceForSnapshot()
         let items = repository?.fetchClipboardItems(kind: nil, limit: 5) ?? []
         let stress = (ProcessInfo.processInfo.environment[stressEnvKey]?.isEmpty == false)
         let billingMock = (ProcessInfo.processInfo.environment[billingMockEnvKey]?.isEmpty == false)
@@ -74,7 +75,7 @@ enum MenuPanelSnapshot {
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let suffix = appearance == .aqua ? "light" : "dark"
                 let url = directory.appendingPathComponent(
-                    "menu-\(tab.fileNameSuffix)\(unitFileSuffix)-\(suffix).png")
+                    "menu-\(tab.fileNameSuffix)\(unitFileSuffix)\(appearanceFileSuffix)-\(suffix).png")
                 render(view: panel, size: size, appearanceName: appearance, to: url)
             }
             // 系统页内容高于 520pt 视口：另出一张「滚到底」，让底部状态带可核验
@@ -101,7 +102,7 @@ enum MenuPanelSnapshot {
         let clipboardBackdrop = makeClipboardPanel(items: items)
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let suffix = appearance == .aqua ? "light" : "dark"
-            let url = directory.appendingPathComponent("panel-clipboard-\(suffix).png")
+            let url = directory.appendingPathComponent("panel-clipboard\(appearanceFileSuffix)-\(suffix).png")
             render(view: clipboardBackdrop.makeView(), size: clipboardPanelSize,
                    appearanceName: appearance, to: url)
         }
@@ -110,43 +111,6 @@ enum MenuPanelSnapshot {
         SettingsSnapshot.capture(directory: directory, settings: settings)
 
         logger.info("快照完成：目录=\(directory.path)，数值单位=\(unitStyle?.rawValue ?? "跟随偏好")")
-    }
-
-    /// 系统页「滚到底」取证：底部状态带（温度 / 电池环 / 估功耗）只在滚动后可见，
-    /// 首屏截图必然看不到它，故单独出一张
-    private static func captureSystemScrolledBottom(directory: URL, items: [ClipboardItem]) {
-        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
-            let suffix = appearance == .aqua ? "light" : "dark"
-            let panel = makeMenuPanel(tab: .system, items: items)
-            let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
-            render(view: panel, size: size, appearanceName: appearance,
-                   to: directory.appendingPathComponent("menu-system-bottom-\(suffix).png")) { view in
-                (view as? MenuPanelView)?.scrollToBottomForSnapshot()
-            }
-        }
-    }
-
-    /// 超高内容自证：把进程数拉到 12（内容 > 520pt），截「视口顶部」与「滚到底部」两张图，
-    /// 并把文档高度 / 视口高度写进 metrics 文本，证明内容没有被裁切、而是变成可滚动。
-    private static func captureStress(directory: URL, items: [ClipboardItem]) {
-        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
-            let suffix = appearance == .aqua ? "light" : "dark"
-            let panel = makeMenuPanel(tab: .network, items: items, processCount: 12)
-            let needed = panel.desiredContentHeight
-            let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
-
-            render(view: panel, size: size, appearanceName: appearance,
-                   to: directory.appendingPathComponent("menu-network-stress-\(suffix).png"))
-
-            let scrolledPanel = makeMenuPanel(tab: .network, items: items, processCount: 12)
-            render(view: scrolledPanel, size: size, appearanceName: appearance,
-                   to: directory.appendingPathComponent("menu-network-stress-\(suffix)-scrolled.png")) { view in
-                guard let panel = view as? MenuPanelView else { return }
-                let metrics = panel.snapshotScrollMetrics()
-                panel.scrollToBottomForSnapshot()
-                writeSnapshotMetrics(directory: directory, needed: needed, size: size, metrics: metrics)
-            }
-        }
     }
 
     /// 构建菜单面板并填入快照数据（速率/流量/进程为固定示意值，剪贴板/系统取真实数据）
