@@ -13,7 +13,7 @@ import QuartzCore
 /// 触发：
 /// ```
 /// NM_MEASURE_PANEL_ROUNDS=20 NM_MEASURE_GAP_MS=0 NM_MEASURE_OUT=/tmp/x.txt \
-///   /tmp/perf/NMProbe.app/Contents/MacOS/NetworkMonitor --measure-panel-open
+///   /Applications/一览.app/Contents/MacOS/一览 --measure-panel-open
 /// ```
 /// - `NM_MEASURE_PANEL_ROUNDS`：轮次（默认 20，下限 10；第 1 轮 = 首次打开）
 /// - `NM_MEASURE_GAP_MS`：每轮打开前额外静置（0 = 连续开合，>0 = 模拟闲置后真实点击）

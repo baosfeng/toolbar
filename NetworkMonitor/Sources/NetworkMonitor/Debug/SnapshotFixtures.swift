@@ -134,6 +134,10 @@ enum SnapshotFixtures {
                                  residentBytes: 2_400_000_000),
             ProcessResourceUsage(pid: 918, name: "WindowServer", cpuPercent: 41.2,
                                  residentBytes: 1_100_000_000),
+            // 本应用：pid 取当前进程、原始名保留历史英文名 NetworkMonitor，自证榜单行显示「一览」
+            ProcessResourceUsage(pid: Int32(ProcessInfo.processInfo.processIdentifier),
+                                 name: "NetworkMonitor", cpuPercent: 44.0,
+                                 residentBytes: 1_650_000_000),
             ProcessResourceUsage(pid: 2261, name: "Xcode", cpuPercent: 27.6,
                                  residentBytes: 3_900_000_000),
             ProcessResourceUsage(pid: 77, name: "mds_stores", cpuPercent: 18.8,
@@ -197,12 +201,22 @@ enum SnapshotFixtures {
 
     /// 活跃进程示意数据（进程名真实 → 可验证 NSWorkspace 真实图标解析）
     ///
+    /// 第 0 条固定放「本应用」：**原始进程名刻意保留历史英文名 `NetworkMonitor`**，pid 取当前进程，
+    /// 用来自证显示层映射把这一行渲染成「一览」（真实运行时包内可执行名已是「一览」，
+    /// pid 判据同样命中，映射结果与原名相同）。
+    ///
     /// - Parameter count: 条数；超过 5 条时用于「内容高于 520pt」的可滚动自证
     static func processes(count: Int = 5) -> [ProcessNetUsage] {
         let names = ["Safari", "Google Chrome", "Terminal", "WeChat", "Spotify",
                      "Xcode", "Slack", "Notes", "Mail", "Finder", "Firefox", "Discord"]
         return (0..<max(0, count)).map { index in
-            let name = names[index % names.count] + (index < names.count ? "" : " \(index + 1)")
+            if index == 0 {
+                return ProcessNetUsage(name: "NetworkMonitor",
+                                       pid: Int32(ProcessInfo.processInfo.processIdentifier),
+                                       bytesIn: 1_200_000, bytesOut: 90_000)
+            }
+            let slot = index - 1
+            let name = names[slot % names.count] + (slot < names.count ? "" : " \(index + 1)")
             return ProcessNetUsage(name: name, pid: Int32(1200 + index),
                                    bytesIn: UInt64(1_200_000 / (index + 1)),
                                    bytesOut: UInt64(90_000 / (index + 1)))

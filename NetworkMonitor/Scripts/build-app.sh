@@ -18,19 +18,30 @@ set -e
 cd "$(dirname "$0")/.."
 BUILD_MODE="${1:-debug}"
 
+# 构建产物名（SwiftPM target 名，.build/<triple>/<config>/NetworkMonitor）——
+# **只决定构建产物路径，不再是包内可执行名**：target / 模块名保持不变（改它会连锁影响
+# import NetworkMonitorCore、CI 与增量缓存），可执行名通过打包时复制改名实现（见下一条）。
 APP_NAME="NetworkMonitor"
 # 对外显示名（中文产品名）：只写进 Info.plist 的显示字段与权限用途说明。
 # 与 Sources/NetworkMonitorCore/Infrastructure/AppIdentity.swift 的 displayName 同源，改名两处一起改。
-# 刻意不动 APP_NAME / CFBundleIdentifier / CFBundleExecutable / 签名身份：它们绑着 TCC 的
-# designated requirement、本地偏好域（~/Library/Preferences/com.example.NetworkMonitor.plist）。
-# .app 目录名单独由下面的 APP_BUNDLE_NAME 决定（改包名只影响 Finder 里看到的名字与登录项路径，
-# 登录项由 App 启动时的自愈重新登记，见 LaunchAtStartupReconciler）。
+# 保持不动的只有 CFBundleIdentifier 与签名身份：它们绑着 TCC 的 designated requirement
+# 与本地偏好域（~/Library/Preferences/com.example.NetworkMonitor.plist）。
 APP_DISPLAY_NAME="一览"
+# 包内可执行名（Contents/MacOS/<此名> 与 Info.plist 的 CFBundleExecutable）
+#
+# 用户明确要求「全部换」：活动监视器 / ps / 崩溃报告里的进程名也要看到中文「一览」。
+# 做法是**打包时复制改名**——构建产物仍叫 NetworkMonitor（SwiftPM target 名不变），
+# 拷进 .app 时命名为「一览」，CFBundleExecutable 写「一览」。
+# 崩溃报告文件名随之变成「一览-<时间>.ips」（历史 .ips 仍留在原处，不影响追溯）；
+# 签名 identifier 仍是 com.example.NetworkMonitor，所以换可执行名不改 TCC 授权判据。
+APP_EXECUTABLE_NAME="一览"
 # .app 目录名（Finder / 启动台 / 权限列表 / 卸载路径里看到的包名）：与显示名同源，用中文「一览」。
-# 与可执行名 APP_NAME 分开：Contents/MacOS/NetworkMonitor、CFBundleExecutable、签名 identifier
-# 一律保持 NetworkMonitor —— 二进制名绑着 TCC 判据、codesign 校验与 CI 架构自证，换它没有收益。
 # 中文路径因此全程加引号（本文件所有路径引用均已加），迁移旧包见下方「部署」段。
 APP_BUNDLE_NAME="一览"
+# 历史可执行名：杀进程判据要连旧名一起扫——可执行名改中文当天，正在跑的实例仍挂着旧二进制名，
+# 只按新名扫会「没找到进程」，脚本随后 rm -rf 正在运行的包（仓库踩坑记过这类事故）。
+# 全量迁移过一个版本后可删掉这个数组（保留也无害，只是多扫一次）。
+LEGACY_EXECUTABLE_NAMES=("NetworkMonitor")
 # 目标架构：显式指定则交叉 / 同架构构建，产物后缀区分；未指定即本机架构、产物名不变
 TARGET_ARCH="${ARCH:-}"
 HOST_ARCH="$(uname -m)"
@@ -106,8 +117,8 @@ package_app() {
     mkdir -p "$app_dir/Contents/MacOS"
     mkdir -p "$app_dir/Contents/Resources"
 
-    # 2.2 复制可执行文件
-    cp "$binary_path" "$app_dir/Contents/MacOS/${APP_NAME}"
+    # 2.2 复制可执行文件（构建产物叫 APP_NAME，包内改名为 APP_EXECUTABLE_NAME）
+    cp "$binary_path" "$app_dir/Contents/MacOS/${APP_EXECUTABLE_NAME}"
 
     # 2.3 复制图标
     if [ -f "Scripts/AppIcon.icns" ]; then
@@ -125,7 +136,7 @@ package_app() {
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>NetworkMonitor</string>
+    <string>${APP_EXECUTABLE_NAME}</string>
     <key>CFBundleIdentifier</key>
     <string>com.example.NetworkMonitor</string>
     <key>CFBundleName</key>
@@ -221,7 +232,7 @@ sign_app() {
     fi
 
     # 主可执行文件：固定标识符（com.example.NetworkMonitor）是 TCC 授权稳定的关键
-    local exe="$target/Contents/MacOS/${APP_NAME}"
+    local exe="$target/Contents/MacOS/${APP_EXECUTABLE_NAME}"
     if [ -f "$exe" ]; then
         sign_object "$exe" "com.example.NetworkMonitor"
     fi
@@ -320,16 +331,21 @@ LEGACY_INSTALL_PATHS=("/Applications/${APP_NAME}.app" "/Applications/一览.app"
 
 # 杀掉正在运行的应用
 #
-# 判据只认「可执行文件绝对路径完全一致」：不能按 APP_NAME 做 pgrep -f 模糊匹配——
-# APP_NAME 与仓库目录同名，同机任何命令行含该串的进程（另一 agent 的 swift-build
-# --package-path .../NetworkMonitor/.build、编辑器语言服务等）都会被命中，而 kill
-# 收到多行 PID 会整条报错，被 || true 吞掉后脚本继续 rm -rf，旧实例存活、新版本静默不生效。
+# 判据只认「可执行文件绝对路径完全一致」：不能按可执行名做 pgrep -f 模糊匹配——
+# 历史英文名 NetworkMonitor 仍是 SwiftPM target 名与构建产物名，同机任何命令行含该串的进程
+# （另一 agent 的 swift-build --package-path .../NetworkMonitor/.build、编辑器语言服务等）
+# 都会被命中，而 kill 收到多行 PID 会整条报错，被 || true 吞掉后脚本继续 rm -rf，
+# 旧实例存活、新版本静默不生效。
 # 更不能用 pgrep -x：同名用户级二进制（如 NetworkMonitor、macMonitor 的调试副本）也会被误杀。
 # 包不存在时跳过扫描：首次安装与已迁移完成的机器都不必为旧路径再扫一遍。
 pids_for_bundle() {
     local bundle="$1"
     [ -d "$bundle" ] || return 0
-    pgrep -f "^${bundle}/Contents/MacOS/${APP_NAME}( |$)" || true
+    local exe
+    # 现有可执行名 + 历史可执行名逐个扫：改名当天旧实例的可执行名还是 NetworkMonitor
+    for exe in "$APP_EXECUTABLE_NAME" "${LEGACY_EXECUTABLE_NAMES[@]}"; do
+        pgrep -f "^${bundle}/Contents/MacOS/${exe}( |$)" || true
+    done
 }
 
 # 当前包与历史包名各扫一遍：包名迁移当天，正在跑的实例还挂在旧路径上
@@ -406,6 +422,6 @@ echo "🎉 部署完成！"
 echo "   📦 应用位置：${INSTALL_PATH}"
 echo ""
 echo "📋 应用大小："
-ls -lh "${INSTALL_PATH}/Contents/MacOS/${APP_NAME}"
+ls -lh "${INSTALL_PATH}/Contents/MacOS/${APP_EXECUTABLE_NAME}"
 echo ""
 echo "💡 应用已自动启动，查看菜单栏 📊 图标"

@@ -181,12 +181,12 @@ ARCH=arm64 SKIP_INSTALL=1 ./Scripts/build-app.sh release   # 交叉构建另一�
 
 ## 常见问题
 
-**「一览.app」包内的可执行文件为什么还叫 NetworkMonitor？**
-Finder 里的包名与菜单栏、通知、权限列表的显示名都是「一览」；包内可执行文件（`Contents/MacOS/NetworkMonitor`）与 bundle id `com.example.NetworkMonitor` 保持英文——系统授权（TCC）判据认 identifier 与签名证书、不认路径，换二进制名没有收益；数据目录 `macMonitor` 也不变。改包名的唯一副作用是旧的登录项登记指向旧路径，应用启动时会自动重新登记（失败则把「开机自启动」开关回滚为关，不会显示虚假的已开启）。
+**进程名为什么叫「一览」？**
+包名、菜单栏 / 通知 / 权限列表里的显示名、包内可执行文件（`Contents/MacOS/一览`）都是「一览」，所以活动监视器、`ps` 与崩溃报告里看到的进程名也是中文（崩溃报告文件名随之是 `一览-<时间>.ips`，历史 `.ips` 仍在原处）。构建产物仍叫 `NetworkMonitor`（SwiftPM target / 模块名不变），由 `build-app.sh` 在打包时复制改名为「一览」；bundle id `com.example.NetworkMonitor`、签名身份与数据目录 `macMonitor` 都不变——TCC 授权判据认 identifier + 签名证书、不认路径。改包名的唯一副作用是旧的登录项登记指向旧路径，应用启动时会自动重新登记（失败则把「开机自启动」开关回滚为关，不会显示虚假的已开启）。
 
 **双击提示「无法验证开发者」？** 右键 → 打开；或系统设置 → 隐私与安全性 →「仍要打开」。
 
-**菜单栏看不到图标？** 确认应用已启动（活动监视器里找 NetworkMonitor）；若装了 Bartender 等工具，检查是否被折叠。
+**菜单栏看不到图标？** 确认应用已启动（活动监视器里找「一览」，旧版是 NetworkMonitor）；若装了 Bartender 等工具，检查是否被折叠。
 
 **`⌘⌥V` 没反应？** 先在剪贴板设置里确认快捷键没被占用，再检查辅助功能权限。
 

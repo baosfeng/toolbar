@@ -78,14 +78,16 @@ extension SystemPaneView {
                             limit: Int,
                             memoryTotal: UInt64?) -> [SystemProcessListView.Row] {
         SystemProcessBoard.rows(snapshot, metric: metric, limit: limit).map { usage in
-            SystemProcessListView.Row(
-                name: usage.name,
+            // 本应用那行显示「一览」：只换显示名，条形 / 数值 / 排序仍按采样原始值
+            let displayName = AppProcessName.displayName(usage.name, pid: usage.pid)
+            return SystemProcessListView.Row(
+                name: displayName,
                 fraction: SystemProcessBoard.barFraction(for: usage, metric: metric,
                                                         memoryTotal: memoryTotal),
                 valueText: SystemProcessBoard.valueText(for: usage, metric: metric),
                 isOver: metric == .cpu && usage.cpuPercent > 100,
-                tip: SystemPaneTip.processRow(usage: usage, metric: metric,
-                                              memoryTotal: memoryTotal))
+                tip: SystemPaneTip.processRow(usage: usage, displayName: displayName,
+                                              metric: metric, memoryTotal: memoryTotal))
         }
     }
 }

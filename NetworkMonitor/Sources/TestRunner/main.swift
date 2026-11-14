@@ -308,5 +308,8 @@ runRenderTierGlassTests()
 runRenderTierGateTests()
 runAppearancePreferencesTests()
 
+// MARK: - 进程显示名映射（本应用那行显示「一览」/ 近似名不误伤 / 截断不变形）
+runProcessDisplayNameTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")

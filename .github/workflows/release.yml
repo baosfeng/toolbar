@@ -77,7 +77,8 @@ jobs:
       - name: Verify binary architecture
         working-directory: NetworkMonitor
         run: |
-          BIN="dist/一览-${{ matrix.arch }}.app/Contents/MacOS/NetworkMonitor"
+          # 包内可执行名是「一览」（build-app.sh 的 APP_EXECUTABLE_NAME，打包时由构建产物改名而来）
+          BIN="dist/一览-${{ matrix.arch }}.app/Contents/MacOS/一览"
           lipo -info "$BIN"
           lipo -info "$BIN" | grep -q "${{ matrix.arch }}"
 

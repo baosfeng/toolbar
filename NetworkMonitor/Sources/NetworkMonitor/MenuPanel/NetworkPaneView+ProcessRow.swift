@@ -13,6 +13,9 @@ final class MenuPanelProcessRow: MenuPanelRow {
     init(process: ProcessNetUsage) {
         super.init(height: MenuPanelStyle.compactRowHeight, onClick: nil)
 
+        // 本应用那行显示「一览」；图标仍按原始进程名 + pid 解析（解析主路径走 pid，不受显示名影响）
+        let displayName = AppProcessName.displayName(process.name, pid: process.pid)
+
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.imageScaling = .scaleProportionallyDown
         iconView.image = AppIconProvider.icon(forProcess: process.name, pid: process.pid, size: 20)
@@ -24,7 +27,7 @@ final class MenuPanelProcessRow: MenuPanelRow {
         ])
         contentStack.addArrangedSubview(iconView)
 
-        contentStack.addArrangedSubview(MenuPanelLabel.text(process.name, font: MenuPanelStyle.bodyFont))
+        contentStack.addArrangedSubview(MenuPanelLabel.text(displayName, font: MenuPanelStyle.bodyFont))
         contentStack.addArrangedSubview(MenuPanelLabel.spacer())
 
         let downText = "↓" + formatSpeedShort(Double(process.bytesIn))

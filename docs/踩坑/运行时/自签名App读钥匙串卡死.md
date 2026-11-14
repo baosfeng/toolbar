@@ -17,7 +17,7 @@
 ## 实测
 
 ```bash
-sample $(pgrep -f '^/Applications/一览.app/Contents/MacOS/NetworkMonitor') 1
+sample $(pgrep -f '^/Applications/一览.app/Contents/MacOS/一览') 1   # 旧包的可执行名是 NetworkMonitor
 # 主线程停在：
 #   KeychainSecretStore.secret(forKey:)
 #   SecItemCopyMatching → SecKeychainItemCopyContent → ...
