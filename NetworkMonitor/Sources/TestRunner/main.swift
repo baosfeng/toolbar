@@ -77,6 +77,12 @@ runClipboardImageGCTests()
 // MARK: - 剪贴板：文件条目类型细分（卡片图标 / 无障碍标签）
 runClipboardFileClassifierTests()
 
+// MARK: - 剪贴板：文件条目按分类聚合摘要（单文件 / 跨族顺序 / 同族合并 / 按条目边界截断）
+runClipboardFileSummaryTests()
+
+// MARK: - 剪贴板：图片存储占用统计（目录不存在 / 空目录 / 计数与字节 / 子目录不计入）
+runClipboardStorageUsageTests()
+
 // MARK: - 剪贴板：图片格式兼容（白名单 / 归一化 / 兜底 / 三表示编码）
 runClipboardImageFormatTests()
 
@@ -252,6 +258,12 @@ runClipboardPollScheduleTests()
 
 // MARK: - 剪贴板缩略图加载闸门（并发上限 / 在途去重 / 额度归还幂等 / reset）
 runClipboardThumbnailGateTests()
+
+// MARK: - 剪贴板缩略图失败重试策略（冷却 / 次数上限终态 / markSucceeded / reset）
+runClipboardThumbnailRetryPolicyTests()
+
+// MARK: - 剪贴板缩略图兜底降采样出口（比例 / 不放大 / 上限归一化）
+runClipboardThumbnailDecodeTests()
 
 // MARK: - 剪贴板删除二次确认（首次 / 窗口内二次 / 超窗 / 打断 / 互不串味）
 runClipboardDeleteConfirmTests()
