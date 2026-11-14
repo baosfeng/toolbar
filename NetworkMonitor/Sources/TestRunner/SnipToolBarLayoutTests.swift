@@ -118,11 +118,12 @@ func runSnipToolBarLayoutTests() {
     assertEqual(primary.width < 540, true, "一级工具条收窄到 540pt 以内（原全摊开 869pt）")
     assertEqual(primary.width > 300, true, "收窄后仍放得下全部高频项")
 
-    // 工具分层：常驻 4 个 + 溢出 7 个 = 全部 11 个，且两者无交集
-    // （11 = 原 10 个标注工具 + 序号；序号不挤一级高频位）
+    // 工具分层：常驻 4 个 + 溢出 8 个 = 全部 12 个，且两者无交集
+    // （12 = 原 10 个标注工具 + 序号 + 识别文字；后两者都不挤一级高频位）
     assertEqual(SnipTool.primary.count, 4, "一级工具条常驻 4 个工具")
-    assertEqual(SnipTool.overflow.count, 7, "二级面板收 7 个工具（含序号）")
+    assertEqual(SnipTool.overflow.count, 8, "二级面板收 8 个工具（含序号与识别文字）")
     assertEqual(SnipTool.overflow.contains(.number), true, "序号工具在二级面板")
+    assertEqual(SnipTool.overflow.contains(.ocr), true, "识别文字在二级面板")
     assertEqual(SnipTool.primary.count + SnipTool.overflow.count, SnipTool.allCases.count, "分层后不丢工具")
     for tool in SnipTool.primary {
         assertEqual(SnipTool.overflow.contains(tool), false, "常驻与溢出工具不重叠")

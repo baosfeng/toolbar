@@ -16,6 +16,8 @@ protocol SnipOverlayViewDelegate: AnyObject {
     func overlayView(_ view: SnipOverlayView, didRequestSave rect: CGRect, quick: Bool)
     /// 用户要求把选区贴到屏幕（本地点坐标）
     func overlayView(_ view: SnipOverlayView, didRequestPin rect: CGRect)
+    /// 用户要求对选区做 OCR 文字识别（本地点坐标）
+    func overlayView(_ view: SnipOverlayView, didRequestTextRecognition rect: CGRect)
 }
 
 // MARK: - 截图覆盖层
@@ -242,6 +244,8 @@ final class SnipOverlayView: NSView {
             requestSave(quick: quick)
         case .copyImage:
             confirm()
+        case .recognizeText:
+            requestTextRecognition()
         case .none:
             return false
         }

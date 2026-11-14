@@ -203,6 +203,9 @@ runSnipTextTests()
 // MARK: - 序号标注（工具分层 / 编号递增 / 几何 / 命中）
 runSnipNumberAnnotationTests()
 
+// MARK: - OCR 结果整理（阅读顺序 / 置信度过滤 / 换行拼接）
+runSnipTextRecognitionTests()
+
 // MARK: - 贴图旋转与镜像
 runSnipTransformTests()
 

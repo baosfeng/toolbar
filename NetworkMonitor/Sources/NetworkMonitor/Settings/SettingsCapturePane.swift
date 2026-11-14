@@ -27,6 +27,8 @@ final class SettingsCapturePane: SettingsPaneView {
     /// JPEG 质量滑块与它的数值标签（PNG 档下禁用）
     var jpegQualitySlider: NSSlider?
     var jpegQualityLabel: NSTextField?
+    /// OCR 识别成功后是否额外贴出文字图
+    private var ocrPinSwitch: NSSwitch?
     private var alphaSlider: NSSlider?
     private var alphaValueLabel: NSTextField?
     /// 放宽为 internal：控件在 SettingsCapturePane+Pin.swift 里创建与刷新
@@ -77,6 +79,7 @@ final class SettingsCapturePane: SettingsPaneView {
         buildAnnotationSection()
         buildToolBarCard()
         buildPinSection()
+        buildRecognizeSection()
         buildSaveSection()
         buildHotKeySection()
         page.addNote("「选择…」切换快速保存目录后只影响之后的截图落盘，已保存的文件不会迁移；"
@@ -137,6 +140,22 @@ final class SettingsCapturePane: SettingsPaneView {
         page.addCard(card, sectionTitle: "贴图")
     }
 
+    /// 识别卡片：OCR 的出口偏好（识别本身是工具条 / ⌘O 的一次性动作）
+    private func buildRecognizeSection() {
+        let pinSwitch = NSSwitch()
+        pinSwitch.target = self
+        pinSwitch.action = #selector(ocrPinChanged)
+        pinSwitch.setAccessibilityLabel("识别后把文字贴到屏幕上")
+        ocrPinSwitch = pinSwitch
+        let row = SettingsRowView(title: "识别后贴图",
+                                  subtitle: "OCR 识别成功后，除复制文本外再把文字贴成一张浮窗")
+        row.trailingStack.addArrangedSubview(pinSwitch)
+
+        let card = SettingsCardView()
+        card.addRow(row)
+        page.addCard(card, sectionTitle: "识别")
+    }
+
     /// 调色板色块 — 22pt 圆形；选中态 2pt 强调色描边，未选中 1pt 分隔线（白色块在浅色下可见）
     private func buildColorButtons() {
         for (index, entry) in Self.palette.enumerated() {
@@ -195,6 +214,7 @@ final class SettingsCapturePane: SettingsPaneView {
 
         refreshQuickSaveDirectory()
         refreshToolBar()
+        ocrPinSwitch?.state = storage.bool(forKey: SnipPreferenceKey.ocrPinResult) ? .on : .off
         updateColorSelection()
         if let text = hotKeySummary?() { hotKeyRow?.update(subtitle: text) }
     }
@@ -215,6 +235,13 @@ final class SettingsCapturePane: SettingsPaneView {
     }
 
     // MARK: - 动作
+
+    @objc private func ocrPinChanged() {
+        let enabled = ocrPinSwitch?.state == .on
+        storage.set(enabled, forKey: SnipPreferenceKey.ocrPinResult)
+        logger.info("识别后贴图：\(enabled ? "开" : "关")")
+    }
+
     @objc private func alphaChanged() {
         let value = alphaSlider?.doubleValue ?? 1
         storage.set(Double(value), forKey: SnipPreferenceKey.pinDefaultAlpha)

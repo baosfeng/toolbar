@@ -2,9 +2,10 @@ import Foundation
 
 // MARK: - 标注工具
 
-/// 工具条上的工具 —— 标注图元 + 一个「动作型」条目（橡皮擦）
+/// 工具条上的工具 —— 标注图元 + 两个「动作型」条目（橡皮擦、识别文字）
 ///
-/// 判据：`annotationKind` 非空 = 落笔时生成一条标注图元；为 nil 的是就地执行的操作（橡皮擦擦除）。
+/// 判据：`annotationKind` 非空 = 落笔时生成一条标注图元；为 nil 的是就地执行的操作
+/// （橡皮擦擦除、识别文字把选区交给 OCR）。
 public enum SnipTool: String, Equatable, Sendable, CaseIterable {
     case rectangle
     case ellipse
@@ -17,20 +18,23 @@ public enum SnipTool: String, Equatable, Sendable, CaseIterable {
     case text
     case number
     case eraser
+    /// 识别文字（OCR）：不产生标注，点一次就对当前选区执行识别
+    case ocr
 
-    /// 对应的图元类型；橡皮擦返回 nil（它是操作而不是图元）
+    /// 对应的图元类型；橡皮擦与识别文字返回 nil（它们是操作而不是图元）
     public var annotationKind: SnipAnnotationKind? {
         SnipAnnotationKind(rawValue: rawValue)
     }
 
     /// 是否是「就地执行的动作」，而不是会落一个图元的标注工具
     public var isActionTool: Bool {
-        self == .eraser
+        self == .eraser || self == .ocr
     }
 
     public var displayName: String {
         switch self {
         case .eraser: return "橡皮擦"
+        case .ocr: return "识别文字"
         default: return annotationKind?.displayName ?? rawValue
         }
     }
@@ -59,6 +63,7 @@ public enum SnipTool: String, Equatable, Sendable, CaseIterable {
         case .text: return "character.textbox"
         case .number: return "number.circle"
         case .eraser: return "eraser"
+        case .ocr: return "text.viewfinder"
         }
     }
 }

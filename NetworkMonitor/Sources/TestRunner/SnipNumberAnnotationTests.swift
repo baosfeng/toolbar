@@ -7,9 +7,12 @@ import NetworkMonitorCore
 func runSnipNumberAnnotationTests() {
     print("🧪 Testing snip number annotation...")
 
+    // 工具层：序号是标注工具，识别文字是动作工具
     assertEqual(SnipTool.number.annotationKind, SnipAnnotationKind.number, "序号工具对应 number 图元")
     assertEqual(SnipTool.number.displayName, "序号", "序号工具显示名")
     assertEqual(SnipTool.number.isActionTool, false, "序号不是动作工具")
+    assertEqual(SnipTool.ocr.annotationKind == nil, true, "识别文字不产生图元")
+    assertEqual(SnipTool.ocr.isActionTool, true, "识别文字是动作工具")
     assertEqual(SnipTool.eraser.isActionTool, true, "橡皮擦是动作工具")
     assertEqual(SnipAnnotationKind.number.displayName, "序号", "序号图元显示名")
     assertEqual(SnipAnnotationKind.number.isDrawable, false, "序号是单击落点，不拖拽绘制")

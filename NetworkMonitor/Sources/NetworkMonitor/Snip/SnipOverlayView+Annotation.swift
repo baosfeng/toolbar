@@ -8,6 +8,15 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
     // MARK: - 工具条回调
 
     func toolBarDidChangeTool(_ tool: SnipTool?) {
+        // 「识别文字」是动作型条目：点中就直接对当前选区执行一次，不进入工具态
+        // （它没有可绘制的图元，留在选中态会让下一次点选区又识别一遍，容易误触发）
+        if tool == .ocr {
+            requestTextRecognition()
+            activeTool = nil
+            toolbarView?.selectedTool = nil
+            needsDisplay = true
+            return
+        }
         activeTool = tool
         // 工具条自己点选时 already 设过一次；二级面板选出来时要回灌给它，
         // 否则「更多」按钮的高亮与图标停在旧状态
@@ -109,6 +118,11 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         }
         if tool == .eraser {
             eraseAnnotation(at: point)
+            return true
+        }
+        if tool == .ocr {
+            // 选中「识别文字」后再点选区 = 立即识别这一块（工具条点选也会直接触发一次）
+            requestTextRecognition()
             return true
         }
         if tool == .polyline {
