@@ -11,7 +11,8 @@ import NetworkMonitorUI
 @MainActor
 final class MenuBarManager: NSObject {
 
-    private let statusItem: NSStatusItem
+    /// 放宽为 internal：状态栏文本组装与 DEBUG 取证钩子拆在 MenuBarManager+StatusTitle / +Evidence
+    let statusItem: NSStatusItem
     /// 放宽为 internal：状态栏文本组装拆在 MenuBarManager+StatusTitle.swift
     let monitor: any NetworkMonitoringService
     // 放宽为 internal：采样节流拆在 MenuBarManager+Sampling.swift（读两个服务 + 面板可见性）
@@ -165,79 +166,11 @@ final class MenuBarManager: NSObject {
         onOpenSettings?(nil)
     }
 
-    @objc private func togglePanel() {
+    /// 展开 / 收起面板（README 与取证钩子都走这一条路径，故放宽为 internal）
+    @objc func togglePanel() {
         guard let button = statusItem.button else { return }
         panel.toggle(relativeTo: button.bounds, of: button)
     }
-
-#if DEBUG
-    /// 取证专用（仅 DEBUG）：走与点击状态栏完全相同的 toggle 路径打开面板
-    func openPanelForEvidence() {
-        togglePanel()
-    }
-
-    /// 取证专用（仅 DEBUG）：popover 窗口号与 frame
-    func evidenceWindow() -> (number: Int, frame: NSRect)? {
-        panel.evidenceWindow()
-    }
-
-    /// 取证专用（仅 DEBUG）：强制 popover 外观（浅色/深色）
-    func forceAppearanceForEvidence(_ name: NSAppearance.Name) {
-        panel.forceAppearanceForEvidence(name)
-    }
-
-    /// 取证专用（仅 DEBUG）：切换到指定分页
-    func selectTabForEvidence(_ tab: MenuPanelTab) {
-        panel.selectTabForEvidence(tab)
-    }
-
-    /// 取证专用（仅 DEBUG）：强制空态（进程 / 剪贴板）
-    func forceEmptyForEvidence() {
-        panel.forceEmptyDataForEvidence = true
-    }
-
-    /// 取证专用（仅 DEBUG）：状态栏当前文本（含换行，可直接核对 layout / 单位写法）
-    var statusTitleForEvidence: String { statusItem.button?.attributedTitle.string ?? "" }
-
-    /// 取证专用（仅 DEBUG）：当前定时器周期（核对「间隔」偏好是否真的重建了定时器）
-    var timerIntervalForEvidence: TimeInterval { timerInterval }
-
-    /// 取证专用（仅 DEBUG）：面板当前分页
-    var currentTabForEvidence: MenuPanelTab { panel.currentTabForEvidence }
-
-    /// 取证专用（仅 DEBUG）：分段条可见分页
-    var visibleTabsForEvidence: [MenuPanelTab] { panel.visibleTabsForEvidence }
-
-    /// 取证专用（仅 DEBUG）：系统页二级详情是否展开
-    var systemDetailShownForEvidence: Bool { panel.systemDetailShownForEvidence }
-
-    /// 取证专用（仅 DEBUG）：进入系统页二级详情
-    func showSystemDetailForEvidence() {
-        panel.showSystemDetailForEvidence()
-    }
-
-    /// 取证专用（仅 DEBUG）：跑显示偏好生效取证（见 Debug/DisplayPreferenceEvidence.swift）
-    func runStatusEvidenceIfRequested() {
-        guard !PanelOpenProbe.requested else { return }
-        DisplayPreferenceEvidence.runIfRequested(manager: self)
-    }
-
-    /// 测量专用（仅 DEBUG）：面板当前是否展开
-    var isPanelShownForMeasure: Bool { panel.isShown }
-
-    /// 测量专用（仅 DEBUG）：收起面板（关掉上一轮，准备下一次测量）
-    func closePanelForMeasure() {
-        panel.close()
-    }
-
-    /// 测量专用（仅 DEBUG）：popover 内容窗口（强制首帧落屏用）
-    func panelWindowForMeasure() -> NSWindow? {
-        panel.measurePanelWindow()
-    }
-
-    /// 测量专用（仅 DEBUG）：popover 当前内容尺寸（核对高度是否已按内容订好）
-    var panelContentSizeForMeasure: NSSize { panel.popover.contentSize }
-#endif
 
     // MARK: - 预热
 
