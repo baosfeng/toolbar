@@ -118,13 +118,32 @@ public final class AppCoordinator {
         // 5. 局域网互传（发现层 + 传输服务 + 面板控制器）
         let transfer = makeTransferController()
 
-        // 6. 额度页链路（provider 注册表 + 凭据存储 + 状态管理器）
-        let billingRegistry = BillingProviderRegistry(providers: [
-            OllamaBillingProvider(logger: logger),
-            OpenDesignBillingProvider(logger: logger),
-            OpencodeGoBillingProvider(logger: logger),
-        ])
-        // 环境变量回退键按 provider 自定义解析（Ollama 用 OLLAMA_API_KEY，其余用 BILLING_<ID>_API_KEY）
+        // 6. 额度页链路（provider 类型工厂 + 实例列表 + 凭据存储 + 状态管理器）
+        //
+        // 每个 provider 类型可以起多个实例：默认实例 id == kindID（沿用旧凭据键 / 启用键 /
+        // 提醒键，升级零迁移），命名实例（如 cursor::work）各自一份凭据与开关。
+        // 具体 provider 类只在这里 new，Core 与状态管理器都只认协议。
+        // 闭包内显式取局部 logger：逃逸闭包引用 self 属性需显式 self，这里避免噪音
+        let billingLogger = logger
+        let billingKinds: [(kindID: String, title: String, make: @MainActor () -> any BillingProvider)] = [
+            ("ollama", "Ollama", { OllamaBillingProvider(logger: billingLogger) }),
+            ("open-design", "Open Design", { OpenDesignBillingProvider(logger: billingLogger) }),
+            ("opencode-go", "OpenCode Go", { OpencodeGoBillingProvider(logger: billingLogger) }),
+            // 订阅额度三家：均为非公开端点（可能失效），失败只回报错误、保留上次成功数据
+            ("claude", "Claude", { ClaudeBillingProvider(logger: billingLogger) }),
+            ("codex", "Codex", { CodexBillingProvider(logger: billingLogger) }),
+            ("cursor", "Cursor", { CursorBillingProvider(logger: billingLogger) }),
+        ]
+        let billingInstanceStore = BillingInstanceStore()
+        let billingInstances = billingInstanceStore.ensureDefaults(
+            kinds: billingKinds.map { BillingInstanceKindSeed(kindID: $0.kindID, title: $0.title) })
+        let billingRegistry = BillingProviderRegistry()
+        for instance in billingInstances {
+            guard let kind = billingKinds.first(where: { $0.kindID == instance.kindID }) else { continue }
+            billingRegistry.register(BillingProviderInstance(base: kind.make(), instance: instance),
+                                     instance: instance)
+        }
+        // 环境变量回退键按实例解析（默认实例沿用旧键，命名实例追加后缀）
         let billingCredentials = PreferencesBillingCredentialStore(
             environmentKeyResolver: { providerID in
                 billingRegistry.provider(id: providerID)?.environmentCredentialKey
@@ -132,7 +151,8 @@ public final class AppCoordinator {
             })
         // 旧明文迁移：按注册表全量走一遍，不等用户点开某个 provider（详见该方法的说明）
         billingCredentials.migrateLegacyPlaintext(for: billingRegistry.all.map(\.id))
-        // 额度阈值提醒（5%/4%/3%/2%/1%）：应用启动时请求通知权限
+        // 额度提醒（阈值 / 窗口重置 / 余额回升）：应用启动时请求通知权限。
+        // 通知出口统一注入 NotificationServicing（本类不再自己持 UNUserNotificationCenter）
         let billingAlerts = BillingAlertService(storage: AppContext.shared.storage,
                                                notifications: notificationService,
                                                soundPlayer: soundPlayer,
@@ -141,6 +161,10 @@ public final class AppCoordinator {
         let billingMonitor = BillingMonitor(registry: billingRegistry,
                                             credentialStore: billingCredentials,
                                             alertService: billingAlerts,
+                                            instances: billingInstanceStore,
+                                            providerFactory: { kindID in
+                                                billingKinds.first { $0.kindID == kindID }?.make()
+                                            },
                                             logger: logger)
         // 6c. 统一设置窗口（六个分类页；额度页直接用上面这个 billingMonitor）
         settingsWindow = makeSettingsWindow(billingMonitor: billingMonitor)

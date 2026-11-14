@@ -17,7 +17,7 @@ enum SnipPermissionGuide {
         alert.informativeText = """
         截图、取色与窗口检测都需要屏幕录制权限。
 
-        请在「系统设置 → 隐私与安全性 → 屏幕录制」中勾选 NetworkMonitor，
+        请在「系统设置 → 隐私与安全性 → 屏幕录制」中勾选 \(AppIdentity.displayName)，
         然后重启应用（授权后必须重启才生效）。
         """
         alert.alertStyle = .informational

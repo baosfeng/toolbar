@@ -1,9 +1,9 @@
 ---
 name: toolbar-coding-standards
-description: 本项目（toolbar/NetworkMonitor）专属编码规范：架构原则、文件组织、测试与提交纪律，写代码前必加载
+description: 本项目（toolbar / 一览）专属编码规范：架构原则、文件组织、测试与提交纪律，写代码前必加载
 ---
 
-# 项目编码规范（NetworkMonitor / macMonitor）
+# 项目编码规范（一览 / NetworkMonitor）
 
 本项目（仓库根目录）专属编码规范 playbook。**在编写或修改本项目任何 Swift 代码之前，必须先加载本 skill 并遵循全部原则。** 本规范由架构审查（2026-08）固化，违反任一强制原则的代码应被拒绝。
 

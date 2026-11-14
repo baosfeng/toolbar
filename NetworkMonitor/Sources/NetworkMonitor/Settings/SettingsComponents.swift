@@ -91,13 +91,29 @@ final class SettingsPageStack: NSStackView {
     required init?(coder: NSCoder) { nil }
 
     /// 追加一张卡片（可先加分组标题）
-    func addCard(_ card: SettingsCardView, sectionTitle: String? = nil) {
+    ///
+    /// - Parameter trailingAccessory: 放在分组标题行右侧的附加控件（如可排序卡片的「恢复默认」按钮）；
+    ///   标题行会与之左右分栏，卡片本身宽度仍与内容栈对齐。
+    func addCard(_ card: SettingsCardView,
+                 sectionTitle: String? = nil,
+                 trailingAccessory: NSView? = nil) {
         if let sectionTitle {
             let label = MenuPanelLabel.text(sectionTitle.uppercased(),
                                             font: SettingsStyle.sectionTitleFont,
                                             color: .secondaryLabelColor)
-            contentStack.addArrangedSubview(label)
-            contentStack.setCustomSpacing(6, after: label)
+            if let trailingAccessory {
+                let header = NSStackView(views: [label, MenuPanelLabel.spacer(), trailingAccessory])
+                header.orientation = .horizontal
+                header.alignment = .centerY
+                header.spacing = 6
+                header.translatesAutoresizingMaskIntoConstraints = false
+                contentStack.addArrangedSubview(header)
+                header.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+                contentStack.setCustomSpacing(6, after: header)
+            } else {
+                contentStack.addArrangedSubview(label)
+                contentStack.setCustomSpacing(6, after: label)
+            }
         }
         contentStack.addArrangedSubview(card)
         card.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
@@ -152,6 +168,15 @@ final class SettingsCardView: NSView {
         NSColor.separatorColor.setStroke()
         path.lineWidth = 1
         path.stroke()
+    }
+
+    /// 清空全部行（整卡重建：重排时避免挪单行把自动补的分隔线搞乱；实例增删后同样走这里，
+    /// 分隔线随 arrangedSubviews 一起移除）
+    func removeAllRows() {
+        for view in rows.arrangedSubviews {
+            rows.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
     }
 
     /// 追加一行（自动在行间补分隔线）

@@ -41,7 +41,8 @@ enum DisplayPreferenceEvidence {
         // 原始偏好：取证结束后逐项还原
         let originals = (layout: prefs.layout, unit: prefs.unitStyle,
                          interval: prefs.refreshInterval, template: prefs.template,
-                         metrics: prefs.enabledMetrics, visible: tabPrefs.visibleTabs)
+                         metrics: prefs.enabledMetrics, order: prefs.metricOrder,
+                         visible: tabPrefs.visibleTabs)
 
         var lines: [String] = []
         lines.append("# 菜单栏显示偏好生效取证")
@@ -88,10 +89,26 @@ enum DisplayPreferenceEvidence {
         let segments = manager.visibleTabsForEvidence.map(\.title).joined(separator: "/")
         lines.append("hidden system      current=\(manager.currentTabForEvidence.title)  isShowingDetail=\(manager.systemDetailShownForEvidence)  segments=[\(segments)]")
 
-        // 6) 还原偏好（恢复默认「单行 / 紧凑 / 1 秒 / 全部分页可见」）
+        // 6) 菜单栏指标顺序：交换「下载 / 上传」→ 状态栏文本首位变化；再恢复默认
+        var swapped = prefs.metricOrder
+        if let downIndex = swapped.firstIndex(of: .downSpeed), downIndex + 1 < swapped.count {
+            swapped.swapAt(downIndex, downIndex + 1)
+        }
+        prefs.metricOrder = swapped
+        AppEvents.postMenuBarDisplayChanged()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        lines.append("order swapped      order=\(orderText(prefs.metricOrder))  title=\(quoted(manager.statusTitleForEvidence))")
+
+        prefs.resetMetricOrder()
+        AppEvents.postMenuBarDisplayChanged()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        lines.append("order reset        order=\(orderText(prefs.metricOrder))  title=\(quoted(manager.statusTitleForEvidence))")
+
+        // 7) 还原偏好（恢复默认「单行 / 紧凑 / 1 秒 / 全部分页可见」，以及用户原有的指标顺序）
         prefs.layout = originals.layout
         prefs.unitStyle = originals.unit
         prefs.refreshInterval = originals.interval
+        prefs.metricOrder = originals.order
         tabPrefs.visibleTabs = originals.visible
         AppEvents.postMenuBarDisplayChanged()
         AppEvents.postPanelTabsChanged()
@@ -104,6 +121,11 @@ enum DisplayPreferenceEvidence {
     /// 周期格式化（保留一位小数，便于看出 1 秒 / 5 秒切换）
     private static func fmt(_ interval: TimeInterval) -> String {
         String(format: "%.1fs", interval)
+    }
+
+    /// 指标顺序压成一行（便于核对「交换 / 恢复默认」是否真的落到偏好里）
+    private static func orderText(_ order: [MenuBarMetric]) -> String {
+        order.map(\.rawValue).joined(separator: "/")
     }
 
     /// 文本加引号并把换行替换成可见标记（一行一条结论，便于核对两行布局）

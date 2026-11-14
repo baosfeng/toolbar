@@ -42,7 +42,6 @@ private func testHarnessScanResidencyBounded() {
     guard (try? buffer.write(toFile: plainPath, atomically: true, encoding: .utf8)) != nil,
           harnessCompress(zstdPath: zstd, from: plainPath, to: archivePath) else {
         harnessFail("驻留有界：夹具准备失败")
-        return
     }
     let expectedEvents = generated
     buffer = ""
@@ -77,14 +76,12 @@ private func testHarnessScanResidencyBounded() {
     if semaphore.wait(timeout: .now() + 600) == .timedOut {
         _ = sampler.stop()
         harnessFail("驻留有界：扫描超时")
-        return
     }
     let peak = sampler.stop()
     let (result, failure) = outcome.snapshot
     if let failure { harnessFail("驻留有界：扫描失败 \(failure)") }
     guard let result else {
         harnessFail("驻留有界：无扫描结果")
-        return
     }
 
     let delta = peak - baseline
@@ -133,7 +130,6 @@ private func testHarnessPathologicalLongLine() {
     guard (try? buffer.write(toFile: plainPath, atomically: true, encoding: .utf8)) != nil,
           harnessCompress(zstdPath: zstd, from: plainPath, to: archivePath) else {
         harnessFail("超长单行：夹具准备失败")
-        return
     }
     buffer = ""
 

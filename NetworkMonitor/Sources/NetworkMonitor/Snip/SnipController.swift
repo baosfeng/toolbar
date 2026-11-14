@@ -17,6 +17,10 @@ final class SnipController: SnipOverlayViewDelegate {
     let pinWindows: PinWindowController
     /// 放宽为 internal：热键扩展文件要用
     let hotKeys: HotKeyRegistry
+    /// OCR 识别服务（协议注入，测试可替换成假实现）
+    let textRecognizer: any SnipTextRecognizing
+    /// 是否有一次识别正在进行（挡住重复触发，避免连按 ⌘O 排队识别多次）
+    var isRecognizing = false
     /// 放宽为 internal：导出扩展要解析快速保存目录
     let storage: KeyValueStorage
     /// 截图快捷键偏好（lazy 是为了和 storage 同步初始化）
@@ -76,11 +80,13 @@ final class SnipController: SnipOverlayViewDelegate {
     init(captureService: any SnipCaptureServicing = ScreenCaptureService(),
          pinWindows: PinWindowController = PinWindowController(),
          hotKeys: HotKeyRegistry = HotKeyRegistry(),
+         textRecognizer: any SnipTextRecognizing = VisionTextRecognizer(),
          storage: KeyValueStorage = AppContext.shared.storage,
          logger: LoggingService = AppContext.shared.logger) {
         self.captureService = captureService
         self.pinWindows = pinWindows
         self.hotKeys = hotKeys
+        self.textRecognizer = textRecognizer
         self.storage = storage
         self.hotKeyPreferences = SnipHotKeyPreferences(storage: storage)
         self.logger = logger
@@ -253,7 +259,8 @@ final class SnipController: SnipOverlayViewDelegate {
 
     // MARK: - 坐标解析
 
-    private func capturedFor(_ view: SnipOverlayView) -> SnipCapturedImage? {
+    /// 放宽为 internal：OCR 扩展文件要用（与复制 / 保存同一套选区解析口径）
+    func capturedFor(_ view: SnipOverlayView) -> SnipCapturedImage? {
         overlays.first { $0.overlayView === view }.flatMap { window in
             captures.first { captured in
                 SelectionGeometry.appKitRect(fromCG: captured.display.frame,
@@ -263,8 +270,9 @@ final class SnipController: SnipOverlayViewDelegate {
         }
     }
 
-    private func resolve(capturedFor view: SnipOverlayView,
-                         localRect: CGRect) -> (captured: SnipCapturedImage, globalRect: CGRect)? {
+    /// 放宽为 internal：OCR 扩展文件要用（本地点选区 → 捕获图 + 全局矩形）
+    func resolve(capturedFor view: SnipOverlayView,
+                 localRect: CGRect) -> (captured: SnipCapturedImage, globalRect: CGRect)? {
         guard let captured = capturedFor(view) else {
             logger.warning("找不到覆盖层对应的捕获图")
             return nil

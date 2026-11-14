@@ -177,7 +177,9 @@ final class SettingsNotificationPane: SettingsPaneView {
     /// 事件 → 试听用的 cue（系统通知事件回落到各自的默认 cue）
     static func previewCue(for event: NotificationEvent) -> NotificationCue? {
         switch event {
-        case .billingAlert, .billingRecovery: return .billingAlert
+        case .billingAlert: return .billingAlert
+        case .billingWindowReset: return .billingWindowReset
+        case .billingRecovery: return .billingRecovery
         case .transferFinished: return .transferFinished
         case .snipCaptured: return .snipCapture
         case .clipboardAction: return .copy

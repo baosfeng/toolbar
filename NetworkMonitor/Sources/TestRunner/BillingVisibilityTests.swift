@@ -1,15 +1,16 @@
 import Foundation
 import NetworkMonitorCore
 
-// MARK: - 额度页可见性 + 同一 provider 唯一配置
+// MARK: - 额度页可见性 + 同一实例唯一配置
 
 /// 两条行为契约的单测：额度页只展示「已启用 + 已配置」的 provider；
-/// 一个 provider 只有一条生效凭据（存储优先、环境变量仅回退）。
+/// 一个**实例**只有一条生效凭据（存储优先、环境变量仅回退）。
+/// 同一 provider 类型可以有多个实例，实例之间凭据互不覆盖（见 BillingInstanceTests）。
 func runBillingVisibilityTests() {
     print("\n🧪 Testing BillingVisibilityRule...")
     testBillingVisibilityRule()
 
-    print("\n🧪 Testing 同一 provider 唯一配置（注册表 / 凭据）...")
+    print("\n🧪 Testing 同一实例唯一配置（注册表 / 凭据）...")
     testSingleConfigurationContract()
 }
 
@@ -47,7 +48,10 @@ private func testBillingVisibilityRule() {
 
 // MARK: - 唯一配置
 
-/// 三种「重复配置」入口逐一断言：注册表同 id / 凭据双写 / 来源优先级
+/// 三种「重复配置」入口逐一断言：注册表同实例 / 凭据双写 / 来源优先级
+///
+/// 多实例改造后本契约的粒度从「provider」收紧为「实例」：默认实例的标识仍等于 kindID，
+/// 因此老配置的键与行为完全不变；命名实例（`cursor::work`）另有独立凭据与启用开关。
 private func testSingleConfigurationContract() {
     // 1) 注册表：同 id 再次 register = 覆盖，列表里永远只有一个同 id 实例
     let registry = BillingProviderRegistry()
@@ -99,6 +103,16 @@ private func testSingleConfigurationContract() {
     assertEqual(empty.credentialResolution(for: "open-design").environmentKeys,
                 ["BILLING_OPEN_DESIGN_API_KEY", "BILLING_OPEN-DESIGN_API_KEY"],
                 "解析结果带参与尝试的环境变量键（默认键 + 旧连字符键，去重后 2 个）")
+
+    // 5) 多实例：同一 provider 类型的两个实例各一条凭据，互不覆盖
+    let multiSecrets = InMemorySecretStorage()
+    let multi = PreferencesBillingCredentialStore(storage: InMemoryStorage(), secrets: multiSecrets,
+                                                  environment: [:])
+    multi.setCredential("sk-default", for: "cursor")
+    multi.setCredential("sk-work", for: "cursor::work")
+    assertEqual(multi.credential(for: "cursor") ?? "", "sk-default", "默认实例凭据不被命名实例覆盖")
+    assertEqual(multi.credential(for: "cursor::work") ?? "", "sk-work", "命名实例有独立凭据")
+    assertEqual(multiSecrets.values.count, 2, "两个实例在秘密存储里是两条记录")
 }
 
 // MARK: - 桩 provider

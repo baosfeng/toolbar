@@ -5,9 +5,13 @@ import Foundation
 /// 截图落盘规则 — 文件名与快速保存目录都是纯函数，便于单测
 public enum SnipFileNaming {
 
-    /// 文件名形如 Snipaste_2026-10-24_19-05-30.png
-    public static func fileName(for date: Date, calendar: Calendar = .current) -> String {
-        "Snipaste_\(timestamp(for: date, calendar: calendar)).png"
+    /// 文件名形如 Snipaste_2026-10-24_19-05-30.png（扩展名跟随输出格式）
+    ///
+    /// 默认 PNG：既有调用点与历史文件名口径不变；选 JPEG 时只换扩展名，时间戳规则不动。
+    public static func fileName(for date: Date,
+                                format: SnipImageFormat = .png,
+                                calendar: Calendar = .current) -> String {
+        "Snipaste_\(timestamp(for: date, calendar: calendar)).\(format.fileExtension)"
     }
 
     /// 文件名中的时间戳部分

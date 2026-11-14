@@ -26,6 +26,7 @@ extension SnipController {
         if SnipCropProbe.isRequested {
             SnipCropProbe.run(controller: self)
         }
+        SnipParityProbe.runIfRequested()
 #endif
     }
 

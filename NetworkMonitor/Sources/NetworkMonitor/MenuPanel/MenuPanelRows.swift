@@ -252,10 +252,15 @@ final class MenuPanelCardView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        PaneCardStyle.cardFill.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: PaneCardStyle.cardRadius,
-                     yRadius: PaneCardStyle.cardRadius).fill()
+        // 与 `PaneCardBackgroundView` 共用同一段玻璃三件套绘制：半透明底 + 顶部 1pt 高光 + 0.5pt 描边
+        ThemeStyle.drawCard(in: bounds, radius: PaneCardStyle.cardRadius, fillRole: .cardFill)
         super.draw(dirtyRect)
+    }
+
+    /// 外观 / 主题变化后重绘
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }
 

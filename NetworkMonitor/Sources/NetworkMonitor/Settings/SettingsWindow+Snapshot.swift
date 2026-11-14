@@ -73,7 +73,24 @@ extension SettingsWindow {
         return root
     }
 
-    /// 快照自证（仅 DEBUG）：当前页实例（探针要按页类型取控件状态）
+    /// 快照自证（仅 DEBUG）：切到指定分类并滚到「距底部 offset 点」处
+    ///
+    /// 用于首屏之外、但又不在页面最底部的区块（例如截图页的「识别 / 保存」两张卡）：
+    /// 滚到底部会把它们挤出视野，只滚一段才能同时看到。
+    func prepareForSnapshotScrolled(toBottomOffset offset: CGFloat,
+                                    section: SettingsSection) -> NSView? {
+        window.contentView = rootView
+        select(section)
+        rootView.layoutSubtreeIfNeeded()
+        let documentHeight = contentContainer.bounds.height
+        let viewportHeight = contentScroll.contentView.bounds.height
+        let target = max(0, documentHeight - viewportHeight - offset)
+        contentScroll.contentView.scroll(to: NSPoint(x: 0, y: target))
+        contentScroll.reflectScrolledClipView(contentScroll.contentView)
+        return rootView
+    }
+
+    /// 快照自证（仅 DEBUG）：当前页实例（探针要按页面类型取控件状态）
     var currentPaneForSnapshot: SettingsPaneView? { currentPane }
 
     /// 快照自证（仅 DEBUG）：切到指定分类并返回内容视图，供离屏渲染

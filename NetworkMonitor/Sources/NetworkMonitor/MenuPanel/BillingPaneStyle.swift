@@ -42,7 +42,7 @@ enum BillingPaneStyle {
     /// 图表坐标轴（8.5pt 等宽）
     static let axisFont: NSFont = PaneCardStyle.axisFont
     /// 模型名（10.5pt 等宽）
-    static let modelNameFont: NSFont = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
+    static let modelNameFont: NSFont = PaneCardStyle.modelNameFont
     /// 模型金额（10.5pt 等宽粗体）
     static let modelAmountFont: NSFont = PaneCardStyle.rowValueStrongFont
     /// 模型请求数（10pt 等宽）
@@ -59,15 +59,15 @@ enum BillingPaneStyle {
     /// 状态带底
     static var bandFill: NSColor { PaneCardStyle.bandFill }
     /// 强调色浅底（分段选中态 15%）
-    static var accentSoft: NSColor { NSColor.controlAccentColor.withAlphaComponent(0.15) }
+    static var accentSoft: NSColor { PaneCardStyle.accentSoft }
     /// 危险色浅底（错误条 10%）
-    static var dangerSoft: NSColor { NSColor.systemRed.withAlphaComponent(0.10) }
+    static var dangerSoft: NSColor { PaneCardStyle.dangerSoft }
     /// 1pt 浅分隔线
     static var hairline: NSColor { PaneCardStyle.hairline }
     /// 轨道底
     static var trackColor: NSColor { PaneCardStyle.trackColor }
     /// 输入框边框
-    static var fieldBorder: NSColor { NSColor.separatorColor }
+    static var fieldBorder: NSColor { PaneCardStyle.fieldBorder }
     /// 告警墨色 / 正常墨色（进度条分级与胶囊用同一套墨色）
     static var warnInk: NSColor { PaneCardStyle.warnInk }
     static var okInk: NSColor { PaneCardStyle.okInk }

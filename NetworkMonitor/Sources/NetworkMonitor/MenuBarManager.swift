@@ -11,24 +11,36 @@ import NetworkMonitorUI
 @MainActor
 final class MenuBarManager: NSObject {
 
-    private let statusItem: NSStatusItem
+    // 放宽为 internal：DEBUG 取证扩展（MenuBarManager+Evidence）要读状态栏按钮文本
+    let statusItem: NSStatusItem
     /// 放宽为 internal：状态栏文本组装拆在 MenuBarManager+StatusTitle.swift
     let monitor: any NetworkMonitoringService
-    private let processMonitor: any ProcessNetworkMonitoringService
+    // 放宽为 internal：采样节流拆在 MenuBarManager+Sampling.swift（读两个服务 + 面板可见性）
+    let processMonitor: any ProcessNetworkMonitoringService
     private let trafficTracker: any TrafficTrackingService
-    private let panel: MenuPanelController
-    private let logger: LoggingService
+    // 放宽为 internal：采样节流要读 panel.isShown；DEBUG 取证与测量扩展要直接驱动面板
+    let panel: MenuPanelController
+    // 放宽为 internal：显示偏好扩展（+DisplayPreferences）切档后要打生效日志
+    let logger: LoggingService
     /// 系统指标采样服务（nil = 未装配；采样频率跟随偏好周期）
-    private let systemMonitor: (any SystemMonitoringService)?
+    // 放宽为 internal：采样节流扩展要读它
+    let systemMonitor: (any SystemMonitoringService)?
     private let systemPreferences: SystemMonitorPreferences?
     /// 放宽为 internal：显示偏好订阅与渲染都拆在 MenuBarManager+DisplayPreferences.swift
     let displayPreferences: MenuBarDisplayPreferences
     /// 注入的键值存储（菜单栏偏好与面板分页偏好共用同一份，测试 / 取证可写隔离 suite）
     let storage: any KeyValueStorage
     private let harnessUsage: (any HarnessUsageServicing)?
-    /// 系统指标采样周期（秒）— 由偏好给出，1 秒链按此节流
-    private let systemSampleInterval: TimeInterval
-    private var lastSystemPoll: Date = .distantPast
+    /// 外观偏好（主题 / 玻璃 / 渲染档）— 与菜单栏偏好共用同一份存储实例
+    let appearancePreferences: AppearancePreferences
+    /// 系统指标采样周期（秒）— 由渲染档给出（原为只读偏好值，现随档位变）
+    // 放宽为 internal：渲染档切换在 +DisplayPreferences 扩展里改写它；
+    // 采样节流扩展（+Sampling）要读它
+    var systemSampleInterval: TimeInterval
+    // 放宽为 internal：采样节流扩展（MenuBarManager+Sampling）要读写这两个时刻
+    var lastSystemPoll: Date = .distantPast
+    /// 上次发起进程网速采样的时间（收起时降频用）
+    var lastProcessPoll: Date = .distantPast
     private var timer: Timer?
     /// 当前定时器周期（秒）— 恢复默认值后需按偏好重建，故单独记账
     // 放宽为 internal：定时器重建与偏好订阅拆在 MenuBarManager+DisplayPreferences.swift
@@ -63,8 +75,10 @@ final class MenuBarManager: NSObject {
         self.storage = storage
         self.displayPreferences = MenuBarDisplayPreferences(storage: storage)
         self.harnessUsage = harnessUsage
-        self.systemSampleInterval = systemPreferences?.sampleInterval
-            ?? SystemMonitorPreferences.defaultSampleInterval
+        let appearance = AppearancePreferences(storage: storage)
+        self.appearancePreferences = appearance
+        // 采样周期以渲染档为准（设置页的系统页下拉标注为「由渲染档接管」）
+        self.systemSampleInterval = appearance.renderProfile.sampleInterval
         self.logger = logger
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.panel = MenuPanelController(networkMonitor: networkMonitor,
@@ -84,7 +98,7 @@ final class MenuBarManager: NSObject {
         configureStatusItem()
         panel.onOpenClipboardHistory = { [weak self] in self?.onOpenClipboardHistory?() }
         panel.onOpenSettings = { [weak self] section in self?.onOpenSettings?(section) }
-        setupTimer(interval: displayPreferences.refreshInterval)
+        setupTimer(interval: appearance.renderProfile.tickInterval)
         observeDisplayPreferenceChanges()
 #if DEBUG
         runStatusEvidenceIfRequested()
@@ -141,7 +155,7 @@ final class MenuBarManager: NSObject {
         settingsItem.target = self
         menu.addItem(settingsItem)
         menu.addItem(.separator())
-        let quitItem = NSMenuItem(title: "退出 NetworkMonitor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "退出 \(AppIdentity.displayName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quitItem.keyEquivalentModifierMask = [.command]
         menu.addItem(quitItem)
         return menu
@@ -158,79 +172,12 @@ final class MenuBarManager: NSObject {
         onOpenSettings?(nil)
     }
 
-    @objc private func togglePanel() {
+    // 放宽为 internal：DEBUG 取证扩展要复用同一条 toggle 路径
+    @objc func togglePanel() {
         guard let button = statusItem.button else { return }
         panel.toggle(relativeTo: button.bounds, of: button)
     }
 
-#if DEBUG
-    /// 取证专用（仅 DEBUG）：走与点击状态栏完全相同的 toggle 路径打开面板
-    func openPanelForEvidence() {
-        togglePanel()
-    }
-
-    /// 取证专用（仅 DEBUG）：popover 窗口号与 frame
-    func evidenceWindow() -> (number: Int, frame: NSRect)? {
-        panel.evidenceWindow()
-    }
-
-    /// 取证专用（仅 DEBUG）：强制 popover 外观（浅色/深色）
-    func forceAppearanceForEvidence(_ name: NSAppearance.Name) {
-        panel.forceAppearanceForEvidence(name)
-    }
-
-    /// 取证专用（仅 DEBUG）：切换到指定分页
-    func selectTabForEvidence(_ tab: MenuPanelTab) {
-        panel.selectTabForEvidence(tab)
-    }
-
-    /// 取证专用（仅 DEBUG）：强制空态（进程 / 剪贴板）
-    func forceEmptyForEvidence() {
-        panel.forceEmptyDataForEvidence = true
-    }
-
-    /// 取证专用（仅 DEBUG）：状态栏当前文本（含换行，可直接核对 layout / 单位写法）
-    var statusTitleForEvidence: String { statusItem.button?.attributedTitle.string ?? "" }
-
-    /// 取证专用（仅 DEBUG）：当前定时器周期（核对「间隔」偏好是否真的重建了定时器）
-    var timerIntervalForEvidence: TimeInterval { timerInterval }
-
-    /// 取证专用（仅 DEBUG）：面板当前分页
-    var currentTabForEvidence: MenuPanelTab { panel.currentTabForEvidence }
-
-    /// 取证专用（仅 DEBUG）：分段条可见分页
-    var visibleTabsForEvidence: [MenuPanelTab] { panel.visibleTabsForEvidence }
-
-    /// 取证专用（仅 DEBUG）：系统页二级详情是否展开
-    var systemDetailShownForEvidence: Bool { panel.systemDetailShownForEvidence }
-
-    /// 取证专用（仅 DEBUG）：进入系统页二级详情
-    func showSystemDetailForEvidence() {
-        panel.showSystemDetailForEvidence()
-    }
-
-    /// 取证专用（仅 DEBUG）：跑显示偏好生效取证（见 Debug/DisplayPreferenceEvidence.swift）
-    func runStatusEvidenceIfRequested() {
-        guard !PanelOpenProbe.requested else { return }
-        DisplayPreferenceEvidence.runIfRequested(manager: self)
-    }
-
-    /// 测量专用（仅 DEBUG）：面板当前是否展开
-    var isPanelShownForMeasure: Bool { panel.isShown }
-
-    /// 测量专用（仅 DEBUG）：收起面板（关掉上一轮，准备下一次测量）
-    func closePanelForMeasure() {
-        panel.close()
-    }
-
-    /// 测量专用（仅 DEBUG）：popover 内容窗口（强制首帧落屏用）
-    func panelWindowForMeasure() -> NSWindow? {
-        panel.measurePanelWindow()
-    }
-
-    /// 测量专用（仅 DEBUG）：popover 当前内容尺寸（核对高度是否已按内容订好）
-    var panelContentSizeForMeasure: NSSize { panel.popover.contentSize }
-#endif
 
     // MARK: - 预热
 
@@ -254,7 +201,10 @@ final class MenuBarManager: NSObject {
 
     // MARK: - 定时器
 
-    /// 启动 / 重建状态栏刷新定时器（周期来自「间隔」偏好，1...10 秒）
+    /// 启动 / 重建状态栏刷新定时器（周期来自渲染帧率档：标准 1s / 极致 0.5s / 省电 2s）
+    ///
+    /// 同一个 Timer 同时驱动状态栏标题与面板 `tick()`，所以档位只需要改这一处周期，
+    /// 状态栏与面板的节拍天然一致（改造前周期来自「间隔」偏好，与档位是两套旋钮）。
     ///
     /// 重建前先停掉旧定时器并从 RunLoop 移除：否则同一时刻会有两个定时器各跑一份 update，
     /// 旧的那个永远不会被释放。
@@ -280,9 +230,14 @@ final class MenuBarManager: NSObject {
     @objc func update() {
         monitor.poll()
         let enabled = displayPreferences.enabledMetrics
+        // 本周流量要读近 7 日日志，只在启用该指标时才算（不白跑存储读取）
+        let weekTraffic = enabled.contains(.weekTraffic)
+            ? trafficTracker.weekEntries.reduce(UInt64(0)) { $0 + $1.rx + $1.tx }
+            : 0
         let parts = makeStatusParts(enabled: enabled,
                                     snapshot: systemMonitor?.snapshot,
                                     todayTraffic: trafficTracker.todayRx + trafficTracker.todayTx,
+                                    weekTraffic: weekTraffic,
                                     tokenTotals: harnessUsage?.snapshot().totals,
                                     unitStyle: MenuBarDisplayLogic.unitStyle(
                                         fromRawValue: displayPreferences.unitStyle.rawValue))
@@ -312,14 +267,8 @@ final class MenuBarManager: NSObject {
             statusItem.button?.attributedTitle = title
         }
 
-        // 系统指标采样：按偏好周期节流（poll 内部防重入，采集在后台串行队列执行）
-        let now = Date()
-        if now.timeIntervalSince(lastSystemPoll) >= systemSampleInterval {
-            lastSystemPoll = now
-            systemMonitor?.poll()
-        }
-        // 进程采样（内部 3 秒节流 + 后台队列执行，不阻塞主线程）
-        processMonitor.poll()
+        // 采样节拍跟随面板可见性（实现见 MenuBarManager+Sampling.swift）
+        pollSamplingIfNeeded(now: Date())
         // 面板自身按 1 秒 / 5 秒分层刷新（内部按时间差节流，收起时直接返回），与状态栏刷新周期无关
         panel.tick()
     }

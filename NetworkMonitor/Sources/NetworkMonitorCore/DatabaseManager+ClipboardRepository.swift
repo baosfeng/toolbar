@@ -212,7 +212,7 @@ extension DatabaseManager: ClipboardRepository {
                 return
             }
             guard clipExec(db, "UPDATE clipboard_items SET stack_position = NULL;") else {
-                clipExec(db, "ROLLBACK")
+                _ = clipExec(db, "ROLLBACK")
                 logger.warning("剪贴板栈清空失败: \(String(cString: sqlite3_errmsg(db)))")
                 return
             }
@@ -220,7 +220,7 @@ extension DatabaseManager: ClipboardRepository {
             var stmt: OpaquePointer?
             defer { sqlite3_finalize(stmt) }
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-                clipExec(db, "ROLLBACK")
+                _ = clipExec(db, "ROLLBACK")
                 logger.warning("剪贴板栈重排准备失败: \(String(cString: sqlite3_errmsg(db)))")
                 return
             }
@@ -230,13 +230,13 @@ extension DatabaseManager: ClipboardRepository {
                 sqlite3_bind_int(stmt, 1, Int32(offset + 1))
                 sqlite3_bind_text_copy(stmt, 2, id.uuidString.uppercased())
                 guard sqlite3_step(stmt) == SQLITE_DONE else {
-                    clipExec(db, "ROLLBACK")
+                    _ = clipExec(db, "ROLLBACK")
                     logger.warning("剪贴板栈重排失败: \(String(cString: sqlite3_errmsg(db)))")
                     return
                 }
             }
             if !clipExec(db, "COMMIT") {
-                clipExec(db, "ROLLBACK")
+                _ = clipExec(db, "ROLLBACK")
                 logger.warning("剪贴板栈重排提交失败: \(String(cString: sqlite3_errmsg(db)))")
             }
         }

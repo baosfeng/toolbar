@@ -5,6 +5,25 @@ import NetworkMonitorCore
 
 extension SnipController {
 
+    // MARK: - 输出格式
+
+    /// 当前输出格式（偏好 → 格式；缺失 / 未知按 PNG）
+    var saveFormat: SnipImageFormat {
+        SnipImageFormat.resolved(raw: storage.string(forKey: SnipPreferenceKey.saveFormat))
+    }
+
+    /// 当前 JPEG 质量（夹紧到 0.3…1.0，默认 0.9；PNG 时无意义）
+    var jpegQuality: Double {
+        SnipImageFormat.clampedQuality(
+            storage.object(forKey: SnipPreferenceKey.jpegQuality) as? Double
+                ?? SnipImageFormat.defaultJPEGQuality)
+    }
+
+    /// 按当前格式写盘（快速保存 / 自动保存 / 另存为 / 贴图保存共用这一份口径）
+    func writeImage(_ image: CGImage, to url: URL) throws {
+        try SnipFileWriter.write(image, to: url, format: saveFormat, quality: jpegQuality)
+    }
+
 // MARK: - 复制
 
     func copyToPasteboard(_ target: (captured: SnipCapturedImage, globalRect: CGRect),
@@ -53,9 +72,9 @@ extension SnipController {
         let directory = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let url = directory.appendingPathComponent(SnipFileNaming.fileName(for: Date()))
-            try SnipFileWriter.writePNG(image, to: url)
-            logger.info("已快速保存：\(LogRedaction.path(url.path))")
+            let url = directory.appendingPathComponent(SnipFileNaming.fileName(for: Date(), format: saveFormat))
+            try writeImage(image, to: url)
+            logger.info("已快速保存（\(saveFormat.displayName)）：\(LogRedaction.path(url.path))")
             dismissOverlays()
         } catch {
             fail(message: "保存失败：\(error.localizedDescription)")
@@ -67,9 +86,9 @@ extension SnipController {
         let directory = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let url = directory.appendingPathComponent(SnipFileNaming.fileName(for: Date()))
-            try SnipFileWriter.writePNG(image, to: url)
-            logger.info("已自动保存：\(LogRedaction.path(url.path))")
+            let url = directory.appendingPathComponent(SnipFileNaming.fileName(for: Date(), format: saveFormat))
+            try writeImage(image, to: url)
+            logger.info("已自动保存（\(saveFormat.displayName)）：\(LogRedaction.path(url.path))")
         } catch {
             logger.warning("自动保存失败：\(error)")
         }
@@ -84,8 +103,9 @@ extension SnipController {
         NSApp.activate(ignoringOtherApps: true)
         defer { restoreMenuBarPolicy() }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = SnipFileNaming.fileName(for: Date())
+        // 只允许当前格式：早期这里写死 .png，用户选了 JPEG 也存不出 jpg
+        panel.allowedContentTypes = [saveFormat.contentType]
+        panel.nameFieldStringValue = SnipFileNaming.fileName(for: Date(), format: saveFormat)
         panel.directoryURL = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else {
@@ -93,8 +113,8 @@ extension SnipController {
             return
         }
         do {
-            try SnipFileWriter.writePNG(image, to: url)
-            logger.info("已保存到：\(LogRedaction.path(url.path))")
+            try writeImage(image, to: url)
+            logger.info("已保存到（\(saveFormat.displayName)）：\(LogRedaction.path(url.path))")
         } catch {
             logger.error("保存失败：\(error)")
         }

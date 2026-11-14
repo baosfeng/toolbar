@@ -96,10 +96,15 @@ public struct BillingPercentLimit: Sendable, Equatable {
     public let unitLabel: String?
     /// 状态角标（如「已限流」；nil = 正常）
     public let badge: String?
+    /// 窗口信息（种类 + 时长 + 重置时刻；nil = provider 未声明窗口）
+    ///
+    /// 恢复通知据此区分「会话窗口重置」与「周额度重置」；`resetsAt` 保留为兼容字段，
+    /// 有窗口时两者指向同一时刻。
+    public let window: BillingQuotaWindow?
 
     public init(id: String, title: String, remainingFraction: Double, resetsAt: Date?,
                 usedAmount: Double? = nil, limitAmount: Double? = nil, unitLabel: String? = nil,
-                badge: String? = nil) {
+                badge: String? = nil, window: BillingQuotaWindow? = nil) {
         self.id = id
         self.title = title
         self.remainingFraction = min(max(remainingFraction, 0), 1)
@@ -108,6 +113,7 @@ public struct BillingPercentLimit: Sendable, Equatable {
         self.limitAmount = limitAmount
         self.unitLabel = unitLabel
         self.badge = badge
+        self.window = window
     }
 
     /// 是否可展示绝对值明细（已用与限额都有值）

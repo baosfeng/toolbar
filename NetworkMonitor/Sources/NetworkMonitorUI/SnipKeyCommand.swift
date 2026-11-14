@@ -39,6 +39,8 @@ public enum SnipKeyCommand: Equatable {
     case save(quick: Bool)
     /// 复制选区到剪贴板
     case copyImage
+    /// 识别选区里的文字（OCR）
+    case recognizeText
     case none
 }
 
@@ -154,6 +156,8 @@ public enum SnipKeyCommandResolver {
         case "z" where modifiers.contains(.shift): return .clearAnnotations
         case "z": return .undo
         case "r": return .rotateSelectedText
+        // ⌘O：识别文字（O 此前未被占用，避开系统级的 ⌘Q / ⌘W 等）
+        case "o": return .recognizeText
         default: return .none
         }
     }

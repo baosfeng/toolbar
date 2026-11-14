@@ -52,7 +52,26 @@ public enum AppEvents {
         NotificationCenter.default.post(name: menuBarDisplayChanged, object: nil)
     }
 
-    /// 剪贴图缩略图已在后台解码完成（增量规格 2.2）— 订阅方只对该哈希命中的可见卡片置重绘
+    /// 外观（主题 / 玻璃开关）已变化 — 订阅方应重建材质并递归重绘
+    ///
+    /// 主题换的是「语义角色 → 色值」的映射，所有视图都得重新解析动态色才会更新；
+    /// 只写存储不发事件是历史上反复踩的坑（设置页切了、面板一点反应都没有）。
+    public static let appearanceChanged = Notification.Name("AppEvents.appearanceChanged")
+
+    /// 发布外观变更通知（设置页在写存储之后调用）
+    public static func postAppearanceChanged() {
+        NotificationCenter.default.post(name: appearanceChanged, object: nil)
+    }
+
+    /// 渲染帧率档已变化 — 订阅方应重建定时器 / 更新中频节流 / 调整动效与图表上限
+    public static let renderTierChanged = Notification.Name("AppEvents.renderTierChanged")
+
+    /// 发布渲染档变更通知（设置页在写存储之后调用）
+    public static func postRenderTierChanged() {
+        NotificationCenter.default.post(name: renderTierChanged, object: nil)
+    }
+
+    /// 剪贴图缩略图已在后台解码完成（增量规格 2.2）— 订阅方只对哈希命中的可见卡片置重绘
     ///
     /// 通知只在主线程发出（解码回到主线程、写好缓存之后），userInfo 带 `contentHash`：
     /// 卡片流据此定位需要重绘的卡片，不做整片重建、不改选中态。

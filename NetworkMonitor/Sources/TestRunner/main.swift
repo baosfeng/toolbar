@@ -23,6 +23,10 @@ runCoreFormattingTests()
 // MARK: - 每日流量追踪
 runTrafficTrackerTests()
 
+// MARK: - 性能热点修复（状态带签名早退 / 心跳退避）
+runTransferBandSignatureTests()
+runDiscoveryHeartbeatPolicyTests()
+
 // MARK: - 时区与货币配置
 runDatabaseConfigTests()
 
@@ -40,6 +44,7 @@ runBillingTimeFormatTests()
 
 // MARK: - 通知与音效（事件表 / 声音解析 / 偏好合并 / 音效文件校验 / 额度恢复）
 runNotificationTests()
+runBillingNotificationMappingTests()
 
 // MARK: - 本地加密凭据存储（密文落盘 / 历史明文就地加密 / 换机器降级）
 runEncryptedSecretStoreTests()
@@ -119,8 +124,11 @@ runBillingPercentDisplayTests()
 // MARK: - 计费额度（provider 抽象 + Ollama 响应解码）
 runBillingTests()
 
-// MARK: - 额度页可见性（未配置 provider 不占位）+ 同一 provider 唯一配置
+// MARK: - 额度页可见性（未配置 provider 不占位）+ 同一实例唯一配置
 runBillingVisibilityTests()
+
+// MARK: - 额度 Provider 多实例（实例标识 / 实例存储 / 装饰器 / 注册表 / 老配置零迁移）
+runBillingInstanceTests()
 
 // MARK: - 屏幕活动（锁屏 / 休眠暂停额度刷新）与快照暂停态
 runScreenActivityRelayTests()
@@ -131,8 +139,14 @@ runNumberUnitTests()
 // MARK: - 菜单栏显示口径（布局 / 单位 / 刷新周期 / 分页可见性重算）
 runMenuBarDisplayTests()
 
+// MARK: - 设置项自定义排序（顺序编解码 / 菜单栏默认上屏顺序 / 旧 Int 键迁移）
+runSettingsOrderTests()
+
 // MARK: - 额度阈值提醒（5%/4%/3%/2%/1%）
 runBillingAlertTests()
+
+// MARK: - 额度恢复通知（窗口重置 / 余额回升 / 同周期去重 / 冷却）
+runBillingRecoveryTests()
 
 // MARK: - Open Design 额度（归一化 / 工作区发现 / 窗口映射 / 用量聚合）
 runOpenDesignBillingTests()
@@ -140,6 +154,9 @@ runOpenDesignUsageTests()
 
 // MARK: - OpenCode Go 额度（三窗口已用→剩余 / 限流角标 / 新旧字段兼容 / 错误映射）
 runOpencodeGoBillingTests()
+
+// MARK: - 三家新 provider（Claude / Codex / Cursor）解码 + 401/403/解析失败姿态
+runBillingProviderDecodingTests()
 
 // MARK: - DSH token 数据层（会话扫描 / 增量索引 / 聚合快照）
 runHarnessTokenTests()
@@ -202,6 +219,12 @@ runSnipMosaicTests()
 
 // MARK: - 文字标注
 runSnipTextTests()
+
+// MARK: - 序号标注（工具分层 / 编号递增 / 几何 / 命中）
+runSnipNumberAnnotationTests()
+
+// MARK: - OCR 结果整理（阅读顺序 / 置信度过滤 / 换行拼接）
+runSnipTextRecognitionTests()
 
 // MARK: - 贴图旋转与镜像
 runSnipTransformTests()
@@ -273,6 +296,14 @@ runClipboardThumbnailDecodeTests()
 
 // MARK: - 剪贴板删除二次确认（首次 / 窗口内二次 / 超窗 / 打断 / 互不串味）
 runClipboardDeleteConfirmTests()
+
+// MARK: - 外观（主题令牌 / 深浅对比度 / 渲染帧率档 / 外观偏好）
+runThemeTokenTests()
+runThemeContrastTests()
+runRenderTierTests()
+runRenderTierGlassTests()
+runRenderTierGateTests()
+runAppearancePreferencesTests()
 
 // MARK: - Done
 print("\n🎉 所有测试通过！")

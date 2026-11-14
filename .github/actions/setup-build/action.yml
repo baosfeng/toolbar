@@ -1,0 +1,72 @@
+# 构建前置步骤的单一实现：工具链展示 / 证书导入 / tag 与 App 版本一致性校验。
+# ci.yml 与 release.yml 共用，避免同一段脚本抄两份后各自漂移。
+name: Setup build
+description: 展示工具链、可选导入签名证书、校验 tag 与 build-app.sh 内联 plist 版本一致
+
+inputs:
+  tag:
+    description: 要校验版本一致性的 tag（如 v1.23.0）；留空则跳过版本校验（CI 用）
+    required: false
+    default: ""
+  certificate-base64:
+    description: 签名证书 .p12 的 base64；留空则跳过导入，由 build-app.sh 回落 ad-hoc 签名
+    required: false
+    default: ""
+  p12-password:
+    description: .p12 证书密码
+    required: false
+    default: ""
+  keychain-password:
+    description: 临时钥匙串密码
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # 工具链版本在日志里显式可见：swift-tools-version 是 6.3，
+    # runner 默认 Xcode 低于 26 时会在 swift build 第一步直接报「installed version is 6.1.0」
+    - name: Show toolchain
+      shell: bash
+      run: |
+        swift --version
+        xcodebuild -version || true
+        uname -m
+
+    - name: Import signing certificate
+      if: inputs.certificate-base64 != ''
+      shell: bash
+      env:
+        CERT_BASE64: ${{ inputs.certificate-base64 }}
+        P12_PASSWORD: ${{ inputs.p12-password }}
+        KEYCHAIN_PASSWORD: ${{ inputs.keychain-password }}
+      run: |
+        KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+        CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
+        echo -n "$CERT_BASE64" | base64 --decode -o "$CERT_PATH"
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+        security list-keychain -d user -s "$KEYCHAIN_PATH"
+        security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+        security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+    # tag 与 App 内的 CFBundleShortVersionString 必须一致：发 v1.20.0 却忘改 plist 时
+    # Release 标题写 1.20.0、用户下载到的「关于」却显示旧版本，属于静默错版
+    # （版本号唯一真源是 build-app.sh 里的内联 Info.plist，仓库中没有独立模板）
+    - name: Version matches tag
+      if: inputs.tag != ''
+      shell: bash
+      working-directory: NetworkMonitor
+      env:
+        INPUT_TAG: ${{ inputs.tag }}
+      run: |
+        tag_version="${INPUT_TAG#v}"
+        plist_version=$(grep -A1 '<key>CFBundleShortVersionString</key>' Scripts/build-app.sh \
+          | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p' | head -1)
+        echo "tag=${tag_version} plist=${plist_version}"
+        if [ "${tag_version}" != "${plist_version}" ]; then
+          echo "::error::tag 与 build-app.sh 的 CFBundleShortVersionString ${plist_version} 不一致"
+          exit 1
+        fi

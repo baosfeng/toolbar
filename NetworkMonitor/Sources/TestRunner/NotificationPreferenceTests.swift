@@ -3,8 +3,8 @@ import NetworkMonitorCore
 
 // MARK: - 通知偏好与音效文件测试
 
-/// 覆盖配置合并 / 恢复默认 / 旧键迁移、音效文件校验、
-/// 自定义音效目录的文件操作（含路径穿越）与额度恢复评估
+/// 覆盖配置合并 / 恢复默认 / 旧键迁移、音效文件校验与自定义音效目录的文件操作（含路径穿越）；
+/// 额度三类通知 → 事件表映射见 BillingNotificationMappingTests.swift
 ///
 /// 与 NotificationTests.swift 分文件的原因：单文件 500 行 / 15 KiB 门禁，
 /// 事件表与解析偏「口径」，这里偏「存储与文件」，两批断言互不依赖。
@@ -16,8 +16,8 @@ func runNotificationPreferenceTests() {
     testSoundFileValidation()
     testNotificationSoundFileStore()
 
-    print("\n🧪 Testing 额度恢复评估...")
-    testBillingRecovery()
+    print("\n🧪 Testing 额度三类通知 → 事件表映射...")
+    runBillingNotificationMappingTests()
 }
 
 // MARK: - 偏好
@@ -171,43 +171,3 @@ func testNotificationSoundFileStore() {
     assertEqual(store.files().isEmpty, true, "清空后目录为空")
 }
 
-// MARK: - 额度恢复
-
-func testBillingRecovery() {
-    let reset = Date(timeIntervalSince1970: 1_800_000_000)
-    let period = BillingPeriod(start: reset.addingTimeInterval(-86_400),
-                               end: reset.addingTimeInterval(86_400 * 20))
-    func makeBalance(session: Double, resetAt: Date = Date(timeIntervalSince1970: 1_800_000_000))
-        -> BillingBalance {
-        BillingBalance(included: nil,
-                       purchasedUSD: 10,
-                       percentLimits: [
-                        BillingPercentLimit(id: "session", title: "会话",
-                                            remainingFraction: session, resetsAt: resetAt),
-                       ])
-    }
-    _ = period
-
-    // 跌破 → 提醒；回升 → 恢复；两者不重复
-    let low = BillingAlertEvaluator.evaluate(balance: makeBalance(session: 0.03),
-                                             providerID: "p", state: [:])
-    assertEqual(low.alerts.count, 1, "3% 发一条提醒")
-    assertEqual(low.recoveries.isEmpty, true, "首次低额度不发恢复")
-    let up = BillingAlertEvaluator.evaluate(balance: makeBalance(session: 0.42),
-                                            providerID: "p", state: low.state)
-    assertEqual(up.alerts.isEmpty, true, "回升不发提醒")
-    assertEqual(up.recoveries.count, 1, "回升发一条恢复")
-    assertEqual(up.recoveries.first?.reason, .recovered, "恢复原因是回升")
-    // 同一周期再涨一次不再发（状态已清）
-    let again = BillingAlertEvaluator.evaluate(balance: makeBalance(session: 0.5),
-                                               providerID: "p", state: up.state)
-    assertEqual(again.recoveries.isEmpty, true, "恢复只发一次")
-
-    // 周期重置：换了 resetAt 且上周期提醒过 → 一条「周期重置」
-    let nextCycle = BillingAlertEvaluator.evaluate(
-        balance: makeBalance(session: 0.9, resetAt: Date(timeIntervalSince1970: 1_800_400_000)),
-        providerID: "p", state: low.state)
-    assertEqual(nextCycle.recoveries.count, 1, "周期重置发一条恢复")
-    assertEqual(nextCycle.recoveries.first?.reason, .cycleReset, "恢复原因是周期重置")
-    assertEqual(nextCycle.alerts.isEmpty, true, "重置后额度充足不发提醒")
-}

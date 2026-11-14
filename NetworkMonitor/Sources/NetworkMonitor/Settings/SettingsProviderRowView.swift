@@ -14,12 +14,18 @@ final class ProviderRowView: NSView {
     var onToggle: ((Bool) -> Void)?
     var onSave: ((String) -> Void)?
     var onClearConfirmed: (() -> Void)?
+    /// 重命名实例（仅命名实例提供入口）
+    var onRename: (() -> Void)?
+    /// 删除实例（仅命名实例提供入口；二次确认由外部弹窗负责）
+    var onDeleteInstance: (() -> Void)?
     /// 编辑区或清除确认展开 / 收起（外部据此锁定其他行）
     var onEditingChanged: ((Bool) -> Void)?
 
     // MARK: - 子视图
 
     let provider: any BillingProvider
+    /// 实例信息（id 即实例标识；默认实例的 id 等于 kindID）
+    let instance: BillingInstance
     let tile: ProviderIconTileView
     let nameLabel = MenuPanelLabel.text("", font: SettingsStyle.rowTitleFont, color: .labelColor)
     let dotView = ProviderStatusDotView()
@@ -31,6 +37,10 @@ final class ProviderRowView: NSView {
     let editButton: NSButton
     let clearButton: NSButton
     let configButton: NSButton
+    /// 「重命名」（仅命名实例可见）
+    let renameButton: NSButton
+    /// 「删除实例」（仅命名实例可见，红色）
+    let deleteButton: NSButton
 
     let editorView = NSView()
     let field = NSSecureTextField()
@@ -61,12 +71,15 @@ final class ProviderRowView: NSView {
 
     // MARK: - 初始化
 
-    init(provider: any BillingProvider) {
+    init(provider: any BillingProvider, instance: BillingInstance) {
         self.provider = provider
+        self.instance = instance
         tile = ProviderIconTileView(symbolName: provider.symbolName)
         editButton = Self.textButton("替换")
         clearButton = Self.textButton("清除")
         configButton = Self.textButton("配置凭据…")
+        renameButton = Self.textButton("重命名")
+        deleteButton = Self.textButton("删除", color: .systemRed)
         saveButton = Self.primaryButton("保存并查询")
         cancelButton = Self.textButton("取消")
         confirmButton = Self.textButton("确认清除", color: .systemRed)
@@ -82,7 +95,7 @@ final class ProviderRowView: NSView {
     // MARK: - 布局
 
     func buildLayout() {
-        nameLabel.stringValue = provider.displayName
+        nameLabel.stringValue = instance.title
         nameLabel.lineBreakMode = .byTruncatingTail
         statusLabel.lineBreakMode = .byTruncatingTail
         errorLabel.maximumNumberOfLines = 2
@@ -106,14 +119,21 @@ final class ProviderRowView: NSView {
         clearButton.action = #selector(clearTapped)
         configButton.target = self
         configButton.action = #selector(editTapped)
+        renameButton.target = self
+        renameButton.action = #selector(renameTapped)
+        deleteButton.target = self
+        deleteButton.action = #selector(deleteInstanceTapped)
         toggle.target = self
         toggle.action = #selector(toggleChanged)
-        for (button, title) in [(editButton, "替换"), (clearButton, "清除"), (configButton, "配置凭据")] {
-            button.setAccessibilityLabel("\(provider.displayName) \(title)")
+        for (button, title) in [(editButton, "替换"), (clearButton, "清除"),
+                               (configButton, "配置凭据"), (renameButton, "重命名"),
+                               (deleteButton, "删除实例")] {
+            button.setAccessibilityLabel("\(instance.title) \(title)")
         }
-        toggle.setAccessibilityLabel("\(provider.displayName) 启用开关")
+        toggle.setAccessibilityLabel("\(instance.title) 启用开关")
 
-        let controls = NSStackView(views: [editButton, clearButton, configButton, toggle])
+        let controls = NSStackView(views: [renameButton, deleteButton,
+                                           editButton, clearButton, configButton, toggle])
         controls.orientation = .horizontal
         controls.alignment = .centerY
         controls.spacing = 10
@@ -145,7 +165,15 @@ final class ProviderRowView: NSView {
             editorView.widthAnchor.constraint(equalTo: root.widthAnchor),
             confirmView.widthAnchor.constraint(equalTo: root.widthAnchor),
         ])
-        setAccessibilityLabel("\(provider.displayName) 额度 Provider")
+        setAccessibilityLabel("\(instance.title) 额度 Provider")
+        applyInstanceControls()
+    }
+
+    /// 默认实例不提供「重命名 / 删除」入口：删掉它等于让旧配置失去落点
+    func applyInstanceControls() {
+        let isNamed = instance.slug != nil
+        renameButton.isHidden = !isNamed
+        deleteButton.isHidden = !isNamed
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -237,12 +265,22 @@ final class ProviderRowView: NSView {
         onToggle?(toggle.state == .on)
     }
 
+    @objc func renameTapped() {
+        onRename?()
+    }
+
+    @objc func deleteInstanceTapped() {
+        onDeleteInstance?()
+    }
+
     /// 编辑其他行时锁定本行交互（视觉降透明，按钮与开关禁用）
     func setInteractionEnabled(_ enabled: Bool) {
         toggle.isEnabled = enabled
         editButton.isEnabled = enabled
         clearButton.isEnabled = enabled
         configButton.isEnabled = enabled
+        renameButton.isEnabled = enabled
+        deleteButton.isEnabled = enabled
         alphaValue = enabled ? 1 : 0.55
     }
 }

@@ -64,17 +64,22 @@ enum MenuPanelStyle {
 
     /// 次要文字 — 替代 secondaryLabelColor：后者在小字号（10-12pt）+
     /// windowBackgroundColor 上实测只有 ~3.9:1，达不到 4.5:1，故用 88% labelColor
-    static var secondaryText: NSColor { dynamicLabel(alpha: 0.88) }
+    ///
+    /// 改造后转发主题角色的 `textSecondary`（取值同为 88% labelColor，
+    /// 三套主题共用文字通道，换肤不改文字对比度）
+    static var secondaryText: NSColor { PaneCardStyle.secondaryText }
     /// 三级文字（9-10pt 图表坐标等）— 62% labelColor
-    static var tertiaryText: NSColor { dynamicLabel(alpha: 0.62) }
+    static var tertiaryText: NSColor { PaneCardStyle.tertiaryText }
 
     static var downColor: NSColor { .systemGreen }
     static var upColor: NSColor { .systemOrange }
-    static var accentColor: NSColor { .controlAccentColor }
-    /// 轨道底色（labelColor 带透明度，深浅色自适应）
+    /// 强调色（转发主题 `accent` 角色 = 系统强调色）
+    static var accentColor: NSColor { PaneCardStyle.accentText }
+    /// 轨道底色 — **不是** `PaneCardStyle.trackColor`：这一条语义是「在任意底上叠一层
+    /// 中性轨道」，走 labelColor 带透明度；主题的 `track` 是有色实值，两者用在不同场景
     static var trackColor: NSColor { dynamicLabel(alpha: 0.14) }
-    /// 轻量填充（今日流量卡片 / 悬停行）
-    static var subtleFill: NSColor { dynamicLabel(alpha: 0.07) }
+    /// 轻量填充（今日流量卡片 / 悬停行）— 转发主题 `selectedFill`（同为 7% labelColor）
+    static var subtleFill: NSColor { PaneCardStyle.selectedFill }
     /// 图表柱（非今天）— 不透明背景上 0.18 偏淡，提到 0.24
     static var barColor: NSColor { dynamicLabel(alpha: 0.24) }
 }

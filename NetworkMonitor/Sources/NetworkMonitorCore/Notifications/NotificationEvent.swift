@@ -13,7 +13,9 @@ import Foundation
 public enum NotificationEvent: String, CaseIterable, Sendable {
     /// 额度提醒（剩余跌破 5% / 4% / 3% / 2% / 1%）
     case billingAlert
-    /// 额度恢复（周期重置或回升到阈值以上）
+    /// 额度重置（会话 / 周 / 月额度进入新周期）
+    case billingWindowReset
+    /// 额度回升（相邻两次观测剩余上升达到阈值）
     case billingRecovery
     /// 截图完成
     case snipCaptured
@@ -30,7 +32,8 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
     public var label: String {
         switch self {
         case .billingAlert: return "额度提醒"
-        case .billingRecovery: return "额度恢复"
+        case .billingWindowReset: return "额度重置"
+        case .billingRecovery: return "额度回升"
         case .snipCaptured: return "截图完成"
         case .clipboardAction: return "剪贴板动作"
         case .transferFinished: return "传输完成"
@@ -43,8 +46,10 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
         switch self {
         case .billingAlert:
             return "额度剩余跌破 5% / 4% / 3% / 2% / 1% 时"
+        case .billingWindowReset:
+            return "会话 / 每周 / 每月额度进入新周期时"
         case .billingRecovery:
-            return "额度周期重置或回升到阈值以上时"
+            return "剩余比上一次上升达到设定百分点时"
         case .snipCaptured:
             return "截图完成、内容已进剪贴板时"
         case .clipboardAction:
@@ -59,7 +64,7 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
     /// 是否会发系统通知（false = 只有应用内提示音与触觉，「提醒方式」对它无效）
     public var postsSystemNotification: Bool {
         switch self {
-        case .billingAlert, .billingRecovery, .transferFinished: return true
+        case .billingAlert, .billingWindowReset, .billingRecovery, .transferFinished: return true
         case .snipCaptured, .clipboardAction, .panelToggle: return false
         }
     }
@@ -69,7 +74,7 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
     /// 默认开关：提醒类默认开（额度 / 传输），操作反馈类默认关（音效默认关是既有口径）
     public var defaultEnabled: Bool {
         switch self {
-        case .billingAlert, .billingRecovery, .transferFinished: return true
+        case .billingAlert, .billingWindowReset, .billingRecovery, .transferFinished: return true
         case .snipCaptured, .clipboardAction, .panelToggle: return false
         }
     }
@@ -84,7 +89,8 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
     public var defaultHaptic: NotificationHaptic {
         switch self {
         case .clipboardAction, .snipCaptured: return .standard
-        case .billingAlert, .billingRecovery, .transferFinished, .panelToggle: return .off
+        case .billingAlert, .billingWindowReset, .billingRecovery,
+             .transferFinished, .panelToggle: return .off
         }
     }
 

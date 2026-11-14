@@ -8,6 +8,15 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
     // MARK: - 工具条回调
 
     func toolBarDidChangeTool(_ tool: SnipTool?) {
+        // 「识别文字」是动作型条目：点中就直接对当前选区执行一次，不进入工具态
+        // （它没有可绘制的图元，留在选中态会让下一次点选区又识别一遍，容易误触发）
+        if tool == .ocr {
+            requestTextRecognition()
+            activeTool = nil
+            toolbarView?.selectedTool = nil
+            needsDisplay = true
+            return
+        }
         activeTool = tool
         // 工具条自己点选时 already 设过一次；二级面板选出来时要回灌给它，
         // 否则「更多」按钮的高亮与图标停在旧状态
@@ -111,6 +120,11 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
             eraseAnnotation(at: point)
             return true
         }
+        if tool == .ocr {
+            // 选中「识别文字」后再点选区 = 立即识别这一块（工具条点选也会直接触发一次）
+            requestTextRecognition()
+            return true
+        }
         if tool == .polyline {
             if var draft = draftAnnotation {
                 draft.points.append(point)
@@ -130,6 +144,10 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         // 二次编辑最小集：点在同类型的已绘制图形上 → 选中它（Del 删除、可见选中描边），
         // 而不是又压一个新图形上去。官方口径是「选中某一类型时对同类型形状二次编辑」。
         if selectSameKindAnnotationIfHit(at: point, kind: kind) { return true }
+        if kind == .number {
+            addNumberAnnotation(at: point)
+            return true
+        }
         if kind == .text {
             // 点在已有文字上 → 选中它（滚轮改字号、⌘R 旋转）；点在空白 → 新建
             if let index = annotationStack.annotations.indices.last(where: {
@@ -146,6 +164,21 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         draftAnnotation = SnipAnnotation(kind: kind, start: point, end: point, style: currentStyle)
         needsDisplay = true
         return true
+    }
+
+    // MARK: - 序号
+
+    /// 点一下落一个序号：编号 = 已有序号最大值 + 1（删掉中间项不重排）
+    func addNumberAnnotation(at point: CGPoint) {
+        let radius = SnipNumberAnnotation.radius(forLineWidth: currentStyle.lineWidth)
+        let next = SnipNumberSequence.next(after: SnipNumberSequence.values(in: annotationStack.annotations))
+        let annotation = SnipAnnotation(kind: .number,
+                                        start: CGPoint(x: point.x - radius, y: point.y - radius),
+                                        end: CGPoint(x: point.x + radius, y: point.y + radius),
+                                        text: String(next),
+                                        style: currentStyle)
+        annotationStack.add(annotation)
+        needsDisplay = true
     }
 
     // MARK: - 文字输入

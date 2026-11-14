@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsItem.target = menuBarManager
             appMenu.addItem(settingsItem)
             appMenu.addItem(.separator())
-            appMenu.addItem(NSMenuItem(title: "退出 NetworkMonitor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+            appMenu.addItem(NSMenuItem(title: "退出 \(AppIdentity.displayName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
             appItem.submenu = appMenu
             NSApp.mainMenu = mainMenu
         }
@@ -40,6 +40,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MenuPanelSnapshot.runIfRequested(repository: coordinator.snapshotClipboardRepository,
                                           harness: coordinator.snapshotHarnessService,
                                           settings: coordinator.settingsWindow)
+        // 仅 DEBUG：NM_APPEARANCE_EVIDENCE=1 时打印三档 / 三主题的运行时结构并退出
+        // （毛玻璃离屏不可辨，材质与档位的验收主判据是结构自证）
+        if let manager = menuBarManager {
+            AppearanceEvidence.runIfRequested(manager: manager)
+        }
         // 仅 DEBUG：NM_NOTIFY_SELFCHECK=<file> 时跑一遍通知与音效自检并退出（取证用）
         NotificationSelfCheck.runIfRequested(coordinator: coordinator)
         // 仅 DEBUG：--measure-panel-open 时逐阶段计时并退出（性能回归取证）

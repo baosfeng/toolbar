@@ -12,24 +12,27 @@ final class TransferController {
 
     private let service: TransferService
     private let registry: DeviceRegistry
-    private let preferences: TransferPreferences
+    // 放宽为 internal：渲染拆在 TransferController+Render.swift
+    let preferences: TransferPreferences
     private let logger: LoggingService
-    private weak var panel: TransferPaneView?
+    // 放宽为 internal：渲染扩展要推数据给它
+    weak var panel: TransferPaneView?
     /// 打开统一设置窗口的传输页（组合根注入：设置窗口由组合根统一持有）
     var onOpenSettings: (() -> Void)?
 
-    private var devices: [RemoteDevice] = []
-    private var sessions: [TransferSession] = []
-    private var selectedDeviceId: String?
-    private var statusText = "未启动"
-    private var started = false
+    // 下面这些放宽为 internal：渲染扩展（TransferController+Render.swift）读写
+    var devices: [RemoteDevice] = []
+    var sessions: [TransferSession] = []
+    var selectedDeviceId: String?
+    var statusText = "未启动"
+    var started = false
 
     private let pairingSheet = TransferPairingSheet()
     private let scanSheet = TransferScanSheet()
-    private let notification: TransferNotification
+    // 渲染扩展要发「新设备出现」通知，故放宽为 internal
+    let notification: TransferNotification
     private var currentPendingOfferId: String?
     private var pollTimer: Timer?
-    private var appearedDeviceIds: Set<String> = []
 
     // MARK: - 初始化
 
@@ -169,23 +172,11 @@ final class TransferController {
 
     // MARK: - 面板交互
 
-    private func render() {
-        let windowActive = preferences.isWindowActive()
-        panel?.update(devices: devices,
-                      sessions: sessions,
-                      selectedDeviceId: selectedDeviceId,
-                      statusText: statusText,
-                      autoAcceptText: windowActive ? preferences.windowRemainingText() : "",
-                      autoAcceptActive: windowActive)
-        trackNewDevices()
-    }
-
-    /// 新设备首次出现在列表时记一笔（提示音并入「传输完成」事件行，不再单独出声）
-    private func trackNewDevices() {
-        for device in devices where device.isOnline {
-            appearedDeviceIds.insert(device.deviceId)
-        }
-    }
+    // 渲染状态放宽为 internal：方法体拆在 TransferController+Render.swift（扩展不能有存储属性）
+    /// 数据侧渲染签名：只用来判断「这一帧数据是否真的变了」
+    var renderSignature = ""
+    /// 面板收起期间数据变过：下次可见时补推一次，避免开面板看到旧状态带
+    var pendingVisibleRender = false
 
     private func select(_ device: RemoteDevice) {
         selectedDeviceId = device.deviceId

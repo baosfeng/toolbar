@@ -52,6 +52,8 @@ public enum SnipAnnotationRenderer {
             break
         case .text:
             drawText(annotation, in: context)
+        case .number:
+            drawNumber(annotation, in: context)
         case .freehand, .polyline:
             guard let first = annotation.points.first, annotation.points.count >= 2 else { break }
             context.move(to: first)
@@ -81,6 +83,44 @@ public enum SnipAnnotationRenderer {
         if annotation.rotation != 0 {
             context.rotate(by: annotation.rotation)
         }
+        context.scaleBy(x: 1, y: -1)
+        context.textPosition = .zero
+        CTLineDraw(line, context)
+        context.restoreGState()
+    }
+
+    /// 序号 = 实心圆底 + 居中白字（编号取 `annotation.text`）
+    static func drawNumber(_ annotation: SnipAnnotation, in context: CGContext) {
+        let rect = annotation.boundingRect
+        let radius = min(rect.width, rect.height) / 2
+        guard radius >= 2 else { return }
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let color = annotation.style.color
+        // 圆底用当前色；白/浅色底上的数字改用深色，避免白底白字看不见
+        let isLight = (color.red + color.green + color.blue) / 3 > 0.75
+        let textColor = isLight ? SnipAnnotationColor.black : SnipAnnotationColor.white
+        context.setFillColor(color.cgColor)
+        context.fillEllipse(in: CGRect(x: center.x - radius,
+                                       y: center.y - radius,
+                                       width: radius * 2,
+                                       height: radius * 2))
+        let text = annotation.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        // 两位及以上缩小字号，保证两位数不溢出圆
+        let fontSize = radius * (text.count >= 2 ? 0.92 : 1.15)
+        let font = CTFontCreateWithName("PingFang SC" as CFString, fontSize, nil)
+        let attributed = NSAttributedString(string: text,
+                                            attributes: [
+                                                kCTFontAttributeName as NSAttributedString.Key: font,
+                                                kCTForegroundColorAttributeName as NSAttributedString.Key: textColor.cgColor,
+                                            ])
+        let line = CTLineCreateWithAttributedString(attributed)
+        var ascent: CGFloat = 0
+        var descent: CGFloat = 0
+        let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
+        context.saveGState()
+        // 外层坐标系 y 向下：基线要按 ascent/descent 折中到圆心，再局部翻转画正向字
+        context.translateBy(x: center.x - width / 2, y: center.y + (ascent - descent) / 2)
         context.scaleBy(x: 1, y: -1)
         context.textPosition = .zero
         CTLineDraw(line, context)
@@ -129,10 +169,16 @@ public enum SnipAnnotationRenderer {
                 .insetBy(dx: -tolerance, dy: -tolerance)
             return textRect.contains(point)
         }
+        if annotation.kind == .number {
+            // 序号按整圆命中：点在圆内即算命中（圆比外接框小，不能直接套矩形容差）
+            let rect = annotation.boundingRect
+            let radius = min(rect.width, rect.height) / 2 + tolerance
+            return distance(CGPoint(x: rect.midX, y: rect.midY), point) <= radius
+        }
         let rect = annotation.boundingRect.insetBy(dx: -tolerance, dy: -tolerance)
         guard rect.contains(point) else { return false }
         switch annotation.kind {
-        case .rectangle, .ellipse, .mosaic, .blur, .text:
+        case .rectangle, .ellipse, .mosaic, .blur, .text, .number:
             return true
         case .freehand:
             return annotation.points.contains { distance($0, point) <= tolerance }

@@ -119,7 +119,11 @@ enum AppIconProvider {
         var buffer = [CChar](repeating: 0, count: 4096)
         let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
         guard length > 0 else { return nil }
-        return String(cString: buffer)
+        // 按返回的字节数（不含 NUL）截断再解码：init(cString:) 已废弃，且整块 4096 字节
+        // 直接转字符串会把缓冲尾部剩余的 0 也当成内容
+        return buffer.withUnsafeBytes { raw in
+            String(decoding: raw.prefix(Int(length)), as: UTF8.self)
+        }
     }
 
     /// 从可执行文件路径向上找到所属 .app 包（没有返回 nil）

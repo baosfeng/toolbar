@@ -18,7 +18,7 @@ func runNotificationTests() {
 // MARK: - 事件表
 
 private func testNotificationEventTable() {
-    assertEqual(NotificationEvent.allCases.count, 6, "事件表六行")
+    assertEqual(NotificationEvent.allCases.count, 7, "事件表七行（额度三类各一行 + 截图 / 剪贴板 / 传输 / 面板）")
     assertEqual(NotificationEvent.billingAlert.postsSystemNotification, true, "额度提醒发系统通知")
     assertEqual(NotificationEvent.transferFinished.postsSystemNotification, true, "传输完成发系统通知")
     assertEqual(NotificationEvent.clipboardAction.postsSystemNotification, false, "剪贴板动作只有应用内提示音")

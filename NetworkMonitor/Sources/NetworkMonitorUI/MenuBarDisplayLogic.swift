@@ -33,7 +33,12 @@ public enum MenuBarDisplayLogic {
     public static let refreshIntervalOptions: [TimeInterval] = [1, 2, 5]
 
     /// 刷新周期上下界（沿用 `MenuBarDisplayPreferences.refreshInterval` 的 1...10 秒）
-    public static let refreshIntervalBounds: ClosedRange<TimeInterval> = 1...10
+    /// 刷新周期允许区间（秒）
+    ///
+    /// 下界原为 1.0：渲染帧率档引入「极致档 0.5 秒」后，1.0 的下界会把极致档夹回 1.0，
+    /// 表现为「选了极致还是 1 秒刷」（切档自证里 tick 恒 1.0s 就是这么暴露的）。
+    /// 上界仍是 10 秒。
+    public static let refreshIntervalBounds: ClosedRange<TimeInterval> = 0.5...10
 
     // MARK: - 偏好 rawValue 对接
 

@@ -29,10 +29,16 @@ extension BillingMonitor {
     }
 
     /// 由 provider 协议实例生成初始展示状态（配置态由凭据存储决定）
+    ///
+    /// `instance` 提供实例标识与展示名；`provider` 是同一个实例的查询实现
+    /// （装饰器已把 `provider.id` 改写为实例标识，两者一致）。
     static func makeState(for provider: any BillingProvider,
+                          instance: BillingInstance,
                           credentialStore: any BillingCredentialStore) -> ProviderState {
-        let descriptor = ProviderDescriptor(id: provider.id,
-                                            displayName: provider.displayName,
+        let descriptor = ProviderDescriptor(id: instance.id,
+                                            kindID: instance.kindID,
+                                            instanceLabel: instance.slug,
+                                            displayName: instance.title,
                                             symbolName: provider.symbolName,
                                             credentialHint: provider.credentialHint,
                                             supportsModelBreakdown: provider.supportsModelBreakdown,
@@ -50,18 +56,19 @@ extension BillingMonitor {
                              errorMessage: nil)
     }
 
-    /// 按启用偏好重建 states — 仍在启用列表中的 provider 保留运行时数据
-    private func rebuildStates() {
+    /// 按启用偏好重建 states — 仍在启用列表中的实例保留运行时数据
+    // 放宽为 internal：`BillingMonitor+Instances` 的实例增删要重建状态表
+    func rebuildStates() {
         var existing: [String: ProviderState] = [:]
         for state in states { existing[state.descriptor.id] = state }
-        let enabledIDs = BillingProviderPreferences.filterEnabled(registry.all.map { $0.id },
-                                                                  preferences: preferences)
-        states = enabledIDs.compactMap { id in
-            guard let provider = registry.provider(id: id) else { return nil }
-            return existing[id] ?? Self.makeState(for: provider, credentialStore: credentialStore)
+        let registrations = registry.registrations.filter { preferences.isEnabled($0.instance.id) }
+        states = registrations.map { registration in
+            existing[registration.instance.id]
+                ?? Self.makeState(for: registration.provider, instance: registration.instance,
+                                  credentialStore: credentialStore)
         }
         // 停用者的节流基准一并清掉：重新启用时不应继承旧的「上次刷新」时间
-        let enabled = Set(enabledIDs)
+        let enabled = Set(registrations.map(\.instance.id))
         lastAttempts = lastAttempts.filter { enabled.contains($0.key) }
         // 代次只增不减：删键会让重新启用后的新请求代次回卷，旧在途响应可能覆盖新状态
     }

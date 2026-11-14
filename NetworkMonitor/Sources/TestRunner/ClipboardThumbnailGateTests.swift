@@ -1,5 +1,6 @@
 import Foundation
 import NetworkMonitorCore
+import os
 
 // MARK: - 缩略图加载闸门（Core 纯状态机）
 
@@ -10,7 +11,7 @@ func runClipboardThumbnailGateTests() {
 
     // 1) 默认并发上限 3；非法上限归一化为默认值（上限 0 等于永久阻塞）
     assertEqual(ClipboardThumbnailLoadGate.defaultMaxConcurrent, 3, "默认并发上限 3")
-    var defaults = ClipboardThumbnailLoadGate()
+    let defaults = ClipboardThumbnailLoadGate()
     assertEqual(defaults.maxConcurrent, 3, "默认构造用 3")
     assertEqual(ClipboardThumbnailLoadGate(maxConcurrent: 0).maxConcurrent, 3, "上限 0 归一化为 3")
     assertEqual(ClipboardThumbnailLoadGate(maxConcurrent: -5).maxConcurrent, 3, "上限负数归一化为 3")
@@ -72,26 +73,29 @@ func runClipboardThumbnailGateTests() {
     assertEqual(blankGate.activeCount, 0, "非法入参不占额度")
 
     // 8) 缩略图就绪事件：post 时带上 contentHash，订阅方据此定位重绘卡片
-    var receivedHash: String?
+    // 观察闭包是 @Sendable：收到的值放进锁盒，避免在闭包里改可捕获的局部 var
+    let receivedHash = OSAllocatedUnfairLock<String?>(initialState: nil)
     let observer = NotificationCenter.default.addObserver(
         forName: AppEvents.clipboardThumbnailReady, object: nil, queue: nil
     ) { notification in
-        receivedHash = notification.userInfo?[AppEvents.clipboardThumbnailHashKey] as? String
+        // 先取值再进锁闭包：Notification 本身非 Sendable，不让它被内层闭包捕获
+        let hash = notification.userInfo?[AppEvents.clipboardThumbnailHashKey] as? String
+        receivedHash.withLock { $0 = hash }
     }
     AppEvents.postClipboardThumbnailReady(contentHash: "hash-ready")
     NotificationCenter.default.removeObserver(observer)
-    assertEqual(receivedHash, "hash-ready", "clipboardThumbnailReady 携带 contentHash")
+    assertEqual(receivedHash.withLock { $0 }, "hash-ready", "clipboardThumbnailReady 携带 contentHash")
 
     // 空白 hash 不发通知（避免订阅方收到无法定位的广播）
-    var blankReceived = false
+    let blankReceived = OSAllocatedUnfairLock(initialState: false)
     let blankObserver = NotificationCenter.default.addObserver(
         forName: AppEvents.clipboardThumbnailReady, object: nil, queue: nil
     ) { _ in
-        blankReceived = true
+        blankReceived.withLock { $0 = true }
     }
     AppEvents.postClipboardThumbnailReady(contentHash: "  ")
     NotificationCenter.default.removeObserver(blankObserver)
-    assertEqual(blankReceived, false, "空白 hash 不发布缩略图就绪事件")
+    assertEqual(blankReceived.withLock { $0 }, false, "空白 hash 不发布缩略图就绪事件")
 
     print("✅ Clipboard 缩略图加载闸门 works")
 }

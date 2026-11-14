@@ -11,9 +11,13 @@ extension BillingMonitor {
 
     /// provider 展示信息 — UI 只读，避免直接持有 provider 协议实例
     struct ProviderDescriptor: Equatable {
-        /// 稳定标识（凭据键）
+        /// 稳定标识（**实例标识**：默认实例 = kindID，命名实例 = `kindID::slug`）
         let id: String
-        /// 展示名称
+        /// provider 类型标识（同一类型可有多实例；UI 用来分组）
+        let kindID: String
+        /// 命名实例后缀（默认实例为 nil；设置页据此决定是否显示「重命名 / 删除」）
+        let instanceLabel: String?
+        /// 展示名称（含实例名）
         let displayName: String
         /// SF Symbol 图标名（禁止 emoji）
         let symbolName: String
@@ -31,11 +35,16 @@ extension BillingMonitor {
         let credentialPageURL: URL?
 
         /// 兼容默认值（快照示意数据 / 测试构造用）
-        init(id: String, displayName: String, symbolName: String, credentialHint: String,
+        ///
+        /// `kindID` 缺省等于 `id`（默认实例）；`instanceLabel` 缺省 nil。
+        init(id: String, kindID: String? = nil, instanceLabel: String? = nil,
+             displayName: String, symbolName: String, credentialHint: String,
              supportsModelBreakdown: Bool, supportsUsage: Bool = true, supportsTimeSeries: Bool = true,
              supportedRanges: [BillingRange] = BillingRange.allCases,
              credentialPageURL: URL? = nil) {
             self.id = id
+            self.kindID = kindID ?? id
+            self.instanceLabel = instanceLabel
             self.displayName = displayName
             self.symbolName = symbolName
             self.credentialHint = credentialHint

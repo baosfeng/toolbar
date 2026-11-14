@@ -65,6 +65,23 @@ extension SnipController {
         logger.info("已从历史贴图（文本）")
     }
 
+    // MARK: 识别结果贴图
+
+    /// 把 OCR 识别出的文字贴到屏幕（偏好「识别后贴图」打开时由识别流程调用）
+    ///
+    /// 走与剪贴板文本贴图完全相同的渲染与定位（SnipClipboardRenderer + placementRect），
+    /// 并带上来源文本，贴图上 ⌘⇧C 仍能复制回纯文本。
+    func pinRecognizedText(_ text: String) {
+        guard let rendered = SnipClipboardRenderer.render(.text(text)) else {
+            logger.warning("识别结果无法渲染成贴图")
+            return
+        }
+        pinWindows.pin(image: rendered.image,
+                       cgRect: placementRect(size: rendered.size),
+                       sourceText: text)
+        logger.info("识别结果已贴到屏幕")
+    }
+
     // MARK: 内容源分支
 
     /// 图片文件分支 — 首贴贴图像并记录，再贴同一个文件降级为路径文本

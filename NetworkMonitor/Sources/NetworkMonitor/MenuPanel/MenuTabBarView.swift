@@ -23,6 +23,21 @@ enum MenuPanelTab: Int, CaseIterable {
         }
     }
 
+    /// 稳定 id —— 顺序偏好里存的就是它
+    ///
+    /// 不用 `rawValue`：那是 Int（按声明位置编号），将来在枚举中间插入一个分页，
+    /// 旧偏好里的数字会指向另一页，用户保存的顺序整体错位。
+    var stableID: String {
+        switch self {
+        case .network: return "network"
+        case .clipboard: return "clipboard"
+        case .transfer: return "transfer"
+        case .credits: return "credits"
+        case .token: return "token"
+        case .system: return "system"
+        }
+    }
+
     /// 分段标签图标（SF Symbols，禁止 emoji）
     var symbolName: String {
         switch self {

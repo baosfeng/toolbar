@@ -78,7 +78,6 @@ extension TokenDerive {
                            hourView: TokenHourView,
                            metric: TokenChartMetric) -> String {
         let current = sum(buckets)
-        let previous = sum(prev)
         let format: (Int) -> String = { value in
             metric == .total ? TokenFormatting.tokens(value) : TokenFormatting.grouped(value) + " 次"
         }
