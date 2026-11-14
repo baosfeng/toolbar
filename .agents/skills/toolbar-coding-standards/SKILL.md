@@ -104,7 +104,10 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 
 | 场景 | 用什么 |
 |------|--------|
-| 指标行 / 列表行 / 占比行 | `DrawnRowList` + `DrawnRowSpec` |
+| 指标行 / 列表行 / 占比行 | `DrawnRowList` + `DrawnRowSpec`（单行式） |
+| 两行式行（名称 + 值 + 占比 + 副文本 + 微条） | 同一组件：`DrawnRowSpec(detail:secondary:showsSwatch:)` |
+| 带行前图标（进程榜） | 同一组件：`iconSize` + `rowIcon` + `iconTint` |
+| 额度格（大数值 + 单位 + 条 + 角标） | `DrawnBillingCell`（业务组件，口径在 `BillingCellLayout`） |
 | 卡片分组（卡头 + 行） | `DrawnCard` |
 | 进度条 / 圆点 / 圆角底 / 分隔线 | `DrawnInk` |
 | 文字尺寸与绘制 | `DrawnTextRun`（尺寸走 `DrawnTextMeasurer` 缓存，不要自己调 `size()`） |
@@ -116,6 +119,9 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 - 自绘的可交互元素**必须**在 `accessibilityChildren()` 里上报元素（role / label / frame），可点击的还要实现 `accessibilityPerformPress`。
 - 宽度分配算 `DrawnRowLayout.metrics`，不要在 draw 里再写一套；它已有 TestRunner 断言。
 - 新增组件要配 `NM_DRAWN_PROBE` 的离屏样例（`Debug/DrawnUIProbe.swift`）与纯逻辑断言。
+- 纯口径（分级 / 行数 / 拼接规则）抽到 `NetworkMonitorUI` 里的 enum 再让视图引用，不要在视图里写真值让测试够不着。
+- 自绘视图默认非 flipped：自上而下排版时必须 `override var isFlipped: Bool { true }`，否则内容会从底部长上来。
+- 大小字号混排（19pt 数值 + 9.5pt 单位）用 `DrawnTextRun.draw(baselineAt:)` 共基线，不要各画各的居中。
 
 设计说明与实测数据见 [自绘组件库](../../../docs/设计/自绘组件库.md)。
 
