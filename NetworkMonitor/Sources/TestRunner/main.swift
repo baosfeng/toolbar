@@ -116,8 +116,11 @@ runBillingPercentDisplayTests()
 // MARK: - 计费额度（provider 抽象 + Ollama 响应解码）
 runBillingTests()
 
-// MARK: - 额度页可见性（未配置 provider 不占位）+ 同一 provider 唯一配置
+// MARK: - 额度页可见性（未配置 provider 不占位）+ 同一实例唯一配置
 runBillingVisibilityTests()
+
+// MARK: - 额度 Provider 多实例（实例标识 / 实例存储 / 装饰器 / 注册表 / 老配置零迁移）
+runBillingInstanceTests()
 
 // MARK: - 屏幕活动（锁屏 / 休眠暂停额度刷新）与快照暂停态
 runScreenActivityRelayTests()
