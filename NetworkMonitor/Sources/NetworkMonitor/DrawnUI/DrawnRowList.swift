@@ -4,22 +4,13 @@ import NetworkMonitorUI
 
 // MARK: - 自绘行列表
 
-/// 可点击行的无障碍元素 —— 让 VoiceOver 能把自绘行当按钮按
-final class DrawnRowAccessibilityElement: NSAccessibilityElement {
-    var activate: (() -> Void)?
-
-    override func accessibilityPerformPress() -> Bool {
-        guard let activate else { return false }
-        activate()
-        return true
-    }
-}
-
 /// 自绘行列表 —— **一个视图画 N 行**，不再为每行建 N 个 NSView
 ///
 /// 与 AppKit 视图树方案的关系：
 /// - 行名 / 行值 / 进度条三者由一次 `draw` 完成，视图数恒为 1；
-/// - 交互（悬停高亮、点击、键盘焦点、无障碍）由本视图自己维护；
+/// - 交互（悬停高亮、点击、键盘焦点、无障碍）由本视图自己维护，且一律走 L4 交互层：
+///   命中 `DrawnHitRegions`、悬停目标 `DrawnHoverState` + 过渡值 `DrawnBlend`、
+///   焦点环 `DrawnFocusRing`、无障碍 `DrawnAccessibilityReporter`；
 /// - 视觉令牌全部取自 `PaneCardStyle`，与现有面板逐像素同源、换主题零改动。
 ///
 /// 行有两种排法（由 `DrawnRowSpec.isStacked` 决定）：
@@ -36,7 +27,8 @@ final class DrawnRowList: NSView {
         didSet {
             guard rows != oldValue else { return }
             if let focusedIndex, focusedIndex >= rows.count { self.focusedIndex = nil }
-            if let hoverIndex, hoverIndex >= rows.count { self.hoverIndex = nil }
+            // 行数变短：越界的悬停目标归零（在状态机里判，不在这里各写一遍）
+            if hoverState.clamp(count: rows.count).isChanged { dropHoverTarget() }
             invalidateIntrinsicContentSize()
             needsDisplay = true
             rebuildAccessibilityElements()
@@ -109,12 +101,15 @@ final class DrawnRowList: NSView {
     }
     /// 是否绘制悬停高亮（纯展示列表可关掉）
     var highlightsHover = true
-    /// 悬停行 —— 跨文件绘制实现要读，故放宽为 internal
-    var hoverIndex: Int? {
-        didSet { if hoverIndex != oldValue { needsDisplay = true } }
-    }
-    /// 模板图标的上色缓存（键 = 图标对象身份；绘制实现跨文件使用，故 internal）
-    var tintedIcons: [ObjectIdentifier: NSImage] = [:]
+
+    /// 悬停目标推进（纯状态机：进入 / 离开 / 跨行；口径在 `DrawnHoverState`）
+    private var hoverState = DrawnHoverState()
+    /// 悬停过渡值（0 = 常态，1 = 高亮满；只在高亮变化的那 0.12s 里有 Timer）
+    /// internal：绘制实现在 DrawnRowList+Drawing.swift 里读它（Swift 扩展不能声明存储属性）
+    let hoverBlend = DrawnBlend()
+    /// 正在绘制的悬停行 —— 离开时保留到淡出结束，避免「移出即消失」；
+    /// 跨文件绘制实现要读，故放宽为 internal
+    private(set) var hoverIndex: Int?
 
     // MARK: - 布局
 
@@ -136,13 +131,13 @@ final class DrawnRowList: NSView {
     }
 
     /// 某点落在哪一行（落在行间空隙返回 nil）
+    ///
+    /// 纯口径在 `DrawnHitRegions.bandIndex`（含边缘 / 空隙 / 越界的边界行为由 TestRunner 钉住）。
     func rowIndex(at point: NSPoint) -> Int? {
-        guard !rows.isEmpty else { return nil }
-        let step = rowHeight + rowSpacing
-        guard step > 0, point.y >= 0 else { return nil }
-        let index = Int((point.y / step).rounded(.down))
-        guard index >= 0, index < rows.count else { return nil }
-        return point.y - CGFloat(index) * step <= rowHeight ? index : nil
+        DrawnHitRegions.bandIndex(at: point,
+                                  bandHeight: rowHeight,
+                                  step: rowHeight + rowSpacing,
+                                  count: rows.count)
     }
 
     // MARK: - 绘制入口
@@ -172,11 +167,47 @@ final class DrawnRowList: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         guard highlightsHover else { return }
-        hoverIndex = rowIndex(at: convert(event.locationInWindow, from: nil))
+        advanceHover(to: rowIndex(at: convert(event.locationInWindow, from: nil)))
     }
 
     override func mouseExited(with event: NSEvent) {
+        advanceHover(to: nil)
+    }
+
+    // MARK: - 悬停推进（目标走状态机，过渡值走 DrawnBlend）
+
+    /// 推进悬停目标并驱动过渡
+    ///
+    /// 三种变化各自的结果：进入 → 新行从 0 淡入；跨行 → 旧行让位、新行淡入；
+    /// 离开 → 旧行淡出到 0 后再停止绘制（所以 hoverIndex 要留到淡出结束）。
+    private func advanceHover(to index: Int?) {
+        let change = hoverState.move(to: index)
+        guard change.isChanged else { return }
+        switch change {
+        case .none:
+            return
+        case .entered, .moved:
+            hoverIndex = index
+            hoverBlend.set(0)
+            hoverBlend.animate(to: 1, onChange: refreshHoverFrame)
+        case .left:
+            hoverBlend.animate(to: 0, onChange: refreshHoverFrame)
+        }
+        needsDisplay = true
+    }
+
+    /// 悬停目标被外部条件清掉（行数变短）：不走淡出，直接收
+    private func dropHoverTarget() {
+        hoverBlend.cancel()
+        hoverBlend.set(0)
         hoverIndex = nil
+        needsDisplay = true
+    }
+
+    /// 过渡帧回调：淡出到底后停止绘制悬停行
+    private func refreshHoverFrame(_ value: CGFloat) {
+        if value <= 0.001, !hoverState.isHovering, hoverIndex != nil { hoverIndex = nil }
+        needsDisplay = true
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -225,39 +256,28 @@ final class DrawnRowList: NSView {
 
     private func rebuildAccessibilityElements() {
         axElements = rows.enumerated().map { index, row in
-            let element = DrawnRowAccessibilityElement()
-            element.setAccessibilityParent(self)
-            element.setAccessibilityRole(row.isActionable ? .button : .staticText)
-            element.setAccessibilityLabel(accessibilityText(for: row))
-            if row.isActionable {
-                element.activate = { [weak self] in self?.onRowAction?(index) }
-            }
-            return element
+            DrawnAccessibilityReporter.element(role: row.isActionable ? .button : .staticText,
+                                               label: accessibilityText(for: row),
+                                               parent: self,
+                                               activate: row.isActionable
+                                                   ? { [weak self] in self?.onRowAction?(index) } : nil)
         }
-        setAccessibilityElement(true)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel("列表")
+        // 列表本身是「组」：整块一个节点，行由 accessibilityChildren 逐行挂上去
+        DrawnAccessibilityReporter.configure(self, role: .group, label: "列表")
     }
 
     /// 一行的读屏文案：两行式把副文本也读出来，否则占比 / 会话数读屏就丢了
     private func accessibilityText(for row: DrawnRowSpec) -> String {
-        var parts = [row.title]
-        if !row.value.isEmpty { parts.append(row.value) }
-        if !row.secondary.isEmpty { parts.append(row.secondary) }
-        if !row.detail.isEmpty { parts.append(row.detail) }
-        return parts.joined(separator: " ")
+        DrawnAccessibilityText.row(title: row.title, value: row.value,
+                                   secondary: row.secondary, detail: row.detail)
     }
 
     override func accessibilityChildren() -> [Any]? {
         if axElements.count != rows.count { rebuildAccessibilityElements() }
         for (index, element) in axElements.enumerated() {
-            element.setAccessibilityFrame(screenFrame(of: rowRect(index)))
+            element.setAccessibilityFrame(
+                DrawnAccessibilityReporter.screenFrame(of: rowRect(index), in: self))
         }
         return axElements
-    }
-
-    private func screenFrame(of rect: CGRect) -> CGRect {
-        guard let window else { return rect }
-        return window.convertToScreen(convert(rect, to: nil))
     }
 }

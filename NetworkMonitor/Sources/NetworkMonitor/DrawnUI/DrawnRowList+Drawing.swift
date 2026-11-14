@@ -24,9 +24,11 @@ extension DrawnRowList {
 
     /// 画一行：有副文本走两行式，否则单行式
     func drawRow(_ row: DrawnRowSpec, index: Int, in rect: CGRect) {
-        // 悬停 / 焦点底
-        if highlightsHover, hoverIndex == index {
-            DrawnInk.fill(rect.insetBy(dx: 0, dy: 1), radius: 4, color: PaneCardStyle.selectedFill)
+        // 悬停底：整层不透明度由过渡值给（静止在 0 时整层不画，与改造前的静态帧逐像素一致）
+        if highlightsHover, hoverIndex == index, hoverBlend.value > 0.001 {
+            DrawnCardSurface(rect: rect.insetBy(dx: 0, dy: 1), radius: 4,
+                             fill: PaneCardStyle.selectedFill,
+                             alpha: hoverBlend.value).draw()
         }
         if row.isStacked {
             drawStackedRow(row, index: index, in: rect)
@@ -46,10 +48,12 @@ extension DrawnRowList {
         let iconWidth = iconSize > 0 ? iconSize : 0
         if iconWidth > 0, let image = rowIcon?(index) {
             // 图标列始终占位（这行取不到图标也留空），保证行名左对齐整齐
-            drawIcon(image, at: CGRect(x: rect.minX + horizontalInset,
-                                       y: rect.midY - iconWidth / 2,
-                                       width: iconWidth,
-                                       height: iconWidth))
+            DrawnSymbolRun.drawFitted(image,
+                                      in: CGRect(x: rect.minX + horizontalInset,
+                                                 y: rect.midY - iconWidth / 2,
+                                                 width: iconWidth,
+                                                 height: iconWidth),
+                                      tint: iconTint)
         }
         singleRowStyle.draw(row, in: rect, leadingWidth: iconWidth)
     }
@@ -186,13 +190,10 @@ extension DrawnRowList {
     }
     // MARK: 焦点环 / 语气色
 
-    /// 键盘焦点环（自绘，不依赖系统 focus ring）
+    /// 键盘焦点环（自绘，不依赖系统 focus ring；绘制在 DrawnFocusRing.drawRow）
     private func drawFocusRing(index: Int, in rect: CGRect) {
-        guard focusedIndex == index, let ctx = NSGraphicsContext.current?.cgContext else { return }
-        ctx.addPath(DrawnInk.roundedPath(rect.insetBy(dx: 1, dy: 1.5), radius: 4))
-        ctx.setStrokeColor(NSColor.controlAccentColor.cgColor)
-        ctx.setLineWidth(1.5)
-        ctx.strokePath()
+        guard focusedIndex == index else { return }
+        DrawnFocusRing.drawRow(in: rect)
     }
 
     private func toneColor(_ tone: DrawnRowSpec.Tone) -> NSColor {

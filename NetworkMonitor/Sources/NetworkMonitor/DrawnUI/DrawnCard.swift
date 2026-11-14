@@ -80,8 +80,8 @@ final class DrawnCard: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        // 卡片底
-        DrawnInk.fill(bounds, radius: PaneCardStyle.cardRadius, color: fillColor)
+        // 卡片底（表面层：圆角 / 填充）
+        DrawnCardSurface(rect: bounds, radius: PaneCardStyle.cardRadius, fill: fillColor).draw()
         guard !title.isEmpty else { return }
         let headRect = CGRect(x: paddingX,
                               y: paddingY,

@@ -305,6 +305,9 @@ runClipboardCardGeometryTests()
 // MARK: - 自绘交互层纯口径（等步行带命中 / 区域优先级 / 悬停目标推进与归零）
 runDrawnInteractionTests()
 
+// MARK: - 自绘绘制层纯口径（层不透明度 / 阴影换算 / 焦点环路径 / 符号缓存键 / 读屏文案）
+runDrawnSurfaceMathTests()
+
 
 // MARK: - 剪贴板缩略图加载闸门（并发上限 / 在途去重 / 额度归还幂等 / reset）
 runClipboardThumbnailGateTests()
