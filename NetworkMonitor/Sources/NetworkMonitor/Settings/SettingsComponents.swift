@@ -170,7 +170,8 @@ final class SettingsCardView: NSView {
         path.stroke()
     }
 
-    /// 清空全部行（重排时用：整卡重建，避免挪单行把自动补的分隔线搞乱）
+    /// 清空全部行（整卡重建：重排时避免挪单行把自动补的分隔线搞乱；实例增删后同样走这里，
+    /// 分隔线随 arrangedSubviews 一起移除）
     func removeAllRows() {
         for view in rows.arrangedSubviews {
             rows.removeArrangedSubview(view)

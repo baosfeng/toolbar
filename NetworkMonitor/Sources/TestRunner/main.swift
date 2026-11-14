@@ -116,8 +116,11 @@ runBillingPercentDisplayTests()
 // MARK: - 计费额度（provider 抽象 + Ollama 响应解码）
 runBillingTests()
 
-// MARK: - 额度页可见性（未配置 provider 不占位）+ 同一 provider 唯一配置
+// MARK: - 额度页可见性（未配置 provider 不占位）+ 同一实例唯一配置
 runBillingVisibilityTests()
+
+// MARK: - 额度 Provider 多实例（实例标识 / 实例存储 / 装饰器 / 注册表 / 老配置零迁移）
+runBillingInstanceTests()
 
 // MARK: - 屏幕活动（锁屏 / 休眠暂停额度刷新）与快照暂停态
 runScreenActivityRelayTests()
@@ -134,12 +137,18 @@ runSettingsOrderTests()
 // MARK: - 额度阈值提醒（5%/4%/3%/2%/1%）
 runBillingAlertTests()
 
+// MARK: - 额度恢复通知（窗口重置 / 余额回升 / 同周期去重 / 冷却）
+runBillingRecoveryTests()
+
 // MARK: - Open Design 额度（归一化 / 工作区发现 / 窗口映射 / 用量聚合）
 runOpenDesignBillingTests()
 runOpenDesignUsageTests()
 
 // MARK: - OpenCode Go 额度（三窗口已用→剩余 / 限流角标 / 新旧字段兼容 / 错误映射）
 runOpencodeGoBillingTests()
+
+// MARK: - 三家新 provider（Claude / Codex / Cursor）解码 + 401/403/解析失败姿态
+runBillingProviderDecodingTests()
 
 // MARK: - DSH token 数据层（会话扫描 / 增量索引 / 聚合快照）
 runHarnessTokenTests()

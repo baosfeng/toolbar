@@ -87,43 +87,94 @@ public enum BillingError: Error, Sendable, Equatable {
 
 // MARK: - provider 注册表
 
-/// 计费 provider 注册表 — 组合根装配后注入 UI，未来加 provider 只需注册
+/// 一条注册记录 —— 实例信息 + 该实例对应的 provider（装饰器）
+public struct BillingRegistration: Sendable {
+    /// 实例（id 即实例标识）
+    public let instance: BillingInstance
+    /// 实例化后的 provider（`provider.id == instance.id`）
+    public let provider: any BillingProvider
+
+    public init(instance: BillingInstance, provider: any BillingProvider) {
+        self.instance = instance
+        self.provider = provider
+    }
+}
+
+/// 计费 provider 注册表 — 组合根装配后注入 UI，加 provider 类型或实例都只需注册
 ///
-/// 线程安全：provider 列表在启动阶段注册完成后只读；`providers` 用锁保护写入。
+/// 线程安全：注册表在启动阶段装配完成后基本只读；写入用锁保护（设置页增删实例时会写）。
+/// 唯一性以**实例标识**为键：同一 provider 类型注册多个命名实例是允许的，
+/// 同一实例标识重复注册 = 替换（保持旧语义）。
 public final class BillingProviderRegistry: @unchecked Sendable {
     private let lock = NSLock()
-    private var providers: [any BillingProvider] = []
+    private var entries: [BillingRegistration] = []
 
     /// 空注册表（测试 / 未装配场景）
     public init() {}
 
-    /// 以初始 provider 列表创建
+    /// 以初始 provider 列表创建 —— 每个 provider 视为该类型的默认实例
     public init(providers: [any BillingProvider]) {
-        self.providers = providers
+        entries = providers.map { provider in
+            BillingRegistration(instance: BillingInstanceID.defaultInstance(kindID: provider.id,
+                                                                           title: provider.displayName),
+                                provider: provider)
+        }
     }
 
-    /// 注册 provider（同 id 覆盖旧实现，便于未来替换）
+    /// 注册默认实例（`provider.id` 即实例标识，同标识覆盖旧实现）
     public func register(_ provider: any BillingProvider) {
+        register(provider, instance: BillingInstanceID.defaultInstance(kindID: provider.id,
+                                                                      title: provider.displayName))
+    }
+
+    /// 注册指定实例（同实例标识覆盖旧实现）
+    public func register(_ provider: any BillingProvider, instance: BillingInstance) {
         lock.lock()
         defer { lock.unlock() }
-        providers.removeAll { $0.id == provider.id }
-        providers.append(provider)
+        entries.removeAll { $0.instance.id == instance.id }
+        entries.append(BillingRegistration(instance: instance, provider: provider))
+    }
+
+    /// 注销实例（设置页删除实例时调用；返回是否确实移除）
+    @discardableResult
+    public func unregister(instanceID: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let before = entries.count
+        entries.removeAll { $0.instance.id == instanceID }
+        return entries.count != before
+    }
+
+    /// 全部注册记录（注册顺序）
+    public var registrations: [BillingRegistration] {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries
     }
 
     /// 全部 provider（注册顺序）
-    public var all: [any BillingProvider] {
-        lock.lock()
-        defer { lock.unlock() }
-        return providers
+    public var all: [any BillingProvider] { registrations.map(\.provider) }
+
+    /// 全部实例（注册顺序）
+    public var instances: [BillingInstance] { registrations.map(\.instance) }
+
+    /// 按实例标识查 provider
+    public func provider(id: String) -> (any BillingProvider)? {
+        registrations.first { $0.instance.id == id }?.provider
     }
 
-    /// 按 id 查 provider
-    public func provider(id: String) -> (any BillingProvider)? {
-        all.first { $0.id == id }
+    /// 按实例标识查实例信息
+    public func instance(id: String) -> BillingInstance? {
+        registrations.first { $0.instance.id == id }?.instance
+    }
+
+    /// 某一 provider 类型的全部注册记录（注册顺序）
+    public func registrations(ofKind kindID: String) -> [BillingRegistration] {
+        registrations.filter { $0.instance.kindID == kindID }
     }
 
     /// 是否为空（UI 空态判断）
-    public var isEmpty: Bool { all.isEmpty }
+    public var isEmpty: Bool { registrations.isEmpty }
 }
 
 // MARK: - 协议默认实现

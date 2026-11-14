@@ -58,7 +58,9 @@ private func testAlertEvaluator() {
     assertEqual(sessionAlert?.bodyText.contains("重置") ?? false, true, "正文带重置时间")
     assertEqual(first.state["ollama.session"]?.notifiedThreshold ?? -1, 4, "会话状态已记录")
     assertEqual(first.state["ollama.weekly"]?.notifiedThreshold ?? -1, 2, "每周状态已记录")
-    assertEqual(first.state["ollama.included"] == nil, true, "内含未到阈值不记录")
+    assertEqual(first.state["ollama.included"]?.notifiedThreshold ?? -1, 0, "内含未到阈值：不提醒")
+    assertEqual(first.state["ollama.included"]?.lastRemainingFraction ?? 0, 0.3,
+                "内含未到阈值：只记录观测基线（恢复通知需要）")
 
     // 同状态再次评估：不重复提醒
     let repeatRun = BillingAlertEvaluator.evaluate(balance: makeBalance(session: 0.04, weekly: 0.012),
@@ -95,14 +97,16 @@ private func testAlertEvaluator() {
     let afterCycle = BillingAlertEvaluator.evaluate(balance: newCycle,
                                                     providerID: "ollama",
                                                     state: lower.state)
-    assertEqual(afterCycle.alerts.count, 1, "周期变化后重新提醒")
+    assertEqual(afterCycle.alerts.count, 2, "周期变化：重置提醒 + 阈值重新提醒")
+    assertEqual(afterCycle.alerts.contains { $0.kind == .windowReset }, true, "周期变化触发窗口重置提醒")
     assertEqual(afterCycle.state["ollama.session"]?.notifiedThreshold ?? -1, 4, "新周期状态重置为 4")
 
     // 回升到 5% 以上：清空记录，下次下降可再次提醒
     let recovered = BillingAlertEvaluator.evaluate(balance: makeBalance(session: 0.2, weekly: 0.012),
                                                    providerID: "ollama",
                                                    state: lower.state)
-    assertEqual(recovered.alerts.isEmpty, true, "回升不提醒")
+    assertEqual(recovered.alerts.count, 1, "回升 16 个百分点触发额度恢复提醒")
+    assertEqual(recovered.alerts.first?.kind ?? .windowReset, .balanceRecovered, "回升提醒种类")
     assertEqual(recovered.state["ollama.session"]?.notifiedThreshold ?? -1, 0, "回升后阈值记录清零")
     _ = newPeriod
 
