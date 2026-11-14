@@ -131,6 +131,9 @@ extension MenuPanelController {
         systemMonitor?.poll()
         PanelOpenProbe.mark("B6 refreshSystem")
         refreshSystem()
+        // 传送页：收起期间只记账不推视图，这里补推一次（否则开面板会看到旧状态带）
+        PanelOpenProbe.mark("B6.5 transfer.refreshNow")
+        transferController?.refreshNow()
         // 额度页：打开面板强制刷新一次（monitor 内部处理未配置/退避）
         PanelOpenProbe.mark("B7 billing.refresh(force)")
         billingMonitor?.refresh(force: true)

@@ -141,6 +141,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         super.init()
 
         configurePopover()
+        // 传送页的「是否可见」由这里注入：收起时它只更新模型、不推视图（见 TransferController.render）
+        content.transferPane.isPanelVisible = { [weak self] in self?.popover.isShown ?? false }
         transferController?.attach(panel: content.transferPane)
         wireActions()
         observeClipboardChanges()
