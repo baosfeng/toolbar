@@ -136,8 +136,12 @@ final class SettingsTransferPane: SettingsPaneView {
     /// 与「通知与音效」页的传输完成一行重复；两处各写一份必然分叉，
     /// 因此这里不再放开关，改为指路。默认值不变（完成类开、其余关）。
     private func buildSoundSection() {
-        let row = SettingsRowView(title: "提示音与通知",
-                                  subtitle: "传输完成 / 失败的声音、提醒方式已统一到「通知与音效」")
+        // 老用户可能配过「配对码生成」「新设备出现」两个分项开关，升级后它们并入了传输完成一行：
+        // 不提示的话会看到「我明明开过配对码提示音，怎么不响了」
+        let subtitle = preferences.legacySoundKeysPresent()
+            ? "旧版逐项开关已并入「通知与音效」的传输完成一行（含失败）"
+            : "传输完成 / 失败的声音、提醒方式已统一到「通知与音效」"
+        let row = SettingsRowView(title: "提示音与通知", subtitle: subtitle)
         let open = SettingsLinkButton.make("去设置…", target: self, action: #selector(openNotificationSettings))
         row.trailingStack.addArrangedSubview(open)
         let card = SettingsCardView()
