@@ -37,6 +37,11 @@ public struct BillingProviderPreferences {
         storage.set(enabled, forKey: Self.storageKey(for: providerID))
     }
 
+    /// 清除启用键（删除实例时调用；重建同名实例时回到「默认启用」）
+    public func removeEnabled(for providerID: String) {
+        storage.removeObject(forKey: Self.storageKey(for: providerID))
+    }
+
     /// 按偏好过滤 provider id（保持传入顺序）
     public func enabledIDs(from providerIDs: [String]) -> [String] {
         Self.filterEnabled(providerIDs, preferences: self)

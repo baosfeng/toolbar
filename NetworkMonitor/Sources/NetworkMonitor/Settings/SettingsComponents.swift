@@ -154,6 +154,14 @@ final class SettingsCardView: NSView {
         path.stroke()
     }
 
+    /// 清空全部行（实例增删后重建卡片内容用；分隔线随 arrangedSubviews 一起移除）
+    func removeAllRows() {
+        for view in rows.arrangedSubviews {
+            rows.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+    }
+
     /// 追加一行（自动在行间补分隔线）
     func addRow(_ row: NSView) {
         if !rows.arrangedSubviews.isEmpty {

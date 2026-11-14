@@ -23,8 +23,13 @@ final class BillingMonitor {
     /// provider 启用偏好（停用者不查询、不出现在额度页，凭据保留）
     let preferences: BillingProviderPreferences
     /// 额度阈值提醒（可选；测试/未装配时为 nil）
-    private let alertService: (any BillingAlerting)?
-    private let logger: LoggingService
+    // 放宽为 internal：`BillingMonitor+Apply` 的成功回调要发提醒
+    let alertService: (any BillingAlerting)?
+    let logger: LoggingService
+    /// 实例列表存储（设置页增删改实例）
+    let instances: BillingInstanceStore
+    /// provider 类型工厂（kindID → 新实例；组合根注入，Core 不认识具体类）
+    let providerFactory: (@MainActor (String) -> (any BillingProvider)?)?
 
     // MARK: - 状态
 
@@ -36,7 +41,8 @@ final class BillingMonitor {
     /// 每 provider 上次发起刷新的时刻（各自节流基准，provider 间隔不同）
     var lastAttempts: [String: Date] = [:]
     /// 限流退避截止时间（429 后按 Retry-After 设置，全局生效）
-    private var retryNotBefore: Date?
+    // 放宽为 internal：`BillingMonitor+Apply` 的合并逻辑要写退避截止时间
+    var retryNotBefore: Date?
     /// 屏幕锁定 / 休眠时暂停后台刷新（不调接口，也不发提醒）
     // 放宽为 internal：`BillingMonitorSnapshot` 的快照要带出暂停态供面板显示
     var isPaused = false
@@ -59,15 +65,20 @@ final class BillingMonitor {
          credentialStore: any BillingCredentialStore,
          alertService: (any BillingAlerting)? = nil,
          preferences: BillingProviderPreferences = BillingProviderPreferences(),
+         instances: BillingInstanceStore = BillingInstanceStore(),
+         providerFactory: (@MainActor (String) -> (any BillingProvider)?)? = nil,
          logger: LoggingService = AppContext.shared.logger) {
         self.registry = registry
         self.credentialStore = credentialStore
         self.alertService = alertService
         self.preferences = preferences
+        self.instances = instances
+        self.providerFactory = providerFactory
         self.logger = logger
-        self.states = registry.all
-            .filter { preferences.isEnabled($0.id) }
-            .map { Self.makeState(for: $0, credentialStore: credentialStore) }
+        self.states = registry.registrations
+            .filter { preferences.isEnabled($0.instance.id) }
+            .map { Self.makeState(for: $0.provider, instance: $0.instance,
+                                  credentialStore: credentialStore) }
         if states.isEmpty {
             logger.warning("计费 provider 全部停用或注册表为空：额度页将显示空态")
         }
@@ -240,74 +251,6 @@ final class BillingMonitor {
             guard let self else { return }
             self.apply(results: results, targets: targets)
             self.emit()
-        }
-    }
-
-    /// 合并并发结果：成功项覆盖，失败项保留上次成功数据并记录错误文案
-    private func apply(results: [ProviderFetchResult], targets: [FetchTarget]) {
-        var rateLimited: TimeInterval?
-        for result in results {
-            guard let index = states.firstIndex(where: { $0.descriptor.id == result.id }) else { continue }
-            // 期间切换了范围 / 清除了凭据：丢弃本次结果，由更新的请求接管
-            guard let target = targets.first(where: { $0.id == result.id }),
-                  generations[result.id] == target.generation else { continue }
-            states[index].isLoading = false
-
-            var failure: BillingError?
-            switch result.balance {
-            case .success(let value):
-                states[index].balance = value
-                // 余额成功就算「刷新成功」：用量接口失败（如 Open Design 的解析 400）
-                // 不该让卡头一直写「未刷新」—— 那会让「刚拉到额度」被读成「根本没查」
-                states[index].lastUpdated = Date()
-                alertService?.handle(balance: value,
-                                     providerID: result.id,
-                                     providerName: states[index].descriptor.displayName)
-            case .failure(let error):
-                failure = error
-            }
-            switch result.usage {
-            case .some(.success(let value)):
-                states[index].usage = value
-            case .some(.failure(let error)):
-                if failure == nil { failure = error }
-            case .none:
-                // provider 不支持用量明细：不发起请求，也不把它当失败
-                states[index].usage = nil
-            }
-
-            if let failure {
-                handle(failure: failure, providerID: result.id)
-                if case .rateLimited(let retryAfter) = failure {
-                    rateLimited = max(rateLimited ?? 0, retryAfter ?? Self.defaultRetryDelay)
-                }
-            } else {
-                states[index].lastUpdated = Date()
-                states[index].errorMessage = nil
-                // 成功也留一条 debug：生产日志里没有额度数值时，无法判断「面板没数据」是哪一环
-                if let balance = states[index].balance {
-                    logger.debug("计费刷新成功（\(result.id)）：\(formatBalanceSummary(balance))")
-                }
-            }
-        }
-        if let rateLimited {
-            retryNotBefore = Date().addingTimeInterval(rateLimited)
-            logger.warning("计费查询触发限流，退避 \(Int(rateLimited)) 秒")
-        } else {
-            retryNotBefore = nil
-        }
-    }
-
-    /// 单 provider 失败处理：429 记录退避，其余记日志（UI 展示 errorMessage）
-    private func handle(failure: BillingError, providerID: String) {
-        if let index = states.firstIndex(where: { $0.descriptor.id == providerID }) {
-            states[index].errorMessage = failure.userMessage
-        }
-        if case .rateLimited(let retryAfter) = failure {
-            retryNotBefore = Date().addingTimeInterval(retryAfter ?? Self.defaultRetryDelay)
-            logger.warning("计费查询触发限流，退避 \(Int(retryAfter ?? Self.defaultRetryDelay)) 秒")
-        } else {
-            logger.error("计费查询失败（\(providerID)）：\(failure.userMessage)")
         }
     }
 
