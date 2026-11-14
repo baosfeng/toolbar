@@ -98,6 +98,27 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 - `nonisolated deinit`、增强泛型（`some`/`any`）、Raw strings、`///` 文档注释
 - 不确定语法是否可用时，先查在线权威文档确认，再写入代码
 
+## UI 组件（自绘组件库）
+
+新增面板 UI 一律优先用自绘组件库，只有少数控件保留 AppKit 原生实现。
+
+| 场景 | 用什么 |
+|------|--------|
+| 指标行 / 列表行 / 占比行 | `DrawnRowList` + `DrawnRowSpec` |
+| 卡片分组（卡头 + 行） | `DrawnCard` |
+| 进度条 / 圆点 / 圆角底 / 分隔线 | `DrawnInk` |
+| 文字尺寸与绘制 | `DrawnTextRun`（尺寸走 `DrawnTextMeasurer` 缓存，不要自己调 `size()`） |
+| 文字输入框、滚动容器、弹窗、菜单 | 保留 AppKit（`NSSearchField` / `NSScrollView` / `NSPopover` / `NSMenu`） |
+
+规矩：
+- **一行 = 零视图**。不要为每一行再建 NSView / NSTextField，行由 `DrawnRowList` 一次 `draw` 画完。
+- 视觉令牌只取 `PaneCardStyle`（几何 / 字号 / 颜色），自绘代码里**不写色值、不写字号字面量**，换主题才不用改组件。
+- 自绘的可交互元素**必须**在 `accessibilityChildren()` 里上报元素（role / label / frame），可点击的还要实现 `accessibilityPerformPress`。
+- 宽度分配算 `DrawnRowLayout.metrics`，不要在 draw 里再写一套；它已有 TestRunner 断言。
+- 新增组件要配 `NM_DRAWN_PROBE` 的离屏样例（`Debug/DrawnUIProbe.swift`）与纯逻辑断言。
+
+设计说明与实测数据见 [自绘组件库](../../../docs/设计/自绘组件库.md)。
+
 ## 测试纪律
 
 - **新增代码必须配测试**：每新增类/方法在 `Sources/TestRunner/main.swift` 添加断言（`assertEqual`/`assertNotNil`），覆盖正常/边界/异常
