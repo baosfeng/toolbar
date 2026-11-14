@@ -1,53 +1,6 @@
 import AppKit
 import NetworkMonitorCore
 
-// MARK: - 卡片流容器
-
-/// 卡片流容器 — 翻转坐标系，让内容从顶部开始排布
-private final class ClipboardCardFlowContainer: NSView {
-    override var isFlipped: Bool { true }
-}
-
-// MARK: - 空态视图
-
-/// 空态视图 — 居中一句话 + 轻量 SF Symbol 图形（禁止 emoji）
-private final class ClipboardEmptyStateView: NSView {
-
-    private let message: String
-    private let symbolName = "doc.on.clipboard"
-    private let iconSize: CGFloat = 24
-    private let iconGap: CGFloat = 10
-
-    init(message: String) {
-        self.message = message
-        super.init(frame: .zero)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("不支持从 nib 初始化") }
-
-    override var isFlipped: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 12),
-            .foregroundColor: NSColor.secondaryLabelColor
-        ]
-        let text = message as NSString
-        let textSize = text.size(withAttributes: attributes)
-        let totalHeight = iconSize + iconGap + textSize.height
-        let top = max(0, (bounds.height - totalHeight) / 2)
-
-        let configuration = NSImage.SymbolConfiguration(pointSize: iconSize, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [NSColor.tertiaryLabelColor]))
-        NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
-            .withSymbolConfiguration(configuration)?
-            .draw(in: NSRect(x: bounds.midX - iconSize / 2, y: top, width: iconSize, height: iconSize))
-        text.draw(at: NSPoint(x: bounds.midX - textSize.width / 2, y: top + iconSize + iconGap),
-                  withAttributes: attributes)
-    }
-}
-
 // MARK: - 卡片流视图
 
 /// 卡片流视图 — 单行横向滚动 + 视图池 + 滑动窗口
@@ -58,6 +11,10 @@ private final class ClipboardEmptyStateView: NSView {
 ///    已存在的视图只做 `configure(with:isSelected:number:)` 与 frame 重设，禁止全删全建；
 /// 3. 窗口：`windowStart` 决定当前建的是哪一段条目；选中项接近窗口边缘时窗口滑动到新位置并复用视图，
 ///    因此 `items` 可以是全部匹配项（上限由偏好 maxItems 决定），任意条数都能靠方向键走到。
+///
+/// 拆文件口径：容器与空态在 `ClipboardCardFlowChrome.swift`，缩略图在
+/// `ClipboardCardFlowView+Thumbnails.swift`，动效与 hover 浮层在
+/// `ClipboardCardFlowView+Motion.swift`。
 @MainActor
 final class ClipboardCardFlowView: NSView {
 
@@ -69,6 +26,8 @@ final class ClipboardCardFlowView: NSView {
     private static let spacing: CGFloat = 10
     /// 卡片流左右内边距
     private static let insetX: CGFloat = 10
+    /// 打开面板后预取的图片条目条数（增量规格 2.2 第 4 条）
+    static let prefetchImageCount = 12
 
     /// 卡片被点选（参数为条目在 items 中的下标）
     var onSelect: ((Int) -> Void)?
@@ -76,23 +35,33 @@ final class ClipboardCardFlowView: NSView {
     var onPin: ((Int) -> Void)?
     /// 卡片被双击（参数同上）
     var onActivate: ((Int) -> Void)?
+    /// 选中项发生切换（面板控制器在此接触觉反馈；未注入时静默）
+    var onSelectionChanged: (() -> Void)?
 
-    /// 打开面板后预取的图片条目条数（增量规格 2.2 第 4 条）
-    private static let prefetchImageCount = 12
     /// 缩略图就绪通知的观察者（主线程回调；deinit 时移除）
-    nonisolated(unsafe) private var thumbnailObserver: NSObjectProtocol?
+    /// nonisolated(unsafe)：deinit 不在主 actor 上，移除观察者需要直接读它
+    nonisolated(unsafe) var thumbnailObserver: NSObjectProtocol?
+    /// 面板上屏通知的观察者（每次面板打开播一次卡片错峰进场）
+    nonisolated(unsafe) var onScreenObserver: NSObjectProtocol?
 
     private let scrollView = NSScrollView()
     private let cardsContainer = ClipboardCardFlowContainer()
     private let emptyView = ClipboardEmptyStateView(message: "没有匹配的剪贴板条目")
+
     /// 视图池：只增不减，靠 isHidden 与内容重设实现复用
-    private var cardViews: [ClipboardCardView] = []
-    /// 全部匹配项（视图只覆盖 windowStart 起的一段）
-    private var items: [ClipboardItem] = []
+    /// （internal：删除动效与进场动效在 ClipboardCardFlowView+Motion.swift 里操作它）
+    var cardViews: [ClipboardCardView] = []
+    /// 全部匹配项（视图只覆盖 windowStart 起的一段；internal：动效扩展要比对旧列表）
+    var items: [ClipboardItem] = []
     /// 窗口起点（items 中的全局下标）
-    private var windowStart = 0
-    /// 当前选中下标
-    private var selectedIndex = -1
+    private(set) var windowStart = 0
+    /// 当前选中下标（internal：动效扩展读当前选中）
+    private(set) var selectedIndex = -1
+
+    /// 删除动效排队中的下一次渲染（动效结束后才真正重排）
+    private var pendingRender: (items: [ClipboardItem], selectedIndex: Int)?
+    /// 删除动效是否在播（期间到达的新渲染参数只排队，不并发）
+    private(set) var isPlayingRemoval = false
 
     override var isFlipped: Bool { true }
 
@@ -107,12 +76,50 @@ final class ClipboardCardFlowView: NSView {
 
     nonisolated deinit {
         if let thumbnailObserver { NotificationCenter.default.removeObserver(thumbnailObserver) }
+        if let onScreenObserver { NotificationCenter.default.removeObserver(onScreenObserver) }
     }
 
     // MARK: 对外接口
 
     /// 重建卡片流（items 为全部匹配项；视图只覆盖窗口内的那一段）
+    ///
+    /// 只有「单条删除」才先播删除动效（0.15s 缩小 + 淡出）再重排；
+    /// 过滤切换 / 清空历史属于整屏重排，直接落地并播进场错峰淡入。
     func render(items: [ClipboardItem], selectedIndex: Int) {
+        let removed = isPlayingRemoval ? [] : vanishedCards(newItems: items)
+        let vanished = (removed.count == 1 && items.count == self.items.count - 1) ? removed : []
+        guard vanished.isEmpty else {
+            pendingRender = (items, selectedIndex)
+            isPlayingRemoval = true
+            hideFullTextOverlay(owner: nil)
+            playRemoval(on: vanished) { [weak self] in
+                guard let self else { return }
+                self.isPlayingRemoval = false
+                guard let pending = self.pendingRender else { return }
+                self.pendingRender = nil
+                self.apply(items: pending.items, selectedIndex: pending.selectedIndex)
+            }
+            return
+        }
+        apply(items: items, selectedIndex: selectedIndex)
+    }
+
+    /// 仅切换选中态（方向键移动时复用卡片，不重建；必要时滑动窗口）
+    func updateSelection(_ index: Int) {
+        guard index >= 0, index < items.count else { return }
+        let previous = selectedIndex
+        selectedIndex = index
+        slideWindow(force: false)
+        syncCards()
+        layoutCards()
+        scrollToSelection()
+        // 换了选中项，全文浮层指向的已不是用户关注的那张卡片
+        hideFullTextOverlay(owner: nil)
+        if previous != selectedIndex { onSelectionChanged?() }
+    }
+
+    /// 真正落地一次渲染（含错峰进场）
+    private func apply(items: [ClipboardItem], selectedIndex: Int) {
         self.items = items
         self.selectedIndex = selectedIndex
         self.windowStart = 0
@@ -123,16 +130,8 @@ final class ClipboardCardFlowView: NSView {
         needsLayout = true
         layoutSubtreeIfNeeded()
         scrollToSelection()
-    }
-
-    /// 仅切换选中态（方向键移动时复用卡片，不重建；必要时滑动窗口）
-    func updateSelection(_ index: Int) {
-        guard index >= 0, index < items.count else { return }
-        selectedIndex = index
-        slideWindow(force: false)
-        syncCards()
-        layoutCards()
-        scrollToSelection()
+        // 这里刻意不发 onSelectionChanged：整屏重排（打开面板 / 过滤切换 / 粘贴后刷新）
+        // 不是用户切换选中项，触觉只由 updateSelection 那条路径（方向键、点击卡片）触发
     }
 
     // MARK: 布局
@@ -174,8 +173,8 @@ final class ClipboardCardFlowView: NSView {
         windowStart = min(max(0, selected - Self.windowSize / 2), count - Self.windowSize)
     }
 
-    /// 当前窗口内应收纳的卡片数
-    private func visibleCount() -> Int {
+    /// 当前窗口内应收纳的卡片数（internal：缩略图扩展按它裁可见卡片）
+    func visibleCount() -> Int {
         min(max(0, items.count - windowStart), Self.windowSize)
     }
 
@@ -190,67 +189,18 @@ final class ClipboardCardFlowView: NSView {
             let index = windowStart + slot
             card.isHidden = false
             let item = items[index]
-            if card.item?.id == item.id, card.isSelected == (index == selectedIndex) {
+            let targetSelected = index == selectedIndex
+            // 内容、收藏态、栈位置都没变、只有选中态变了：走轻量路径，只做描边与底色的交叉过渡，
+            // 不重设正文与缩略图（方向键连按时这条路径承担绝大部分切换）
+            let sameContent = card.item?.id == item.id
+                && card.item?.isPinned == item.isPinned
+                && card.item?.stackPosition == item.stackPosition
+            if sameContent {
+                if card.isSelected != targetSelected { card.setSelected(targetSelected) }
                 continue
             }
-            card.configure(with: item, isSelected: index == selectedIndex, number: index + 1)
+            card.configure(with: item, isSelected: targetSelected, number: index + 1)
         }
-    }
-
-    // MARK: 缩略图
-
-    /// 预取前 12 条图片条目的缩略图（只走 `ClipboardThumbnailLoader` 这一条解码路径，不新增解码实现）
-    ///
-    /// 预取只负责「提前把并发额度用起来的头几条」；实际可见性仍由每条卡片首帧绘制时再请求兜底，
-    /// 因此预取失败（闸门拒绝 / 解码失败）不会让任何卡片永久停在占位符号。
-    private func prefetchThumbnails() {
-        var requested = 0
-        for item in items where item.kind == .image {
-            guard requested < Self.prefetchImageCount else { break }
-            requested += 1
-            ClipboardThumbnailLoader.shared.request(contentHash: item.contentHash, imagePath: item.imagePath)
-        }
-    }
-
-    /// 订阅「缩略图就绪」：只对哈希命中的可见卡片置重绘（不重建视图、不改选中态）
-    private func observeThumbnails() {
-        thumbnailObserver = NotificationCenter.default.addObserver(
-            forName: AppEvents.clipboardThumbnailReady, object: nil, queue: .main
-        ) { [weak self] notification in
-            guard let hash = notification.userInfo?[AppEvents.clipboardThumbnailHashKey] as? String else { return }
-            Task { @MainActor in self?.handleThumbnailReady(contentHash: hash) }
-        }
-    }
-
-    /// 缩略图就绪：先重绘命中卡片，再为其余「可见且仍无缓存」的图片卡片续请求一次
-    ///
-    /// 续请求不可省：闸门只放行 3 个并发，首屏第 4 张起会被拒绝，若不在这里再次触发，
-    /// 被拒卡片会一直停在占位符号。续请求同样只走 loader 路径，闸门自身去重与限流。
-    private func handleThumbnailReady(contentHash hash: String) {
-        redrawCards(contentHash: hash)
-        continueLoadingVisibleThumbnails()
-    }
-
-    /// 对内容哈希命中的卡片置重绘：隐藏槽位（超出窗口的复用视图）不参与，避免给不可见卡片做无谓重绘
-    private func redrawCards(contentHash hash: String) {
-        for card in visibleCards() where card.item?.contentHash == hash {
-            card.needsDisplay = true
-        }
-    }
-
-    /// 为可见且仍未缓存的图片卡片再请求一次（缓存命中由 loader 直接同步回调，不占闸门）
-    private func continueLoadingVisibleThumbnails() {
-        for card in visibleCards() {
-            guard let item = card.item, item.kind == .image else { continue }
-            guard ClipboardCardView.thumbnailCache.object(forKey: item.contentHash as NSString) == nil else { continue }
-            ClipboardThumbnailLoader.shared.request(contentHash: item.contentHash, imagePath: item.imagePath)
-        }
-    }
-
-    /// 当前可见卡片（槽位超出窗口的复用视图一律排除）
-    private func visibleCards() -> [ClipboardCardView] {
-        let count = visibleCount()
-        return cardViews.prefix(count).filter { !$0.isHidden }
     }
 
     /// 新建一张卡片视图；回调按视图在池中的槽位换算当前下标（视图复用后下标随之变化）
@@ -268,6 +218,10 @@ final class ClipboardCardFlowView: NSView {
             guard let self, let index = self.cardViews.firstIndex(of: card) else { return }
             self.onActivate?(self.windowStart + index)
         }
+        card.onHoverStateChange = { [weak self] card, hovering in
+            guard let self else { return }
+            if hovering { self.showFullTextOverlay(for: card) } else { self.hideFullTextOverlay(owner: card) }
+        }
         cardsContainer.addSubview(card)
         return card
     }
@@ -278,6 +232,47 @@ final class ClipboardCardFlowView: NSView {
         guard slot >= 0, slot < visibleCount() else { return }
         let card = cardViews[slot]
         card.scrollToVisible(card.bounds.insetBy(dx: -16, dy: -16))
+    }
+
+    // MARK: 鼠标
+
+    /// 竖向滚轮：全文浮层开着且正文超长时，滚轮改由浮层吞掉（浮层自身不收鼠标事件，
+    /// 只有这样才能既「不拦截点击」又「超长内容可滚」）
+    override func scrollWheel(with event: NSEvent) {
+        if ClipboardCardFullTextOverlay.shared.scroll(by: event.scrollingDeltaY) { return }
+        super.scrollWheel(with: event)
+    }
+
+    // MARK: 生命周期
+
+    /// 换窗口时重挂通知：离开窗口（面板收起 / 快照结束）收起全文浮层、复位进场中间态与进场订阅
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        hideFullTextOverlay(owner: nil)
+        stopObservingOnScreen()
+        guard let window else { resetCardsForNextEntrance(); return }
+        // 面板每次打开（makeKeyAndOrderFront 触发 didBecomeKey）播一次卡片错峰进场；
+        // 离屏快照 / 预布局不触发这条通知，截图里不会留半透明卡片
+        onScreenObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.playEntrance() }
+        }
+    }
+
+    /// 复位卡片到「不透明、无缩放、无位移」：进场动效中途收起面板时，卡片可能停在半透明，
+    /// 下一次打开若内容未变就不会重新 configure，必须在这里兜底复位
+    private func resetCardsForNextEntrance() {
+        for card in cardViews {
+            card.alphaValue = 1
+            card.layer?.transform = CATransform3DIdentity
+        }
+    }
+
+    /// 摘掉上屏观察者（换窗口 / 被移出窗口时都要清，避免旧窗口继续驱动本视图）
+    private func stopObservingOnScreen() {
+        if let onScreenObserver { NotificationCenter.default.removeObserver(onScreenObserver) }
+        onScreenObserver = nil
     }
 
     // MARK: 子视图构建

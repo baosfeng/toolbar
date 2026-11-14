@@ -106,6 +106,38 @@ public enum ClipboardImageDecoder {
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
+    /// 把已解出的位图按最长边降采样（缩略图兜底路径专用）
+    ///
+    /// 主路径是 ImageIO 在解码管线内降采样；当 ImageIO 打不开某个文件时，调用方会用
+    /// `NSBitmapImageRep` 解出整张 CGImage，再回到这里统一缩放出口，避免第二套缩放实现。
+    /// 调用方负责先把原图字节过像素守卫（本函数拿到的是已解出的位图，拦不住像素炸弹）。
+    /// - Parameters:
+    ///   - image: 已解出的位图
+    ///   - maxPixelSize: 最长边像素上限（≤ 0 时取默认 320）
+    /// - Returns: 降采样后的位图；尺寸非法或无法创建位图上下文时返回 nil
+    public static func thumbnail(from image: CGImage,
+                                 maxPixelSize: Int = ClipboardImagePolicy.thumbnailMaxEdge) -> CGImage? {
+        let edge = maxPixelSize > 0 ? maxPixelSize : ClipboardImagePolicy.thumbnailMaxEdge
+        let width = image.width
+        let height = image.height
+        guard width > 0, height > 0 else { return nil }
+        let longest = max(width, height)
+        guard longest > edge else { return image }
+        let scale = CGFloat(edge) / CGFloat(longest)
+        let targetWidth = max(1, Int((CGFloat(width) * scale).rounded()))
+        let targetHeight = max(1, Int((CGFloat(height) * scale).rounded()))
+        guard let context = CGContext(data: nil,
+                                      width: targetWidth,
+                                      height: targetHeight,
+                                      bitsPerComponent: 8,
+                                      bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
+        return context.makeImage()
+    }
+
     /// 直读原图 CGImage（贴图 / 回写用；调用方必须先过像素守卫，否则等于自己造像素炸弹）
     public static func cgImage(fromFileAt path: String) -> CGImage? {
         guard let source = imageSource(ofFileAt: path) else { return nil }

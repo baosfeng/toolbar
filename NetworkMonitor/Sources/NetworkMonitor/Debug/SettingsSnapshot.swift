@@ -37,6 +37,12 @@ enum SettingsSnapshot {
                 // 探针按页实例取控件状态：勾选态与偏好真值必须一致
                 capture.debugLogToolBarControlStates("snapshot")
             }
+            // 剪贴板页的「操作音效 / 触觉反馈」同样是 NSSwitch：离屏渲染看不出 on/off，
+            // 状态判定以 settings-clipboard-states.txt 为准（见踩坑记录「离屏快照看不出开关状态」）
+            if section == .clipboard,
+               let clipboard = settings.currentPaneForSnapshot as? SettingsClipboardPane {
+                clipboard.debugLogFeedbackControlStates("snapshot")
+            }
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let suffix = appearance == .aqua ? "light" : "dark"
                 let url = directory.appendingPathComponent(
@@ -47,7 +53,38 @@ enum SettingsSnapshot {
         }
         // 首次打开路径（不做任何显式布局）：复现「第一次进设置页中间一大片空白」，
         // 每次快照都重出，作为该版式问题的回归证据
+        captureScrolledClipboard(directory: directory, settings: settings)
         captureFirstOpen(directory: directory, settings: settings)
+    }
+
+    /// 剪贴板页滚动到底部（存储卡在首屏之外，单独出一组作为可见性证据）
+    ///
+    /// 版式基线仍是首屏图；这张只证明「存储」卡在实际页面上完整可见、深浅色都不压字。
+    static func captureScrolledClipboard(directory: URL, settings: SettingsWindow?) {
+        guard let settings else { return }
+        guard let view = settings.prepareForSnapshotScrolledToBottom(.clipboard) else { return }
+        writeClipboardScrollMetrics(directory: directory, settings: settings)
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let suffix = appearance == .aqua ? "light" : "dark"
+            let url = directory.appendingPathComponent("settings-clipboard-storage-\(suffix).png")
+            MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
+                                     appearanceName: appearance, to: url)
+        }
+    }
+
+    /// 写剪贴板页的滚动度量（文档高 / 视口高 / 需要下滚多少），供 review 核对「存储卡在首屏之外」而不靠肉眼
+    private static func writeClipboardScrollMetrics(directory: URL, settings: SettingsWindow) {
+        guard let documentHeight = settings.snapshotScrollDocumentHeight else { return }
+        let viewportHeight = SettingsStyle.windowSize.height - SettingsStyle.contentInset * 2
+        let overflow = max(0, documentHeight - viewportHeight)
+        let text = """
+        clipboard_page_document_pt = \(Int(documentHeight.rounded()))
+        clipboard_page_viewport_pt = \(Int(viewportHeight.rounded()))
+        clipboard_page_scroll_needed_pt = \(Int(overflow.rounded()))
+        storage_card_on_first_screen = \(overflow <= 0)
+        """
+        try? text.write(to: directory.appendingPathComponent("settings-clipboard-metrics.txt"),
+                        atomically: true, encoding: .utf8)
     }
 }
 #endif

@@ -13,6 +13,8 @@ extension ClipboardPanelController {
             return
         }
         hide(animated: true)
+        // 贴到屏幕与收藏同属「固定住」的语义，共用 .pin 音效（设计规格 §3 B3 的 cue 定义）
+        feedback.sound.play(.pin)
         onRequestPin(item)
     }
 }

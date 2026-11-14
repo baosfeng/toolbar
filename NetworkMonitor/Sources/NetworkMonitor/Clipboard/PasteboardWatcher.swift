@@ -209,7 +209,7 @@ final class PasteboardWatcher: ClipboardCaptureService {
         let pasteboardItems = pasteboard.pasteboardItems ?? []
         let now = Date()
 
-        // 1) 文件 URL（多个文件合并为一条记录）
+        // 1) 文件 URL（多个文件合并为一条记录）：text 存原始路径，preview 存分类摘要
         let paths = pasteboardItems
             .compactMap { $0.string(forType: .fileURL) }
             .compactMap { URL(string: $0)?.path }
@@ -217,7 +217,7 @@ final class PasteboardWatcher: ClipboardCaptureService {
             return ClipboardDraft(kind: .file,
                                   contentHash: payload.contentHash,
                                   text: payload.text,
-                                  preview: ClipboardPreview.make(from: payload.text),
+                                  preview: ClipboardFileSummary.summarize(paths: paths, fallbackText: payload.text),
                                   sourceBundleID: bundleID,
                                   sourceAppName: appName,
                                   createdAt: now)

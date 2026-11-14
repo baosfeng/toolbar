@@ -18,17 +18,20 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     /// 页工厂 — 由组合根提供，窗口只按分类取用
     typealias PaneFactory = () -> SettingsPaneView
 
-    private let window: NSWindow
-    private let factories: [SettingsSection: PaneFactory]
+    // 放宽为 internal：DEBUG 快照扩展文件（SettingsWindow+Snapshot.swift）要换挂内容视图
+    let window: NSWindow
+    // 放宽为 internal：DEBUG 快照扩展文件（SettingsWindow+Snapshot.swift）要用
+    let factories: [SettingsSection: PaneFactory]
     private let logger: LoggingService
     private let sidebarStack = NSStackView()
-    private let contentScroll = NSScrollView()
-    private let contentContainer = SettingsFlippedView()
+    // 放宽为 internal：DEBUG 快照扩展文件要重建同构容器
+    let contentScroll = NSScrollView()
+    let contentContainer = SettingsFlippedView()
     /// 窗口根视图 — 快照渲染会把视图借走再归还，这里保留引用以便重新挂回
-    private var rootView: NSView!
+    var rootView: NSView!
     private var items: [SettingsSection: SettingsSidebarItemView] = [:]
     private var currentSection: SettingsSection = .general
-    private var currentPane: SettingsPaneView?
+    var currentPane: SettingsPaneView?
 
     init(factories: [SettingsSection: PaneFactory],
          logger: LoggingService = AppContext.shared.logger) {
@@ -47,88 +50,6 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window.center()
         select(.general)
     }
-
-#if DEBUG
-#if DEBUG
-    /// 快照自证（仅 DEBUG）：用一个全新窗口复现「用户第一次打开设置」的路径
-    ///
-    /// 与 `prepareForSnapshot` 的区别是**不做任何显式布局**，用来复现首次进入的版式问题。
-    func makeFreshForFirstOpenProbe() -> NSView? {
-        guard let factory = factories[.general] else { return nil }
-        let probeWindow = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsStyle.windowSize),
-                                   styleMask: [.titled, .closable, .miniaturizable],
-                                   backing: .buffered, defer: false)
-        let root = SettingsSurfaceView { SettingsStyle.pageBackground }
-        let sidebar = SettingsSurfaceView { .underPageBackgroundColor }
-        // 侧栏也要照实际样式填上，否则探针图会误导成「侧栏是空的」
-        let probeSidebarStack = NSStackView()
-        probeSidebarStack.orientation = .vertical
-        probeSidebarStack.alignment = .leading
-        probeSidebarStack.spacing = 2
-        probeSidebarStack.distribution = .fill
-        probeSidebarStack.translatesAutoresizingMaskIntoConstraints = false
-        for section in SettingsSection.allCases {
-            let item = SettingsSidebarItemView(section: section)
-            item.isSelected = (section == .general)
-            probeSidebarStack.addArrangedSubview(item)
-            item.widthAnchor.constraint(equalTo: probeSidebarStack.widthAnchor).isActive = true
-        }
-        sidebar.addSubview(probeSidebarStack)
-        NSLayoutConstraint.activate([
-            probeSidebarStack.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 8),
-            probeSidebarStack.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -8),
-            probeSidebarStack.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 12),
-        ])
-        let scroll = NSScrollView()
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.borderType = .noBorder
-        scroll.drawsBackground = false
-        let container = SettingsFlippedView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        scroll.documentView = container
-        let pane = factory()
-        pane.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(pane)
-        root.addSubview(sidebar)
-        root.addSubview(scroll)
-        NSLayoutConstraint.activate([
-            sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            sidebar.topAnchor.constraint(equalTo: root.topAnchor),
-            sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            sidebar.widthAnchor.constraint(equalToConstant: SettingsStyle.sidebarWidth),
-            scroll.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: root.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            container.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-            container.heightAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.heightAnchor),
-            pane.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: SettingsStyle.contentInset),
-            pane.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -SettingsStyle.contentInset),
-            pane.topAnchor.constraint(equalTo: container.topAnchor, constant: SettingsStyle.contentInset),
-            pane.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -SettingsStyle.contentInset),
-        ])
-        probeWindow.contentView = root
-        return root
-    }
-#endif
-
-    /// 快照自证（仅 DEBUG）：当前页实例（探针要按页类型取控件状态）
-    var currentPaneForSnapshot: SettingsPaneView? { currentPane }
-
-    /// 快照自证（仅 DEBUG）：切到指定分类并返回内容视图，供离屏渲染
-    func prepareForSnapshot(_ section: SettingsSection) -> NSView? {
-        // 上一次渲染把根视图借进了离屏容器并移除，这里先挂回去再切页
-        window.contentView = rootView
-        select(section)
-        rootView.layoutSubtreeIfNeeded()
-        // 内容超过一屏时上次的滚动位置会残留，快照前统一回到顶部
-        contentScroll.contentView.scroll(to: .zero)
-        contentScroll.reflectScrolledClipView(contentScroll.contentView)
-        return rootView
-    }
-#endif
 
     // MARK: - 对外入口
 

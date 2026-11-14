@@ -1,4 +1,5 @@
 import Foundation
+import NetworkMonitorCore
 
 // MARK: - 剪贴板设置事件回调
 
@@ -20,4 +21,21 @@ protocol ClipboardSettingsDelegate: AnyObject {
     func settingsDidRequestAccessibilityPermission()
     /// 请求打开剪贴板相关系统设置（剪贴板访问权限）
     func settingsDidRequestClipboardSettings()
+    /// 图片落盘目录的当前占用（设置页「存储」卡每次刷新现取）
+    func settingsClipboardImageUsage() -> ClipboardStorageUsage.Summary
+    /// 请求清空图片存储（内部复用既有清空 + 孤儿清扫，返回删了多少）
+    func settingsDidRequestClearImageStorage() -> ClipboardStorageCleanupResult
+}
+
+// MARK: - 清空结果
+
+/// 清空图片存储的结果 — 设置页据此给出「删了多少」的可见反馈，不静默
+struct ClipboardStorageCleanupResult: Equatable, Sendable {
+    /// 被删除的历史条目数（收藏项保留）
+    let deletedItems: Int
+    /// 被删除的残留图片文件数（原图 + 缩略图）
+    let removedFiles: Int
+
+    /// 是否什么都没删（设置页据此说明「本来就没有可清理的内容」）
+    var isNoop: Bool { deletedItems == 0 && removedFiles == 0 }
 }

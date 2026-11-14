@@ -18,8 +18,8 @@ public final class AppCoordinator {
     private var networkMonitor: (any NetworkMonitoringService)!
     /// 进程网络监控
     private let processMonitor: any ProcessNetworkMonitoringService = ProcessNetworkMonitor()
-    /// 数据库
-    private var database: (any AppDatabase)!
+    /// 数据库（放宽为 internal：AppCoordinator+ClipboardSettings 的存储统计与清空要读仓储）
+    var database: (any AppDatabase)!
     /// 每日流量追踪
     private var trafficTracker: (any TrafficTrackingService)!
     /// 累计流量定期落盘定时器（崩溃丢失窗口压到 1 分钟）
@@ -31,32 +31,30 @@ public final class AppCoordinator {
 
     // MARK: - 剪贴板历史
 
-    /// 剪贴板偏好
-    private var clipboardPreferences: ClipboardPreferences!
-    /// 采集器（分支 A / 分支 B 是同一个实现的两种模式）
-    private var clipboardWatcher: PasteboardWatcher!
+    /// 剪贴板偏好（放宽为 internal：AppCoordinator+ClipboardSettings 设置页回调要读写）
+    var clipboardPreferences: ClipboardPreferences!
+    /// 采集器（分支 A / 分支 B 是同一个实现的两种模式；放宽为 internal：设置页切换采集模式要重启它）
+    var clipboardWatcher: PasteboardWatcher!
     /// 粘贴器（写回剪贴板 + 合成 ⌘V）
     private var clipboardPaster: ClipboardPaster!
-    /// Paste Stack 状态机
-    private var clipboardStack: PasteStackController!
+    /// Paste Stack 状态机（放宽为 internal：设置页权限查询与跳转走它）
+    var clipboardStack: PasteStackController!
     /// 面板控制器
     private var clipboardPanel: ClipboardPanelController!
-    /// 设置窗
-    /// 统一设置窗口（六个分类页；组合根装配后长期持有）
+    /// 统一设置窗口（长期持有）
     var settingsWindow: SettingsWindow?
-    /// 全局热键
-    private var globalHotKey: GlobalHotKeyCenter!
-    /// 截图 / 贴图链路
-    /// 放宽为 internal：截图装配扩展文件要写
+    /// 全局热键（放宽为 internal：设置页重新录制快捷键要重注册）
+    var globalHotKey: GlobalHotKeyCenter!
+    /// 截图 / 贴图链路（放宽为 internal：截图装配扩展文件要写）
     var snipController: SnipController!
-    /// 截图与贴图设置窗
-    /// 放宽为 internal：截图装配扩展文件要写
+    // 操作反馈实例（放宽为 internal：AppCoordinator+Feedback 装配扩展要写）
+    var soundFeedback: SoundFeedback!
+    var hapticFeedback: HapticFeedback!
 
     /// 局域网互传面板控制器
     // 放宽为 internal：AppCoordinator+Transfer 装配扩展要写
     var transferController: TransferController?
-    /// 互传服务实例（设置页的接收目录统计/清理要用）
-    // setter 放宽为 internal：只有 AppCoordinator+Transfer 装配扩展写它
+    /// 互传服务实例（设置页统计/清理要用；仅装配扩展写）
     var transferService: TransferService?
 
     // MARK: - 日志
@@ -214,6 +212,7 @@ public final class AppCoordinator {
     private func setupClipboard(database: any AppDatabase) {
         let preferences = ClipboardPreferences()
         clipboardPreferences = preferences
+        setupFeedback(preferences: preferences)
 
         let writer = PasteboardWriter()
         let paster = ClipboardPaster(writer: writer, preferences: preferences)
@@ -230,10 +229,13 @@ public final class AppCoordinator {
         clipboardStack = stack
         stack.start()
 
+        // 音效与触觉成对注入：面板控制器与面板视图共用同一份实例（由 setupFeedback 装配）
+        let feedback = ClipboardFeedback(sound: soundFeedback, haptics: hapticFeedback)
         clipboardPanel = ClipboardPanelController(repository: database,
                                                   captureService: watcher,
                                                   paster: paster,
                                                   stack: stack,
+                                                  feedback: feedback,
                                                   // ⌘, 与面板内「设置」入口都走统一设置窗口的剪贴板页
                                                   onRequestSettings: { [weak self] in
                                                       self?.settingsWindow?.show(section: .clipboard)
@@ -275,8 +277,9 @@ public final class AppCoordinator {
     }
 
     /// 注册全局唤起热键；失败时不静默，引导用户去系统设置释放占用
+    /// 放宽 internal：设置页重新录制快捷键时由 AppCoordinator+ClipboardSettings 调用
     @discardableResult
-    private func registerClipboardHotKey(_ combo: HotKeyCombo, presentingAlert: Bool) -> Bool {
+    func registerClipboardHotKey(_ combo: HotKeyCombo, presentingAlert: Bool) -> Bool {
         let result = globalHotKey.register(combo) { [weak self] in self?.clipboardPanel.toggle() }
         switch result {
         case .success:
@@ -301,39 +304,5 @@ public final class AppCoordinator {
                 self.settingsWindow?.show(section: .clipboard)
             }
         }
-    }
-}
-
-// MARK: - 设置窗回调
-
-extension AppCoordinator: ClipboardSettingsDelegate {
-
-    /// 设置窗内重新录制快捷键：冲突时由设置窗标记冲突态，不再弹模态框
-    func settingsDidChangeHotKey(_ combo: HotKeyCombo) -> Bool {
-        registerClipboardHotKey(combo, presentingAlert: false)
-    }
-
-    /// 采集模式切换：按新模式重启采集器（分支 B 轮询 / 分支 A 按需）
-    func settingsDidChangeCaptureMode() {
-        clipboardWatcher.stop()
-        clipboardWatcher.start()
-        logger.info("剪贴板采集模式已切换为：\(clipboardPreferences.captureMode.label)")
-    }
-
-    func settingsDidChangeIgnoredApps() {
-        logger.info("剪贴板忽略应用已更新，共 \(clipboardPreferences.ignoredBundleIDs.count) 项")
-    }
-
-    func settingsAccessibilityGranted() -> Bool {
-        clipboardStack.refreshAccessibility()
-    }
-
-    func settingsDidRequestAccessibilityPermission() {
-        clipboardStack.requestAccessibilityPermission()
-    }
-
-    func settingsDidRequestClipboardSettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") else { return }
-        NSWorkspace.shared.open(url)
     }
 }

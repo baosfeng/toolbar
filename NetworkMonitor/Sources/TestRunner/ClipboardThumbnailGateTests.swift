@@ -48,25 +48,22 @@ func runClipboardThumbnailGateTests() {
     assertEqual(gate.activeCount, 3, "重复 finish 幂等（不会误删别人的额度）")
     gate.finishLoad(hash: "never-begun")
     assertEqual(gate.activeCount, 3, "finish 未登记的 hash 无副作用")
-    assertEqual(gate.hasFailed(hash: "never-begun"), false, "finish 不写失败记忆")
+    assertEqual(gate.isInFlight(hash: "never-begun"), false, "finish 不会给未登记的 hash 造出在途")
 
-    // 5) 失败记忆：markFailed 后同一 hash 不再登记（避免对坏文件反复重试）
+    // 5) 失败不再由闸门记忆：解码失败后归还额度，同一 hash 可以重新登记
+    //    （「失败能重试几次」的唯一判据是 ClipboardThumbnailRetryPolicy，闸门只管并发与去重）
     gate.finishLoad(hash: "ccc")
-    gate.markFailed(hash: "ccc")
-    assertEqual(gate.hasFailed(hash: "ccc"), true, "已记录失败")
-    assertEqual(gate.beginLoad(hash: "ccc"), false, "失败过的 hash 不再登记")
-    assertEqual(gate.beginLoad(hash: " ccc "), false, "失败记忆同样按归一化后的 hash 命中")
+    assertEqual(gate.beginLoad(hash: "ccc"), true, "归还额度后同一 hash 可重新登记")
+    gate.finishLoad(hash: "ccc")
     assertEqual(gate.beginLoad(hash: "eee"), true, "其他 hash 不受影响")
-    gate.markFailed(hash: "   ")
-    assertEqual(gate.activeCount, 3, "空白 hash 记失败不产生条目（在途仍 3：bbb/ddd/eee）")
+    assertEqual(gate.activeCount, 3, "登记后额度重新占满（bbb/ddd/eee）")
 
-    // 6) reset 清空在途与计数（含失败记忆，下次允许重新尝试）
+    // 6) reset 清空在途与计数（下次允许重新尝试）
     gate.reset()
     assertEqual(gate.activeCount, 0, "reset 后无在途")
     assertEqual(gate.inFlightCount, 0, "reset 后在途计数清零")
     assertEqual(gate.availableSlots, 3, "reset 后额度全额可用")
-    assertEqual(gate.hasFailed(hash: "ccc"), false, "reset 同时清空失败记忆")
-    assertEqual(gate.beginLoad(hash: "ccc"), true, "reset 后失败过的 hash 允许重新尝试")
+    assertEqual(gate.beginLoad(hash: "ccc"), true, "reset 后任意 hash 都允许重新尝试")
 
     // 7) 非法入参：空白 hash 一律拒绝（空键会让所有条目共用一个额度槽）
     var blankGate = ClipboardThumbnailLoadGate(maxConcurrent: 3)

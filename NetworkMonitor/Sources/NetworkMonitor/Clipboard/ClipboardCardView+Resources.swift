@@ -3,10 +3,11 @@ import NetworkMonitorCore
 
 // MARK: - 卡片静态资源
 
-/// `ClipboardCardView` 的静态资源扩展 — 符号、缩略图、来源 App 图标与等比填充绘制
+/// `ClipboardCardView` 的静态资源扩展 — 符号、缩略图、来源 App 图标与角标文案
 ///
-/// 成员声明为 internal 而非 private：由拆出的主文件 `ClipboardCardView.swift` 跨文件调用，
-/// 同目录内无其他调用方。缓存本体留在主类内（Swift 扩展不能声明存储属性）。
+/// 成员声明为 internal 而非 private：由拆出的主文件 `ClipboardCardView.swift` 与内容层
+/// `ClipboardCardContentView.swift` 跨文件调用，同目录内无其他调用方。
+/// 缓存本体留在主类内（Swift 扩展不能声明存储属性）。
 extension ClipboardCardView {
 
     /// 类型符号名（正文按 URL / JSON / 命令细分；文件条目按分类细分；禁止 emoji）
@@ -60,7 +61,6 @@ extension ClipboardCardView {
     /// 绘制路径上**不得**出现同步解码：首帧先画占位符号，后台解完写缓存并发
     /// `AppEvents.clipboardThumbnailReady`，由卡片流对该哈希置重绘后再画真图。
     /// 缓存口径不变（仍只缓存缩略图，cost = 解码后像素字节数，见 ClipboardImagePolicy）。
-    /// 补生成缩略图（原图 → <hash>_thumb.png）也整体搬到了后台，见 `ClipboardThumbnailLoader`。
     static func thumbnail(for item: ClipboardItem) -> NSImage? {
         let key = item.contentHash as NSString
         if let cached = thumbnailCache.object(forKey: key) { return cached }
@@ -82,7 +82,7 @@ extension ClipboardCardView {
         return icon
     }
 
-    /// 等比填充绘制（铺满目标矩形，超出部分裁剪）
+    /// 等比填充绘制（铺满目标矩形，超出部分裁剪；图片卡的既有口径）
     static func drawAspectFill(image: NSImage, in rect: NSRect) {
         let imageSize = image.size
         guard imageSize.width > 0, imageSize.height > 0 else { return }

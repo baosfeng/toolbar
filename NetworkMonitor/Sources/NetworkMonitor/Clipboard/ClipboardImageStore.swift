@@ -40,6 +40,13 @@ enum ClipboardImageStore {
         return base.appendingPathComponent("macMonitor/clipboard/images", isDirectory: true)
     }
 
+    /// 图片目录当前占用（设置页「存储」卡用；统计口径见 Core 的 ClipboardStorageUsage）
+    ///
+    /// 每次读取现算，不缓存：目录可能被删除 / 清空 / 超限清理改动，设置页刷新即要新值。
+    static var usage: ClipboardStorageUsage.Summary {
+        ClipboardStorageUsage.summarize(in: directory)
+    }
+
     /// 缩略图路径（卡片视图懒加载用）
     static func thumbnailURL(for contentHash: String) -> URL {
         directory.appendingPathComponent("\(contentHash)_thumb.png")

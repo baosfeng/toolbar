@@ -50,6 +50,8 @@ protocol ClipboardPanelViewDelegate: AnyObject {
     func panelView(_ view: ClipboardPanelView, didRequestPinAt index: Int)
     /// 卡片右键菜单其余指令（复制 / 粘贴为纯文本 / 收藏 / 删除）；按条目 ID 定位，不依赖卡片视图位置
     func panelView(_ view: ClipboardPanelView, didRequestMenuCommand command: ClipboardCardMenuCommand, itemID: UUID)
+    /// 首次引导态被关闭（控制器据此写 ClipboardPreferences.hasGuidedClipboardAccess）
+    func panelViewDidDismissGuide(_ view: ClipboardPanelView)
     /// 请求跳转辅助功能权限设置
     func panelViewDidRequestOpenAccessibilitySettings(_ view: ClipboardPanelView)
 }
@@ -98,6 +100,8 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         static let searchMinWidth: CGFloat = 300
         static let searchMaxWidth: CGFloat = 420
         static let filterWidth: CGFloat = 160
+        /// 「?」快捷键帮助按钮宽度（纯图标按钮）
+        static let helpButtonWidth: CGFloat = 24
         static let gap: CGFloat = 8
         static let footerTextHeight: CGFloat = 16
     }
@@ -111,6 +115,11 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     let searchField = NSSearchField()
     let filterControl = NSSegmentedControl()
     let captureButton = NSButton()
+    /// 工具条「?」快捷键帮助按钮
+    let helpButton = NSButton()
+    /// 首次引导态 / 快捷键帮助浮层（构建见 ClipboardPanelView+Subviews，视图定义见 ClipboardPanelOverlays）
+    let guideView = ClipboardGuideView()
+    let helpOverlay = ClipboardShortcutHelpOverlay()
     /// 底部件数计数（「N 条 · 收藏 M」）
     let countLabel = NSTextField(labelWithString: "")
     let stackLabel = NSTextField(labelWithString: "")
@@ -118,6 +127,9 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     let accessibilityButton = NSButton()
     /// 卡片流（单行横向滚动 + 视图池 + 滑动窗口，见 ClipboardCardFlowView）
     let cardFlow = ClipboardCardFlowView()
+    /// 两级材质的里层内衬与发丝分隔线层（视图口径与布局接线见 ClipboardPanelChrome.swift）
+    let innerMaterial = ClipboardPanelInnerMaterialView()
+    let separatorView = ClipboardPanelSeparatorView()
 
     /// 当前搜索串
     private(set) var query: String = ""
@@ -126,18 +138,30 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     /// 当前选中下标
     private(set) var selectedIndex = -1
 
+    /// 操作反馈（音效 / 触觉）— 构造器注入，未装配时用 `.silent`（快照与独立预览）
+    /// 放宽 internal：ClipboardPanelView+Subviews.swift 的卡片流回调要在视图层接触觉
+    let feedback: ClipboardFeedback
+
     override var isFlipped: Bool { true }
 
     /// 非激活态首次点击即生效（NSPanel 非激活面板的首次点击必须由视图放行）
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override init(frame frameRect: NSRect) {
+    /// 指定构造器：反馈按依赖注入，视图不自行取单例
+    init(frame frameRect: NSRect, feedback: ClipboardFeedback = .silent) {
+        self.feedback = feedback
         super.init(frame: frameRect)
+        // 加视图顺序即层次：内衬最先（最底层）→ 分隔线 → 控件与卡片 → 浮层
+        // 分隔线紧跟内衬：与改动前「父视图自绘、所有子视图压在其上」的层次一致，外观不回退
+        buildInnerMaterial()
+        buildSeparatorLayer()
         buildSearchField()
         buildFilterControl()
         buildCaptureButton()
+        buildHelpButton()
         buildFooter()
         buildCardFlow()
+        buildOverlays()
     }
 
     @available(*, unavailable)
@@ -212,8 +236,14 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
 
         // 卡片区 = 面板高 − 工具条 − 提示行（左右 10pt，上下不留白，由卡片流自身垂直居中）
         let cardsHeight = max(0, height - Metrics.toolbarHeight - Metrics.footerHeight)
-        cardFlow.frame = NSRect(x: padding, y: Metrics.toolbarHeight,
+        let cardsFrame = NSRect(x: padding, y: Metrics.toolbarHeight,
                                 width: max(0, width - padding * 2), height: cardsHeight)
+        cardFlow.frame = cardsFrame
+        // 引导态与卡片区同框（互斥显示）；帮助浮层铺满整个内容区，含工具条与提示行
+        guideView.frame = cardsFrame
+        helpOverlay.frame = bounds
+
+        layoutPanelChrome(toolbarHeight: Metrics.toolbarHeight, footerHeight: height - Metrics.footerHeight)
     }
 
     /// 工具条：搜索框弹性 300–420、类型过滤、右侧「采集当前剪贴板」
@@ -221,15 +251,20 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         let padding = Metrics.padding
         let controlY = (Metrics.toolbarHeight - Metrics.controlHeight) / 2
         let captureWidth = max(96, ceil(captureButton.fittingSize.width))
+        // 「?」按钮固定宽，从搜索框可用宽度里让出来（两处间距都要扣）；采集按钮仍贴右边缘
+        let helpWidth = Metrics.helpButtonWidth
         let searchWidth = min(Metrics.searchMaxWidth,
                               max(Metrics.searchMinWidth,
-                                  width - padding * 2 - captureWidth - Metrics.filterWidth - Metrics.gap * 2))
+                                  width - padding * 2 - captureWidth - helpWidth
+                                      - Metrics.filterWidth - Metrics.gap * 3))
         searchField.frame = NSRect(x: padding, y: controlY,
                                    width: searchWidth, height: Metrics.controlHeight)
         filterControl.frame = NSRect(x: padding + searchWidth + Metrics.gap, y: controlY,
                                      width: Metrics.filterWidth, height: Metrics.controlHeight)
         captureButton.frame = NSRect(x: width - padding - captureWidth, y: controlY,
                                      width: captureWidth, height: Metrics.controlHeight)
+        helpButton.frame = NSRect(x: width - padding - captureWidth - Metrics.gap - helpWidth,
+                                  y: controlY, width: helpWidth, height: Metrics.controlHeight)
     }
 
     /// 提示行：自左向右为「件数计数 → 栈进度 → 按键提示」，最右是「辅助功能权限」入口
@@ -269,14 +304,6 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
                                  width: max(0, hintRight - hintX), height: Metrics.footerTextHeight)
     }
 
-    /// 工具条上下发丝分隔线（设计稿：工具条底部、提示行顶部各一条）
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        NSColor.separatorColor.withAlphaComponent(0.5).setFill()
-        NSRect(x: 0, y: Metrics.toolbarHeight, width: bounds.width, height: 1).fill()
-        NSRect(x: 0, y: bounds.height - Metrics.footerHeight, width: bounds.width, height: 1).fill()
-    }
-
     // MARK: 动作（子视图构建与菜单分发见 ClipboardPanelView+Subviews.swift）
 
     @objc func filterChanged() {
@@ -287,6 +314,11 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
 
     @objc func captureNow() {
         delegate?.panelViewDidRequestCapture(self)
+    }
+
+    /// 「?」按钮：开合帮助浮层（再次点击收起）
+    @objc func toggleShortcutHelp() {
+        if isShortcutHelpVisible { hideShortcutHelp() } else { showShortcutHelp() }
     }
 
     @objc func openAccessibilitySettings() {
