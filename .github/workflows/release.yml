@@ -77,25 +77,27 @@ jobs:
       - name: Verify binary architecture
         working-directory: NetworkMonitor
         run: |
-          BIN="dist/NetworkMonitor-${{ matrix.arch }}.app/Contents/MacOS/NetworkMonitor"
+          BIN="dist/一览-${{ matrix.arch }}.app/Contents/MacOS/NetworkMonitor"
           lipo -info "$BIN"
           lipo -info "$BIN" | grep -q "${{ matrix.arch }}"
 
       - name: Show signature
         working-directory: NetworkMonitor
-        run: codesign -dv --verbose=2 "dist/NetworkMonitor-${{ matrix.arch }}.app" 2>&1 | head -8
+        run: codesign -dv --verbose=2 "dist/一览-${{ matrix.arch }}.app" 2>&1 | head -8
 
       - name: Zip app bundle
         working-directory: NetworkMonitor
         run: |
-          ditto -c -k --keepParent "dist/NetworkMonitor-${{ matrix.arch }}.app" \
-            "dist/NetworkMonitor-${{ matrix.arch }}.app.zip"
+          # zip 名用 URL 友好的 Yilan-<arch>.app.zip：资产名进下载链接时不会被百分号编码，
+          # 解压出来仍是「一览.app」（--keepParent 保留包目录名）
+          ditto -c -k --keepParent "dist/一览-${{ matrix.arch }}.app" \
+            "dist/Yilan-${{ matrix.arch }}.app.zip"
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NetworkMonitor-${{ matrix.arch }}
-          path: NetworkMonitor/dist/NetworkMonitor-${{ matrix.arch }}.app.zip
+          name: Yilan-${{ matrix.arch }}
+          path: NetworkMonitor/dist/Yilan-${{ matrix.arch }}.app.zip
           if-no-files-found: error
 
   publish:
@@ -118,7 +120,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: NetworkMonitor-*
+          pattern: Yilan-*
           merge-multiple: true
 
       - name: List assets
@@ -132,7 +134,7 @@ jobs:
         run: |
           set -uo pipefail
           notes_file="release-notes.md"
-          printf '%s\n\n' '**下载**：`NetworkMonitor-arm64.app.zip` 面向 Apple Silicon，`NetworkMonitor-x86_64.app.zip` 面向 Intel；两个 zip 解压后都是 NetworkMonitor.app。' > "$notes_file"
+          printf '%s\n\n' '**下载**：`Yilan-arm64.app.zip` 面向 Apple Silicon，`Yilan-x86_64.app.zip` 面向 Intel；两个 zip 解压后都是「一览.app」。' > "$notes_file"
           if bash NetworkMonitor/Scripts/generate-release-notes.sh --tag "$TAG" >> "$notes_file"; then
             echo "::notice::release notes 已由脚本生成"
           else
@@ -152,6 +154,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          name: NetworkMonitor ${{ inputs.tag || github.ref_name }} · Apple Silicon + Intel 双架构
+          name: 一览 ${{ inputs.tag || github.ref_name }} · Apple Silicon + Intel 双架构
           body_path: release-notes.md
           files: artifacts/*.zip

@@ -3,9 +3,9 @@
 # Usage: ./Scripts/build-app.sh [debug|release]
 #
 # 架构：默认按本机架构构建；发版时用 ARCH=arm64|x86_64 指定（GitHub Actions 双架构矩阵就是这条通路），
-# 此时产物名为 <APP_NAME>-<arch>.app，且不会部署到 /Applications。
+# 此时产物名为 <APP_BUNDLE_NAME>-<arch>.app，且不会部署到 /Applications。
 # 需要本机一次出两个架构时用 BOTH_ARCH=1：两个架构各用独立 scratch 并行构建，产物同样是
-# dist/<APP_NAME>-arm64.app 与 dist/<APP_NAME>-x86_64.app（与 ARCH 模式的产物名一致）。
+# dist/<APP_BUNDLE_NAME>-arm64.app 与 dist/<APP_BUNDLE_NAME>-x86_64.app（与 ARCH 模式的产物名一致）。
 #
 # 注意：下面两条构建命令都追加了 --build-system 参数（取值 native）。本机只装了 Command Line Tools
 # （无 Xcode.app），默认的 swiftbuild/XCBuild 后端在 session 初始化阶段就会失败
@@ -21,18 +21,25 @@ BUILD_MODE="${1:-debug}"
 APP_NAME="NetworkMonitor"
 # 对外显示名（中文产品名）：只写进 Info.plist 的显示字段与权限用途说明。
 # 与 Sources/NetworkMonitorCore/Infrastructure/AppIdentity.swift 的 displayName 同源，改名两处一起改。
-# 刻意不动 APP_NAME / CFBundleIdentifier / CFBundleExecutable / 签名身份：它们绑着 TCC 授权、
-# 本地偏好域（~/Library/Preferences/com.example.NetworkMonitor.plist）与 SMAppService 登录项注册路径。
+# 刻意不动 APP_NAME / CFBundleIdentifier / CFBundleExecutable / 签名身份：它们绑着 TCC 的
+# designated requirement、本地偏好域（~/Library/Preferences/com.example.NetworkMonitor.plist）。
+# .app 目录名单独由下面的 APP_BUNDLE_NAME 决定（改包名只影响 Finder 里看到的名字与登录项路径，
+# 登录项由 App 启动时的自愈重新登记，见 LaunchAtStartupReconciler）。
 APP_DISPLAY_NAME="一览"
+# .app 目录名（Finder / 启动台 / 权限列表 / 卸载路径里看到的包名）：与显示名同源，用中文「一览」。
+# 与可执行名 APP_NAME 分开：Contents/MacOS/NetworkMonitor、CFBundleExecutable、签名 identifier
+# 一律保持 NetworkMonitor —— 二进制名绑着 TCC 判据、codesign 校验与 CI 架构自证，换它没有收益。
+# 中文路径因此全程加引号（本文件所有路径引用均已加），迁移旧包见下方「部署」段。
+APP_BUNDLE_NAME="一览"
 # 目标架构：显式指定则交叉 / 同架构构建，产物后缀区分；未指定即本机架构、产物名不变
 TARGET_ARCH="${ARCH:-}"
 HOST_ARCH="$(uname -m)"
 if [ -n "$TARGET_ARCH" ]; then
     ARCH_TRIPLE="${TARGET_ARCH}-apple-macosx"
-    APP_DIR="dist/${APP_NAME}-${TARGET_ARCH}.app"
+    APP_DIR="dist/${APP_BUNDLE_NAME}-${TARGET_ARCH}.app"
 else
     ARCH_TRIPLE="${HOST_ARCH}-apple-macosx"
-    APP_DIR="dist/${APP_NAME}.app"
+    APP_DIR="dist/${APP_BUNDLE_NAME}.app"
 fi
 
 echo "🔨 正在构建 ${APP_NAME}（${BUILD_MODE}，架构 ${TARGET_ARCH:-$HOST_ARCH}）..."
@@ -249,7 +256,7 @@ if [ "${BOTH_ARCH:-0}" = "1" ]; then
         PARALLEL_LOGS+=("$log")
         (
             swift_build "$arch" ".build-${arch}"
-            package_app "dist/${APP_NAME}-${arch}.app" "$(binary_path_for "$arch" ".build-${arch}")"
+            package_app "dist/${APP_BUNDLE_NAME}-${arch}.app" "$(binary_path_for "$arch" ".build-${arch}")"
         ) > "$log" 2>&1 &
         PARALLEL_PIDS+=("$!")
     done
@@ -273,12 +280,12 @@ if [ "${BOTH_ARCH:-0}" = "1" ]; then
 
     for arch in "${PARALLEL_ARCHS[@]}"; do
         echo ""
-        echo "🔏 签署 dist/${APP_NAME}-${arch}.app ..."
-        sign_app "dist/${APP_NAME}-${arch}.app"
+        echo "🔏 签署 dist/${APP_BUNDLE_NAME}-${arch}.app ..."
+        sign_app "dist/${APP_BUNDLE_NAME}-${arch}.app"
     done
 
     echo ""
-    echo "📦 已生成 dist/${APP_NAME}-arm64.app 与 dist/${APP_NAME}-x86_64.app（并行模式不部署到 /Applications）"
+    echo "📦 已生成 dist/${APP_BUNDLE_NAME}-arm64.app 与 dist/${APP_BUNDLE_NAME}-x86_64.app（并行模式不部署到 /Applications）"
     exit 0
 fi
 
@@ -305,7 +312,11 @@ fi
 echo ""
 echo "📦 正在部署到 /Applications..."
 
-INSTALL_PATH="/Applications/${APP_NAME}.app"
+INSTALL_PATH="/Applications/${APP_BUNDLE_NAME}.app"
+# 历史包名（本机出现过的两种）：迁移时先杀掉从旧路径启动的实例再删包——两个包并存会让 Finder 里
+# 出现两个图标，旧包还会继续被 SMAppService 登录项指着（新包路径变了，那份登记已经失效）。
+# 与 INSTALL_PATH 相同的那条自动跳过，所以包名改回英文时这条迁移逻辑同样成立。
+LEGACY_INSTALL_PATHS=("/Applications/${APP_NAME}.app" "/Applications/一览.app")
 
 # 杀掉正在运行的应用
 #
@@ -314,13 +325,26 @@ INSTALL_PATH="/Applications/${APP_NAME}.app"
 # --package-path .../NetworkMonitor/.build、编辑器语言服务等）都会被命中，而 kill
 # 收到多行 PID 会整条报错，被 || true 吞掉后脚本继续 rm -rf，旧实例存活、新版本静默不生效。
 # 更不能用 pgrep -x：同名用户级二进制（如 NetworkMonitor、macMonitor 的调试副本）也会被误杀。
+# 包不存在时跳过扫描：首次安装与已迁移完成的机器都不必为旧路径再扫一遍。
+pids_for_bundle() {
+    local bundle="$1"
+    [ -d "$bundle" ] || return 0
+    pgrep -f "^${bundle}/Contents/MacOS/${APP_NAME}( |$)" || true
+}
+
+# 当前包与历史包名各扫一遍：包名迁移当天，正在跑的实例还挂在旧路径上
 running_pids() {
-    pgrep -f "^${INSTALL_PATH}/Contents/MacOS/${APP_NAME}( |$)" || true
+    local legacy
+    pids_for_bundle "$INSTALL_PATH"
+    for legacy in "${LEGACY_INSTALL_PATHS[@]}"; do
+        if [ "$legacy" = "$INSTALL_PATH" ]; then continue; fi
+        pids_for_bundle "$legacy"
+    done
 }
 
 RUNNING_PIDS=$(running_pids)
 if [ -n "$RUNNING_PIDS" ]; then
-    echo "   🛑 正在关闭正在运行的 ${APP_NAME}（PID: $(printf '%s' "$RUNNING_PIDS" | tr '\n' ' ')）..."
+    echo "   🛑 正在关闭正在运行的 ${APP_BUNDLE_NAME}.app（PID: $(printf '%s' "$RUNNING_PIDS" | tr '\n' ' ')）..."
     # 逐个 PID 终止：整段多行字符串传给 kill 会报 "arguments must be process or job IDs"
     while IFS= read -r pid; do
         [ -n "$pid" ] || continue
@@ -354,6 +378,15 @@ if [ -d "$INSTALL_PATH" ]; then
     rm -rf "$INSTALL_PATH"
 fi
 
+# 迁移：删掉改名前的旧包，避免两个包并存（此时它们都已无实例在跑，见上方杀进程段）
+for legacy in "${LEGACY_INSTALL_PATHS[@]}"; do
+    if [ "$legacy" = "$INSTALL_PATH" ]; then continue; fi
+    if [ -d "$legacy" ]; then
+        echo "   🗑️  迁移：删除改名前的旧包 ${legacy}（当前包名 ${APP_BUNDLE_NAME}.app）"
+        rm -rf "$legacy"
+    fi
+done
+
 # 复制到 /Applications
 cp -R "$APP_DIR" "$INSTALL_PATH"
 echo "   ✅ 已复制到 ${INSTALL_PATH}"
@@ -365,7 +398,7 @@ echo "   🔏 签名（固定标识符 + 固定证书）..."
 sign_app "$INSTALL_PATH"
 
 # 打开应用
-echo "   🚀 正在启动 ${APP_NAME}..."
+echo "   🚀 正在启动 ${APP_BUNDLE_NAME}.app..."
 open "$INSTALL_PATH"
 
 echo ""
