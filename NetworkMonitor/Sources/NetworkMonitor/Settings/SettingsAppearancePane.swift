@@ -88,6 +88,39 @@ final class SettingsAppearancePane: SettingsPaneView {
         tierRow.update(subtitle: tier.detail)
     }
 
+    #if DEBUG
+    /// 把三项的**偏好真值 / 控件勾选态**并排落盘
+    ///
+    /// 为什么需要：`NSSwitch` 的 on/off 在离屏渲染里几乎不可辨（见踩坑记录
+    /// 「离屏快照看不出开关状态」——设置页四行开关在图里全画成浅灰关态，
+    /// 但偏好与控件其实都是开）。因此「外观」页快照的开关状态以本文件为准，
+    /// 图只用于看版式。
+    func debugLogAppearanceControlStates(_ tag: String) {
+        let themePref = preferences.themeID.displayName
+        let themeShown = ThemeID.allCases.indices.contains(themeControl.indexOfSelectedItem)
+            ? ThemeID.allCases[themeControl.indexOfSelectedItem].displayName : "?"
+        let glassPref = preferences.glassEnabled
+        let glassShown = glassSwitch.state == .on
+        let tierPref = preferences.renderTier.displayName
+        let tierShown = RenderTier.allCases.indices.contains(tierControl.indexOfSelectedItem)
+            ? RenderTier.allCases[tierControl.indexOfSelectedItem].displayName : "?"
+        let overrideText = preferences.glassOverride == nil
+            ? "跟随档位" : (preferences.glassOverride == true ? "手动开" : "手动关")
+        let matches = themePref == themeShown && glassPref == glassShown && tierPref == tierShown
+        let line = "[\(tag)] 主题=\(themePref)/\(themeShown) "
+            + "玻璃=\(glassPref)/\(glassShown ? "on" : "off")（\(overrideText)） "
+            + "档位=\(tierPref)/\(tierShown) 一致=\(matches) "
+            + "玻璃配方：填充alpha=\(ThemeStyle.cardFillAlpha) "
+            + "高光=\(ThemeStyle.highlightAlpha) 描边=\(ThemeStyle.strokeAlpha) "
+            + "面板底=\(ThemeStyle.glassEnabled ? "NSGlassEffectView" : "纯实色")"
+        guard let path = ProcessInfo.processInfo.environment["NM_SNAPSHOT_DIR"], !path.isEmpty else { return }
+        let url = URL(fileURLWithPath: path, isDirectory: true)
+            .appendingPathComponent("settings-appearance-states.txt")
+        let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        try? (existing + line + "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+    #endif
+
     // MARK: - 动作
 
     @objc private func themeChanged() {

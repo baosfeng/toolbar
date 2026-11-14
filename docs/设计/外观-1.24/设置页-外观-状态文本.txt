@@ -1,0 +1,1 @@
+[snapshot] 主题=Apple/Apple 玻璃=true/on（跟随档位） 档位=标准/标准 一致=true 玻璃配方：填充alpha=0.72 高光=0.55 描边=0.1 面板底=NSGlassEffectView

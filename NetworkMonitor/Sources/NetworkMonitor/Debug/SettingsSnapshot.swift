@@ -43,6 +43,12 @@ enum SettingsSnapshot {
                let clipboard = settings.currentPaneForSnapshot as? SettingsClipboardPane {
                 clipboard.debugLogFeedbackControlStates("snapshot")
             }
+            // 外观页的玻璃开关同样是 NSSwitch：图上只看版式，三项状态判定以
+            // settings-appearance-states.txt 为准（偏好真值 / 控件勾选态并排 + 一致判定）
+            if section == .appearance,
+               let appearancePane = settings.currentPaneForSnapshot as? SettingsAppearancePane {
+                appearancePane.debugLogAppearanceControlStates("snapshot")
+            }
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let suffix = appearance == .aqua ? "light" : "dark"
                 let url = directory.appendingPathComponent(
