@@ -275,6 +275,36 @@ enum MotionKit {
         min(Double(max(0, index)) * durations.stagger, staggerLimit)
     }
 
+    // MARK: 自绘过渡
+
+    /// 自绘过渡的缓动 —— 与 `crossFade` / `fadeIn` 用的 `CAMediaTimingFunction(name: .easeOut)`
+    /// 是**同一条曲线**（cubic-bezier(0, 0, 0.58, 1)），逐帧求解而不是另配一条近似曲线，
+    /// 否则自绘的 hover / 选中过渡会比同一面板里的视图动效「快一截」。
+    ///
+    /// - Parameter progress: 线性进度 0…1
+    /// - Returns: 曲线上的值 0…1
+    static func easedOut(_ progress: CGFloat) -> CGFloat {
+        let x = min(max(progress, 0), 1)
+        // 控制点 (0,0) (0,0) (0.58,1) (1,1)：x(u) = 1.74u² − 0.74u³，y(u) = 3u² − 2u³
+        var u = x
+        for _ in 0..<4 {
+            let xAtU = 1.74 * u * u - 0.74 * u * u * u
+            let slope = 3.48 * u - 2.22 * u * u
+            guard abs(slope) > 1e-6 else { break }
+            u = min(max(u - (xAtU - x) / slope, 0), 1)
+        }
+        return 3 * u * u - 2 * u * u * u
+    }
+
+    /// 弹入缩放 —— 与 `popIn` 的 keyframe `[0.7, 1.15, 1]`（keyTimes `[0, 0.6, 1]`）同一段曲线
+    static func popScale(_ progress: CGFloat) -> CGFloat {
+        let p = min(max(progress, 0), 1)
+        if p < 0.6 {
+            return 0.7 + (1.15 - 0.7) * (p / 0.6)
+        }
+        return 1.15 + (1.0 - 1.15) * ((p - 0.6) / 0.4)
+    }
+
     // MARK: 内部
 
     /// 缩放动画落地（from = 当前呈现值，to = 目标）

@@ -36,10 +36,17 @@ enum MenuPanelSnapshot {
         let directory = URL(fileURLWithPath: path, isDirectory: true)
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: delayNanoseconds)
+            // 只跑剪贴板取证（改卡片视觉时反复对账用；全套快照约 2 分钟）
+            if ProcessInfo.processInfo.environment["NM_SNAPSHOT_CLIPBOARD_ONLY"]?.isEmpty == false {
+                await SnapshotClipboardEvidence.captureIfRequested(directory: directory)
+                SnapshotClipboardGuide.captureIfRequested(directory: directory)
+                NSApp.terminate(nil)
+                return
+            }
             // Token 页：先等一次索引（已有落库数据时是快速增量），再用真实快照渲染
             let tokenSnapshot = await TokenPaneSnapshot.waitForSnapshot(harness: harness)
-            captureAll(directory: directory, repository: repository,
-                       tokenSnapshot: tokenSnapshot, settings: settings)
+            await captureAll(directory: directory, repository: repository,
+                             tokenSnapshot: tokenSnapshot, settings: settings)
             TokenPaneSnapshot.capture(directory: directory, tokenSnapshot: tokenSnapshot)
             await SnapshotClipboardEvidence.captureIfRequested(directory: directory)
             SnapshotClipboardGuide.captureIfRequested(directory: directory)
@@ -51,7 +58,7 @@ enum MenuPanelSnapshot {
 
     private static func captureAll(directory: URL, repository: (any ClipboardRepository)?,
                                    tokenSnapshot: HarnessUsageSnapshot?,
-                                   settings: SettingsWindow?) {
+                                   settings: SettingsWindow?) async {
         prepareUnitStyleForSnapshot()
         prepareAppearanceForSnapshot()
         let items = repository?.fetchClipboardItems(kind: nil, limit: 5) ?? []

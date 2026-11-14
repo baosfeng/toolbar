@@ -29,6 +29,18 @@ final class DrawnTextMeasurer {
     private var heights: [HeightKey: CGFloat] = [:]
     private var layoutWidths: [WidthKey: CGFloat] = [:]
     private var labelHeights: [HeightKey: CGFloat] = [:]
+    private var exactSizes: [WidthKey: CGSize] = [:]
+    private var blockHeights: [BlockKey: CGFloat] = [:]
+    /// 精确尺寸的键（limit = -1 表示「不截断、不取整」）
+
+    /// 多行块测量的键（宽度上限 + 行距都影响换行结果）
+    private struct BlockKey: Hashable {
+        let string: String
+        let fontName: String
+        let fontSize: CGFloat
+        let width: CGFloat
+        let lineSpacing: CGFloat
+    }
     /// 缓存条数上限（超了整体清空）
     private let capacity = 4096
 
@@ -74,6 +86,45 @@ final class DrawnTextMeasurer {
         return half
     }
 
+    /// 多行换行后的自然高度（未按行数封顶）
+    ///
+    /// 与 `NSAttributedString.boundingRect(with:options:)` 同源同参数，因此自绘正文的
+    /// 「最多 N 行 / 尾部省略」判定与改造前的标签绘制完全一致，只差这一次 CoreText 排版。
+    func blockHeight(string: String, font: NSFont, width: CGFloat, lineSpacing: CGFloat) -> CGFloat {
+        guard !string.isEmpty, width > 0 else { return 0 }
+        let key = BlockKey(string: string, fontName: font.fontName, fontSize: font.pointSize,
+                           width: width, lineSpacing: lineSpacing)
+        if let hit = blockHeights[key] { return hit }
+        if blockHeights.count >= capacity { blockHeights.removeAll(keepingCapacity: true) }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.lineSpacing = lineSpacing
+        paragraph.alignment = .left
+        let attributed = NSAttributedString(string: string, attributes: [
+            .font: font,
+            .paragraphStyle: paragraph,
+        ])
+        let measured = attributed.boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]).height
+        blockHeights[key] = measured
+        return measured
+    }
+
+    /// 精确测量（与 `NSString.size(withAttributes:)` 同源，不取整）
+    ///
+    /// 单行 meta 文字（类型提示 / 相对时间）在改造前用 `size(withAttributes:)` 定位，
+    /// 这里缓存同一份数值：取整到 0.5pt 网格的 `layoutWidth` 会让文字漂半个像素。
+    func exactSize(string: String, font: NSFont) -> CGSize {
+        guard !string.isEmpty else { return .zero }
+        let key = WidthKey(string: string, fontName: font.fontName, fontSize: font.pointSize, limit: -1)
+        if let hit = exactSizes[key] { return hit }
+        if exactSizes.count >= capacity { exactSizes.removeAll(keepingCapacity: true) }
+        let measured = NSAttributedString(string: string, attributes: [.font: font]).size()
+        exactSizes[key] = measured
+        return measured
+    }
+
     /// 行框高度 —— 与 AppKit 标签的 frame 高一致（按字体整像素取整，不是 CoreText 行高）
     ///
     /// 实测 11pt 粗体 = 14（而 ascender−descender 只有 12.95）、10.5pt 粗体 = 13，
@@ -115,6 +166,19 @@ struct DrawnTextRun {
 
     /// 行框高度（= AppKit 标签的 frame 高）
     var labelHeight: CGFloat { DrawnTextMeasurer.shared.labelHeight(font: font) }
+
+    /// 精确尺寸（与 `NSString.size(withAttributes:)` 同源，不取整）
+    var exactSize: CGSize { DrawnTextMeasurer.shared.exactSize(string: string, font: font) }
+
+    /// 按「左上角」绘制 —— 与 `NSString.draw(at:withAttributes:)` 同一段 API，
+    /// 用于改造前用点坐标定位的单行文字（meta 行里的 ⌘N / 时间），逐像素不变。
+    func draw(at point: CGPoint) {
+        guard !string.isEmpty else { return }
+        NSAttributedString(string: string, attributes: [
+            .font: font,
+            .foregroundColor: color,
+        ]).draw(at: point)
+    }
 
     /// 顶部对齐绘制：AppKit 的标签把行框贴在 frame 顶部（不是垂直居中）
     ///

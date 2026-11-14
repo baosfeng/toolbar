@@ -299,6 +299,10 @@ runSystemCardLayoutTests()
 // MARK: - 剪贴板动态轮询调度（三档边界 / 归一化 / 停止后不再重排）
 runClipboardPollScheduleTests()
 
+// MARK: - 剪贴板卡片几何与命中（自绘卡片的区域位置 / 点哪算哪个区域 / 区域动作一致性）
+runClipboardCardGeometryTests()
+
+
 // MARK: - 剪贴板缩略图加载闸门（并发上限 / 在途去重 / 额度归还幂等 / reset）
 runClipboardThumbnailGateTests()
 

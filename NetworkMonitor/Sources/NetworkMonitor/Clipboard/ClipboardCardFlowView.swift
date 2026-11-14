@@ -113,6 +113,7 @@ final class ClipboardCardFlowView: NSView {
         // 换了选中项，全文浮层指向的已不是用户关注的那张卡片
         hideFullTextOverlay(owner: nil)
         if previous != selectedIndex { onSelectionChanged?() }
+        refreshShadows()
     }
 
     /// 真正落地一次渲染（含错峰进场）
@@ -157,6 +158,17 @@ final class ClipboardCardFlowView: NSView {
                                       width: max(contentSize.width, allWidth),
                                       height: max(contentSize.height, cardSize.height))
         emptyView.frame = cardsContainer.bounds
+        refreshShadows()
+    }
+
+    /// 把「hover 或选中的可见卡片」交给容器绘制投影（未选中的卡片不投影，避免整屏噪声）
+    ///
+    /// 阴影由容器统一画（见 ClipboardCardFlowContainer）：卡片自身的 draw 画不到卡外，
+    /// 而卡片 backing layer 的阴影在离屏快照路径里不参与合成。
+    func refreshShadows() {
+        cardsContainer.shadowRects = cardViews
+            .filter { !$0.isHidden && !$0.isRemoving && ($0.isSelected || $0.isHovering) }
+            .map { $0.frame }
     }
 
     /// 窗口滑动：选中项接近窗口边缘时把窗口重新居中到选中项，保证任意下标都能走到
@@ -197,6 +209,7 @@ final class ClipboardCardFlowView: NSView {
             }
             card.configure(with: item, isSelected: targetSelected, number: index + 1)
         }
+        refreshShadows()
     }
 
     /// 新建一张卡片视图；回调按视图在池中的槽位换算当前下标（视图复用后下标随之变化）
@@ -218,6 +231,7 @@ final class ClipboardCardFlowView: NSView {
             guard let self else { return }
             if hovering { self.showFullTextOverlay(for: card) } else { self.hideFullTextOverlay(owner: card) }
         }
+        card.onShadowStateChange = { [weak self] in self?.refreshShadows() }
         cardsContainer.addSubview(card)
         return card
     }

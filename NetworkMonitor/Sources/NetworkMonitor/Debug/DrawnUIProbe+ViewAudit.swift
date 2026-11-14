@@ -16,6 +16,10 @@ extension DrawnUIProbe {
         guard let path = ProcessInfo.processInfo.environment["NM_DRAWN_COUNT"], !path.isEmpty else {
             return false
         }
+        // 剪贴板面板：`NM_DRAWN_COUNT_TAB=clipboard`（不设时仍量系统页，旧命令口径不变）
+        if ProcessInfo.processInfo.environment["NM_DRAWN_COUNT_TAB"] == "clipboard" {
+            return runClipboardViewAudit(path: path)
+        }
         let panel = MenuPanelSnapshot.makeMenuPanel(tab: .system, items: [])
         let height = min(max(panel.desiredContentHeight, 180), MenuPanelStyle.maxHeight)
         let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
@@ -29,6 +33,28 @@ extension DrawnUIProbe {
             exit(0)
         }
         let failure = "视图台账：快照渲染未回调，未取到数据\n"
+        try? failure.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+        FileHandle.standardError.write(Data(failure.utf8))
+        exit(1)
+    }
+
+    /// 剪贴板面板视图台账：卡片区 / 卡片流 / 面板总计（与系统页同一套「子树 − 1」计数口径）
+    ///
+    /// 触发：`NM_DRAWN_COUNT=<文件> NM_DRAWN_COUNT_TAB=clipboard`
+    /// 画布与取证快照同口径（640×260），条目夹具复用性能探针的 32 条（= 视图池窗口大小）。
+    private static func runClipboardViewAudit(path: String) -> Bool {
+        let items = ClipboardPerfProbe.fixtureItems()
+        let size = NSSize(width: 640, height: 260)
+        let canvas = SnapshotClipboardPanel(size: size, items: items).makeView()
+        let scratch = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("drawn-view-audit-clipboard.png")
+        MenuPanelSnapshot.render(view: canvas, size: size, appearanceName: .aqua, to: scratch) { root in
+            let report = ClipboardPerfProbe.viewLedger(root)
+            try? report.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+            FileHandle.standardError.write(Data(report.utf8))
+            exit(0)
+        }
+        let failure = "剪贴板视图台账：快照渲染未回调，未取到数据\n"
         try? failure.write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
         FileHandle.standardError.write(Data(failure.utf8))
         exit(1)
