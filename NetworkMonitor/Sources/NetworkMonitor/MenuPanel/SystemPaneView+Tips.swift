@@ -99,16 +99,20 @@ enum SystemPaneTip {
     static let processToggle = "切换榜单维度：CPU 占用降序 / 常驻内存降序"
 
     /// 单行进程说明
+    ///
+    /// - Parameter displayName: 行的显示名（本应用那行已由 `AppProcessName` 换成「一览」）——
+    ///   与行内标签同源，避免悬停说明写英文名、行里却是中文名
     static func processRow(usage: ProcessResourceUsage,
+                           displayName: String,
                            metric: SystemProcessMetric,
                            memoryTotal: UInt64?) -> String {
         switch metric {
         case .cpu:
-            return "\(usage.name) · pid \(usage.pid) · CPU \(String(format: "%.2f", usage.cpuPercent))%"
+            return "\(displayName) · pid \(usage.pid) · CPU \(String(format: "%.2f", usage.cpuPercent))%"
                 + "（多线程可 >100%，满条即一个核）；常驻内存 \(SystemPaneFormat.bytes(usage.residentBytes))"
         case .memory:
             let totalText = memoryTotal.map { SystemPaneFormat.bytes($0) } ?? SystemPaneFormat.placeholder
-            return "\(usage.name) · pid \(usage.pid) · 常驻内存 \(SystemPaneFormat.bytes(usage.residentBytes))"
+            return "\(displayName) · pid \(usage.pid) · 常驻内存 \(SystemPaneFormat.bytes(usage.residentBytes))"
                 + " / 物理内存 \(totalText)；当前 CPU \(String(format: "%.1f", usage.cpuPercent))%"
         }
     }
