@@ -49,33 +49,16 @@ final class SystemRingView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        let radius = max(1, (min(bounds.width, bounds.height) - Self.ringWidth) / 2)
-        let center = NSPoint(x: bounds.midX, y: bounds.midY)
-
-        let track = NSBezierPath()
-        track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
-        track.lineWidth = Self.ringWidth
-        SystemPalette.track.setStroke()
-        track.stroke()
-
-        let value = fraction.isFinite ? min(1, max(0, fraction)) : 0
-        if value > 0 {
-            let arc = NSBezierPath()
-            arc.appendArc(withCenter: center, radius: radius, startAngle: 90,
-                          endAngle: 90 - 360 * CGFloat(value), clockwise: true)
-            arc.lineWidth = Self.ringWidth
-            arc.lineCapStyle = .round
-            ringColor.setStroke()
-            arc.stroke()
-        }
-
+        // 环的绘制只留一份（DrawnInk.ring）：自绘卡片复用同一个函数，两条路径不会画出两种环
+        DrawnInk.ring(in: bounds, fraction: fraction, lineWidth: Self.ringWidth,
+                      color: ringColor, track: SystemPalette.track)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: Self.centerFont,
             .foregroundColor: textColor,
         ]
         let size = (centerText as NSString).size(withAttributes: attributes)
-        (centerText as NSString).draw(at: NSPoint(x: center.x - size.width / 2,
-                                                  y: center.y - size.height / 2),
+        (centerText as NSString).draw(at: NSPoint(x: bounds.midX - size.width / 2,
+                                                  y: bounds.midY - size.height / 2),
                                       withAttributes: attributes)
     }
 }
@@ -90,13 +73,8 @@ final class SystemRingView: NSView {
 /// 视线落在条形上根本看不出「紧张」。
 final class SystemStackedBarView: NSView {
 
-    /// 单个分段
-    struct Segment {
-        /// 分段数值（与 `total` 同单位）
-        let value: Double
-        /// 分段颜色（语义色；传 `.clear` 表示该段留空）
-        let color: NSColor
-    }
+    /// 单个分段（与自绘卡片共用同一个值类型，调用点写法不变）
+    typealias Segment = SystemBarSegment
 
     var segments: [Segment] = [] {
         didSet { needsDisplay = true }
@@ -140,54 +118,11 @@ final class SystemStackedBarView: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        let clipPath = NSBezierPath(roundedRect: bounds, xRadius: 2, yRadius: 2)
-        clipPath.addClip()
-        SystemPalette.track.setFill()
-        bounds.fill()
-
-        guard total > 0, total.isFinite else {
-            drawPressureStroke()
-            return
-        }
-        let visible = segments.filter { $0.value.isFinite && $0.value > 0 }
-        guard !visible.isEmpty else {
-            drawPressureStroke()
-            return
-        }
-        var x = bounds.minX
-        for (index, segment) in visible.enumerated() {
-            let ratio = min(1, max(0, segment.value / total))
-            let width = bounds.width * CGFloat(ratio)
-            segment.color.setFill()
-            NSRect(x: x, y: bounds.minY, width: width, height: bounds.height).fill()
-            // 段间缝：在边界处压一条卡底色细线（首段左侧与末段右侧不画）
-            if index < visible.count - 1 {
-                (gapColor ?? SystemPalette.color(.cardMemory)).setFill()
-                NSRect(x: x + width - Self.segmentGap, y: bounds.minY,
-                       width: Self.segmentGap, height: bounds.height).fill()
-            }
-            x += width
-        }
-        drawPressureStroke()
-    }
-
-    /// 压力态内描边 — 1pt 沿轨道内侧，不遮四段色块（内缩半线宽避免被裁切）
-    private func drawPressureStroke() {
-        guard let color = pressureStrokeColor else { return }
-        let rect = bounds.insetBy(dx: 0.5, dy: 0.5)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2)
-        path.lineWidth = 1
-        color.setStroke()
-        path.stroke()
-    }
-
-    /// 压力等级 → 描边色（正常 / 未知不描边，语义与卡头圆点一致）
-    private var pressureStrokeColor: NSColor? {
-        switch pressureLevel {
-        case .warning: return SystemPalette.warn
-        case .critical: return SystemPalette.danger
-        case .normal, .unknown: return nil
-        }
+        // 绘制只留一份（SystemChartDrawing）：自绘卡片复用同一个函数，两条路径不会画出两种条
+        SystemChartDrawing.drawStackedBar(segments: segments, total: total,
+                                         pressureStroke: SystemChartDrawing.pressureStrokeColor(pressureLevel),
+                                         gapColor: gapColor ?? SystemPalette.color(.cardMemory),
+                                         in: bounds)
     }
 }
 

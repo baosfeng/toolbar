@@ -12,6 +12,8 @@ import NetworkMonitorUI
 enum DrawnUIProbe {
 
     static func runIfRequested() {
+        if runViewAuditIfRequested() { return }
+        if runTwoTimesRenderIfRequested() { return }
         guard let dir = ProcessInfo.processInfo.environment["NM_DRAWN_PROBE"] else { return }
         let url = URL(fileURLWithPath: dir, isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
@@ -175,5 +177,6 @@ enum DrawnUIProbe {
         NSGraphicsContext.restoreGraphicsState()
         return rep.representation(using: .png, properties: [:])
     }
+
 }
 #endif

@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorUI
 
 // MARK: - 卡头微图例
 
@@ -83,10 +84,10 @@ final class SystemUsageSplitView: NSView {
             systemLabel.stringValue = SystemPaneFormat.placeholder
             return
         }
-        let totalPercent = Int((SystemPaneView.clamp(total) * 100).rounded())
-        let systemPercent = min(totalPercent, Int((SystemPaneView.clamp(system) * 100).rounded()))
-        systemLabel.stringValue = "\(systemPercent)%"
-        userLabel.stringValue = "\(max(0, totalPercent - systemPercent))%"
+        // 取整口径只有一份（SystemCardLayout.usageSplitPercents）：首屏图例与详情页图例必须同源
+        let split = SystemCardLayout.usageSplitPercents(total: total, system: system)
+        systemLabel.stringValue = "\(split.system)%"
+        userLabel.stringValue = "\(split.user)%"
     }
 
     /// 单枚图例：色块 + 数值（间距 2pt，与原型一致）

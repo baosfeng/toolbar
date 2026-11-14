@@ -27,6 +27,8 @@ final class DrawnTextMeasurer {
 
     private var widths: [WidthKey: CGFloat] = [:]
     private var heights: [HeightKey: CGFloat] = [:]
+    private var layoutWidths: [WidthKey: CGFloat] = [:]
+    private var labelHeights: [HeightKey: CGFloat] = [:]
     /// 缓存条数上限（超了整体清空）
     private let capacity = 4096
 
@@ -54,6 +56,36 @@ final class DrawnTextMeasurer {
         heights[key] = h
         return h
     }
+
+    /// 排版宽度 —— 按 0.5pt 网格向上取整
+    ///
+    /// AppKit 的标签对齐矩形宽就是「文本宽」，而文本宽落在半像素网格上
+    /// （实测 15 种常见字串全部吻合：CPU→24.5、8P · 2E→36.5、11.2 GB / 16.0 GB→88.5）。
+    /// 排版必须用这个值而不是取整到整数的 width：差 0.5pt 会让整行元素漂半个像素。
+    func layoutWidth(string: String, font: NSFont) -> CGFloat {
+        guard !string.isEmpty else { return 0 }
+        let key = WidthKey(string: string, fontName: font.fontName,
+                           fontSize: font.pointSize, limit: 0)
+        if let hit = layoutWidths[key] { return hit }
+        if layoutWidths.count >= capacity { layoutWidths.removeAll(keepingCapacity: true) }
+        let measured = NSAttributedString(string: string, attributes: [.font: font]).size().width
+        let half = ceil(measured * 2) / 2
+        layoutWidths[key] = half
+        return half
+    }
+
+    /// 行框高度 —— 与 AppKit 标签的 frame 高一致（按字体整像素取整，不是 CoreText 行高）
+    ///
+    /// 实测 11pt 粗体 = 14（而 ascender−descender 只有 12.95）、10.5pt 粗体 = 13，
+    /// 因此不能自己用 ascender 推，直接按同一个字体量一次并缓存。
+    func labelHeight(font: NSFont) -> CGFloat {
+        let key = HeightKey(fontName: font.fontName, fontSize: font.pointSize)
+        if let hit = labelHeights[key] { return hit }
+        if labelHeights.count >= capacity { labelHeights.removeAll(keepingCapacity: true) }
+        let h = ceil(NSAttributedString(string: "0", attributes: [.font: font]).size().height)
+        labelHeights[key] = h
+        return h
+    }
 }
 
 // MARK: - 一段文字
@@ -77,6 +109,32 @@ struct DrawnTextRun {
 
     /// 实测行高（走缓存）
     var lineHeight: CGFloat { DrawnTextMeasurer.shared.lineHeight(font: font) }
+
+    /// 排版宽度（0.5pt 网格）—— 相邻两件的距离按它算才不漂半个像素（与 AppKit 标签同源）
+    var layoutWidth: CGFloat { DrawnTextMeasurer.shared.layoutWidth(string: string, font: font) }
+
+    /// 行框高度（= AppKit 标签的 frame 高）
+    var labelHeight: CGFloat { DrawnTextMeasurer.shared.labelHeight(font: font) }
+
+    /// 顶部对齐绘制：AppKit 的标签把行框贴在 frame 顶部（不是垂直居中）
+    ///
+    /// 与 draw(in:) 的区别只在 y 的取法：这里直接用 rect.minY，
+    /// 因此调用方按「标签 frame」摆好 rect 就能逐像素对上原生标签。
+    func draw(topIn rect: CGRect, alignment: NSTextAlignment = .left) {
+        guard !string.isEmpty, rect.width > 0 else { return }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = alignment
+        paragraph.lineBreakMode = truncates ? .byTruncatingTail : .byClipping
+        let attributed = NSAttributedString(string: string, attributes: [
+            .font: font,
+            .foregroundColor: color,
+            .paragraphStyle: paragraph,
+        ])
+        attributed.draw(with: CGRect(x: rect.minX, y: rect.minY,
+                                     width: rect.width, height: max(rect.height, labelHeight)),
+                        options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+                        context: nil)
+    }
 
     /// 按基线绘制：`baselineY` 是文字基线（flipped 坐标，向下为正）
     ///

@@ -79,26 +79,41 @@ final class SystemProcessListView: NSView {
         rebuild()
     }
 
-    /// 把行数据铺成固定条数的自绘行规格
-    private func rebuild() {
-        var specs: [DrawnRowSpec] = []
-        specs.reserveCapacity(capacity)
-        for index in 0..<capacity {
-            if index < rows.count {
-                let row = rows[index]
-                specs.append(DrawnRowSpec(title: row.name,
-                                          value: row.valueText,
-                                          progress: row.fraction,
-                                          tone: row.isOver ? .warning : .normal))
-            } else {
+    /// 把行数据铺成固定条数的自绘行规格（列表与整卡自绘共用同一份口径）
+    static func specs(rows: [Row], capacity: Int) -> [DrawnRowSpec] {
+        (0..<max(capacity, 1)).map { index in
+            guard index < rows.count else {
                 // 不可得：占位「—」+ 空描边条
-                specs.append(DrawnRowSpec(title: SystemPaneFormat.placeholder,
-                                          value: SystemPaneFormat.placeholder,
-                                          progress: 0,
-                                          isEmptyBar: true))
+                return DrawnRowSpec(title: SystemPaneFormat.placeholder,
+                                    value: SystemPaneFormat.placeholder,
+                                    progress: 0,
+                                    isEmptyBar: true)
             }
+            let row = rows[index]
+            return DrawnRowSpec(title: row.name,
+                                value: row.valueText,
+                                progress: row.fraction,
+                                tone: row.isOver ? .warning : .normal)
         }
-        list.rows = specs
+    }
+
+    /// 进程榜的行绘制配置（列表与整卡自绘共用，改一处两边一起变）
+    static var rowStyle: DrawnSingleRowStyle {
+        DrawnSingleRowStyle(horizontalInset: 0,
+                            elementGap: 5,
+                            titleFont: SystemPaneStyle.microFont,
+                            valueFont: MenuPanelStyle.smallValueFont,
+                            titleColor: SystemPalette.foregroundSecondary,
+                            trackColor: SystemPalette.track,
+                            barColor: SystemPalette.process,
+                            barHeight: 5,
+                            minBarWidth: 8,
+                            fixedTitleWidth: 58)
+    }
+
+    /// 刷新榜单（行数据变了就重铺规格）
+    private func rebuild() {
+        list.rows = Self.specs(rows: rows, capacity: capacity)
         list.rowToolTip = { [weak self] index in
             guard let self else { return "" }
             return index < self.rows.count ? self.rows[index].tip : self.unavailableTip

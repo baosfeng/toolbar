@@ -13,48 +13,26 @@ extension SystemPaneView {
     func updateCPU(_ snapshot: CPUSnapshot?) {
         guard let snapshot else {
             cpuTile.update(value: SystemPaneFormat.placeholder, color: SystemPalette.meta)
-            cpuCard.updateTrailing(SystemPaneFormat.placeholder)
-            cpuSplit.update(total: nil, system: nil)
-            cpuHero.reset(color: SystemPalette.meta)
+            cpuCard.update(nil)
             return
         }
         cpuTile.update(value: SystemPaneFormat.percent(snapshot.totalUsage),
                        color: SystemPalette.cpuInk)
-        cpuCard.updateTrailing(coreSummary(snapshot))
-        // total 是唯一真相源：用户态由 total − 系统态现算，不读 userUsage 这个独立字段。
-        // 否则两枚数字各自取整后会凑不出总量（如「总 25 / 用户 13 / 系统 13」），
-        // 与图上叠加带（带厚 = 系统态、带顶 = 总量）也对不上。
-        cpuSplit.update(total: snapshot.totalUsage, system: snapshot.systemUsage)
-        cpuHero.update(value: SystemDetailFormatting.percentNumberText(snapshot.totalUsage),
-                       color: SystemPalette.cpuInk, unit: "%")
+        // total 是唯一真相源：用户态由 total − 系统态现算（口径在卡内图例里），
+        // 不读 userUsage 这个独立字段，否则两枚数字各自取整后会凑不出总量。
+        cpuCard.update(snapshot)
     }
 
     /// GPU：四联数值 + 环形利用率 + 显存数值行（版2 不画显存条）
     func updateGPU(_ snapshot: GPUSnapshot?) {
         guard let snapshot else {
             gpuTile.update(value: SystemPaneFormat.placeholder, color: SystemPalette.meta)
-            gpuRing.fraction = 0
-            gpuRing.centerText = SystemPaneFormat.placeholder
-            gpuMemoryLabel.stringValue = SystemPaneFormat.placeholder
-            gpuMemoryLabel.textColor = SystemPalette.meta
+            gpuCard.update(nil)
             return
         }
         gpuTile.update(value: SystemPaneFormat.percent(snapshot.utilization),
                        color: SystemPalette.gpuInk)
-        let utilization = Self.clamp(snapshot.utilization)
-        gpuRing.fraction = utilization
-        gpuRing.centerText = SystemPaneFormat.percent(utilization)
-        gpuRing.textColor = SystemPalette.gpuInk
-        // 统一内存机型取不到显存总量：只给已用量（不显示半条假比例）
-        if let used = snapshot.memoryUsed, let total = snapshot.memoryTotal, total > 0 {
-            gpuMemoryLabel.stringValue = SystemPaneFormat.bytes(used) + " / "
-                + SystemPaneFormat.bytes(total)
-        } else if let used = snapshot.memoryUsed {
-            gpuMemoryLabel.stringValue = SystemPaneFormat.bytes(used)
-        } else {
-            gpuMemoryLabel.stringValue = SystemPaneFormat.placeholder
-        }
-        gpuMemoryLabel.textColor = snapshot.memoryUsed == nil ? SystemPalette.meta : SystemPalette.gpuInk
+        gpuCard.update(snapshot)
     }
 
     /// 内存：四段堆叠条 + 压力徽标 + 卡头容量（版2 不画四段数值行）
@@ -65,44 +43,14 @@ extension SystemPaneView {
     func updateMemory(_ snapshot: MemorySnapshot?) {
         guard let snapshot, snapshot.total > 0 else {
             memoryTile.update(value: SystemPaneFormat.placeholder, color: SystemPalette.meta)
-            memoryCard.updateTrailing(SystemPaneFormat.placeholder)
-            memoryBar.segments = []
-            memoryBar.total = 0
-            memoryBar.pressureLevel = .unknown
-            pressureDot.level = .unknown
+            memoryCard.update(nil)
             return
-        }
-        let total = Double(snapshot.total)
-        let used = min(Double(snapshot.used), total)
-        let wired = min(Double(snapshot.wired), used)
-        let compressed = min(Double(snapshot.compressed), max(0, used - wired))
-        let active = max(0, used - wired - compressed)
-        let free = max(0, total - used)
-        memoryBar.total = total
-        if snapshot.wired > 0 || snapshot.active > 0 {
-            memoryBar.segments = [
-                .init(value: wired, color: SystemPaneStyle.memoryWired),
-                .init(value: active, color: SystemPaneStyle.memoryActive),
-                .init(value: compressed, color: SystemPaneStyle.memoryCompressed),
-                .init(value: free, color: .clear),
-            ]
-        } else {
-            // 老快照未拆分 wired / active：非压缩已用合并为一段，仍保持四段槽位形状
-            memoryBar.segments = [
-                .init(value: used - compressed, color: SystemPaneStyle.memoryActive),
-                .init(value: compressed, color: SystemPaneStyle.memoryCompressed),
-                .init(value: free, color: .clear),
-            ]
         }
         memoryTile.update(value: SystemPaneFormat.percent(
             SystemMetricsFormatting.capacityRatio(used: snapshot.used, total: snapshot.total)
         ), color: SystemPalette.memoryInk)
-        memoryCard.updateTrailing(SystemDetailFormatting.capacityPairText(used: snapshot.used,
-                                                                          total: snapshot.total))
-        // 压力态同时反映到堆叠条描边与卡头圆点：只看条形时也要能读出「警示 / 紧张」
-        let level = pressureLevel(snapshot.pressure)
-        memoryBar.pressureLevel = level
-        pressureDot.level = level
+        // 四段口径与压力态（条描边 + 卡头圆点）都在卡内，见 SystemMemoryCardView.update
+        memoryCard.update(snapshot)
     }
 
     /// 磁盘：版2 只更新卡头 — 繁忙度微条 + 已用 / 总容量 + ›
@@ -110,21 +58,7 @@ extension SystemPaneView {
     /// IOPS 与繁忙度首帧都是 nil（差分指标没有基线）；nil 一律显示「—」而不是 0，
     /// 否则「刚启动」与「真的没有 IO」在界面上无法区分。
     func updateDisk(_ snapshot: DiskSnapshot?) {
-        guard let snapshot, snapshot.total > 0 else {
-            diskCard.updateTrailing(SystemPaneFormat.placeholder)
-            diskBusyLabel.stringValue = SystemPaneFormat.placeholder
-            diskBusyLabel.textColor = SystemPalette.meta
-            diskBusyTrack.fraction = 0
-            return
-        }
-        diskCard.updateTrailing(SystemDetailFormatting.capacityPairText(used: snapshot.used,
-                                                                        total: snapshot.total))
-        let busyAvailable = snapshot.busyFraction != nil
-        diskBusyLabel.stringValue = busyAvailable
-            ? SystemPaneFormat.percent(snapshot.busyFraction) : SystemPaneFormat.placeholder
-        diskBusyLabel.textColor = busyAvailable ? SystemPalette.diskInk : SystemPalette.meta
-        diskBusyTrack.fraction = busyAvailable
-            ? SystemPaneFormat.unitFraction(snapshot.busyFraction) : 0
+        diskCard.update(snapshot)
     }
 
     // MARK: - 压力卡（v4）
@@ -133,29 +67,15 @@ extension SystemPaneView {
     func updateLoad(_ snapshot: LoadSnapshot?) {
         guard let snapshot else {
             loadTile.update(value: SystemPaneFormat.placeholder, color: SystemPalette.meta)
-            loadNumbers.update(short: nil, medium: nil, long: nil)
-            loadCard.updateTrailing(SystemPaneFormat.placeholder)
-            loadChart.coreCount = 0
-            loadChart.axisMaximum = 0
+            loadCard.update(nil)
             return
         }
         // 主数值取 1 分钟均值（最贴近「此刻压力」），单位由数值自身表达（非百分比）
         loadTile.update(value: String(format: "%.2f", max(0, snapshot.load1)),
                         color: SystemPalette.loadInk)
-        loadNumbers.update(short: snapshot.load1, medium: snapshot.load5, long: snapshot.load15)
-        // 卡头已有三枚负载数值 + 图例，右侧只留「/10」这种极短核数标记（「核」字进 toolTip）
-        loadCard.updateTrailing(snapshot.coreCount > 0 ? "/\(snapshot.coreCount)"
-                                : SystemPaneFormat.placeholder)
-        loadChart.coreCount = max(0, snapshot.coreCount)
-        refreshLoadAxis()
+        // 三值图例、核数标记与纵轴量程都在卡内（量程 = max(核数 × 1.2, 峰值 × 1.15)）
+        loadCard.update(snapshot)
         loadCard.toolTip = SystemPaneTip.load(load: snapshot)
-    }
-
-    /// 按当前三序列峰值与核数重算纵轴（cap = max(核数 × 1.2, 峰值 × 1.15)）
-    func refreshLoadAxis() {
-        let peak = (loadChart.shortValues + loadChart.mediumValues + loadChart.longValues).max() ?? 0
-        loadChart.axisMaximum = SystemLoadChartView.axisMaximum(coreCount: loadChart.coreCount,
-                                                                peak: peak)
     }
 
     /// 进程榜：按 CPU 占用排序并渲染 Top-2
@@ -166,18 +86,15 @@ extension SystemPaneView {
     }
 
     /// 重绘进程榜（数据刷新共用同一入口，避免两处口径分叉）
+    ///
+    /// 榜单口径与「压力详情」Top-10 共用（SystemPaneView.processRows），只是条数按首屏取 Top-2。
     func renderProcessList() {
-        guard let snapshot = processesSnapshot else {
-            processList.update([], unavailableTip: SystemPaneTip.processUnavailable)
-            return
-        }
-        let rows = Self.processRows(snapshot, metric: .cpu, limit: 2,
-                                    memoryTotal: processesMemoryTotal)
-        guard !rows.isEmpty else {
-            processList.update([], unavailableTip: SystemPaneTip.processUnavailable)
-            return
-        }
-        processList.update(Array(rows), unavailableTip: SystemPaneTip.processUnavailable)
+        let rows = processesSnapshot.map {
+            Self.processRows($0, metric: .cpu,
+                             limit: SystemLoadCardView.rowLimit,
+                             memoryTotal: processesMemoryTotal)
+        } ?? []
+        loadCard.update(processRows: rows)
     }
 
     /// 采样周期（秒）— 由控制器按设置页偏好注入，详情页据此写「采样 1 秒」

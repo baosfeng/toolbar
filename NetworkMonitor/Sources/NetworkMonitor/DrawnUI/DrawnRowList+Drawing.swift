@@ -39,61 +39,33 @@ extension DrawnRowList {
     // MARK: 单行式
 
     /// 行名 → 进度条 → 行值（行内垂直居中）
+    ///
+    /// 绘制主体在 DrawnSingleRowStyle：自绘卡片里的行不建视图，但两条路径必须画出同一种行。
+    /// 图标由本视图补（只有列表才有图标来源），位置与宽度走同一套列宽分配。
     private func drawSingleRow(_ row: DrawnRowSpec, index: Int, in rect: CGRect) {
-        let titleRun = DrawnTextRun(string: row.title, font: titleFont, color: titleColor)
-        let valueRun = DrawnTextRun(string: row.value,
-                                    font: row.tone == .strong ? PaneCardStyle.rowValueStrongFont : valueFont,
-                                    color: toneColor(row.tone))
-        // 图标列先占位：图标宽 + 一个间距，行名从它右侧开始
         let iconWidth = iconSize > 0 ? iconSize : 0
-        let metrics = DrawnRowLayout.metrics(rowWidth: rect.width,
-                                             leadingInset: horizontalInset,
-                                             trailingInset: horizontalInset,
-                                             titleWidth: fixedTitleWidth ?? titleRun.width(),
-                                             valueWidth: valueRun.width(),
-                                             gap: elementGap,
-                                             hasProgress: row.progress != nil,
-                                             minBarWidth: minBarWidth,
-                                             leadingWidth: iconWidth)
-        var cursorX = rect.minX + horizontalInset
-        if iconWidth > 0 {
+        if iconWidth > 0, let image = rowIcon?(index) {
             // 图标列始终占位（这行取不到图标也留空），保证行名左对齐整齐
-            if let image = rowIcon?(index) {
-                drawIcon(image, at: CGRect(x: cursorX,
-                                           y: rect.midY - iconWidth / 2,
-                                           width: iconWidth,
-                                           height: iconWidth))
-            }
-            cursorX += iconWidth + elementGap
+            drawIcon(image, at: CGRect(x: rect.minX + horizontalInset,
+                                       y: rect.midY - iconWidth / 2,
+                                       width: iconWidth,
+                                       height: iconWidth))
         }
-        if metrics.titleWidth > 0 {
-            titleRun.draw(in: CGRect(x: cursorX,
-                                     y: rect.minY,
-                                     width: metrics.titleWidth,
-                                     height: rect.height))
-            cursorX += metrics.titleWidth + elementGap
-        }
-        if metrics.showsBar {
-            let barRect = CGRect(x: cursorX,
-                                 y: rect.midY - barHeight / 2,
-                                 width: metrics.barWidth,
-                                 height: barHeight)
-            if row.isEmptyBar {
-                DrawnInk.outlineBar(in: barRect, color: trackColor)
-            } else if let progress = row.progress {
-                DrawnInk.progressBar(in: barRect,
-                                     progress: progress,
-                                     track: trackColor,
-                                     fill: row.tone == .warning ? PaneCardStyle.warnInk : barColor)
-            }
-        }
-        if metrics.valueWidth > 0 {
-            valueRun.draw(in: CGRect(x: rect.maxX - horizontalInset - metrics.valueWidth,
-                                     y: rect.minY,
-                                     width: metrics.valueWidth,
-                                     height: rect.height),
-                          alignment: .right)
-        }
+        singleRowStyle.draw(row, in: rect, leadingWidth: iconWidth)
+    }
+
+    /// 当前配置对应的单行式绘制器（行列表与自绘卡片共用）
+    private var singleRowStyle: DrawnSingleRowStyle {
+        DrawnSingleRowStyle(horizontalInset: horizontalInset,
+                            elementGap: elementGap,
+                            titleFont: titleFont,
+                            valueFont: valueFont,
+                            titleColor: titleColor,
+                            trackColor: trackColor,
+                            barColor: barColor,
+                            barHeight: barHeight,
+                            minBarWidth: minBarWidth,
+                            fixedTitleWidth: fixedTitleWidth)
     }
 
     // MARK: 两行式

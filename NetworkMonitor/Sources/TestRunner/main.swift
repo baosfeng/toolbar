@@ -293,6 +293,9 @@ runBillingRefreshGateTests()
 runDrawnRowLayoutTests()
 runBillingCellLayoutTests()
 
+// MARK: - 系统页首屏五卡排布（卡头让位 / 卡高与内容区 / 读数条 / 段宽 / 负载纵轴 / 取整合账）
+runSystemCardLayoutTests()
+
 // MARK: - 剪贴板动态轮询调度（三档边界 / 归一化 / 停止后不再重排）
 runClipboardPollScheduleTests()
 

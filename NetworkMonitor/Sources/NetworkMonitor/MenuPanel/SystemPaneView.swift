@@ -54,45 +54,22 @@ final class SystemPaneView: MenuPanelPaneView {
     let loadTile = SystemHeroTileView(label: "负载", lineColor: SystemPalette.loadShort,
                                       showsSparkline: false)
 
-    // MARK: CPU 卡（版2：不画每核柱阵，加卡内大号数值）
+    // MARK: 五张语义分族卡（整卡自绘，卡内零视图）
+    //
+    // 改造前每张卡是「NSStackView 卡头 + 内容视图树」（五卡内部共 113 个视图）；
+    // 现在每张卡是一个视图，卡头与内容都在一次 draw 里画完。
+    // 各卡的内容口径见 SystemPaneView+DrawnCards.swift。
 
-    let cpuCard = SystemCardView(title: "CPU", wash: SystemPalette.wash(.cpu))
-    let cpuArea = SystemAreaChartView(height: 32)
-    let cpuHero = SystemMetricValueView(fontSize: 23, unitFontSize: 9)
-    // 卡头双图例（用户态 / 系统态）：与标题同行，不占新增行高
-    let cpuSplit = SystemUsageSplitView()
-
-    // MARK: GPU 卡（版2：不画显存条，保留已用数值行）
-
-    let gpuCard = SystemCardView(title: "GPU", wash: SystemPalette.wash(.gpu))
-    let gpuRing = SystemRingView(diameter: 40)
-    let gpuSparkline = SystemSparklineView(lineColor: SystemPalette.gpu, height: 28)
-    let gpuMemoryLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
-                                             font: MenuPanelStyle.smallValueFont,
-                                             color: SystemPalette.gpuInk)
-
-    // MARK: 内存卡（版2：只留四段条）
-
-    let memoryCard = SystemCardView(title: "内存", wash: SystemPalette.wash(.memory))
-    let memoryBar = SystemStackedBarView()
-    let pressureDot = SystemPressureDotView()
-
-    // MARK: 磁盘卡（版2：压成单行 — 忙% + 容量 + ›）
-
-    let diskCard = SystemCardView(title: "磁盘", wash: SystemPalette.wash(.disk))
-    // 卡头繁忙度微条：30pt 宽的细条 + 「忙 xx%」，走磁盘族石墨（「忙」是设备占用率，属容量/水位一族）
-    let diskBusyLabel = MenuPanelLabel.text(SystemPaneFormat.placeholder,
-                                            font: MenuPanelStyle.smallValueFont,
-                                            color: SystemPalette.diskInk)
-    let diskBusyTrack = MenuPanelTrackView(fillColor: SystemPalette.disk, height: 3)
-
-    // MARK: 压力卡（负载三线 + 进程榜 Top-2 + 「全部 ›」）
-
-    let loadCard = SystemCardView(title: "压力", wash: SystemPalette.wash(.load))
-    let loadChart = SystemLoadChartView()
-    let loadNumbers = SystemLoadNumbersView()
-    let processList = SystemProcessListView(rows: 2)
-    let processAllButton = NSButton(title: "全部 ›", target: nil, action: nil)
+    /// CPU 卡（版2：不画每核柱阵，加卡内大号数值 + 卡头用户态 / 系统态双图例）
+    let cpuCard = SystemCPUCardView(title: "CPU", wash: SystemPalette.wash(.cpu))
+    /// GPU 卡（版2：不画显存条，保留已用数值行）
+    let gpuCard = SystemGPUCardView(title: "GPU", wash: SystemPalette.wash(.gpu))
+    /// 内存卡（版2：只留四段堆叠条 + 卡头压力徽标）
+    let memoryCard = SystemMemoryCardView(title: "内存", wash: SystemPalette.wash(.memory))
+    /// 磁盘卡（版2：压成单行 — 忙% 微条 + 容量 + 「›」）
+    let diskCard = SystemDiskCardView(title: "磁盘", wash: SystemPalette.wash(.disk))
+    /// 压力卡（负载三线 + 进程榜 Top-2 + 「全部 ›」入口）
+    let loadCard = SystemLoadCardView(title: "压力", wash: SystemPalette.wash(.load))
 
     // MARK: 顶部页头（五页统一样式：页名 + 口径 + 动作槽）
 
@@ -224,7 +201,7 @@ final class SystemPaneView: MenuPanelPaneView {
     // 跨文件调用需放宽（同模块内除该扩展外无其他调用方）。
 
     /// 卡头补充：P/E 核数（无分组元数据时退化为总核数）
-    func coreSummary(_ snapshot: CPUSnapshot) -> String {
+    static func coreSummary(_ snapshot: CPUSnapshot) -> String {
         if snapshot.performanceCores > 0 || snapshot.efficiencyCores > 0 {
             return "\(snapshot.performanceCores)P · \(snapshot.efficiencyCores)E"
         }

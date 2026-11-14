@@ -117,4 +117,69 @@ enum DrawnInk {
         ctx.setFillColor(color.cgColor)
         ctx.fill(CGRect(x: x0, y: alignedY, width: x1 - x0, height: 1 / scale))
     }
+
+    // MARK: 环 / 圆点
+
+    /// 进度环 —— 从 12 点方向顺时针画 fraction（圆头端点）
+    ///
+    /// 弧用 NSBezierPath 画（角度语义 0=右、90=上、顺时针），与改造前 SystemRingView /
+    /// SystemBatteryRingView 用的是同一段 API；在 flipped 视图里先局部翻正，
+    /// 两种坐标系画出的圆环才能逐像素一致（实测换成 CGContext 弧会有 1–4 级抗锯齿差）。
+    static func ring(in rect: CGRect, fraction: Double, lineWidth: CGFloat,
+                     color: NSColor, track: NSColor) {
+        guard rect.width > 0, rect.height > 0 else { return }
+        let radius = max(1, (min(rect.width, rect.height) - lineWidth) / 2)
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        withUnflippedIfNeeded(around: rect) {
+            let trackPath = NSBezierPath()
+            trackPath.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
+            trackPath.lineWidth = lineWidth
+            track.setStroke()
+            trackPath.stroke()
+
+            let value = fraction.isFinite ? min(max(fraction, 0), 1) : 0
+            guard value > 0 else { return }
+            let arc = NSBezierPath()
+            arc.appendArc(withCenter: center, radius: radius,
+                          startAngle: 90, endAngle: 90 - 360 * CGFloat(value), clockwise: true)
+            arc.lineWidth = lineWidth
+            arc.lineCapStyle = .round
+            color.setStroke()
+            arc.stroke()
+        }
+    }
+
+    /// 圆点（可带 1pt 内边）—— 浅底上 systemGreen / systemYellow 这类颜色对比不足 3:1，
+    /// 用一圈描边把它从底上「框」出来，而不是把颜色调深（调深就是混色）
+    ///
+    /// 与原生 WiFiSignalDotView / SystemPressureDotView 同一段 NSBezierPath 绘制：
+    /// 圆取 rect 内缩半个像素，描边压在圆心上（不额外内缩）。
+    static func circle(in rect: CGRect, fill: NSColor, stroke: NSColor? = nil, lineWidth: CGFloat = 1) {
+        guard rect.width > 0, rect.height > 0 else { return }
+        let oval = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
+        fill.setFill()
+        oval.fill()
+        guard let stroke else { return }
+        oval.lineWidth = lineWidth
+        stroke.setStroke()
+        oval.stroke()
+    }
+
+    /// 在 flipped 上下文里按「非 flipped」语义绘制
+    ///
+    /// 原生组件（SystemRingView / WiFiSignalDotView 等）都是非 flipped 视图，
+    /// 自绘卡片统一 flipped；局部翻正后就能直接复用同一段路径代码。
+    private static func withUnflippedIfNeeded(around rect: CGRect, _ body: () -> Void) {
+        guard NSGraphicsContext.current?.isFlipped == true,
+              let ctx = NSGraphicsContext.current?.cgContext else {
+            body()
+            return
+        }
+        ctx.saveGState()
+        ctx.translateBy(x: 0, y: rect.midY)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.translateBy(x: 0, y: -rect.midY)
+        body()
+        ctx.restoreGState()
+    }
 }

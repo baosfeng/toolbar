@@ -47,22 +47,10 @@ final class SystemSparklineView: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard values.count >= 2 else {
-            // 无数据：贴底一条轨道，避免整格空白被误读为渲染失败
-            SystemPalette.track.setFill()
-            NSRect(x: bounds.minX, y: bounds.maxY - 1, width: bounds.width, height: 1).fill()
-            return
-        }
-        let rect = bounds.insetBy(dx: 1, dy: 1)
-        let maximum = max(fixedMaximum ?? values.max() ?? 0, 0.000_001)
-        if fillsArea {
-            let area = SystemChartDrawing.areaPath(values: values, in: rect, maximum: maximum)
-            SystemPalette.fillVerticalGradient(area, in: rect, color: lineColor)
-        }
-        let line = SystemChartDrawing.linePath(values: values, in: rect, maximum: maximum)
-        line.lineWidth = 1.5
-        lineColor.setStroke()
-        line.stroke()
+        // 绘制只留一份（SystemChartDrawing）：自绘卡片复用同一个函数，两条路径不会画出两种图
+        SystemChartDrawing.drawSparkline(values: values, in: bounds, lineColor: lineColor,
+                                         fixedMaximum: fixedMaximum, fillsArea: fillsArea,
+                                         trackColor: SystemPalette.track)
     }
 }
 
@@ -124,36 +112,11 @@ final class SystemAreaChartView: NSView {
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        // 参考线 25% / 50% / 75%：给「高/低」一个刻度感，不写字
-        SystemPalette.grid.setFill()
-        for fraction: CGFloat in [0.25, 0.5, 0.75] {
-            NSRect(x: bounds.minX, y: bounds.height * fraction,
-                   width: bounds.width, height: 0.5).fill()
-        }
-        guard values.count >= 2 else { return }
-        let rect = bounds.insetBy(dx: 0, dy: 1)
-        let isOverlay = overlayValues.count == values.count
-        // 叠加模式：纵轴固定 1.0（0…100%），带厚 = 真实占比；单序列：自适应取峰值保形状
-        let maximum = fixedMaximum ?? (isOverlay ? 1 : max(values.max() ?? 0, 0.000_001))
-        if isOverlay {
-            // 底层 = 总量 − 叠加量（钳到 [0, 总量]）：带厚即叠加量的真实占比
-            let base = zip(values, overlayValues).map { total, overlay in
-                min(max(total, 0), max(0, total - max(overlay, 0)))
-            }
-            SystemPalette.fillVerticalGradient(
-                SystemChartDrawing.areaPath(values: base, in: rect, maximum: maximum),
-                in: rect, color: lineColor, topAlpha: 0.30, bottomAlpha: 0.03)
-            overlayColor.setFill()
-            SystemChartDrawing.bandPath(lower: base, upper: values,
-                                       in: rect, maximum: maximum).fill()
-        } else {
-            SystemPalette.fillVerticalGradient(
-                SystemChartDrawing.areaPath(values: values, in: rect, maximum: maximum),
-                in: rect, color: lineColor)
-        }
-        let line = SystemChartDrawing.linePath(values: values, in: rect, maximum: maximum)
-        line.lineWidth = 2
-        lineColor.setStroke()
-        line.stroke()
+        // 绘制只留一份（SystemChartDrawing）：自绘卡片复用同一个函数，两条路径不会画出两种图
+        SystemChartDrawing.drawAreaChart(values: values, overlayValues: overlayValues,
+                                         in: bounds, lineColor: lineColor,
+                                         overlayColor: overlayColor,
+                                         fixedMaximum: fixedMaximum,
+                                         gridColor: SystemPalette.grid)
     }
 }

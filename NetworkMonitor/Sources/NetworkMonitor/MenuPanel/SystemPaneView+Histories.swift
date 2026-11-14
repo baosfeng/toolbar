@@ -33,17 +33,17 @@ extension SystemPaneView {
             let points = SystemChartDrawing.sanitized(cpu)
             cpuHistory = points
             cpuTile.update(history: points)
-            cpuArea.values = points
+            cpuCard.totalValues = points
         }
         if let cpuSystem {
             cpuSystemHistory = SystemChartDrawing.sanitized(cpuSystem)
-            cpuArea.overlayValues = cpuSystemHistory
+            cpuCard.systemValues = cpuSystemHistory
         }
         if let gpu {
             let points = SystemChartDrawing.sanitized(gpu)
             gpuHistory = points
             gpuTile.update(history: points)
-            gpuSparkline.values = points
+            gpuCard.seriesValues = points
         }
         if let memory {
             memoryHistory = SystemChartDrawing.sanitized(memory)
@@ -66,18 +66,15 @@ extension SystemPaneView {
         }
         if let loadShort {
             loadShortHistory = SystemChartDrawing.sanitized(loadShort)
-            loadChart.shortValues = loadShortHistory
+            loadCard.shortValues = loadShortHistory
         }
         if let loadMedium {
             loadMediumHistory = SystemChartDrawing.sanitized(loadMedium)
-            loadChart.mediumValues = loadMediumHistory
+            loadCard.mediumValues = loadMediumHistory
         }
         if let loadLong {
             loadLongHistory = SystemChartDrawing.sanitized(loadLong)
-            loadChart.longValues = loadLongHistory
-        }
-        if loadShort != nil || loadMedium != nil || loadLong != nil {
-            refreshLoadAxis()
+            loadCard.longValues = loadLongHistory
         }
         syncDetailIfNeeded()
     }

@@ -3,95 +3,177 @@ import NetworkMonitorCore
 
 // MARK: - 底部状态带
 
-/// 底部状态带 — SoC 温度 · 电池环 + 电量 · Wi-Fi 三段，一行横跨面板底部
+/// 底部状态带 —— SoC 温度 · 电池环 + 电量 · Wi-Fi 三段，一行横跨面板底部
 ///
-/// 温度卡下线后的替代形态：只占状态带那一行（`PaneCardStyle.stateBandHeight`），不再是独立卡片。
-/// 外壳（底 / 高度 / 内边距 / 圆角）全部走 `PaneBandChrome`：此前这里自己画
-/// `SystemPalette.bandBackground`（0xF0F0F4）+ 6pt 圆角 + 写死 7pt 内边距与 20pt 高，
-/// 与额度 / Token 页的 0xEEEFF2 / bandRadius 是第三份实现，切页时页脚底色与字号都能看出差别。
+/// 温度卡下线后的替代形态：只占状态带那一行（PaneCardStyle.stateBandHeight），不再是独立卡片。
+/// 外壳（底 / 高度 / 内边距 / 圆角）全部走 PaneBandChrome：此前这里自己画
+/// SystemPalette.bandBackground + 6pt 圆角 + 写死 7pt 内边距与 20pt 高，
+/// 与额度 / Token 页的 bandFill / bandRadius 是第三份实现。
 ///
-/// **第四段「估功耗」已从正文移到 toolTip**（`updatePower` 的 API 不变，读数照旧可取）：
+/// **整条一个视图**：三段读数由 DrawnReadoutRun 一次画完（改造前这里 19 个子视图：
+/// 3 个 NSStackView 组 + 6 个 NSTextField + 电池环 + 档位点 + 占位）。
+///
+/// **第四段「估功耗」已从正文移到 toolTip**（updatePower 的 API 不变，读数照旧可取）：
 /// 字号统一到 10pt 键 / 10.5pt 值后，四段最宽组合实测 307pt（电池 100% · 温度 105° ·
-/// RSSI −100 · 功耗 48.20 W；按 `NSTextField.fittingSize` 量），状态带内宽只有 282pt
-/// （面板内容 296 − 2×`bandPaddingX`）。砍掉功耗段后三段最宽组合 228pt，余量 54pt，
-/// 三段按 `bandGroupSpacing` 排布后不再挤压。
-/// 口径全部写在 toolTip：健康度不可得（只给循环次数）、功耗为估算值、GPU 温度与风扇不可得。
+/// RSSI −100 · 功耗 48.20 W），状态带内宽只有 282pt（面板内容 296 − 2×bandPaddingX）。
+/// 砍掉功耗段后三段最宽组合 228pt，余量 54pt，三段按 bandGroupSpacing 排布后不再挤压。
 final class SystemStateBandView: NSView {
 
-    private let tempCaption: NSTextField
-    private let tempValue: NSTextField
-    private let batteryRing: SystemBatteryRingView
-    private let batteryValue: NSTextField
-    private let batteryNote: NSTextField
-    // MARK: Wi-Fi 段
-    // 只放 RSSI 与档位色点：信道 / 速率在状态带内宽里放不下（在网络页链路条上）。
-    private let wifiCaption: NSTextField
-    private let wifiValue: NSTextField
-    private let wifiDot: WiFiSignalDotView
+    // MARK: 数据
 
-    /// 温度段与电池段小组（`setShowsTemperature` 按组显隐，避免留半截标签）
-    private let tempGroup: NSStackView
-    private let batteryGroup: NSStackView
+    private var temperature: Double?
+    private var battery: BatterySnapshot?
+    private var wifi: WiFiLinkSnapshot?
+    private var showsTemperature = true
 
     /// 功耗读数（正文第四段已移除，见类型注释的取舍）—— 与 toolTip 合并展示
     private(set) var powerText: String = SystemPaneFormat.placeholder
 
-    /// 调用方写进来的口径说明（`SystemPaneTip.band(...)`），与功耗读数合并后再交给 AppKit
+    /// 调用方写进来的口径说明（SystemPaneTip.band(...)），与功耗读数合并后再交给 AppKit
     private var baseToolTip: String?
 
+    // MARK: 字号（与 PaneBandChrome.makeItemView 同一张表）
+
+    private static let captionFont = PaneCardStyle.metaFont
+    private static let valueFont = PaneCardStyle.rowValueStrongFont
+
+    // MARK: 初始化
+
     init() {
-        tempCaption = MenuPanelLabel.text("SoC", font: PaneCardStyle.metaFont,
-                                          color: SystemPalette.meta)
-        tempValue = MenuPanelLabel.text(SystemPaneFormat.placeholder,
-                                        font: PaneCardStyle.rowValueStrongFont,
-                                        color: SystemPalette.temperatureInk)
-        batteryRing = SystemBatteryRingView()
-        batteryValue = MenuPanelLabel.text(SystemPaneFormat.placeholder,
-                                           font: PaneCardStyle.rowValueStrongFont,
-                                           color: SystemPalette.batteryInk)
-        // 「充 / AC」是电量之外的补充标记：与键同一档字号、走三级色，不加粗也不放大
-        batteryNote = MenuPanelLabel.text("", font: PaneCardStyle.metaFont,
-                                         color: SystemPalette.meta)
-        wifiCaption = MenuPanelLabel.text("Wi-Fi", font: PaneCardStyle.metaFont,
-                                         color: SystemPalette.meta)
-        wifiValue = MenuPanelLabel.text(SystemPaneFormat.placeholder,
-                                       font: PaneCardStyle.rowValueStrongFont,
-                                       color: SystemPalette.wifiInk)
-        wifiDot = WiFiSignalDotView()
-        tempGroup = Self.group([tempCaption, tempValue])
-        batteryGroup = Self.group([batteryRing, batteryValue, batteryNote])
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-
-        let content = NSStackView(views: [tempGroup, batteryGroup,
-                                          Self.group([wifiCaption, wifiValue, wifiDot]),
-                                          MenuPanelLabel.spacer()])
-        content.orientation = .horizontal
-        content.alignment = .centerY
-        content.spacing = PaneCardStyle.bandGroupSpacing
-        content.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(content)
-        // 底 / 高度 / 内边距 / 圆角与其它页同一个壳（高度 = stateBandHeight，内边距 = bandPaddingX）
-        PaneBandChrome.constrain(content, in: self)
-        for label in [tempValue, batteryValue, wifiValue] {
-            label.setContentHuggingPriority(.required, for: .horizontal)
-            label.setContentCompressionResistancePriority(.required, for: .horizontal)
-        }
+        heightAnchor.constraint(equalToConstant: PaneBandChrome.height).isActive = true
         setAccessibilityRole(.group)
         setAccessibilityLabel("系统状态带")
+        rebuildReadout()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
+    override var isFlipped: Bool { true }
+
     override func draw(_ dirtyRect: NSRect) {
+        // 与原生标签同一套字形渲染（字体平滑参与抗锯齿）
+        NSGraphicsContext.current?.cgContext.setShouldSubpixelPositionFonts(false)
+        NSGraphicsContext.current?.cgContext.setAllowsFontSubpixelPositioning(false)
         PaneBandChrome.draw(in: bounds)
+        readoutRun.draw(at: PaneCardStyle.bandPaddingX, centerY: bounds.midY)
         super.draw(dirtyRect)
+    }
+
+    // MARK: 读数条（三段：温度 / 电池 / Wi-Fi）
+
+    /// 整条读数（在 update 里重建，draw 里不再做文本测量）
+    private var readoutRun = DrawnReadoutRun()
+
+    /// 重建读数：组间 8pt、组内 3pt（与 PaneCardStyle 的 band 间距同源）
+    private func rebuildReadout() {
+        var groups: [[DrawnReadoutPiece]] = []
+        if showsTemperature { groups.append(temperatureGroup) }
+        groups.append(batteryGroup)
+        groups.append(wifiGroup)
+        readoutRun = DrawnReadoutRun(groups: groups,
+                                     innerGap: PaneCardStyle.bandInnerSpacing,
+                                     groupGap: PaneCardStyle.bandGroupSpacing)
+    }
+
+    /// 「SoC 温度」（>85°C 转警示色）
+    private var temperatureGroup: [DrawnReadoutPiece] {
+        let hot = (temperature ?? 0) > SystemPaneFormat.hotThreshold
+        let text: String
+        let color: NSColor
+        if let temperature, temperature.isFinite {
+            text = SystemPaneFormat.temperatureNumber(temperature) + "°"
+            color = hot ? SystemPaneStyle.temperatureHot : SystemPalette.temperatureInk
+        } else {
+            text = SystemPaneFormat.placeholder
+            color = SystemPalette.meta
+        }
+        return [
+            caption("SoC"),
+            value(text, color: color),
+        ]
+    }
+
+    /// 「电量环 + 电量 + 充 / AC」
+    private var batteryGroup: [DrawnReadoutPiece] {
+        let ratio = battery.flatMap { $0.percentage }.map { SystemPaneFormat.unitFraction($0) } ?? 0
+        let tone: BatteryTone
+        if battery?.percentage == nil {
+            tone = .unavailable
+        } else {
+            tone = ratio < 0.10 ? .critical : (ratio < 0.20 ? .warning : .normal)
+        }
+        let valueText = battery.flatMap { $0.percentage }.map { SystemPaneFormat.percent($0) }
+            ?? SystemPaneFormat.placeholder
+        let valueColor = battery?.percentage == nil ? SystemPalette.meta : SystemPalette.batteryInk
+        // 状态小字独立于电量：电量读不到不代表电源状态读不到
+        let note = battery?.isCharging == true ? "充" : (battery?.isOnAC == true ? "AC" : "")
+        var pieces: [DrawnReadoutPiece] = [
+            .ring(fraction: ratio,
+                  diameter: Self.batteryRingSize,
+                  lineWidth: Self.batteryRingLineWidth,
+                  color: tone.color,
+                  track: SystemPalette.track),
+            value(valueText, color: valueColor),
+        ]
+        if !note.isEmpty {
+            pieces.append(caption(note))
+        }
+        return pieces
+    }
+
+    /// 「Wi-Fi + RSSI + 档位圆点」
+    private var wifiGroup: [DrawnReadoutPiece] {
+        let available = wifi.map { WiFiLinkFormatting.isAvailable($0) } ?? false
+        let rssi = WiFiLinkFormatting.rssiText(wifi)
+        let quality = available ? WiFiLinkFormatting.quality(wifi) : .unknown
+        return [
+            caption("Wi-Fi"),
+            value(rssi, color: available ? SystemPalette.wifiInk : SystemPalette.meta),
+            .dot(color: WiFiLinkStyle.dotColor(for: quality),
+                 size: WiFiLinkStyle.dotDiameter,
+                 ringColor: MenuPanelStyle.trackColor),
+        ]
+    }
+
+    /// 一段次级色说明文字
+    private func caption(_ text: String) -> DrawnReadoutPiece {
+        SystemDrawnText.piece(text, font: Self.captionFont, color: SystemPalette.meta)
+    }
+
+    /// 一段读数文字（值）
+    private func value(_ text: String, color: NSColor) -> DrawnReadoutPiece {
+        SystemDrawnText.piece(text, font: Self.valueFont, color: color)
+    }
+
+    // MARK: 电池环规格
+
+    private static let batteryRingSize: CGFloat = 14
+    private static let batteryRingLineWidth: CGFloat = 2.6
+
+    /// 电池档位（决定环色）：正常 / 警告 / 极低 / 不可得
+    @MainActor
+    private enum BatteryTone {
+        case normal
+        case warning
+        case critical
+        case unavailable
+
+        var color: NSColor {
+            switch self {
+            case .normal: return SystemPaneStyle.batteryRing
+            case .warning: return SystemPaneStyle.batteryWarn
+            case .critical: return SystemPaneStyle.batteryCritical
+            case .unavailable: return SystemPalette.track
+            }
+        }
     }
 
     // MARK: toolTip（口径说明 + 功耗读数）
 
-    /// 状态带 toolTip —— 口径说明由 `SystemPaneView+Metrics` 写入，功耗读数由本视图补在末尾
+    /// 状态带 toolTip —— 口径说明由 SystemPaneView+Metrics 写入，功耗读数由本视图补在末尾
     ///
     /// 重写而不是在各 update 里拼字符串：口径文案的写入点在另一个文件、时序在本视图之后，
     /// 只有把「基底文案」与「功耗读数」两段分开存，谁后写都不会把对方覆盖掉。
@@ -114,64 +196,27 @@ final class SystemStateBandView: NSView {
 
     /// 温度段（nil 显示「—」；>85°C 转警示色）
     func updateTemperature(_ celsius: Double?) {
-        guard let celsius, celsius.isFinite else {
-            tempValue.stringValue = SystemPaneFormat.placeholder
-            tempValue.textColor = SystemPalette.meta
-            return
-        }
-        tempValue.stringValue = SystemPaneFormat.temperatureNumber(celsius) + "°"
-        tempValue.textColor = celsius > SystemPaneFormat.hotThreshold
-            ? SystemPaneStyle.temperatureHot : SystemPalette.temperatureInk
+        temperature = celsius
+        rebuildReadout()
+        needsDisplay = true
     }
 
     /// 电池段 — 环 + 电量 + 状态小字（充 / AC）；循环次数进 toolTip（健康度不可得）
     func updateBattery(_ snapshot: BatterySnapshot?) {
-        guard let snapshot else {
-            batteryRing.fraction = 0
-            batteryRing.tone = .unavailable
-            batteryValue.stringValue = SystemPaneFormat.placeholder
-            batteryValue.textColor = SystemPalette.meta
-            batteryNote.stringValue = ""
-            return
-        }
-        // 状态小字独立于电量：电量读不到不代表电源状态读不到，
-        // 「— AC」与「—」是两种不同的事实，不能因为缺电量就把供电状态一起抹掉
-        if snapshot.isCharging == true {
-            batteryNote.stringValue = "充"
-        } else if snapshot.isOnAC == true {
-            batteryNote.stringValue = "AC"
-        } else {
-            batteryNote.stringValue = ""
-        }
-        guard let percentage = snapshot.percentage, percentage.isFinite else {
-            batteryRing.fraction = 0
-            batteryRing.tone = .unavailable
-            batteryValue.stringValue = SystemPaneFormat.placeholder
-            batteryValue.textColor = SystemPalette.meta
-            return
-        }
-        let ratio = SystemPaneFormat.unitFraction(percentage)
-        batteryRing.fraction = ratio
-        batteryRing.tone = ratio < 0.10 ? .critical : (ratio < 0.20 ? .warning : .normal)
-        batteryValue.stringValue = SystemPaneFormat.percent(percentage)
-        batteryValue.textColor = SystemPalette.batteryInk
+        battery = snapshot
+        rebuildReadout()
+        needsDisplay = true
     }
 
     /// GPU 功耗段（估算值；nil 显示「—」）
     ///
     /// 正文不再占第四段：读数写进 toolTip，并同步到无障碍值，读屏仍能听到功耗。
     func updatePower(_ watts: Double?) {
-        guard let watts, watts.isFinite else {
+        if let watts, watts.isFinite {
+            powerText = String(format: "%.2f W", max(0, watts))
+        } else {
             powerText = SystemPaneFormat.placeholder
-            refreshPowerSurface()
-            return
         }
-        powerText = String(format: "%.2f W", max(0, watts))
-        refreshPowerSurface()
-    }
-
-    /// 功耗读数落盘到两处可见面（toolTip / 无障碍值）—— 正文已无第四段可写
-    private func refreshPowerSurface() {
         super.toolTip = mergedToolTip()
         setAccessibilityValue("估功耗 " + powerText)
     }
@@ -181,102 +226,16 @@ final class SystemStateBandView: NSView {
     /// 读不到时段内显示「—」且圆点转灰：整段保留而不是隐藏，
     /// 避免温度 / 电池的位置随 Wi-Fi 有无左右横跳；也不写 0 dBm 冒充读数。
     func updateWiFi(_ snapshot: WiFiLinkSnapshot?) {
-        let available = WiFiLinkFormatting.isAvailable(snapshot)
-        wifiValue.stringValue = WiFiLinkFormatting.rssiText(snapshot)
-        wifiValue.textColor = available ? SystemPalette.wifiInk : SystemPalette.meta
-        wifiDot.quality = available ? WiFiLinkFormatting.quality(snapshot) : .unknown
-        setAccessibilityLabel("系统状态带")
+        wifi = snapshot
+        rebuildReadout()
+        needsDisplay = true
     }
 
     /// 温度是否显示（设置页 PanelItem.thermal 开关的新语义）
     func setShowsTemperature(_ shows: Bool) {
-        tempGroup.isHidden = !shows
-    }
-
-    /// 三段「标签 + 数值」横向小组（组内间距 = bandInnerSpacing）
-    private static func group(_ views: [NSView]) -> NSStackView {
-        let stack = NSStackView(views: views)
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = PaneCardStyle.bandInnerSpacing
-        return stack
-    }
-}
-
-// MARK: - 电池环
-
-/// 14pt 电池环 — 弧长按电量百分比
-///
-/// 颜色用**纯系统绿**，绝不与强调色混合：v3 用 success + accent 40% 在 oklab 插值后
-/// hue 落到 178°（青）被打回。低电量转琥珀 / 红，与状态语义一致。
-final class SystemBatteryRingView: NSView {
-
-    /// 档位（决定环色）
-    enum Tone {
-        case normal
-        case warning
-        case critical
-        case unavailable
-    }
-
-    /// 电量比例 0...1
-    var fraction: Double = 0 {
-        didSet {
-            guard fraction != oldValue else { return }
-            needsDisplay = true
-        }
-    }
-
-    var tone: Tone = .unavailable {
-        didSet {
-            guard tone != oldValue else { return }
-            needsDisplay = true
-        }
-    }
-
-    private static let lineWidth: CGFloat = 2.6
-
-    init(size: CGFloat = 14) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: size),
-            heightAnchor.constraint(equalToConstant: size),
-        ])
-        setAccessibilityRole(.image)
-        setAccessibilityLabel("电池电量环")
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let radius = max(1, (min(bounds.width, bounds.height) - Self.lineWidth) / 2)
-        let center = NSPoint(x: bounds.midX, y: bounds.midY)
-
-        let track = NSBezierPath()
-        track.appendArc(withCenter: center, radius: radius, startAngle: 0, endAngle: 360)
-        track.lineWidth = Self.lineWidth
-        SystemPalette.track.setStroke()
-        track.stroke()
-
-        let value = fraction.isFinite ? min(1, max(0, fraction)) : 0
-        guard value > 0 else { return }
-        let arc = NSBezierPath()
-        arc.appendArc(withCenter: center, radius: radius, startAngle: 90,
-                      endAngle: 90 - 360 * CGFloat(value), clockwise: true)
-        arc.lineWidth = Self.lineWidth
-        arc.lineCapStyle = .round
-        color.setStroke()
-        arc.stroke()
-    }
-
-    private var color: NSColor {
-        switch tone {
-        case .normal: return SystemPaneStyle.batteryRing
-        case .warning: return SystemPaneStyle.batteryWarn
-        case .critical: return SystemPaneStyle.batteryCritical
-        case .unavailable: return SystemPalette.track
-        }
+        guard showsTemperature != shows else { return }
+        showsTemperature = shows
+        rebuildReadout()
+        needsDisplay = true
     }
 }
