@@ -105,7 +105,7 @@ final class ClipboardThumbnailLoader {
     /// 无冷却时段的实现细节：定时器只负责「到期后把队列里的项重新 request 一遍」，
     /// 是否真的放行仍由策略的 `shouldRetry` 决定，两处口径不会打架。
     private func scheduleRetryIfNeeded(hash: String, imagePath: String?) {
-        guard let delay = retryPolicy.retryDelay(hash: hash) else {
+        guard retryPolicy.retryDelay(hash: hash) != nil else {
             // 终态：达次数上限，本会话不再尝试（也不留占位排期）
             pendingRetries.removeValue(forKey: hash)
             logger.debug("剪贴板缩略图重试已达上限，本会话不再尝试：\(hash.prefix(8))")
@@ -151,7 +151,7 @@ final class ClipboardThumbnailLoader {
     }
 
     /// 读缩略图文件；缺失时用原图在后台补生成一次（与旧同步路径同一补生成逻辑）
-    private static func decode(hash: String, imagePath: String?, maxPixelEdge: Int,
+    private nonisolated static func decode(hash: String, imagePath: String?, maxPixelEdge: Int,
                                logger: LoggingService) -> Decoded? {
         let url = ClipboardImageStore.thumbnailURL(for: hash)
         var cgImage = ClipboardImageDecoder.thumbnail(fromFileAt: url.path, maxPixelSize: maxPixelEdge)
@@ -182,7 +182,7 @@ final class ClipboardThumbnailLoader {
     ///
     /// 调用方只会在主路径已失败时进来，因此这里只做一次字节→位图的直读；
     /// 原图字节先过像素守卫，避免兜底路把像素炸弹解开。
-    private static func fallbackThumbnail(atPath path: String, maxPixelEdge: Int,
+    private nonisolated static func fallbackThumbnail(atPath path: String, maxPixelEdge: Int,
                                           logger: LoggingService) -> CGImage? {
         guard !path.isEmpty, let data = FileManager.default.contents(atPath: path), !data.isEmpty else {
             return nil

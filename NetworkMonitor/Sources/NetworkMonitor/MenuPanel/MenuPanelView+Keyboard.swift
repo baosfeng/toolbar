@@ -50,10 +50,8 @@ extension MenuPanelView {
             activateFocusedTarget()
         default:
             if let number = Int(characters), number >= 1,
-               let view = self as? MenuPanelView,
-               number <= view.tabBar.visibleTabs.count,
-               number - 1 < view.tabBar.visibleTabs.count {
-                select(tab: view.tabBar.visibleTabs[number - 1])
+               number <= tabBar.visibleTabs.count {
+                select(tab: tabBar.visibleTabs[number - 1])
                 return
             }
             super.keyDown(with: event)

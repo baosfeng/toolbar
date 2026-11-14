@@ -33,7 +33,7 @@ enum TransferMotion {
             view.alphaValue = 1
             return
         }
-        nonisolated(unsafe) let target = view
+        let target = view
         let work = {
             target.wantsLayer = true
             guard let layer = target.layer else {
@@ -47,7 +47,9 @@ enum TransferMotion {
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 target.animator().alphaValue = 1
             }, completionHandler: {
-                layer.setAffineTransform(.identity)
+                // completionHandler 是 @Sendable 非隔离闭包：不捕获 CALayer（非 Sendable），
+                // 改在「已在主线程」的断言里用动画对象本身重新取图层
+                MainActor.assumeIsolated { target.layer?.setAffineTransform(.identity) }
             })
         }
         if delay <= 0 {
@@ -66,7 +68,7 @@ enum TransferMotion {
             completion?()
             return
         }
-        nonisolated(unsafe) let target = view
+        let target = view
         nonisolated(unsafe) let handler = completion
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = duration

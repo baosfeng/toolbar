@@ -133,7 +133,6 @@ private func testHarnessLongLineAcrossChunks() {
     guard (try? plain.write(toFile: plainPath, atomically: true, encoding: .utf8)) != nil,
           harnessCompress(zstdPath: zstd, from: plainPath, to: archivePath) else {
         harnessFail("跨块长行：夹具准备失败")
-        return
     }
 
     let scanner = HarnessSessionScanner(sessionsRoot: directory, streamer: HarnessZstdLineStreamer())
@@ -173,7 +172,6 @@ private func testHarnessTrailingLineWithoutNewline() {
     guard (try? plain.write(toFile: plainPath, atomically: true, encoding: .utf8)) != nil,
           harnessCompress(zstdPath: zstd, from: plainPath, to: archivePath) else {
         harnessFail("无尾换行：夹具准备失败")
-        return
     }
 
     let scanner = HarnessSessionScanner(sessionsRoot: directory, streamer: HarnessZstdLineStreamer())
@@ -214,7 +212,6 @@ private func testHarnessLineCountersUnchanged() {
     guard (try? plain.write(toFile: plainPath, atomically: true, encoding: .utf8)) != nil,
           harnessCompress(zstdPath: zstd, from: plainPath, to: archivePath) else {
         harnessFail("计数口径：夹具准备失败")
-        return
     }
 
     let scanner = HarnessSessionScanner(sessionsRoot: directory, streamer: HarnessZstdLineStreamer())

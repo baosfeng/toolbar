@@ -140,7 +140,7 @@ private func runImageReclaimAfterDeleteTests() {
     // 1) 删除单条 → 返回被删条目，原图与缩略图都不存在
     let doomedItem = saveImage("a")
     assertNotNil(doomedItem, "图片条目 A 落库成功")
-    saveImage("keep")
+    _ = saveImage("keep")
     let deleted = db.deleteClipboardItem(id: doomedItem?.id ?? UUID())
     assertEqual(deleted?.contentHash, "hash-a", "删除单条返回被删条目")
     assertEqual(reclaim(deleted.map { [$0] } ?? []), 2, "删除单条回收原图 + 缩略图")
@@ -153,7 +153,7 @@ private func runImageReclaimAfterDeleteTests() {
     let pinned = saveImage("pinned", pinned: true)
     // save 返回的是落库时的值快照，收藏后需回读才能看到 isPinned
     assertEqual(db.fetchClipboardItem(id: pinned?.id ?? UUID())?.isPinned, true, "收藏条目已置顶")
-    saveImage("plain")
+    _ = saveImage("plain")
     // 库里此时有 2 条非收藏（上一步保留的 keep + 新增的 plain）与 1 条收藏
     let cleared = db.clearClipboardItems(keepingPinned: true)
     assertEqual(cleared.count, 2, "清空删除 2 条非收藏（keep + plain）")
@@ -173,7 +173,7 @@ private func runImageReclaimAfterDeleteTests() {
     // 4) 超限清理 → 被清理条目的图片删除
     let base = Date()
     for index in 0..<5 {
-        saveImage("prune-\(index)", createdAt: base.addingTimeInterval(Double(index)))
+        _ = saveImage("prune-\(index)", createdAt: base.addingTimeInterval(Double(index)))
     }
     let pruned = db.pruneClipboardItems(maxItems: 2, retentionDays: 30)
     assertEqual(pruned.count, 3, "超限清理返回 3 条被删条目")

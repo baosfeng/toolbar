@@ -221,7 +221,7 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
     ///
     /// 温度为 nil 但功耗有值时也要产出一个只含功耗的快照，否则面板会把已采到的
     /// 功耗一并显示成「—」。功耗为 nil 时原样返回温度读数（可能也是 nil）。
-    private static func merging(thermal: ThermalSnapshot?, powerWatts: Double?) -> ThermalSnapshot? {
+    private nonisolated static func merging(thermal: ThermalSnapshot?, powerWatts: Double?) -> ThermalSnapshot? {
         guard let powerWatts else { return thermal }
         guard let thermal else { return ThermalSnapshot(powerWatts: powerWatts) }
         return ThermalSnapshot(cpuTemperatureCelsius: thermal.cpuTemperatureCelsius,

@@ -62,7 +62,7 @@ extension DatabaseManager {
                 return []
             }
             for index in Int32(1)...Int32(3) {
-                pattern.withCString { sqlite3_bind_text(stmt, index, $0, -1, transient) }
+                _ = pattern.withCString { sqlite3_bind_text(stmt, index, $0, -1, transient) }
             }
             sqlite3_bind_int(stmt, 4, capped)
             return clipItems(from: stmt)

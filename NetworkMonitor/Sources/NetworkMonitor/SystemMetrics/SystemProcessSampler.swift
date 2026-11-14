@@ -131,7 +131,11 @@ enum SystemProcessSampler {
     /// 进程名（proc_name 截断到 255 字节；失败返回空串，由 UI 显示 pid）
     private static func processName(_ pid: Int32) -> String {
         var buffer = [CChar](repeating: 0, count: 256)
-        guard proc_name(pid, &buffer, UInt32(buffer.count)) > 0 else { return "" }
-        return String(cString: buffer)
+        let length = proc_name(pid, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return "" }
+        // 按实际写入长度（不含 NUL）截断再解码，替换已废弃的 init(cString:)
+        return buffer.withUnsafeBytes { raw in
+            String(decoding: raw.prefix(Int(length)), as: UTF8.self)
+        }
     }
 }
