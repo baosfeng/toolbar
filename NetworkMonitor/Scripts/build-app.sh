@@ -87,9 +87,9 @@ cat > "$APP_DIR/Contents/Info.plist" << PLIST
     <key>CFBundleDisplayName</key>
     <string>${APP_DISPLAY_NAME}</string>
     <key>CFBundleVersion</key>
-    <string>18</string>
+    <string>19</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.23.0</string>
+    <string>1.24.0</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSUIElement</key>
