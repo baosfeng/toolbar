@@ -111,6 +111,10 @@ public final class AppCoordinator {
             OllamaBillingProvider(logger: logger),
             OpenDesignBillingProvider(logger: logger),
             OpencodeGoBillingProvider(logger: logger),
+            // 订阅额度三家：均为非公开端点（可能失效），失败只回报错误、保留上次成功数据
+            ClaudeBillingProvider(logger: logger),
+            CodexBillingProvider(logger: logger),
+            CursorBillingProvider(logger: logger),
         ])
         // 环境变量回退键按 provider 自定义解析（Ollama 用 OLLAMA_API_KEY，其余用 BILLING_<ID>_API_KEY）
         let billingCredentials = PreferencesBillingCredentialStore(

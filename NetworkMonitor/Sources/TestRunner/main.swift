@@ -141,6 +141,9 @@ runOpenDesignUsageTests()
 // MARK: - OpenCode Go 额度（三窗口已用→剩余 / 限流角标 / 新旧字段兼容 / 错误映射）
 runOpencodeGoBillingTests()
 
+// MARK: - 三家新 provider（Claude / Codex / Cursor）解码 + 401/403/解析失败姿态
+runBillingProviderDecodingTests()
+
 // MARK: - DSH token 数据层（会话扫描 / 增量索引 / 聚合快照）
 runHarnessTokenTests()
 runHarnessStreamMemoryTests()
