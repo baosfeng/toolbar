@@ -25,6 +25,8 @@ public struct DrawnRowSpec: Equatable {
     public var progress: Double?
     /// 数值语气
     public var tone: Tone
+    /// 是否画「空描边条」（不可得态的占位条：只有轮廓、没有填充）
+    public var isEmptyBar: Bool
     /// 是否可点击（决定无障碍角色与鼠标悬停高亮）
     public var isActionable: Bool
 
@@ -32,12 +34,14 @@ public struct DrawnRowSpec: Equatable {
                 value: String,
                 progress: Double? = nil,
                 tone: Tone = .normal,
-                isActionable: Bool = false) {
+                isActionable: Bool = false,
+                isEmptyBar: Bool = false) {
         self.title = title
         self.value = value
         self.progress = progress
         self.tone = tone
         self.isActionable = isActionable
+        self.isEmptyBar = isEmptyBar
     }
 }
 

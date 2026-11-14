@@ -71,6 +71,9 @@ enum DrawnUIProbe {
         list.displayIgnoringOpacity(list.bounds, in: context)
         NSGraphicsContext.restoreGraphicsState()
 
+        if let boardData = DrawnUIProbe.renderProcessBoard() {
+            try? boardData.write(to: url.appendingPathComponent("drawn-process-board.png"))
+        }
         let cardData = DrawnUIProbe.renderCard()
         if let cardData {
             try? cardData.write(to: url.appendingPathComponent("drawn-card.png"))
@@ -80,6 +83,57 @@ enum DrawnUIProbe {
         try? data.write(to: file)
         FileHandle.standardError.write(Data("DrawnUIProbe -> \(file.path)\n".utf8))
         exit(0)
+    }
+
+    /// 渲染「进程 Top-N 榜」 —— 系统页真实使用的组件（SystemProcessListView 内部就是 DrawnRowList）
+    private static func renderProcessBoard() -> Data? {
+        let board = SystemProcessListView(rows: 10)
+        let samples: [(String, Double, String, Bool)] = [
+            ("一览", 12.4 / 100, "12.4%", false),
+            ("WindowServer", 8.1 / 100, "8.1%", false),
+            ("Google Chrome", 6.3 / 100, "6.3%", false),
+            ("Xcode", 4.2 / 100, "4.2%", false),
+            ("终端", 2.8 / 100, "2.8%", false),
+            ("Finder", 1.4 / 100, "1.4%", false),
+            ("mds_stores", 0.9 / 100, "0.9%", false),
+            ("一个名字非常长的后台索引进程", 0.6 / 100, "0.6%", false),
+            ("超量程示例", 1.0, "126.0%", true),
+        ]
+        let rows = samples.map { SystemProcessListView.Row(name: $0.0,
+                                                          fraction: $0.1,
+                                                          valueText: $0.2,
+                                                          isOver: $0.3,
+                                                          tip: $0.0) }
+        board.update(rows, unavailableTip: "不可得")
+        let width: CGFloat = 300
+        let height: CGFloat = 13 * 10 + 2 * 9
+        board.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        board.layoutSubtreeIfNeeded()
+        return renderViewToPNG(board, size: NSSize(width: width, height: height))
+    }
+
+    /// 通用：把某个视图离屏渲染成 PNG 数据（2 倍图）
+    private static func renderViewToPNG(_ view: NSView, size: NSSize) -> Data? {
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
+                                         pixelsWide: Int(size.width * 2),
+                                         pixelsHigh: Int(size.height * 2),
+                                         bitsPerSample: 8,
+                                         samplesPerPixel: 4,
+                                         hasAlpha: true,
+                                         isPlanar: false,
+                                         colorSpaceName: .deviceRGB,
+                                         bytesPerRow: 0,
+                                         bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        rep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        context.cgContext.scaleBy(x: 2, y: 2)
+        NSColor.windowBackgroundColor.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        view.displayIgnoringOpacity(view.bounds, in: context)
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.representation(using: .png, properties: [:])
     }
 
     /// 渲染一张自绘卡片（卡头 + 行列表），验证组合单元

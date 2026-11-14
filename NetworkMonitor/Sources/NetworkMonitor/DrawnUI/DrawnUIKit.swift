@@ -51,6 +51,18 @@ enum DrawnInk {
         ctx.restoreGState()
     }
 
+    /// 空描边条（不可得态占位：只有轮廓、没有填充）
+    static func outlineBar(in rect: CGRect, color: NSColor, radius: CGFloat? = nil) {
+        guard rect.width > 0, rect.height > 0, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let r = radius ?? rect.height / 2
+        ctx.saveGState()
+        ctx.addPath(roundedPath(rect.insetBy(dx: 0.5, dy: 0.5), radius: r))
+        ctx.setStrokeColor(color.cgColor)
+        ctx.setLineWidth(1)
+        ctx.strokePath()
+        ctx.restoreGState()
+    }
+
     // MARK: 小色块
 
     /// 圆点（状态指示灯）

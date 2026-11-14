@@ -53,6 +53,21 @@ final class DrawnRowList: NSView {
     }
     /// 名称 / 进度条 / 数值之间的间距
     var elementGap: CGFloat = 6 { didSet { needsDisplay = true } }
+    /// 行名字体（默认面板行名；系统页等更紧凑的页面按需覆盖）
+    var titleFont: NSFont = PaneCardStyle.rowNameFont { didSet { needsDisplay = true } }
+    /// 行值字体（默认面板行值）
+    var valueFont: NSFont = PaneCardStyle.rowValueFont { didSet { needsDisplay = true } }
+    /// 行名固定列宽（nil = 按文字实际宽度占位；非 nil 时按等宽列排布，超宽截断）
+    var fixedTitleWidth: CGFloat? { didSet { needsDisplay = true } }
+    /// 行悬停提示（返回空串则不提示）
+    var rowToolTip: ((Int) -> String)?
+    /// 行名颜色（默认主文字；系统页等按需覆盖）
+    var titleColor: NSColor = PaneCardStyle.primaryText { didSet { needsDisplay = true } }
+    /// 进度条轨道色
+    var trackColor: NSColor = PaneCardStyle.trackColor { didSet { needsDisplay = true } }
+    /// 进度条填充色（告警语气固定用警示色）
+    var barColor: NSColor = PaneCardStyle.okColor { didSet { needsDisplay = true } }
+
     /// 进度条可画的最小宽度（不足则整条不画）
     ///
     /// 取 36 而不是视觉最小 24：长标题把进度条挤到 24–36 时会变成一个小色块，
@@ -124,15 +139,15 @@ final class DrawnRowList: NSView {
             DrawnInk.fill(rect.insetBy(dx: 0, dy: 1), radius: 4, color: PaneCardStyle.selectedFill)
         }
         let titleRun = DrawnTextRun(string: row.title,
-                                    font: PaneCardStyle.rowNameFont,
-                                    color: PaneCardStyle.primaryText)
+                                    font: titleFont,
+                                    color: titleColor)
         let valueRun = DrawnTextRun(string: row.value,
-                                    font: row.tone == .strong ? PaneCardStyle.rowValueStrongFont : PaneCardStyle.rowValueFont,
+                                    font: row.tone == .strong ? PaneCardStyle.rowValueStrongFont : valueFont,
                                     color: toneColor(row.tone))
         let metrics = DrawnRowLayout.metrics(rowWidth: rect.width,
                                              leadingInset: horizontalInset,
                                              trailingInset: horizontalInset,
-                                             titleWidth: titleRun.width(),
+                                             titleWidth: fixedTitleWidth ?? titleRun.width(),
                                              valueWidth: valueRun.width(),
                                              gap: elementGap,
                                              hasProgress: row.progress != nil,
@@ -145,15 +160,19 @@ final class DrawnRowList: NSView {
                                      height: rect.height))
             cursorX += metrics.titleWidth + elementGap
         }
-        if metrics.showsBar, let progress = row.progress {
+        if metrics.showsBar {
             let barRect = CGRect(x: cursorX,
                                  y: rect.midY - barHeight / 2,
                                  width: metrics.barWidth,
                                  height: barHeight)
-            DrawnInk.progressBar(in: barRect,
-                                 progress: progress,
-                                 track: PaneCardStyle.trackColor,
-                                 fill: row.tone == .warning ? PaneCardStyle.warnInk : PaneCardStyle.okColor)
+            if row.isEmptyBar {
+                DrawnInk.outlineBar(in: barRect, color: trackColor)
+            } else if let progress = row.progress {
+                DrawnInk.progressBar(in: barRect,
+                                     progress: progress,
+                                     track: trackColor,
+                                     fill: row.tone == .warning ? PaneCardStyle.warnInk : barColor)
+            }
         }
         if metrics.valueWidth > 0 {
             valueRun.draw(in: CGRect(x: rect.maxX - horizontalInset - metrics.valueWidth,
@@ -209,6 +228,29 @@ final class DrawnRowList: NSView {
             return
         }
         onRowAction?(index)
+    }
+
+    // MARK: - 悬停提示
+
+    private var toolTipTag: NSView.ToolTipTag?
+
+    /// 整块挂一个 tooltip，按坐标反查行（行数变化不需要重挂）
+    private func refreshToolTip() {
+        if let toolTipTag { removeToolTip(toolTipTag) }
+        toolTipTag = addToolTip(bounds, owner: self, userData: nil)
+    }
+
+    @objc func view(_ view: NSView,
+                    stringForToolTip tag: NSView.ToolTipTag,
+                    point: NSPoint,
+                    userData data: UnsafeMutableRawPointer?) -> String {
+        guard let index = rowIndex(at: point) else { return "" }
+        return rowToolTip?(index) ?? ""
+    }
+
+    override func layout() {
+        super.layout()
+        refreshToolTip()
     }
 
     // MARK: - 无障碍
