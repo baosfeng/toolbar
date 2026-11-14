@@ -19,21 +19,27 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
     /// 模型 TopN
     public static let modelLimit = 8
 
-    private let scanner: any HarnessSessionScanning
-    private let store: any HarnessTokenRepository
-    private let logger: LoggingService
-    private let nowProvider: @Sendable () -> Date
-    private let queue: DispatchQueue
-    private let lock = NSLock()
+    // 以下几项由 private 放宽为 internal：快照构建已拆到 HarnessUsageService+Snapshot.swift，
+    // 同模块内无其他调用方。
+    let scanner: any HarnessSessionScanning
+    let store: any HarnessTokenRepository
+    let logger: LoggingService
+    let nowProvider: @Sendable () -> Date
+    let queue: DispatchQueue
+    let lock = NSLock()
 
     /// 当前索引状态
     private var currentState: HarnessIndexingState = .idle
-    /// 最近一次聚合快照（内存缓存，跨轮次保留）
-    private var cachedSnapshot: HarnessUsageSnapshot?
+    /// 最近一次聚合快照（内存缓存，跨轮次保留；快照扩展跨文件访问）
+    var cachedSnapshot: HarnessUsageSnapshot?
     /// 是否有索引在跑
     private var running = false
     /// 本轮取消令牌
     private var cancelToken = HarnessCancellationToken()
+    /// 内存快照是否落后于已提交的写入（false = 复用它，不再全表聚合；快照扩展跨文件访问）
+    var snapshotStale = true
+    /// 是否已排入一次按需重算（重复调用合并成一次；快照扩展跨文件访问）
+    var snapshotRefreshQueued = false
     /// 状态变化回调
     private var stateObserver: (@Sendable (HarnessIndexingState) -> Void)?
 
@@ -157,6 +163,7 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
         if fullRebuild {
             logger.info("Harness token 索引：清空后全量重建")
             _ = store.harnessClearAll()
+            markSnapshotStale()
         }
 
         // 冷启动先把上一轮落库结果读进内存缓存，UI 打开面板即可渲染，不必等本轮索引
@@ -180,7 +187,9 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
         if changed.isEmpty {
             logger.info("Harness token 增量刷新：无变更文件（共 " + String(files.count) + " 个）")
             setState(.ready)
-            publishSnapshot(availability: availability, totalSessions: files.count, now: nowProvider())
+            // 无变更：不重算聚合（缓存快照已覆盖全部已提交数据），只在还没有缓存时补算一次
+            publishSnapshot(availability: availability, totalSessions: files.count,
+                            now: nowProvider(), force: false)
             return
         }
 
@@ -217,7 +226,10 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
             }
 
             let record = HarnessSessionScanRecord(file: file, scannedAt: nowProvider().timeIntervalSince1970)
-            if !store.harnessReplaceSession(record: record, events: result.events, cwd: result.cwd) {
+            if store.harnessReplaceSession(record: record, events: result.events, cwd: result.cwd) {
+                // 落库即脏：中途取消时也要让下一次按需重算把新数据算进去
+                markSnapshotStale()
+            } else {
                 failedFiles += 1
                 logger.warning("Harness 会话落库失败: " + LogRedaction.path(file.path))
             }
@@ -233,97 +245,15 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
         }
 
         setState(.ready)
-        publishSnapshot(availability: availability, totalSessions: files.count, now: nowProvider())
+        // 索引结束算一次聚合 —— 本流程里唯一一次全表重算
+        publishSnapshot(availability: availability, totalSessions: files.count,
+                        now: nowProvider(), force: true)
 
         let elapsed = Date().timeIntervalSince(startedAt)
         logger.info(String(
             format: "Harness token 索引完成：%d 个变更文件（失败 %d）/ %d 条事件 / %d 条坏行，耗时 %.2fs",
             changed.count, failedFiles, totalEvents, malformedLines, elapsed
         ))
-    }
-
-    // MARK: - 快照构建
-
-    /// 从落库数据构建快照（并写入内存缓存 + 发事件）
-    private func publishSnapshot(availability: HarnessSourceAvailability, totalSessions: Int, now: Date) {
-        let aggregate = store.harnessAggregate(now: now)
-        let snapshot = makeSnapshot(
-            from: aggregate,
-            availability: availability,
-            totalSessions: totalSessions,
-            lastScanAt: now
-        )
-        lock.lock()
-        cachedSnapshot = snapshot
-        lock.unlock()
-        AppEvents.postHarnessUsageChanged()
-    }
-
-    /// 冷启动预热：内存无缓存时先读一次落库数据（不发事件，避免开面板时多余刷新）
-    private func seedSnapshotIfNeeded(availability: HarnessSourceAvailability) {
-        lock.lock()
-        let hasCache = cachedSnapshot != nil
-        lock.unlock()
-        guard !hasCache else { return }
-        let aggregate = store.harnessAggregate(now: nowProvider())
-        guard aggregate.indexedSessions > 0 else { return }
-        let snapshot = makeSnapshot(
-            from: aggregate,
-            availability: availability,
-            totalSessions: aggregate.indexedSessions,
-            lastScanAt: nil
-        )
-        lock.lock()
-        cachedSnapshot = snapshot
-        lock.unlock()
-    }
-
-    /// 由聚合结果裁剪出对外快照（TopN 与 33 天窗口在这里收敛）
-    private func makeSnapshot(
-        from aggregate: HarnessAggregate,
-        availability: HarnessSourceAvailability,
-        totalSessions: Int,
-        lastScanAt: Date?
-    ) -> HarnessUsageSnapshot {
-        // 趋势只保留最近 dailyLimit 天；无数据的日子不补 0，保持空缺
-        let daily = Array(aggregate.daily.suffix(Self.dailyLimit))
-        let totals = HarnessUsageTotals(
-            today: aggregate.today,
-            thisWeek: aggregate.thisWeek,
-            allTime: aggregate.allTime,
-            cacheHitRate: HarnessCacheHitRate.compute(
-                cacheRead: aggregate.allTime.cacheRead,
-                uncachedInput: aggregate.allTime.uncachedInput
-            )
-        )
-        // 按范围聚合在同一次查询里算好，这里按 TopN 裁剪后按窗口分发
-        var windowedProjects: [HarnessUsageWindow: [HarnessProjectUsage]] = [:]
-        var windowedModels: [HarnessUsageWindow: [HarnessModelUsage]] = [:]
-        var windowProjectTotals: [HarnessUsageWindow: HarnessTokenUsage] = [:]
-        var windowModelTotals: [HarnessUsageWindow: HarnessTokenUsage] = [:]
-        for item in aggregate.windowed {
-            windowedProjects[item.window] = Array(item.projects.prefix(Self.projectLimit))
-            windowedModels[item.window] = Array(item.models.prefix(Self.modelLimit))
-            windowProjectTotals[item.window] = item.projectTotals
-            windowModelTotals[item.window] = item.modelTotals
-        }
-        return HarnessUsageSnapshot(
-            totals: totals,
-            daily: daily,
-            todayHourly: aggregate.todayHourly,
-            yesterdayHourly: aggregate.yesterdayHourly,
-            projects: Array(aggregate.projects.prefix(Self.projectLimit)),
-            models: Array(aggregate.models.prefix(Self.modelLimit)),
-            windowedProjects: windowedProjects,
-            windowedModels: windowedModels,
-            windowProjectTotals: windowProjectTotals,
-            windowModelTotals: windowModelTotals,
-            indexedSessions: aggregate.indexedSessions,
-            totalSessions: max(totalSessions, aggregate.indexedSessions),
-            lastScanAt: lastScanAt,
-            indexingState: state,
-            sourceAvailability: availability
-        )
     }
 
     // MARK: - 状态

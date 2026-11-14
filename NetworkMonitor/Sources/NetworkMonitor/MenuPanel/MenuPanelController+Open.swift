@@ -85,6 +85,11 @@ extension MenuPanelController {
     /// 省电档额外做一件事：**面板收起时整轮 tick 直接停摆**（连计费也不拉）——
     /// 代价是收起态不再做额度阈值提醒，打开面板时会 force 刷新补上。
     func tick() {
+        // 看门狗心跳：顺带把「当前分页 / 展开态 / 索引状态」存进看护线程的上下文，
+        // 主线程真卡住时这条就是唯一能还原现场的记录（看护线程不回头问主线程）
+        watchdog.beat(tab: content.currentTab.stableID,
+                      panelShown: popover.isShown,
+                      indexingState: harnessUsage?.state.logLabel ?? "未装配索引")
         let tier = currentRenderTier
         let profile = RenderTierLogic.profile(for: tier)
         let visible = popover.isShown

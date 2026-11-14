@@ -71,8 +71,8 @@ extension DatabaseManager: HarnessTokenRepository {
     // MARK: - 扫描记录
 
     public func harnessScanRecords() -> [String: HarnessSessionScanRecord] {
-        serialQueue.sync { () -> [String: HarnessSessionScanRecord] in
-            guard let db, harnessMigrateSchema(db) else { return [:] }
+        withReadDB([:]) { db -> [String: HarnessSessionScanRecord] in
+            guard harnessMigrateSchema(db) else { return [:] }
             var records: [String: HarnessSessionScanRecord] = [:]
             let sql = "SELECT path, session_id, size, mtime_ms, scanned_at FROM harness_session_scan;"
             var stmt: OpaquePointer?

@@ -4,7 +4,8 @@ import SQLite3
 // MARK: - 剪贴板仓储实现
 
 /// DatabaseManager 的剪贴板仓储实现（接口隔离：见 ClipboardRepository）
-/// 线程模型：经 serialQueue 同步执行；行映射辅助见 DatabaseManager+ClipboardSchema.swift。
+/// 线程模型：写入经 serialQueue（写连接），只读查询经 withReadDB（只读连接 / 只读队列）；
+/// 行映射辅助见 DatabaseManager+ClipboardSchema.swift。
 /// - Warning: 不得在 query(sql:handler:) 回调内或串行队列上下文调用，否则死锁。
 extension DatabaseManager: ClipboardRepository {
 
@@ -64,8 +65,7 @@ extension DatabaseManager: ClipboardRepository {
 
     public func fetchClipboardItem(id: UUID) -> ClipboardItem? {
         let key = id.uuidString.uppercased()
-        return serialQueue.sync { () -> ClipboardItem? in
-            guard let db else { return nil }
+        return withReadDB(nil) { db -> ClipboardItem? in
             let sql = "SELECT \(ClipboardSchema.columns) FROM clipboard_items WHERE id = ?;"
             var stmt: OpaquePointer?
             defer { sqlite3_finalize(stmt) }
@@ -81,8 +81,7 @@ extension DatabaseManager: ClipboardRepository {
 
     public func fetchClipboardItems(kind: ClipboardItemKind?, limit: Int) -> [ClipboardItem] {
         guard limit > 0 else { return [] }
-        return serialQueue.sync { () -> [ClipboardItem] in
-            guard let db else { return [] }
+        return withReadDB([]) { db -> [ClipboardItem] in
             var sql = "SELECT \(ClipboardSchema.columns) FROM clipboard_items"
             if kind != nil { sql += " WHERE kind = ?" }
             sql += " ORDER BY is_pinned DESC, created_at DESC LIMIT ?;"
@@ -103,8 +102,7 @@ extension DatabaseManager: ClipboardRepository {
     }
 
     public func fetchAllClipboardItems(kind: ClipboardItemKind?) -> [ClipboardItem] {
-        serialQueue.sync { () -> [ClipboardItem] in
-            guard let db else { return [] }
+        withReadDB([]) { db -> [ClipboardItem] in
             var sql = "SELECT \(ClipboardSchema.columns) FROM clipboard_items"
             if kind != nil { sql += " WHERE kind = ?" }
             sql += " ORDER BY is_pinned DESC, created_at DESC;"
@@ -122,8 +120,7 @@ extension DatabaseManager: ClipboardRepository {
     }
 
     public func fetchClipboardStack() -> [ClipboardItem] {
-        serialQueue.sync { () -> [ClipboardItem] in
-            guard let db else { return [] }
+        withReadDB([]) { db -> [ClipboardItem] in
             let sql = """
             SELECT \(ClipboardSchema.columns) FROM clipboard_items
             WHERE stack_position IS NOT NULL ORDER BY stack_position ASC;
@@ -139,8 +136,7 @@ extension DatabaseManager: ClipboardRepository {
     }
 
     public func clipboardItemCount() -> Int {
-        serialQueue.sync { () -> Int in
-            guard let db else { return 0 }
+        withReadDB(0) { db -> Int in
             var stmt: OpaquePointer?
             defer { sqlite3_finalize(stmt) }
             guard sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM clipboard_items;", -1, &stmt, nil) == SQLITE_OK,

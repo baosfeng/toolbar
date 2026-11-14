@@ -22,6 +22,11 @@ func runLogRedactionTests() {
     assertEqual(LogRedaction.path(home + "/Documents/a.png").contains(leakedUser), false,
                 "隐去后不含用户名")
 
+    // 句中夹着的路径同样要脱敏（只做前缀替换会漏）
+    assertEqual(LogRedaction.paths(in: "索引失败：未找到目录 " + home + "/.dsh/sessions"),
+                "索引失败：未找到目录 ~/.dsh/sessions", "句中路径脱敏")
+    assertEqual(LogRedaction.paths(in: "无路径的普通说明"), "无路径的普通说明", "无路径原样保留")
+
     // PIN：不保留任何一位数字
     assertEqual(LogRedaction.pin("1234"), "<4 位已隐藏>", "4 位 PIN 只报长度")
     assertEqual(LogRedaction.pin("1234").contains("1"), false, "PIN 不暴露任何数字")

@@ -84,15 +84,24 @@ enum AppIconProvider {
     }
 
     /// 灰色占位图标（SF Symbols，模板色跟随语义色；符号缺失时返回 nil）
+    ///
+    /// 按边长缓存一份：行图标回调在重绘时取不到真图标会回落到这里，每帧新建一个 NSImage
+    /// 既多一次符号解析，也让下游「按对象身份缓存上色结果」每次落空（见 DrawnRowList+Icon.swift）。
     static func placeholderIcon(size: CGFloat) -> NSImage? {
+        let key = Int(size.rounded())
+        if let cached = placeholderIconCache[key] { return cached }
         let image = NSImage(systemSymbolName: "app.dashed", accessibilityDescription: "应用")
             ?? NSImage(systemSymbolName: "questionmark.square.dashed", accessibilityDescription: "应用")
         guard let image else { return nil }
         let config = NSImage.SymbolConfiguration(pointSize: size - 4, weight: .regular)
         let configured = image.withSymbolConfiguration(config) ?? image
         configured.isTemplate = true
+        placeholderIconCache[key] = configured
         return configured
     }
+
+    /// 占位图标缓存（键 = 边长；面板里只有少数几个尺寸，天然有界）
+    private static var placeholderIconCache: [Int: NSImage] = [:]
 
     // MARK: - 私有解析
 

@@ -44,8 +44,7 @@ extension DatabaseManager {
         // 用局部量而非全局常量，避免非 Sendable 的 C 函数指针触发 Swift 6 并发检查
         let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-        return serialQueue.sync { () -> [ClipboardItem] in
-            guard let db else { return [] }
+        return withReadDB([]) { db -> [ClipboardItem] in
             // COALESCE 归一 NULL：text / source_app_name 可为 NULL，
             // 直接比较会得到 NULL 参与三值逻辑，这里显式等价于「该列为空 → 不命中」
             let sql = """

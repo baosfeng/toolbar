@@ -22,3 +22,20 @@ func assertNotNil<T>(_ value: T?, _ message: String = "", file: String = #file, 
     }
 }
 
+func assertContains(_ haystack: String, _ needle: String, _ message: String = "", file: String = #file, line: Int = #line) {
+    if haystack.contains(needle) {
+        print("✅ 包含 \"\(needle)\"", message.isEmpty ? "" : " — \(message)")
+    } else {
+        print("❌ \(file):\(line) — 期望包含 \"\(needle)\"，实际 \"\(haystack)\"\(message.isEmpty ? "" : " — \(message)")")
+        exit(1)
+    }
+}
+
+func assertNotContains(_ haystack: String, _ needle: String, _ message: String = "", file: String = #file, line: Int = #line) {
+    if !haystack.contains(needle) {
+        print("✅ 不含 \"\(needle)\"", message.isEmpty ? "" : " — \(message)")
+    } else {
+        print("❌ \(file):\(line) — 意外包含 \"\(needle)\"：\"\(haystack)\"\(message.isEmpty ? "" : " — \(message)")")
+        exit(1)
+    }
+}

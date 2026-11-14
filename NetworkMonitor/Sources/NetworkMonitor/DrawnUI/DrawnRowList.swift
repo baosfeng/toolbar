@@ -191,11 +191,19 @@ final class DrawnRowList: NSView {
     // MARK: - 悬停提示
 
     private var toolTipTag: NSView.ToolTipTag?
+    /// 上次挂 tooltip 时的 bounds（bounds 不变就不重挂）
+    private var toolTipBounds: CGRect = .null
 
-    /// 整块挂一个 tooltip，按坐标反查行（行数变化不需要重挂）
-    private func refreshToolTip() {
+    /// 整块挂一个 tooltip，按坐标反查行
+    ///
+    /// 只在 bounds 变化时重挂：旧实现在**每次布局**都 remove + add 一个 tooltip，
+    /// 重建一遍 tooltip tracking 是纯浪费（面板展开时布局并不罕见），而 tooltip 矩形
+    /// 只跟 view 尺寸有关，行数变化由 `rowIndex(at:)` 现算，本就不需要重挂。
+    private func refreshToolTipIfNeeded() {
+        guard toolTipTag == nil || bounds != toolTipBounds else { return }
         if let toolTipTag { removeToolTip(toolTipTag) }
         toolTipTag = addToolTip(bounds, owner: self, userData: nil)
+        toolTipBounds = bounds
     }
 
     @objc func view(_ view: NSView,
@@ -208,7 +216,7 @@ final class DrawnRowList: NSView {
 
     override func layout() {
         super.layout()
-        refreshToolTip()
+        refreshToolTipIfNeeded()
     }
 
     // MARK: - 无障碍

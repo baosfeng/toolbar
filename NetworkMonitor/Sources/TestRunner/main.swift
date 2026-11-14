@@ -325,5 +325,18 @@ runProcessDisplayNameTests()
 // MARK: - 设置窗口骨架（定稿度量 / 侧栏三段分组 / 页头胶囊三态与文案）
 runSettingsThemeTests()
 
+// MARK: - 读写分队列（只读连接可见性 / 队列排队等待计时）
+runDatabaseReadQueueTests()
+runDatabaseQueueWaitTests()
+
+// MARK: - Token 聚合降频（索引结束一次 / 无变更零聚合 / 按需补算）
+runHarnessAggregateThrottleTests()
+
+// MARK: - 主线程看门狗口径（停顿阈值 / 日志字段与脱敏）
+runMainThreadWatchdogPolicyTests()
+
+// MARK: - 最新请求闸门（异步读只渲染最新一次结果）
+runLatestRequestGateTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")

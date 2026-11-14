@@ -21,6 +21,16 @@ public enum LogRedaction {
         return "~" + raw.dropFirst(home.count)
     }
 
+    /// 把**任意位置**出现的用户主目录替换为 `~`
+    ///
+    /// 与 `path(_:)` 的区别：那个只看前缀（「这个值本身就是路径」）；
+    /// 日志正文里路径常常夹在句中（「索引失败：未找到目录 /Users/x/...」），只做前缀替换会漏。
+    public static func paths(in text: String) -> String {
+        let home = NSHomeDirectory()
+        guard !home.isEmpty else { return text }
+        return text.replacingOccurrences(of: home, with: "~")
+    }
+
     /// 遮蔽敏感短码（配对 PIN 等）：保留位数，不保留任何一位数字
     ///
     /// PIN 只有 4 位，留前 2 位等于泄露一半搜索空间，所以只报长度。

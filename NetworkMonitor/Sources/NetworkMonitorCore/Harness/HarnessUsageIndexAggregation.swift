@@ -11,8 +11,9 @@ extension DatabaseManager {
     // MARK: - 聚合查询
 
     public func harnessAggregate(now: Date) -> HarnessAggregate {
-        serialQueue.sync { () -> HarnessAggregate in
-            guard let db, harnessMigrateSchema(db) else { return .empty }
+        let startedAt = DispatchTime.now().uptimeNanoseconds
+        let aggregate = withReadDB(HarnessAggregate.empty) { db -> HarnessAggregate in
+            guard harnessMigrateSchema(db) else { return .empty }
             let todayStart = HarnessTokenTimeWindow.startOfDayMs(now: now)
             let weekStart = HarnessTokenTimeWindow.startOfWeekMs(now: now)
             let dayMs = HarnessTokenTimeWindow.millisecondsPerDay
@@ -37,7 +38,17 @@ extension DatabaseManager {
                 )
             )
         }
+        // 出口耗时埋点：一次聚合是 8~10 条全表查询，> 100 ms 才记（避免刷屏）
+        let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000
+        if elapsedMs > Self.aggregateSlowThresholdMs {
+            logger.warning(String(format: "Harness 聚合耗时 %.0f ms（8~10 条全表查询，阈值 %.0f ms）",
+                                  elapsedMs, Self.aggregateSlowThresholdMs))
+        }
+        return aggregate
     }
+
+    /// 聚合耗时告警阈值（毫秒）
+    private static let aggregateSlowThresholdMs: Double = 100
 
     /// 区间求和（fromMs 含、toMs 不含；nil 表示不限）
     ///
@@ -241,8 +252,8 @@ extension DatabaseManager {
     // MARK: - 计数 / 清空
 
     public func harnessEventCount() -> Int {
-        serialQueue.sync { () -> Int in
-            guard let db, harnessMigrateSchema(db) else { return 0 }
+        withReadDB(0) { db -> Int in
+            guard harnessMigrateSchema(db) else { return 0 }
             var stmt: OpaquePointer?
             defer { sqlite3_finalize(stmt) }
             guard sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM harness_token_event;", -1, &stmt, nil) == SQLITE_OK,

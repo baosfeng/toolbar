@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 面板内容控制器
 
@@ -69,6 +70,19 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     let logger: LoggingService
     /// 开机自启动开关（与设置页共用同一份 SMAppService 逻辑）
     let launchAtStartupService = LaunchAtStartupService()
+
+    /// 面板数据读取队列（剪贴板 / Token 快照）
+    ///
+    /// 并发而非串行：两页各自独立，一页的重活（Token 聚合补算）不该把另一页的首屏拖住；
+    /// 「只渲染最新一次结果」由 LatestRequestGate 保证，不依赖队列顺序。
+    let dataReadQueue = DispatchQueue(label: "com.example.NetworkMonitor.panelDataRead",
+                                     qos: .userInitiated, attributes: .concurrent)
+    /// 剪贴板刷新请求闸门（异步读 + 只接受最新一次结果）
+    var clipboardRequests = LatestRequestGate()
+    /// Token 快照刷新请求闸门（同上）
+    var tokenRequests = LatestRequestGate()
+    /// 主线程看门狗（心跳打点见 tick 与 sendEvent 路径）
+    let watchdog = MainThreadWatchdog()
 
     // MARK: 回调（组合根注入）
 
@@ -163,6 +177,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         super.init()
 
         configurePopover()
+        // 主线程看门狗：启动即开始看护（心跳在 tick 与 sendEvent 路径打）
+        watchdog.start()
         // 分页动作在「该页首次装配」时才挂：懒装配下这里直接读 pane 属性会把六页提前建出来
         wirePaneActions()
         observeClipboardChanges()

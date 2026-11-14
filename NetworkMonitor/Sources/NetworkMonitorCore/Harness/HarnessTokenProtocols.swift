@@ -70,6 +70,17 @@ public enum HarnessIndexingState: Sendable, Equatable {
         if case .indexing = self { return true }
         return false
     }
+
+    /// 日志 / 看门狗用的短标签（失败原因里可能含会话目录路径，写入日志前再过 LogRedaction）
+    public var logLabel: String {
+        switch self {
+        case .idle: return "idle"
+        case .indexing(let progress):
+            return "indexing \(progress.completedFiles)/\(progress.totalFiles)"
+        case .ready: return "ready"
+        case .failed(let message): return "failed: " + message
+        }
+    }
 }
 
 // MARK: - 取消令牌
@@ -205,6 +216,9 @@ public protocol HarnessUsageServicing: AnyObject, Sendable {
 
     /// 取消正在进行的索引
     func cancelIndexing()
+
+    /// 有未计入快照的写入时重算一次（不阻塞调用线程；无脏数据即零查询）
+    func refreshSnapshotIfDirty()
 }
 
 // MARK: - 协议默认实现
