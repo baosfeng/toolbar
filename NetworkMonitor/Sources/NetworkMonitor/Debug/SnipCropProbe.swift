@@ -7,7 +7,7 @@ import NetworkMonitorUI
 
 /// 无人值守的坐标自证：抓屏 → 取屏幕中央固定选区 → 走**生产链路**（composedImage）落盘
 ///
-/// 触发方式：NM_SNIP_CROP_PROBE=1 /Applications/一览.app/Contents/MacOS/NetworkMonitor
+/// 触发方式：NM_SNIP_CROP_PROBE=1 /Applications/一览.app/Contents/MacOS/一览
 /// 产物：/tmp/nm-crop-probe-full.png（整屏原图）+ /tmp/nm-crop-probe.png（所选区域）
 ///
 /// 为什么需要它：坐标偏移类问题（「框选 A 截到 B」）肉眼看不出来，

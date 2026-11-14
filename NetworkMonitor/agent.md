@@ -25,7 +25,7 @@ cd NetworkMonitor && swift build --disable-sandbox
 ```bash
 cd NetworkMonitor
 
-APP_PATH="./dist/NetworkMonitor.app"
+APP_PATH="./dist/一览.app"
 
 # 首次创建 .app 目录结构，后续只替换可执行文件（保持 inode 不变）
 if [ ! -d "${APP_PATH}" ]; then
@@ -36,11 +36,11 @@ if [ ! -d "${APP_PATH}" ]; then
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>NetworkMonitor</string>
+    <string>一览</string>
     <key>CFBundleIdentifier</key>
     <string>com.example.NetworkMonitor</string>
     <key>CFBundleName</key>
-    <string>网络监控</string>
+    <string>一览</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -55,7 +55,8 @@ EOF
 fi
 
 # 只替换可执行文件，不删 .app 目录
-cp .build/debug/NetworkMonitor "${APP_PATH}/Contents/MacOS/NetworkMonitor"
+# 包内可执行名是「一览」：构建产物仍叫 NetworkMonitor（SwiftPM target 名不变），拷贝时改名
+cp .build/debug/NetworkMonitor "${APP_PATH}/Contents/MacOS/一览"
 ```
 
 不要生成 .dmg 文件。**不要用 codesign 签名**，签名会导致 app 无法打开。

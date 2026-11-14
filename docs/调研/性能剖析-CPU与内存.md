@@ -34,6 +34,8 @@
 \`\`\`
 $ ps -Ao pid,pcpu,pmem,rss,etime,comm | grep NetworkMonitor
 74648  12.0  1.1 191072    15:24:37  /Applications/NetworkMonitor.app/Contents/MacOS/NetworkMonitor
+# ↑ 历史读数（当时的包名与可执行名都还是英文）。现在同一命令应看到
+#   /Applications/一览.app/Contents/MacOS/一览：包名与包内可执行名都已中文化，数值口径不变。
 
 $ footprint 74648 | tail -6
  204 MB      34 MB       336 KB      9697    TOTAL
@@ -182,8 +184,8 @@ Process 74648: 454 leaks for 21360 total leaked bytes.
 ## 8. 复跑命令
 
 \`\`\`bash
-PID=$(pgrep -f "NetworkMonitor.app/Contents/MacOS/NetworkMonitor")
-ps -Ao pid,pcpu,pmem,rss,etime,comm | grep -E "NetworkMonitor" | grep -v grep
+PID=$(pgrep -f "/Contents/MacOS/一览( |$)" | head -1)   # 旧包（可执行名 NetworkMonitor）用 /Contents/MacOS/NetworkMonitor
+ps -Ao pid,pcpu,pmem,rss,etime,comm | grep -E "MacOS/一览" | grep -v grep
 top -l 8 -s 1 -stats pid,cpu,mem,command | grep -E "^ *$PID"
 sample "$PID" 30 -file /tmp/nm.sample        # 热点表在文件末尾「Sort by top of stack」
 footprint "$PID" | tail -6                    # footprint 与峰值

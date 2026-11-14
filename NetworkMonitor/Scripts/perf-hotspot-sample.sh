@@ -34,11 +34,16 @@ else
 fi
 
 if [ -z "$TARGET_PID" ]; then
-    # 判据只认包内可执行文件名，不认包名：.app 改名成「一览.app」后旧判据会 0 命中
-    TARGET_PID=$(pgrep -f "/Contents/MacOS/NetworkMonitor( |$)" | head -1 || true)
+    # 判据只认包内可执行文件名，不认包名：包名早已是「一览.app」，可执行名也已改成「一览」。
+    # 两个名字分两次扫（pgrep 的 POSIX ERE 分支写法在老版本 macOS 上不保证可用）：
+    # 仍挂着旧二进制名 NetworkMonitor 的机器（未重新打包）也要能采到
+    TARGET_PID=$(pgrep -f "/Contents/MacOS/一览( |$)" | head -1 || true)
+    if [ -z "$TARGET_PID" ]; then
+        TARGET_PID=$(pgrep -f "/Contents/MacOS/NetworkMonitor( |$)" | head -1 || true)
+    fi
 fi
 if [ -z "$TARGET_PID" ]; then
-    echo "未找到 NetworkMonitor 进程（可显式传 pid）" >&2
+    echo "未找到「一览」进程（包内可执行名 一览 / 历史名 NetworkMonitor 都未命中，可显式传 pid）" >&2
     exit 1
 fi
 

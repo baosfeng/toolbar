@@ -38,7 +38,7 @@ SwiftPM 的 `swift run` 与 `.build/.../NetworkMonitor` 都跑在「无 bundle�
 ```bash
 cd NetworkMonitor
 SKIP_INSTALL=1 ./Scripts/build-app.sh debug        # 产出 dist/一览.app，不装 /Applications
-NM_SNAPSHOT_DIR=/tmp/nm-shots ./dist/一览.app/Contents/MacOS/NetworkMonitor
+NM_SNAPSHOT_DIR=/tmp/nm-shots ./dist/一览.app/Contents/MacOS/一览
 ls /tmp/nm-shots                                   # 出图
 rm -rf dist                                        # 取证后清掉
 ```
