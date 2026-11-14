@@ -141,7 +141,7 @@ final class MenuBarManager: NSObject {
         settingsItem.target = self
         menu.addItem(settingsItem)
         menu.addItem(.separator())
-        let quitItem = NSMenuItem(title: "退出 NetworkMonitor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "退出 \(AppIdentity.displayName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quitItem.keyEquivalentModifierMask = [.command]
         menu.addItem(quitItem)
         return menu

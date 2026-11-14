@@ -1,6 +1,6 @@
-# NetworkMonitor
+# 一览
 
-> macOS 菜单栏的网速与额度监控，外加剪贴板历史和局域网文件互传。
+> 一屏看全：网速、额度、Token、剪贴板、截图贴图、局域网互传与系统监控。
 
 [![CI](https://github.com/baosfeng/toolbar/actions/workflows/ci.yml/badge.svg)](https://github.com/baosfeng/toolbar/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -11,7 +11,7 @@
 
 ![额度页](docs/设计/额度页-聚合视图-预览/展开态-浅色.png)
 
-纯 Swift / SwiftPM 实现的菜单栏常驻应用：实时网速、进程流量、Ollama 与 Open Design 额度、剪贴板历史、局域网文件互传。所有数据落在本地 SQLite，没有遥测与后台上报。
+纯 Swift / SwiftPM 实现的菜单栏常驻应用，七个模块一屏看完：实时网速与进程流量、Ollama / Open Design / OpenCode Go 额度、DSH Token 用量、剪贴板历史、截图与贴图、局域网文件互传、CPU / GPU / 内存 / 磁盘 / 压力系统监控。所有数据落在本地 SQLite，没有遥测与后台上报。
 
 ## 功能
 

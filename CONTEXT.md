@@ -1,6 +1,6 @@
 # 项目上下文（共享语言）
 
-NetworkMonitor / macMonitor — macOS 菜单栏应用。本文档定义项目术语，帮助 agent 用 1 个词代替 20 个词。术语更新时同步维护本文件。
+一览（NetworkMonitor / macMonitor）— macOS 菜单栏应用。本文档定义项目术语，帮助 agent 用 1 个词代替 20 个词。术语更新时同步维护本文件。
 
 ## 核心术语
 
