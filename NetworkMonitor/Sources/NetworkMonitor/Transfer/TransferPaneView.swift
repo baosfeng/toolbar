@@ -47,6 +47,12 @@ final class TransferPaneView: MenuPanelPaneView {
 
     // MARK: 状态
 
+    /// 面板是否可见（由 `MenuPanelController` 装配时注入：popover.isShown）
+    ///
+    /// 默认 true＝被视为可见：未注入时宁可多刷一次，也不让状态带停在旧值。
+    /// 收起时 `TransferController` 只更新模型、不推视图，避免每秒白跑一次布局。
+    var isPanelVisible: () -> Bool = { true }
+
     private var devices: [RemoteDevice] = []
     private var sessions: [TransferSession] = []
     private var deviceRows: [MenuPanelTransferDeviceRow] = []
@@ -56,6 +62,8 @@ final class TransferPaneView: MenuPanelPaneView {
     /// 签名用于跳过无变化的列表重建
     private var deviceSignature = ""
     private var sessionSignature = ""
+    /// 页脚状态带签名（与上面两个同源手法：内容没变就不重建/不重设文本）
+    private var bandSignature = ""
 
     // MARK: - 初始化
 
@@ -192,6 +200,15 @@ final class TransferPaneView: MenuPanelPaneView {
     private func updateBand(devices: [RemoteDevice], sessions: [TransferSession],
                             autoAcceptText: String, statusText: String) {
         let active = sessions.filter { $0.state.isActive }.count
+        // 签名覆盖状态带的全部可见项：设备 / 任务 / 进行中 / 免配对倒计时 / 发现状态。
+        // 键与值都进签名，避免「数值变了但条数没变」被误判为无变化。
+        let signature = TransferBandSignature.make(statusText: statusText,
+                                                   deviceCount: devices.count,
+                                                   sessionCount: sessions.count,
+                                                   activeCount: active,
+                                                   autoAcceptText: autoAcceptText)
+        guard signature != bandSignature else { return }
+        bandSignature = signature
         stateBand.update(items: [
             (key: "发现", value: statusText.isEmpty ? nil : statusText),
             (key: "设备", value: devices.isEmpty ? nil : "\(devices.count) 台"),

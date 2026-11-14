@@ -110,10 +110,12 @@ extension UdpDiscoveryService {
     }
 
     /// 发送一个 UDP 报文（失败仅记录，不中断心跳）
-    func send(_ data: Data, to host: String) {
+    /// - Returns: true = sendto 成功（心跳退避据此判定网络是否恢复）
+    @discardableResult
+    func send(_ data: Data, to host: String) -> Bool {
         guard sendFD >= 0 else {
             logger.warning("UDP 发送被跳过：发送 socket 未打开（host=\(host)）")
-            return
+            return false
         }
         var address = sockaddr_in()
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
@@ -131,7 +133,9 @@ extension UdpDiscoveryService {
         }
         if sent < 0 {
             logger.warning("UDP 发送失败 host=\(host) errno=\(errno)")
+            return false
         }
+        return true
     }
 
     /// 关闭收发 socket（幂等；`start()` 失败与 `stop()` 共用）

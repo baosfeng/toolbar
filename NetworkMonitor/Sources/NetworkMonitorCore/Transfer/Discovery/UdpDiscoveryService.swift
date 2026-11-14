@@ -31,6 +31,8 @@ public final class UdpDiscoveryService: @unchecked Sendable {
     var readSource: DispatchSourceRead?
     private var heartbeatTimer: DispatchSourceTimer?
     private var fallbackTasks: [DispatchWorkItem] = []
+    /// 心跳退避策略（纯值类型，判定逻辑在 Core 里可测；只作用于心跳公告）
+    private var heartbeatPolicy = DiscoveryHeartbeatPolicy()
     private var offerCooldowns: [String: Date] = [:]
     var running = false
     /// socket 计数（只在状态锁内读写，避免测试观测时与网络队列互相等待）
@@ -145,10 +147,11 @@ public final class UdpDiscoveryService: @unchecked Sendable {
     // MARK: - 收发
 
     /// 组播发送公告（携带本机身份与 HTTP 端口）
-    private func announce() {
-        guard running, sendFD >= 0 else { return }
-        guard let data = DiscoveryMessage.announce(identity: identity).encoded() else { return }
-        send(data, to: DiscoveryMessage.multicastHost)
+    @discardableResult
+    private func announce() -> Bool {
+        guard running, sendFD >= 0 else { return false }
+        guard let data = DiscoveryMessage.announce(identity: identity).encoded() else { return false }
+        return send(data, to: DiscoveryMessage.multicastHost)
     }
 
     /// 对上次见过的地址逐个单播探测（快速路径）
@@ -231,9 +234,12 @@ public final class UdpDiscoveryService: @unchecked Sendable {
                            repeating: DiscoveryMessage.heartbeatInterval)
         heartbeat.setEventHandler { [weak self] in
             guard let self else { return }
-            self.announce()
-            // 心跳同时推进存活状态：15s 离线、60s 移除
+            // 存活判定必须照常推进：退避只压「本机发公告」，不影响对端离线 / 移除判定
             self.registry.applyLiveness()
+            let now = Date()
+            guard self.heartbeatPolicy.shouldAnnounce(now: now) else { return }
+            let sent = self.announce()
+            self.heartbeatPolicy.noteAnnounce(success: sent, now: now)
         }
         heartbeat.resume()
         heartbeatTimer = heartbeat
