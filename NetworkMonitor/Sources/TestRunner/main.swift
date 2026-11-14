@@ -311,5 +311,8 @@ runAppearancePreferencesTests()
 // MARK: - 进程显示名映射（本应用那行显示「一览」/ 近似名不误伤 / 截断不变形）
 runProcessDisplayNameTests()
 
+// MARK: - 设置窗口骨架（定稿度量 / 侧栏三段分组 / 页头胶囊三态与文案）
+runSettingsThemeTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")

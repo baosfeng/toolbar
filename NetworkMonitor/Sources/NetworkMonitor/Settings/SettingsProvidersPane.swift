@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 额度 Provider 设置页
 
@@ -44,8 +45,8 @@ final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHo
     private var countdownTimer: Timer?
 
     let toastView = NSView()
-    let toastLabel = MenuPanelLabel.text("", font: NSFont.systemFont(ofSize: 11.5),
-                                                 color: .white)
+    let toastLabel = MenuPanelLabel.text("", font: SettingsTheme.rowTitleFont,
+                                         color: .white)
     private var toastTask: Task<Void, Never>?
 
     // MARK: - 初始化
@@ -160,11 +161,25 @@ final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHo
         let now = Date()
         var states: [String: BillingMonitor.ProviderState] = [:]
         for state in monitor.states { states[state.descriptor.id] = state }
+        // 页头胶囊的两个读数在同一趟循环里取（不额外查存储、不新增数据源）
+        var enabledConfigured = 0
+        var configuredTotal = 0
+        var anyLoading = false
+        var allRefreshed = true
         for registration in monitor.registry.registrations {
             let instanceID = registration.instance.id
-            guard let row = rows[instanceID] else { continue }
+            let isEnabled = preferences.isEnabled(instanceID)
             let resolution = monitor.credentialStore.credentialResolution(for: instanceID)
-            row.update(isEnabled: preferences.isEnabled(instanceID),
+            if resolution.isConfigured {
+                configuredTotal += 1
+                if isEnabled {
+                    enabledConfigured += 1
+                    if states[instanceID]?.isLoading == true { anyLoading = true }
+                    if states[instanceID]?.lastUpdated == nil { allRefreshed = false }
+                }
+            }
+            guard let row = rows[instanceID] else { continue }
+            row.update(isEnabled: isEnabled,
                        isConfigured: resolution.isConfigured,
                        credentialMask: resolution.credential.map(Self.mask),
                        credentialSource: resolution.source,
@@ -175,6 +190,10 @@ final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHo
                        now: now)
         }
         notificationCard.refresh()
+        page.setStatusChip(Self.statusChip(enabledConfigured: enabledConfigured,
+                                           configuredTotal: configuredTotal,
+                                           anyLoading: anyLoading,
+                                           allRefreshed: allRefreshed))
     }
 
     // MARK: - 生命周期（倒计时）

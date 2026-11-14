@@ -1,137 +1,50 @@
 import AppKit
 
-// MARK: - 设置页视觉常量
+// MARK: - 设置页兼容层
 
-/// 设置窗口的尺寸与字体常量 — 与原型（application 风格）对齐
+/// `SettingsStyle` —— 兼容转发层
 ///
-/// 只放常量与工厂，不放业务：页面各自组合组件，避免每个 pane 重复写字号与间距。
+/// 令牌已搬到 `SettingsTheme`（取色 / 几何 / 字号唯一出口），这里保留同名成员做转发：
+/// 二十多个设置页文件仍在用 `SettingsStyle.xxx`，调用点无需改动即可吃到新令牌。
+/// **新代码一律直接用 `SettingsTheme`**，本层只为存量调用点存在。
 @MainActor
 enum SettingsStyle {
-    /// 窗口初始尺寸（原型画布）
-    static let windowSize = NSSize(width: 760, height: 540)
+    /// 窗口初始尺寸（原型画布 760×540）
+    static let windowSize = SettingsTheme.windowSize
     /// 侧栏宽度
-    static let sidebarWidth: CGFloat = 168
+    static let sidebarWidth = SettingsTheme.sidebarWidth
     /// 内容区左右内边距
-    static let contentInset: CGFloat = 24
+    static let contentInset = SettingsTheme.contentInset
     /// 卡片圆角
-    static let cardCornerRadius: CGFloat = 10
-    /// 卡片内单行高度（含上下内边距）
-    static let rowHeight: CGFloat = 40
-    /// 卡片内边距
-    static let rowInset: CGFloat = 12
+    static let cardCornerRadius = SettingsTheme.cardRadius
+    /// 卡片内单行最小高
+    static let rowHeight = SettingsTheme.rowHeight
+    /// 卡片内左右内边距（旧名保留：行的左右内边距与卡片内边距是同一档）
+    static let rowInset = SettingsTheme.cardPaddingX
 
-    static var accent: NSColor { MenuPanelStyle.accentColor }
-    /// 页面底色（浅色下为浅灰）— 与白色卡片形成层次，纯白底会让卡片看不出边界
-    static var pageBackground: NSColor { .underPageBackgroundColor }
-    static var cardBackground: NSColor { .controlBackgroundColor }
+    /// 强调色
+    static var accent: NSColor { SettingsTheme.accent }
+    /// 页面底色（= 主题 `surface`）
+    static var pageBackground: NSColor { SettingsTheme.surface }
+    /// 卡片底色（= 主题 `cardFill`）
+    static var cardBackground: NSColor { SettingsTheme.cardFill }
+    /// 破坏性动作色（单一出口）
+    static var destructive: NSColor { SettingsTheme.destructive }
 
-    static let pageTitleFont = NSFont.systemFont(ofSize: 20, weight: .semibold)
-    static let sectionTitleFont = NSFont.systemFont(ofSize: 11.5, weight: .semibold)
-    static let rowTitleFont = NSFont.systemFont(ofSize: 13, weight: .regular)
-    static let rowValueFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-    static let rowSubtitleFont = NSFont.systemFont(ofSize: 11.5, weight: .regular)
-    static let noteFont = NSFont.systemFont(ofSize: 11, weight: .regular)
-}
-
-// MARK: - 页容器
-
-/// 页容器 — 页头（标题 + 副标题）+ 若干卡片 + 底部说明，整体放进滚动视图
-///
-/// 用法：`let stack = SettingsPageStack(section: .providers)` → `stack.addCard(...)` → `stack.finish()`
-/// （finish 必须在最后调用：它把底部说明与弹性空白补进去）。
-final class SettingsPageStack: NSStackView {
-
-    private let contentStack = NSStackView()
-
-    init(section: SettingsSection) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        orientation = .vertical
-        alignment = .leading
-        spacing = 0
-        // 必须显式 .fill：NSStackView 默认是 .gravityAreas，容器比内容高时
-        // 剩余空间会被均分到 gravity 区之间 —— 表现就是「标题在顶、卡片在底、
-        // 中间一大片空白」。首次打开设置页时容器高度先按视口撑满，
-        // 正好命中这个条件；第二次进入高度已被算准，所以「再进一次就好了」。
-        distribution = .fill
-
-        contentStack.orientation = .vertical
-        contentStack.alignment = .leading
-        contentStack.spacing = 8
-        contentStack.distribution = .fill
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-
-        let title = MenuPanelLabel.text(section.title, font: SettingsStyle.pageTitleFont, color: .labelColor)
-        let subtitle = MenuPanelLabel.text(section.subtitle, font: SettingsStyle.rowSubtitleFont,
-                                           color: .secondaryLabelColor)
-        subtitle.maximumNumberOfLines = 2
-        subtitle.lineBreakMode = .byWordWrapping
-
-        let header = NSStackView(views: [title, subtitle])
-        header.orientation = .vertical
-        header.alignment = .leading
-        header.spacing = 4
-
-        contentStack.addArrangedSubview(header)
-        contentStack.setCustomSpacing(18, after: header)
-
-        addArrangedSubview(contentStack)
-        contentStack.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
-
-        // 弹性尾部空白：把多余高度全部吸到最底部，内容始终贴顶
-        let tail = NSView()
-        tail.translatesAutoresizingMaskIntoConstraints = false
-        tail.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .vertical)
-        tail.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .vertical)
-        addArrangedSubview(tail)
-        tail.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    /// 追加一张卡片（可先加分组标题）
-    ///
-    /// - Parameter trailingAccessory: 放在分组标题行右侧的附加控件（如可排序卡片的「恢复默认」按钮）；
-    ///   标题行会与之左右分栏，卡片本身宽度仍与内容栈对齐。
-    func addCard(_ card: SettingsCardView,
-                 sectionTitle: String? = nil,
-                 trailingAccessory: NSView? = nil) {
-        if let sectionTitle {
-            let label = MenuPanelLabel.text(sectionTitle.uppercased(),
-                                            font: SettingsStyle.sectionTitleFont,
-                                            color: .secondaryLabelColor)
-            if let trailingAccessory {
-                let header = NSStackView(views: [label, MenuPanelLabel.spacer(), trailingAccessory])
-                header.orientation = .horizontal
-                header.alignment = .centerY
-                header.spacing = 6
-                header.translatesAutoresizingMaskIntoConstraints = false
-                contentStack.addArrangedSubview(header)
-                header.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
-                contentStack.setCustomSpacing(6, after: header)
-            } else {
-                contentStack.addArrangedSubview(label)
-                contentStack.setCustomSpacing(6, after: label)
-            }
-        }
-        contentStack.addArrangedSubview(card)
-        card.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
-        contentStack.setCustomSpacing(16, after: card)
-    }
-
-    /// 页尾说明（灰色小字）
-    func addNote(_ text: String) {
-        let note = MenuPanelLabel.text(text, font: SettingsStyle.noteFont, color: .tertiaryLabelColor)
-        note.maximumNumberOfLines = 3
-        note.lineBreakMode = .byWordWrapping
-        contentStack.addArrangedSubview(note)
-    }
+    static let pageTitleFont = SettingsTheme.pageTitleFont
+    static let sectionTitleFont = SettingsTheme.sectionTitleFont
+    static let rowTitleFont = SettingsTheme.rowTitleFont
+    static let rowValueFont = SettingsTheme.rowValueFont
+    static let rowSubtitleFont = SettingsTheme.rowSubtitleFont
+    static let noteFont = SettingsTheme.noteFont
 }
 
 // MARK: - 卡片
 
-/// 设置卡片 — 圆角背景 + 1pt 边框，内部按行垂直排布（行之间自动补分隔线）
+/// 设置卡片 — `cardFill` 实底 + 圆角 9 + 0.5pt 描边 + 顶部 1pt 高光
+///
+/// 与面板是同一卡形（不再是「白底 + 1pt 灰描边 + 圆角 10」这套旧语言）；
+/// 行与行之间由 `addRow` 自动补 1pt 行分隔线（设置页每行是独立设置项，见 `SettingsDividerView`）。
 final class SettingsCardView: NSView {
 
     private let rows = NSStackView()
@@ -147,27 +60,21 @@ final class SettingsCardView: NSView {
         rows.distribution = .fill
         rows.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rows)
+        // 上下留卡片内边距，左右为 0 —— 行自己吃 10pt，行分隔线才不会顶到卡片边缘
         NSLayoutConstraint.activate([
             rows.leadingAnchor.constraint(equalTo: leadingAnchor),
             rows.trailingAnchor.constraint(equalTo: trailingAnchor),
-            rows.topAnchor.constraint(equalTo: topAnchor),
-            rows.bottomAnchor.constraint(equalTo: bottomAnchor),
+            rows.topAnchor.constraint(equalTo: topAnchor, constant: SettingsTheme.cardPaddingY),
+            rows.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -SettingsTheme.cardPaddingY),
         ])
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    /// 卡片底直接 draw：离屏渲染换外观时动态语义色仍正确，圆角与描边也稳定可见
+    /// 卡片底直接 draw：离屏渲染换外观 / 换主题时动态语义色仍正确，圆角与描边也稳定可见
     override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-                                xRadius: SettingsStyle.cardCornerRadius,
-                                yRadius: SettingsStyle.cardCornerRadius)
-        SettingsStyle.cardBackground.setFill()
-        path.fill()
-        NSColor.separatorColor.setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        SettingsTheme.drawCardBackground(in: bounds)
     }
 
     /// 清空全部行（整卡重建：重排时避免挪单行把自动补的分隔线搞乱；实例增删后同样走这里，
@@ -195,12 +102,15 @@ final class SettingsCardView: NSView {
 
 /// 通用设置行 — 左标题（可带副标题）+ 右控件
 ///
-/// 右控件由调用方提供：开关、下拉、按钮、只读值。行高固定 40pt，保证多行卡片对齐。
+/// 右侧控件由调用方提供：开关、下拉、按钮、只读值（行值字体用 `SettingsTheme.rowValueFont`
+/// 统一那一档等宽 11.5，控件自身字号仍由控件决定，保证读写逻辑零变化）。
+/// 行最小高 32pt、左右内边距 10pt、上下 2pt，保证多行卡片横向严格对齐。
 final class SettingsRowView: NSView {
 
-    private let titleLabel = MenuPanelLabel.text("", font: SettingsStyle.rowTitleFont, color: .labelColor)
-    private let subtitleLabel = MenuPanelLabel.text("", font: SettingsStyle.rowSubtitleFont,
-                                                   color: .secondaryLabelColor)
+    private let titleLabel = MenuPanelLabel.text("", font: SettingsTheme.rowTitleFont,
+                                                 color: SettingsTheme.textPrimary)
+    private let subtitleLabel = MenuPanelLabel.text("", font: SettingsTheme.rowSubtitleFont,
+                                                    color: SettingsTheme.textSecondary)
     /// 右侧控件容器（外部往里塞一个视图）
     let trailingStack = NSStackView()
 
@@ -214,7 +124,7 @@ final class SettingsRowView: NSView {
         let labels = NSStackView(views: [titleLabel, subtitleLabel])
         labels.orientation = .vertical
         labels.alignment = .leading
-        labels.spacing = 1
+        labels.spacing = SettingsTheme.rowLabelSpacing
 
         trailingStack.orientation = .horizontal
         trailingStack.alignment = .centerY
@@ -229,11 +139,13 @@ final class SettingsRowView: NSView {
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
         NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: SettingsStyle.rowInset),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -SettingsStyle.rowInset),
-            row.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-            heightAnchor.constraint(greaterThanOrEqualToConstant: SettingsStyle.rowHeight),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor,
+                                         constant: SettingsTheme.cardPaddingX),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor,
+                                          constant: -SettingsTheme.cardPaddingX),
+            row.topAnchor.constraint(equalTo: topAnchor, constant: SettingsTheme.rowPaddingY),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -SettingsTheme.rowPaddingY),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: SettingsTheme.rowHeight),
         ])
         setAccessibilityLabel(title)
     }
@@ -252,30 +164,36 @@ final class SettingsRowView: NSView {
 
 // MARK: - 分隔线
 
-/// 卡片内行分隔线（1pt，跟随语义色）
+/// 卡内行分隔线（1pt `rowSeparator` = `hairline`）
+///
+/// 与面板的**有意偏离**：面板卡内行是同一指标的多个读数，不画线才不碎；
+/// 设置页每一行是独立设置项（开关 / 下拉 / 可编辑值），扫读靠横向对齐找行，
+/// 所以相邻行之间画 1pt 线。线只画在卡片左右内边距以内、不触卡片边缘与圆角。
 final class SettingsDividerView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
-        wantsLayer = true
         heightAnchor.constraint(equalToConstant: 1).isActive = true
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    override var wantsUpdateLayer: Bool { true }
-
-    override func updateLayer() {
-        layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.6).cgColor
+    override func draw(_ dirtyRect: NSRect) {
+        let inset = SettingsTheme.cardPaddingX
+        SettingsTheme.rowSeparator.setFill()
+        NSRect(x: inset, y: bounds.minY,
+               width: max(0, bounds.width - inset * 2), height: 1).fill()
     }
 }
+
 // MARK: - 动态背景面
 
-/// 纯背景视图 — 背景色按当前外观实时重算（离屏渲染换外观后仍是正确色）
+/// 纯背景视图 — 背景色按当前外观 / 主题实时重算（离屏渲染换外观后仍是正确色）
 ///
-/// 用途：设置窗口根视图与侧栏底色。用静态 CGColor 会让深色快照出现浅色底。
+/// 用途：设置窗口根视图、侧栏底、侧栏竖线。用静态 CGColor 会让深色快照出现浅色底，
+/// 也会让换主题后的底色停在旧主题。
 final class SettingsSurfaceView: NSView {
 
     private let colorProvider: () -> NSColor
@@ -296,6 +214,7 @@ final class SettingsSurfaceView: NSView {
         layer?.backgroundColor = colorProvider().cgColor
     }
 }
+
 // MARK: - 翻转载体
 
 /// 翻转坐标的容器 — 滚动视图的 documentView 必须是 flipped，否则内容从底部开始排，

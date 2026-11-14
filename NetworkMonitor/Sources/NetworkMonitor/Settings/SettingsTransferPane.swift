@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 局域网互传设置页
 
@@ -23,8 +24,8 @@ final class SettingsTransferPane: SettingsPaneView, SettingsNotificationEventHos
     private let thresholdSwitch = NSSwitch()
     private let thresholdField = NSTextField()
     private let remainingDot = SettingsStatusDotView()
-    private let remainingLabel = MenuPanelLabel.text("", font: SettingsStyle.rowValueFont,
-                                                      color: .secondaryLabelColor)
+    private let remainingLabel = MenuPanelLabel.text("", font: SettingsTheme.rowValueFont,
+                                                      color: SettingsTheme.textSecondary)
     private var durationControl: NSSegmentedControl?
     private var restartButton: NSButton?
     /// 放宽为 internal：接收目录扩展文件要在切换目录时禁用
@@ -63,7 +64,7 @@ final class SettingsTransferPane: SettingsPaneView, SettingsNotificationEventHos
     private func buildReceiveSection() {
         clearButton = SettingsLinkButton.make("清理", target: self,
                                               action: #selector(clearReceivedFiles),
-                                              color: .systemRed)
+                                              color: SettingsTheme.destructive)
         chooseButton = SettingsLinkButton.make("选择…", target: self,
                                                action: #selector(chooseReceiveDirectory))
         if let chooseButton { directoryRow.trailingStack.addArrangedSubview(chooseButton) }
@@ -90,7 +91,9 @@ final class SettingsTransferPane: SettingsPaneView, SettingsNotificationEventHos
                                           target: self,
                                           action: #selector(durationChanged))
         duration.controlSize = .small
+        duration.font = SettingsTheme.rowTitleFont
         duration.setAccessibilityLabel("免配对窗口时长")
+        SettingsControlChrome.applyStandardHeight(to: duration)
         durationControl = duration
         let durationRow = SettingsRowView(title: "窗口时长")
         durationRow.trailingStack.addArrangedSubview(duration)
@@ -115,15 +118,16 @@ final class SettingsTransferPane: SettingsPaneView, SettingsNotificationEventHos
         thresholdSwitch.action = #selector(thresholdToggled)
         thresholdSwitch.setAccessibilityLabel("体积阈值")
         thresholdField.alignment = .right
-        thresholdField.font = SettingsStyle.rowValueFont
+        thresholdField.font = SettingsTheme.rowValueFont
+        SettingsControlChrome.applyStandardHeight(to: thresholdField)
         thresholdField.controlSize = .small
         thresholdField.target = self
         thresholdField.action = #selector(thresholdFieldChanged)
         thresholdField.delegate = self
         thresholdField.widthAnchor.constraint(equalToConstant: 56).isActive = true
         thresholdField.setAccessibilityLabel("体积阈值（MB）")
-        let unit = MenuPanelLabel.text("MB", font: SettingsStyle.rowSubtitleFont,
-                                       color: .secondaryLabelColor)
+        let unit = MenuPanelLabel.text("MB", font: SettingsTheme.rowSubtitleFont,
+                                       color: SettingsTheme.textSecondary)
         let thresholdRow = SettingsRowView(title: "体积阈值",
                                            subtitle: "开启后，小于该体积的接收免输 PIN")
         thresholdRow.trailingStack.addArrangedSubview(thresholdSwitch)
@@ -155,6 +159,7 @@ final class SettingsTransferPane: SettingsPaneView, SettingsNotificationEventHos
         refreshValues()
         refreshUsage()
         notificationCard.refresh()
+        refreshStatusChip()
         startCountdown()
     }
 
@@ -176,17 +181,17 @@ final class SettingsTransferPane: SettingsPaneView, SettingsNotificationEventHos
     /// 免配对窗口剩余：活跃绿、到期橙、未开启灰
     private func refreshRemaining() {
         guard preferences.autoAcceptEnabled else {
-            remainingDot.setColor(.tertiaryLabelColor)
+            remainingDot.setColor(SettingsTheme.ghost)
             remainingLabel.stringValue = "未开启"
             restartButton?.isEnabled = false
             return
         }
         restartButton?.isEnabled = true
         if preferences.isWindowActive() {
-            remainingDot.setColor(.systemGreen)
+            remainingDot.setColor(SettingsTheme.okInk)
             remainingLabel.stringValue = preferences.windowRemainingText()
         } else {
-            remainingDot.setColor(.systemOrange)
+            remainingDot.setColor(SettingsTheme.warnInk)
             remainingLabel.stringValue = "已到期"
         }
     }

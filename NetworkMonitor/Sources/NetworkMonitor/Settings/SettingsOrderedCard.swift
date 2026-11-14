@@ -37,10 +37,14 @@ final class SettingsOrderButton: NSButton {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    /// 首项不能再上移、末项不能再下移：禁用并转次要色（不隐藏，保持行内宽度稳定）
+    /// 首项不能再上移、末项不能再下移：禁用并转三级色（不隐藏，保持行内宽度稳定）
+    ///
+    /// 可用 / 禁用两档都走主题令牌：系统强调色不随三套主题变，
+    /// 会让「上移 / 下移」在石墨、米白主题下仍是系统蓝。
     func applyAppearance(enabled: Bool) {
         isEnabled = enabled
-        SettingsLinkButton.setTitle(plainTitle, on: self, color: enabled ? .controlAccentColor : .tertiaryLabelColor)
+        SettingsLinkButton.setTitle(plainTitle, on: self,
+                                    color: enabled ? SettingsTheme.accent : SettingsTheme.textTertiary)
     }
 }
 
@@ -129,7 +133,7 @@ final class SettingsOrderedCardView {
                                          storage: storage)
         layoutRows()
         resetButton = SettingsLinkButton.make("恢复默认", target: self, action: #selector(resetTapped),
-                                             color: .secondaryLabelColor)
+                                             color: SettingsTheme.textSecondary)
         resetButton?.setAccessibilityLabel("恢复默认顺序")
     }
 

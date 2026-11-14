@@ -83,6 +83,8 @@ extension SettingsGeneralPane {
         let template = NSSegmentedControl(labels: Self.templateTitles, trackingMode: .selectOne,
                                           target: self, action: #selector(menuBarTemplateChanged))
         template.tag = 0
+        template.font = SettingsTheme.rowTitleFont
+        SettingsControlChrome.applyStandardHeight(to: template)
         templateControl = template
         let templateRow = SettingsRowView(title: "快捷模板", subtitle: "只改显示哪些指标，不改上面排好的顺序")
         templateRow.trailingStack.addArrangedSubview(template)
@@ -91,6 +93,8 @@ extension SettingsGeneralPane {
         densityControl.addItems(withTitles: MenuBarDensity.allCases.map(\.rawValue))
         densityControl.target = self
         densityControl.action = #selector(menuBarDensityChanged)
+        densityControl.font = SettingsTheme.rowTitleFont
+        SettingsControlChrome.applyStandardHeight(to: densityControl)
         let densityRow = SettingsRowView(title: "密度")
         densityRow.trailingStack.addArrangedSubview(densityControl)
         card.addRow(densityRow)
@@ -100,12 +104,16 @@ extension SettingsGeneralPane {
         unitControl2.addItems(withTitles: MenuBarUnitStyle.allCases.map(\.title))
         unitControl2.target = self
         unitControl2.action = #selector(menuBarUnitChanged)
+        unitControl2.font = SettingsTheme.rowTitleFont
+        SettingsControlChrome.applyStandardHeight(to: unitControl2)
         unit2Row.trailingStack.addArrangedSubview(unitControl2)
         card.addRow(unit2Row)
 
         layoutControl.addItems(withTitles: MenuBarLayout.allCases.map(\.rawValue))
         layoutControl.target = self
         layoutControl.action = #selector(menuBarLayoutChanged)
+        layoutControl.font = SettingsTheme.rowTitleFont
+        SettingsControlChrome.applyStandardHeight(to: layoutControl)
         let layoutRow = SettingsRowView(title: "布局")
         layoutRow.trailingStack.addArrangedSubview(layoutControl)
         card.addRow(layoutRow)
@@ -113,6 +121,8 @@ extension SettingsGeneralPane {
         intervalControl.addItems(withTitles: ["1s", "2s", "5s"])
         intervalControl.target = self
         intervalControl.action = #selector(menuBarIntervalChanged)
+        intervalControl.font = SettingsTheme.rowTitleFont
+        SettingsControlChrome.applyStandardHeight(to: intervalControl)
         let intervalRow = SettingsRowView(title: "间隔")
         intervalRow.trailingStack.addArrangedSubview(intervalControl)
         card.addRow(intervalRow)

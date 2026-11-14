@@ -28,8 +28,8 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
     private let hotKeyRecorder = HotKeyRecorderView()
     private let positionPopup = NSPopUpButton()
     private let heightSlider = NSSlider()
-    private let heightValueLabel = MenuPanelLabel.text("", font: SettingsStyle.rowValueFont,
-                                                      color: .secondaryLabelColor)
+    private let heightValueLabel = MenuPanelLabel.text("", font: SettingsTheme.rowValueFont,
+                                                       color: SettingsTheme.textSecondary)
     private let quickPasteSwitch = NSSwitch()
     /// 剪贴板动作的通知行（放宽为 internal：DEBUG 快照要按协议取到它）
     let notificationCard: SettingsNotificationEventCard
@@ -45,21 +45,22 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
     var ignoredExpanded = false
 
     // 图片存储（跨文件访问：SettingsClipboardPane+Storage.swift 构建与动作）
-    let usageLabel = MenuPanelLabel.text("", font: SettingsStyle.rowValueFont, color: .labelColor)
-    let usageDetailLabel = MenuPanelLabel.text("", font: SettingsStyle.rowSubtitleFont,
-                                               color: .secondaryLabelColor)
+    let usageLabel = MenuPanelLabel.text("", font: SettingsTheme.rowValueFont,
+                                         color: SettingsTheme.textPrimary)
+    let usageDetailLabel = MenuPanelLabel.text("", font: SettingsTheme.rowSubtitleFont,
+                                               color: SettingsTheme.textSecondary)
     var openDirectoryButton = NSButton()
     var clearStorageButton = NSButton()
     var storageActionRow: SettingsRowView?
 
     // 权限状态控件与按钮（跨文件访问：SettingsClipboardPane+Permission.swift 只读状态与显隐）
     let clipboardDot = SettingsStatusDotView()
-    let clipboardStateLabel = MenuPanelLabel.text("", font: .systemFont(ofSize: 12),
-                                                 color: .secondaryLabelColor)
+    let clipboardStateLabel = MenuPanelLabel.text("", font: SettingsTheme.rowTitleFont,
+                                                  color: SettingsTheme.textSecondary)
     var clipboardSettingsButton = NSButton()
     let accessibilityDot = SettingsStatusDotView()
-    let accessibilityStateLabel = MenuPanelLabel.text("", font: .systemFont(ofSize: 12),
-                                                     color: .secondaryLabelColor)
+    let accessibilityStateLabel = MenuPanelLabel.text("", font: SettingsTheme.rowTitleFont,
+                                                      color: SettingsTheme.textSecondary)
     var accessibilityButton = NSButton()
 
     init(preferences: ClipboardPreferences = ClipboardPreferences(),
@@ -174,18 +175,20 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         for (field, name) in [(maxItemsField, "最大条数"), (retentionField, "保留天数")] {
             field.controlSize = .small
             field.alignment = .right
-            field.font = SettingsStyle.rowValueFont
+            field.font = SettingsTheme.rowValueFont
             field.target = self
             field.action = #selector(limitsChanged)
             field.delegate = self
             field.widthAnchor.constraint(equalToConstant: 64).isActive = true
             field.setAccessibilityLabel(name)
+            SettingsControlChrome.applyStandardHeight(to: field)
         }
 
         ignoredInput.placeholderString = "com.example.app"
         ignoredInput.controlSize = .small
-        ignoredInput.font = .monospacedSystemFont(ofSize: 11.5, weight: .regular)
+        ignoredInput.font = SettingsTheme.rowValueFont
         ignoredInput.widthAnchor.constraint(equalToConstant: 176).isActive = true
+        SettingsControlChrome.applyStandardHeight(to: ignoredInput)
         ignoredInput.setAccessibilityLabel("要忽略的应用 bundleID")
         ignoredToggleButton.target = self
         ignoredToggleButton.action = #selector(toggleIgnoredList)
@@ -213,6 +216,7 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
                                       action: Selector,
                                       accessibility: String) {
         popup.controlSize = .small
+        popup.font = SettingsTheme.rowTitleFont
         for item in items {
             popup.addItem(withTitle: labels(item))
             popup.lastItem?.representedObject = rawValues(item)
@@ -221,6 +225,7 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         popup.action = action
         popup.widthAnchor.constraint(equalToConstant: 148).isActive = true
         popup.setAccessibilityLabel(accessibility)
+        SettingsControlChrome.applyStandardHeight(to: popup)
     }
 
     // MARK: - 刷新
@@ -238,7 +243,10 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         retentionField.stringValue = "\(preferences.retentionDays)"
         reloadIgnoredApps()
         notificationCard.refresh()
-        refreshStorageCard()
+        // 目录只扫一次：存储卡与页头胶囊共用同一份读数（图片目录可能上千个文件，
+        // 两处各扫一遍等于把打开设置页的磁盘开销翻倍）
+        let imageUsage = settingsDelegate?.settingsClipboardImageUsage() ?? ClipboardStorageUsage.empty
+        refreshStorageCard(usage: imageUsage)
         refreshPermissionStatus()
     }
 

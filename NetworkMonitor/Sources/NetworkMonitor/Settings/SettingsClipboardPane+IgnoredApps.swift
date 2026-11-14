@@ -49,8 +49,8 @@ extension SettingsClipboardPane {
         let bundleIDs = preferences.ignoredBundleIDs.sorted()
         if bundleIDs.isEmpty {
             ignoredListStack.addArrangedSubview(
-                MenuPanelLabel.text("（无）", font: SettingsStyle.rowSubtitleFont,
-                                    color: .tertiaryLabelColor))
+                MenuPanelLabel.text("（无）", font: SettingsTheme.rowSubtitleFont,
+                                    color: SettingsTheme.textTertiary))
         } else {
             bundleIDs.forEach { ignoredListStack.addArrangedSubview(makeIgnoredAppRow(bundleID: $0)) }
         }
@@ -60,10 +60,11 @@ extension SettingsClipboardPane {
 
     private func makeIgnoredAppRow(bundleID: String) -> NSView {
         let label = MenuPanelLabel.text(bundleID,
-                                        font: .monospacedSystemFont(ofSize: 11.5, weight: .regular),
-                                        color: .labelColor)
+                                        font: SettingsTheme.rowValueFont,
+                                        color: SettingsTheme.textPrimary)
         let removeButton = SettingsLinkButton.make("移除", target: self,
-                                                    action: #selector(removeIgnoredApp(_:)))
+                                                   action: #selector(removeIgnoredApp(_:)),
+                                                   color: SettingsTheme.destructive)
         removeButton.identifier = NSUserInterfaceItemIdentifier(bundleID)
         let row = NSStackView(views: [label, MenuPanelLabel.spacer(), removeButton])
         row.orientation = .horizontal

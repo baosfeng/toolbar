@@ -25,6 +25,8 @@ extension SettingsCapturePane {
 
         let recoverable = NSPopUpButton(frame: .zero, pullsDown: false)
         recoverable.controlSize = .small
+        recoverable.font = SettingsTheme.rowTitleFont
+        SettingsControlChrome.applyStandardHeight(to: recoverable)
         recoverable.target = self
         recoverable.action = #selector(recoverableCountChanged)
         recoverable.setAccessibilityLabel("可被恢复的已关闭贴图数")

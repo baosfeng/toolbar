@@ -33,7 +33,9 @@ extension SettingsCapturePane {
                                                target: self,
                                                action: #selector(saveFormatChanged))
         formatControl.controlSize = .small
+        formatControl.font = SettingsTheme.rowTitleFont
         formatControl.setAccessibilityLabel("截图输出格式")
+        SettingsControlChrome.applyStandardHeight(to: formatControl)
         saveFormatControl = formatControl
         let formatRow = SettingsRowView(title: "输出格式")
         formatRow.trailingStack.addArrangedSubview(formatControl)
@@ -47,8 +49,8 @@ extension SettingsCapturePane {
         quality.widthAnchor.constraint(equalToConstant: 140).isActive = true
         quality.setAccessibilityLabel("JPEG 质量")
         jpegQualitySlider = quality
-        let qualityValue = MenuPanelLabel.text("90%", font: SettingsStyle.rowValueFont,
-                                               color: .secondaryLabelColor)
+        let qualityValue = MenuPanelLabel.text("90%", font: SettingsTheme.rowValueFont,
+                                               color: SettingsTheme.textSecondary)
         qualityValue.alignment = .right
         qualityValue.widthAnchor.constraint(equalToConstant: 44).isActive = true
         qualityValue.setContentHuggingPriority(.required, for: .horizontal)
@@ -85,7 +87,7 @@ extension SettingsCapturePane {
         jpegQualityLabel?.stringValue = "\(Int((quality * 100).rounded()))%"
         let isJPEG = format == .jpeg
         jpegQualitySlider?.isEnabled = isJPEG
-        jpegQualityLabel?.textColor = isJPEG ? .secondaryLabelColor : .tertiaryLabelColor
+        jpegQualityLabel?.textColor = isJPEG ? SettingsTheme.textSecondary : SettingsTheme.textTertiary
     }
 
     /// 快速保存目录行副标题：路径 + 来源（自定义 / 默认）
@@ -102,6 +104,7 @@ extension SettingsCapturePane {
         storage.set(format.rawValue, forKey: SnipPreferenceKey.saveFormat)
         logger.info("截图输出格式：\(format.displayName)")
         refreshSaveFormat()
+        refreshStatusChip()
     }
 
     @objc func jpegQualityChanged() {
@@ -109,6 +112,7 @@ extension SettingsCapturePane {
                                                     ?? SnipImageFormat.defaultJPEGQuality)
         storage.set(Double(value), forKey: SnipPreferenceKey.jpegQuality)
         jpegQualityLabel?.stringValue = "\(Int((value * 100).rounded()))%"
+        refreshStatusChip()
     }
 
     @objc func autoSaveChanged() {

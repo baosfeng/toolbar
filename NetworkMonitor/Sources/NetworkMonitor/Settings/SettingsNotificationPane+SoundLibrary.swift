@@ -30,8 +30,8 @@ extension SettingsNotificationPane {
         volumeSlider.action = #selector(volumeChanged(_:))
         volumeSlider.widthAnchor.constraint(equalToConstant: 160).isActive = true
         volumeSlider.setAccessibilityLabel("应用内提示音音量")
-        volumeValueLabel.font = SettingsStyle.rowValueFont
-        volumeValueLabel.textColor = .secondaryLabelColor
+        volumeValueLabel.font = SettingsTheme.rowValueFont
+        volumeValueLabel.textColor = SettingsTheme.textSecondary
         let volumeRow = SettingsRowView(title: "应用内音量",
                                         subtitle: "只影响应用内提示音；系统通知音量由系统「声音」设置决定")
         volumeRow.trailingStack.addArrangedSubview(volumeSlider)
@@ -45,6 +45,7 @@ extension SettingsNotificationPane {
         uploadButton.target = self
         uploadButton.action = #selector(uploadTapped)
         uploadButton.setAccessibilityLabel("上传音效")
+        SettingsControlChrome.applyStandardHeight(to: uploadButton)
         uploadRow.trailingStack.addArrangedSubview(uploadButton)
         card.addRow(uploadRow)
 
@@ -72,8 +73,8 @@ extension SettingsNotificationPane {
         customListStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         guard !files.isEmpty else {
             let empty = MenuPanelLabel.text("还没有自定义音效，点「上传…」选一段音频",
-                                            font: SettingsStyle.rowSubtitleFont,
-                                            color: .tertiaryLabelColor)
+                                            font: SettingsTheme.rowSubtitleFont,
+                                            color: SettingsTheme.textTertiary)
             let holder = NSView()
             holder.translatesAutoresizingMaskIntoConstraints = false
             empty.translatesAutoresizingMaskIntoConstraints = false
@@ -106,7 +107,7 @@ extension SettingsNotificationPane {
         rename.identifier = NSUserInterfaceItemIdentifier(file)
         row.trailingStack.addArrangedSubview(rename)
         let remove = SettingsLinkButton.make("删除", target: self, action: #selector(deleteCustom(_:)),
-                                             color: .systemRed)
+                                             color: SettingsTheme.destructive)
         remove.identifier = NSUserInterfaceItemIdentifier(file)
         row.trailingStack.addArrangedSubview(remove)
         return row
@@ -117,6 +118,7 @@ extension SettingsNotificationPane {
     @objc func volumeChanged(_ sender: NSSlider) {
         preferences.inAppVolume = sender.doubleValue
         volumeValueLabel.stringValue = "\(Int((sender.doubleValue * 100).rounded()))%"
+        refreshStatusChip()
     }
 
     @objc func uploadTapped() {

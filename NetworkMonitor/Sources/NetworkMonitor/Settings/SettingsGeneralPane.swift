@@ -83,6 +83,8 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         unitControl.target = self
         unitControl.action = #selector(unitChanged)
         unitControl.setAccessibilityLabel("数值单位")
+        unitControl.font = SettingsTheme.rowTitleFont
+        SettingsControlChrome.applyStandardHeight(to: unitControl)
 
         launchRow.trailingStack.addArrangedSubview(launchSwitch)
         alertRow.trailingStack.addArrangedSubview(alertSwitch)

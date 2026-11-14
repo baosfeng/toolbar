@@ -12,14 +12,16 @@ extension ProviderRowView {
         editorView.wantsLayer = true
         editorView.isHidden = true
 
-        let keyLabel = MenuPanelLabel.text("Key", font: SettingsStyle.rowSubtitleFont,
-                                           color: .secondaryLabelColor)
+        let keyLabel = MenuPanelLabel.text("Key", font: SettingsTheme.rowSubtitleFont,
+                                           color: SettingsTheme.textSecondary)
         keyLabel.setContentHuggingPriority(.required, for: .horizontal)
 
         field.placeholderString = provider.credentialHint
-        field.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        // 输入框用统一的等宽行值档：凭据是「一串字符」，等宽比比例字好看也更易核对
+        field.font = SettingsTheme.rowValueFont
         field.controlSize = .small
         field.bezelStyle = .roundedBezel
+        SettingsControlChrome.applyStandardHeight(to: field)
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.target = self
         field.action = #selector(saveTapped)
@@ -65,8 +67,8 @@ extension ProviderRowView {
         confirmView.isHidden = true
 
         let message = MenuPanelLabel.text("清除后需要重新填写 Key 才能查询额度。",
-                                          font: SettingsStyle.rowSubtitleFont,
-                                          color: .secondaryLabelColor)
+                                          font: SettingsTheme.rowSubtitleFont,
+                                          color: SettingsTheme.textSecondary)
         message.maximumNumberOfLines = 2
         message.lineBreakMode = .byWordWrapping
 
@@ -93,10 +95,12 @@ extension ProviderRowView {
         updateChromeColors()
     }
 
-    /// 编辑区 / 确认区底色（强调色 6% / 危险色 7%，深浅色都跟随系统语义色）
+    /// 编辑区 / 确认区底色（强调色 6% / 破坏性色 7%）
+    ///
+    /// 两者都从主题令牌取：强调色随主题、破坏性色走 `SettingsTheme.destructive` 单一出口。
     func updateChromeColors() {
-        editorView.layer?.backgroundColor = SettingsStyle.accent.withAlphaComponent(0.06).cgColor
-        confirmView.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.07).cgColor
+        editorView.layer?.backgroundColor = SettingsTheme.accent.withAlphaComponent(0.06).cgColor
+        confirmView.layer?.backgroundColor = SettingsTheme.destructive.withAlphaComponent(0.07).cgColor
     }
 
     // MARK: - 编辑区
@@ -149,8 +153,8 @@ extension ProviderRowView {
     }
 
     func updateEditorNote(now: Date) {
-        let font = SettingsStyle.noteFont
-        let secondary = NSColor.secondaryLabelColor
+        let font = SettingsTheme.noteFont
+        let secondary = SettingsTheme.textSecondary
         let text = NSMutableAttributedString()
         func append(_ string: String, color: NSColor = secondary) {
             text.append(NSAttributedString(string: string,
@@ -163,7 +167,7 @@ extension ProviderRowView {
         } else {
             append("上次查询：")
             if let errorMessage, !errorMessage.isEmpty {
-                append(errorMessage, color: .systemRed)
+                append(errorMessage, color: SettingsTheme.destructive)
             } else if lastUpdated != nil {
                 append("成功")
             } else {
@@ -217,12 +221,14 @@ extension ProviderRowView {
     // MARK: - 控件工厂
 
     static func textButton(_ title: String,
-                          color: NSColor = SettingsStyle.accent) -> NSButton {
+                           color: NSColor = SettingsTheme.accent) -> NSButton {
         let button = NSButton(title: title, target: nil, action: nil)
         button.isBordered = false
         button.controlSize = .small
-        button.font = NSFont.systemFont(ofSize: 11.5)
+        button.font = SettingsTheme.rowTitleFont
         button.contentTintColor = color
+        // 文字按钮与右侧开关同在一行：给同一档 22pt 高，横线才对得齐（不改字号与行为）
+        SettingsControlChrome.applyStandardHeight(to: button)
         return button
     }
 
@@ -230,8 +236,9 @@ extension ProviderRowView {
         let button = NSButton(title: title, target: nil, action: nil)
         button.bezelStyle = .rounded
         button.controlSize = .small
-        button.bezelColor = SettingsStyle.accent
+        button.bezelColor = SettingsTheme.accent
         button.contentTintColor = .white
+        SettingsControlChrome.applyStandardHeight(to: button)
         return button
     }
 }

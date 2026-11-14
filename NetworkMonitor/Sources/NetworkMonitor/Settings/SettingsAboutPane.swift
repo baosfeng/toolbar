@@ -26,13 +26,15 @@ final class SettingsAboutPane: SettingsPaneView {
         openButton.bezelStyle = .rounded
         openButton.controlSize = .small
         openButton.setAccessibilityLabel("打开项目地址")
+        SettingsControlChrome.applyStandardHeight(to: openButton)
         repoRow.trailingStack.addArrangedSubview(openButton)
 
         let quitButton = NSButton(title: "退出", target: self, action: #selector(quit))
         quitButton.bezelStyle = .rounded
         quitButton.controlSize = .small
-        quitButton.contentTintColor = .systemRed
+        quitButton.contentTintColor = SettingsTheme.destructive
         quitButton.setAccessibilityLabel("退出 \(AppIdentity.displayName)")
+        SettingsControlChrome.applyStandardHeight(to: quitButton)
         quitRow.trailingStack.addArrangedSubview(quitButton)
 
         let appCard = SettingsCardView()
@@ -62,8 +64,8 @@ final class SettingsAboutPane: SettingsPaneView {
 
     /// 只读值标签（等宽数字，右对齐）
     private func valueLabel(_ text: String) -> NSTextField {
-        let label = MenuPanelLabel.text(text, font: SettingsStyle.rowValueFont,
-                                        color: .secondaryLabelColor)
+        let label = MenuPanelLabel.text(text, font: SettingsTheme.rowValueFont,
+                                        color: SettingsTheme.textSecondary)
         label.alignment = .right
         return label
     }

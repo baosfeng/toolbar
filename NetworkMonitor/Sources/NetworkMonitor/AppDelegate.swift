@@ -43,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MenuPanelSnapshot.runIfRequested(repository: coordinator.snapshotClipboardRepository,
                                           harness: coordinator.snapshotHarnessService,
                                           settings: coordinator.settingsWindow)
+        // 仅 DEBUG：NM_THEME_HOT_PROBE=<目录> 时验证「切主题 → 设置窗口重绘」链路并退出
+        SettingsThemeHotProbe.runIfRequested(settings: coordinator.settingsWindow)
         // 仅 DEBUG：NM_APPEARANCE_EVIDENCE=1 时打印三档 / 三主题的运行时结构并退出
         // （毛玻璃离屏不可辨，材质与档位的验收主判据是结构自证）
         if let manager = menuBarManager {

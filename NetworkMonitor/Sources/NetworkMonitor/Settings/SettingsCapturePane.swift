@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 截图与贴图设置页
 
@@ -127,8 +128,8 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         slider.setAccessibilityLabel("贴图默认不透明度")
         alphaSlider = slider
 
-        let value = MenuPanelLabel.text("100%", font: SettingsStyle.rowValueFont,
-                                        color: .secondaryLabelColor)
+        let value = MenuPanelLabel.text("100%", font: SettingsTheme.rowValueFont,
+                                        color: SettingsTheme.textSecondary)
         value.alignment = .right
         value.widthAnchor.constraint(equalToConstant: 44).isActive = true
         value.setContentHuggingPriority(.required, for: .horizontal)
@@ -227,6 +228,22 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         updateColorSelection()
         notificationCard.refresh()
         if let text = hotKeySummary?() { hotKeyRow?.update(subtitle: text) }
+
+        refreshStatusChip()
+    }
+
+    /// 页头胶囊：输出格式 + JPEG 质量（PNG 档没有质量语义，只显示格式）
+    ///
+    /// 放宽为 internal：保存卡扩展（`SettingsCapturePane+Save`）里改格式 / 拖质量后要同步胶囊。
+    func refreshStatusChip() {
+        let format = SnipImageFormat.resolved(raw: storage.string(forKey: SnipPreferenceKey.saveFormat))
+        let quality = SnipImageFormat.clampedQuality(
+            storage.object(forKey: SnipPreferenceKey.jpegQuality) as? Double
+                ?? SnipImageFormat.defaultJPEGQuality)
+        page.setStatusChip(SettingsStatusChip(
+            subject: format.displayName,
+            detail: format == .jpeg ? "质量 " + String(format: "%.2f", quality) : nil,
+            tone: .muted))
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -240,7 +257,8 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         for (index, button) in colorButtons.enumerated() {
             let isSelected = index == selectedIndex
             button.layer?.borderWidth = isSelected ? 2 : 1
-            button.layer?.borderColor = (isSelected ? SettingsStyle.accent : NSColor.separatorColor).cgColor
+            // 选中描边用主题强调色，未选中用 1pt 分隔线色（都不再用系统 separatorColor：它不随主题变）
+            button.layer?.borderColor = (isSelected ? SettingsTheme.accent : SettingsTheme.hairline).cgColor
         }
     }
 

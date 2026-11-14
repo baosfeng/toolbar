@@ -106,7 +106,8 @@ extension SettingsProvidersPane {
                                            subtitle: "百分点（1–50），默认 10")
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
         popup.controlSize = .small
-        popup.font = SettingsStyle.rowValueFont
+        popup.font = SettingsTheme.rowValueFont
+        SettingsControlChrome.applyStandardHeight(to: popup)
         for percent in Self.recoveryThresholdChoices(including: alertPreferences.recoveryMinimumPercent) {
             popup.addItem(withTitle: "\(Int(percent)) 个百分点")
             popup.lastItem?.representedObject = percent
@@ -155,7 +156,7 @@ extension SettingsProvidersPane {
         alert.addButton(withTitle: "取消")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
         field.placeholderString = placeholder
-        field.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        field.font = SettingsTheme.rowValueFont
         alert.accessoryView = field
         alert.window.initialFirstResponder = field
         return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil

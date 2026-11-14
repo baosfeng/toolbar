@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 系统监控设置页
 
@@ -38,6 +39,8 @@ final class SettingsSystemPane: SettingsPaneView {
         intervalControl.target = self
         intervalControl.action = #selector(intervalChanged)
         intervalControl.setAccessibilityLabel("采样周期")
+        intervalControl.font = SettingsTheme.rowTitleFont
+        SettingsControlChrome.applyStandardHeight(to: intervalControl)
 
         thermalSwitch.target = self
         thermalSwitch.action = #selector(thermalChanged)
@@ -64,6 +67,16 @@ final class SettingsSystemPane: SettingsPaneView {
             .offset ?? 1
         intervalControl.selectItem(at: index)
         thermalSwitch.state = preferences.isPanelItemVisible(.thermal) ? .on : .off
+
+        refreshStatusChip()
+    }
+
+    /// 页头胶囊：采样周期（只陈述周期，无成败语义 → 中性状态点）
+    ///
+    /// 取值用真实偏好而不是「最接近的选项」：用户填过 0.75 时页面如实显示 0.75 s。
+    private func refreshStatusChip() {
+        let seconds = String(format: "%.1f", preferences.sampleInterval)
+        page.setStatusChip(SettingsStatusChip(subject: "采样 \(seconds) s", tone: .muted))
     }
 
     // MARK: - 动作
@@ -74,6 +87,7 @@ final class SettingsSystemPane: SettingsPaneView {
         let option = Self.intervalOptions[index]
         preferences.sampleInterval = option.value
         intervalRow.update(subtitle: "当前 \(option.title)，重启应用后生效")
+        refreshStatusChip()
     }
 
     @objc private func thermalChanged() {

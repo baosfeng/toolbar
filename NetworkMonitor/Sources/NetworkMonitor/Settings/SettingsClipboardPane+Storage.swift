@@ -20,14 +20,14 @@ extension SettingsClipboardPane {
 
     /// 构建「存储」卡（占用 + 目录 + 两个动作）
     func buildStorageCard() {
-        usageLabel.font = SettingsStyle.rowValueFont
-        usageLabel.textColor = .labelColor
+        usageLabel.font = SettingsTheme.rowValueFont
+        usageLabel.textColor = SettingsTheme.textPrimary
         usageLabel.alignment = .right
         usageLabel.setContentHuggingPriority(.required, for: .horizontal)
         usageLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        usageDetailLabel.font = SettingsStyle.rowSubtitleFont
-        usageDetailLabel.textColor = .secondaryLabelColor
+        usageDetailLabel.font = SettingsTheme.rowSubtitleFont
+        usageDetailLabel.textColor = SettingsTheme.textSecondary
         usageDetailLabel.lineBreakMode = .byTruncatingMiddle
         usageDetailLabel.maximumNumberOfLines = 1
         // 路径很长：让它先被压缩（行名必须完整），过宽时省略中间段而不是把左侧「目录」压成省略号
@@ -45,7 +45,7 @@ extension SettingsClipboardPane {
         openDirectoryButton.setAccessibilityLabel("打开图片目录")
         clearStorageButton = SettingsLinkButton.make("清空…", target: self,
                                                       action: #selector(requestClearImageStorage),
-                                                      color: .systemRed)
+                                                      color: SettingsTheme.destructive)
         clearStorageButton.setAccessibilityLabel("清空图片存储（需二次确认）")
 
         let actionRow = SettingsRowView(title: "管理", subtitle: Self.storageActionSubtitle)
@@ -59,8 +59,11 @@ extension SettingsClipboardPane {
     }
 
     /// 刷新占用与条数（切页 / 窗口重新显示 / 清空后都调用；每次现算，不缓存）
-    func refreshStorageCard() {
-        let usage = settingsDelegate?.settingsClipboardImageUsage() ?? ClipboardStorageUsage.empty
+    ///
+    /// - Parameter provided: 已拿到的当前目录占用。`refresh()` 里只扫一次目录，
+    ///   同一次页刷新内存储卡与页头胶囊共用这一份读数；传 nil 时自己现取。
+    func refreshStorageCard(usage provided: ClipboardStorageUsage.Summary? = nil) {
+        let usage = provided ?? settingsDelegate?.settingsClipboardImageUsage() ?? ClipboardStorageUsage.empty
         let sizeText = SystemDetailFormatting.byteCountText(usage.byteCount)
         usageLabel.stringValue = sizeText
         let countText = "\(usage.fileCount) 个文件"
@@ -77,6 +80,8 @@ extension SettingsClipboardPane {
         clearStorageButton.isEnabled = usage.fileCount > 0
         // 上次清理的结果文案复位，避免停留在旧状态
         storageActionRow?.update(title: nil, subtitle: Self.storageActionSubtitle)
+        // 页头胶囊吃同一个文件数：清空后胶囊也跟着归零，不用等下次切页
+        refreshHeaderChip(usage: usage)
     }
 
     // MARK: 动作

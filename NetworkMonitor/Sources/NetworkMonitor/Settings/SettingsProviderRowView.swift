@@ -27,12 +27,14 @@ final class ProviderRowView: NSView {
     /// 实例信息（id 即实例标识；默认实例的 id 等于 kindID）
     let instance: BillingInstance
     let tile: ProviderIconTileView
-    let nameLabel = MenuPanelLabel.text("", font: SettingsStyle.rowTitleFont, color: .labelColor)
+    let nameLabel = MenuPanelLabel.text("", font: SettingsTheme.rowTitleFont,
+                                       color: SettingsTheme.textPrimary)
     let dotView = ProviderStatusDotView()
-    let statusLabel = MenuPanelLabel.text("", font: SettingsStyle.rowSubtitleFont,
-                                                  color: .secondaryLabelColor)
-    let errorLabel = MenuPanelLabel.text("", font: SettingsStyle.noteFont,
-                                                 color: .systemRed)
+    let statusLabel = MenuPanelLabel.text("", font: SettingsTheme.rowSubtitleFont,
+                                          color: SettingsTheme.textSecondary)
+    // 错误文案是「这一条不能用」，属于破坏性语义：走 destructive 单一出口，不直接写 systemRed
+    let errorLabel = MenuPanelLabel.text("", font: SettingsTheme.noteFont,
+                                         color: SettingsTheme.destructive)
     let toggle = NSSwitch()
     let editButton: NSButton
     let clearButton: NSButton
@@ -46,8 +48,8 @@ final class ProviderRowView: NSView {
     let field = NSSecureTextField()
     let saveButton: NSButton
     let cancelButton: NSButton
-    let editorMessage = MenuPanelLabel.text("", font: SettingsStyle.noteFont,
-                                                    color: .systemRed)
+    let editorMessage = MenuPanelLabel.text("", font: SettingsTheme.noteFont,
+                                            color: SettingsTheme.destructive)
     let editorNote = NSTextField(labelWithAttributedString: NSAttributedString(string: ""))
 
     let confirmView = NSView()
@@ -79,10 +81,10 @@ final class ProviderRowView: NSView {
         clearButton = Self.textButton("清除")
         configButton = Self.textButton("配置凭据…")
         renameButton = Self.textButton("重命名")
-        deleteButton = Self.textButton("删除", color: .systemRed)
+        deleteButton = Self.textButton("删除", color: SettingsTheme.destructive)
         saveButton = Self.primaryButton("保存并查询")
         cancelButton = Self.textButton("取消")
-        confirmButton = Self.textButton("确认清除", color: .systemRed)
+        confirmButton = Self.textButton("确认清除", color: SettingsTheme.destructive)
         confirmCancelButton = Self.textButton("取消")
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -227,7 +229,7 @@ final class ProviderRowView: NSView {
             dotView.kind = .ok
             statusLabel.stringValue = "已配置\(sourceNote) · \(refreshText())"
         }
-        nameLabel.textColor = isEnabled ? .labelColor : .secondaryLabelColor
+        nameLabel.textColor = isEnabled ? SettingsTheme.textPrimary : SettingsTheme.textSecondary
         tile.alphaValue = isEnabled ? 1 : 0.7
 
         errorLabel.stringValue = errorMessage ?? ""

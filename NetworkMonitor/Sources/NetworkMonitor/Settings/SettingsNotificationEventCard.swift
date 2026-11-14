@@ -133,7 +133,7 @@ final class SettingsNotificationEventCard: NSObject {
         }
     }
 
-    /// 下拉统一口径：小号、固定宽、identifier 存事件
+    /// 下拉统一口径：小号、固定宽、22pt 高、字号取行名那一档（与开关同一横线）
     private func makePopup(width: CGFloat,
                            items: [String]?,
                            action: Selector,
@@ -141,13 +141,14 @@ final class SettingsNotificationEventCard: NSObject {
                            accessibility: String) -> NSPopUpButton {
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
         popup.controlSize = .small
-        popup.font = SettingsStyle.rowSubtitleFont
+        popup.font = SettingsTheme.rowTitleFont
         if let items { popup.addItems(withTitles: items) }
         popup.target = self
         popup.action = action
         popup.identifier = Self.identifier(for: event)
         popup.setAccessibilityLabel(accessibility)
         popup.widthAnchor.constraint(equalToConstant: width).isActive = true
+        SettingsControlChrome.applyStandardHeight(to: popup)
         return popup
     }
 

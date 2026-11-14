@@ -19,7 +19,9 @@ extension SettingsCapturePane {
                                            target: self,
                                            action: #selector(toolBarLabelModeChanged))
         labelMode.controlSize = .small
+        labelMode.font = SettingsTheme.rowTitleFont
         labelMode.setAccessibilityLabel("工具条文字提示")
+        SettingsControlChrome.applyStandardHeight(to: labelMode)
         toolBarLabelControl = labelMode
         let labelRow = SettingsRowView(title: "文字提示",
                                       subtitle: toolBarLabelSubtitle())
@@ -31,8 +33,10 @@ extension SettingsCapturePane {
         placement.target = self
         placement.action = #selector(toolBarPlacementChanged)
         placement.setAccessibilityLabel("工具条位置")
+        placement.font = SettingsTheme.rowTitleFont
         placement.addItems(withTitles: SnipToolBarPlacement.allCases.map(\.title))
         placement.widthAnchor.constraint(equalToConstant: 110).isActive = true
+        SettingsControlChrome.applyStandardHeight(to: placement)
         toolBarPlacementControl = placement
         let placementRow = SettingsRowView(title: "位置",
                                            subtitle: "工具条相对选区的位置")
@@ -93,15 +97,17 @@ extension SettingsCapturePane {
                 chip.bezelStyle = .inline
                 chip.controlSize = .small
                 chip.tag = SnipTool.allCases.firstIndex(of: tool) ?? 0
+                chip.font = SettingsTheme.rowTitleFont
                 chip.setAccessibilityLabel("常驻工具：\(tool.displayName)")
+                SettingsControlChrome.applyStandardHeight(to: chip)
                 toolBarToolChips[tool] = chip
                 lineStack.addArrangedSubview(chip)
             }
             chipsRow.addArrangedSubview(lineStack)
         }
         let chipNote = MenuPanelLabel.text("未选的工具收进「更多」面板；至少保留 1 个",
-                                          font: SettingsStyle.rowSubtitleFont,
-                                          color: .secondaryLabelColor)
+                                          font: SettingsTheme.rowSubtitleFont,
+                                          color: SettingsTheme.textSecondary)
         chipsRow.addArrangedSubview(chipNote)
         let toolsRow = SettingsRowView(title: "常驻工具")
         toolsRow.trailingStack.addArrangedSubview(chipsRow)

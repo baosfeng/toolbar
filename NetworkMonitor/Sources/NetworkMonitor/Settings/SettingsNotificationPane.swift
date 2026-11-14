@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 通知与音效设置页
 
@@ -22,12 +23,12 @@ final class SettingsNotificationPane: SettingsPaneView {
 
     /// 授权状态行
     private let authDot = SettingsStatusDotView()
-    private let authLabel = MenuPanelLabel.text("", font: SettingsStyle.rowSubtitleFont,
-                                                color: .secondaryLabelColor)
+    private let authLabel = MenuPanelLabel.text("", font: SettingsTheme.rowSubtitleFont,
+                                                color: SettingsTheme.textSecondary)
     // 放宽为 internal：音效库扩展文件（SettingsNotificationPane+SoundLibrary）要构建与刷新这些控件
     let volumeSlider = NSSlider()
-    let volumeValueLabel = MenuPanelLabel.text("100%", font: SettingsStyle.rowValueFont,
-                                               color: .secondaryLabelColor)
+    let volumeValueLabel = MenuPanelLabel.text("100%", font: SettingsTheme.rowValueFont,
+                                               color: SettingsTheme.textSecondary)
     let uploadButton = NSButton(title: "上传…", target: nil, action: nil)
     let customListStack = NSStackView()
 
@@ -80,6 +81,7 @@ final class SettingsNotificationPane: SettingsPaneView {
                                   subtitle: "七类事件回到出厂配置，音量回到 100%，自定义音效保留")
         let reset = NSButton(title: "恢复默认", target: self, action: #selector(resetTapped))
         reset.bezelStyle = .rounded
+        SettingsControlChrome.applyStandardHeight(to: reset)
         row.trailingStack.addArrangedSubview(reset)
         let card = SettingsCardView()
         card.addRow(row)
@@ -94,14 +96,38 @@ final class SettingsNotificationPane: SettingsPaneView {
         refreshSoundLibrary()
     }
 
-    /// 授权状态 → 状态点 + 文案
+    /// 授权状态 → 状态点 + 文案 + 页头胶囊
+    ///
+    /// 三态只用主题那三种语义色（达标 / 告警 / 中性），不再引入红：
+    /// - 已授权 → okInk
+    /// - 已关闭（用户拒绝）→ warnInk（需要用户去系统设置打开）
+    /// - 未决定（还没问过）→ ghost（中性，不是错误）
     private func renderAuthorizationState() {
         let state = service.authorizationState
         authLabel.stringValue = "\(state.label) · \(state.detail)"
+        let tone = Self.tone(for: state)
+        // 状态点与胶囊共用同一份语义映射（SettingsTheme.statusDotColor 就是 tone → 角色色）
+        authDot.setColor(SettingsTheme.statusDotColor(tone))
+        refreshStatusChip()
+    }
+
+    /// 页头胶囊：授权态 + 应用内音量
+    ///
+    /// 放宽为 internal：音效库扩展里拖动音量滑杆时也要同步胶囊（否则停在旧音量）。
+    func refreshStatusChip() {
+        let state = service.authorizationState
+        let volume = "\(Int((preferences.inAppVolume * 100).rounded()))%"
+        page.setStatusChip(SettingsStatusChip(subject: state.label,
+                                             detail: "音量 \(volume)",
+                                             tone: Self.tone(for: state)))
+    }
+
+    /// 授权态 → 胶囊 / 状态点语义（一处映射，两处显示不各判一遍）
+    private static func tone(for state: NotificationAuthorizationState) -> SettingsStatusTone {
         switch state {
-        case .authorized: authDot.setColor(.systemGreen)
-        case .notDetermined: authDot.setColor(.systemOrange)
-        case .denied: authDot.setColor(.systemRed)
+        case .authorized: return .ok
+        case .denied: return .warn
+        case .notDetermined: return .muted
         }
     }
 

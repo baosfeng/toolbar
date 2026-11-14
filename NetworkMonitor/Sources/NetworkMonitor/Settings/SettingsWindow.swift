@@ -1,17 +1,21 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 统一设置窗口
 
-/// 统一设置窗口 — 左侧分类栏 + 右侧内容区（760×540，与原型一致）
+/// 统一设置窗口 — 左侧三段分组侧栏 + 右侧内容区（760×540，与定稿原型一致）
 ///
 /// 职责边界：
-/// - 只做容器与切换：分类列表、内容滚动区、当前页缓存策略
+/// - 只做容器与切换：分类列表、内容滚动区、当前页缓存策略、外观变更后的整窗重绘
 /// - 不碰业务：每页由组合根注入的工厂创建（`SettingsPaneView` 子类）
 /// - 外部可指定初始分类（额度页未配置时「去设置配置」直接落到额度 Provider 页）
 ///
 /// 页面按需创建、切走即释放：设置页里的输入框都是「保存即持久化」，
 /// 重建不会丢数据，反而避免多页同时观察外部状态（设备清单、权限）。
+///
+/// 取色：窗口底 / 侧栏底 / 内容区底全部是主题 `surface`（不再用系统语义色），
+/// 侧栏右侧 0.5pt `hairline` 竖线把两层分开。
 @MainActor
 final class SettingsWindow: NSObject, NSWindowDelegate {
 
@@ -23,7 +27,6 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     // 放宽为 internal：DEBUG 快照扩展文件（SettingsWindow+Snapshot.swift）要用
     let factories: [SettingsSection: PaneFactory]
     private let logger: LoggingService
-    private let sidebarStack = NSStackView()
     // 放宽为 internal：DEBUG 快照扩展文件要重建同构容器
     let contentScroll = NSScrollView()
     let contentContainer = SettingsFlippedView()
@@ -32,12 +35,15 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private var items: [SettingsSection: SettingsSidebarItemView] = [:]
     private var currentSection: SettingsSection = .general
     var currentPane: SettingsPaneView?
+    /// 外观 / 渲染档观察者（换主题后整窗必须立刻变）
+    private var appearanceObserver: NSObjectProtocol?
+    private var renderTierObserver: NSObjectProtocol?
 
     init(factories: [SettingsSection: PaneFactory],
          logger: LoggingService = AppContext.shared.logger) {
         self.factories = factories
         self.logger = logger
-        window = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsStyle.windowSize),
+        window = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsTheme.windowSize),
                           styleMask: [.titled, .closable, .miniaturizable],
                           backing: .buffered, defer: false)
         super.init()
@@ -49,6 +55,19 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window.contentView = rootView
         window.center()
         select(.general)
+        observeAppearanceChanges()
+    }
+
+    // isolated deinit：注销观察者必须在主线程（通知中心的线程要求），
+    // 与 PasteboardWatcher / UserActivityMonitor 同一写法
+    isolated deinit {
+        // 观察者注销放析构：窗口被关掉不一定立刻析构，但漏掉注销就是泄漏 + 野回调
+        if let appearanceObserver {
+            NotificationCenter.default.removeObserver(appearanceObserver)
+        }
+        if let renderTierObserver {
+            NotificationCenter.default.removeObserver(renderTierObserver)
+        }
     }
 
     // MARK: - 对外入口
@@ -68,28 +87,11 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     // MARK: - 布局
 
     private func makeContentView() -> NSView {
-        let root = SettingsSurfaceView { SettingsStyle.pageBackground }
-
-        sidebarStack.orientation = .vertical
-        sidebarStack.alignment = .leading
-        sidebarStack.spacing = 2
-        sidebarStack.translatesAutoresizingMaskIntoConstraints = false
-
-        for section in SettingsSection.allCases {
-            let item = SettingsSidebarItemView(section: section)
-            item.onSelect = { [weak self] in self?.select(section) }
-            sidebarStack.addArrangedSubview(item)
-            item.widthAnchor.constraint(equalTo: sidebarStack.widthAnchor).isActive = true
-            items[section] = item
+        let root = SettingsSurfaceView { SettingsTheme.surface }
+        let sidebar = SettingsSidebarBuilder.make { [weak self] section in
+            self?.select(section)
         }
-
-        let sidebar = SettingsSurfaceView { .underPageBackgroundColor }
-        sidebar.addSubview(sidebarStack)
-        NSLayoutConstraint.activate([
-            sidebarStack.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 8),
-            sidebarStack.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -8),
-            sidebarStack.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 12),
-        ])
+        items = sidebar.items
 
         contentScroll.translatesAutoresizingMaskIntoConstraints = false
         contentScroll.drawsBackground = false
@@ -99,14 +101,15 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         contentScroll.documentView = contentContainer
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
 
-        root.addSubview(sidebar)
+        let sidebarView = sidebar.view
+        root.addSubview(sidebarView)
         root.addSubview(contentScroll)
         NSLayoutConstraint.activate([
-            sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            sidebar.topAnchor.constraint(equalTo: root.topAnchor),
-            sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            sidebar.widthAnchor.constraint(equalToConstant: SettingsStyle.sidebarWidth),
-            contentScroll.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            sidebarView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            sidebarView.topAnchor.constraint(equalTo: root.topAnchor),
+            sidebarView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            sidebarView.widthAnchor.constraint(equalToConstant: SettingsTheme.sidebarWidth),
+            contentScroll.leadingAnchor.constraint(equalTo: sidebarView.trailingAnchor),
             contentScroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             contentScroll.topAnchor.constraint(equalTo: root.topAnchor),
             contentScroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
@@ -137,107 +140,55 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         contentContainer.addSubview(pane)
         NSLayoutConstraint.activate([
             pane.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor,
-                                          constant: SettingsStyle.contentInset),
+                                          constant: SettingsTheme.contentInset),
             pane.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor,
-                                           constant: -SettingsStyle.contentInset),
+                                           constant: -SettingsTheme.contentInset),
             pane.topAnchor.constraint(equalTo: contentContainer.topAnchor,
-                                      constant: SettingsStyle.contentInset),
+                                      constant: SettingsTheme.contentInset),
             pane.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor,
-                                         constant: -SettingsStyle.contentInset),
+                                         constant: -SettingsTheme.contentInset),
         ])
         pane.refresh()
+    }
+
+    // MARK: - 跟随外观 / 渲染档
+
+    /// 订阅外观变更 —— 换主题后设置窗口必须**立刻**变，这是本轮的核心验收项
+    ///
+    /// 主题换的是「语义角色 → 色值」的映射，视图不会收到外观变更回调
+    /// （系统外观没变），只有显式重绘才会重新解析动态色。
+    private func observeAppearanceChanges() {
+        let center = NotificationCenter.default
+        appearanceObserver = center.addObserver(forName: AppEvents.appearanceChanged,
+                                                object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.redrawEverything() }
+        }
+        renderTierObserver = center.addObserver(forName: AppEvents.renderTierChanged,
+                                                object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.redrawEverything() }
+        }
+    }
+
+    /// 递归置 `needsDisplay`：动态色在绘制期解析，重绘即换色
+    ///
+    /// 只置根视图不够——子视图各自缓存着自己的绘制结果；层背景（`wantsUpdateLayer`）
+    /// 也会在 needsDisplay → updateLayer 时重新取色。
+    private func redrawEverything() {
+        guard let rootView else { return }
+        rootView.needsDisplay = true
+        Self.markNeedsDisplay(rootView)
+    }
+
+    private static func markNeedsDisplay(_ view: NSView) {
+        for subview in view.subviews {
+            subview.needsDisplay = true
+            markNeedsDisplay(subview)
+        }
     }
 
     // MARK: - NSWindowDelegate
 
     func windowDidBecomeKey(_ notification: Notification) {
         currentPane?.refresh()
-    }
-}
-
-// MARK: - 侧栏项
-
-/// 侧栏分类项 — 图标 + 文字，选中态为浅强调底 + 强调色文字（原型定稿规则）
-final class SettingsSidebarItemView: NSView {
-
-    /// 点击回调
-    var onSelect: (() -> Void)?
-
-    /// 选中态
-    var isSelected: Bool = false {
-        didSet {
-            guard isSelected != oldValue else { return }
-            updateAppearance()
-        }
-    }
-
-    private let iconView: NSImageView?
-    private let titleLabel: NSTextField
-    private let section: SettingsSection
-    private var isHovered = false {
-        didSet { updateAppearance() }
-    }
-
-    init(section: SettingsSection) {
-        self.section = section
-        iconView = MenuPanelLabel.symbol(section.symbolName, pointSize: 13, color: .secondaryLabelColor)
-        titleLabel = MenuPanelLabel.text(section.title, font: .systemFont(ofSize: 12.5),
-                                         color: .labelColor)
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        wantsLayer = true
-        layer?.cornerRadius = 6
-
-        let row = NSStackView()
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 8
-        if let iconView { row.addArrangedSubview(iconView) }
-        row.addArrangedSubview(titleLabel)
-        row.addArrangedSubview(MenuPanelLabel.spacer())
-        row.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(row)
-        NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 9),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -9),
-            row.centerYAnchor.constraint(equalTo: centerYAnchor),
-            heightAnchor.constraint(equalToConstant: 30),
-        ])
-        setAccessibilityLabel(section.title)
-        setAccessibilityRole(.button)
-        updateAppearance()
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.mouseEnteredAndExited, .activeInKeyWindow],
-                                       owner: self, userInfo: nil))
-    }
-
-    override func mouseEntered(with event: NSEvent) { isHovered = true }
-    override func mouseExited(with event: NSEvent) { isHovered = false }
-
-    override func mouseUp(with event: NSEvent) {
-        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        onSelect?()
-    }
-
-    private func updateAppearance() {
-        if isSelected {
-            layer?.backgroundColor = SettingsStyle.accent.withAlphaComponent(0.14).cgColor
-            titleLabel.textColor = SettingsStyle.accent
-            iconView?.contentTintColor = SettingsStyle.accent
-        } else {
-            layer?.backgroundColor = isHovered
-                ? NSColor.labelColor.withAlphaComponent(0.06).cgColor
-                : NSColor.clear.cgColor
-            titleLabel.textColor = .labelColor
-            iconView?.contentTintColor = .secondaryLabelColor
-        }
     }
 }

@@ -3,42 +3,28 @@ import AppKit
 
 // MARK: - 设置窗口快照自证（仅 DEBUG）
 
-/// 快照所需的三个入口 — 从 `SettingsWindow.swift` 拆出
+/// 快照所需的几个入口 — 从 `SettingsWindow.swift` 拆出
 ///
-/// 拆出原因：窗口主文件已贴着单文件 15 KiB 上限，而这些方法只服务于 DEBUG 快照取证，
-/// 与窗口的容器 / 切页职责无关。跨文件访问：`window` / `factories` / `rootView` /
-/// `currentPane` / `contentScroll` 由 private 放宽为 internal，仅供本扩展使用。
+/// 拆出原因：窗口主文件只留容器与切页，而这些方法只服务于 DEBUG 快照取证。
+/// 跨文件访问：`window` / `factories` / `rootView` / `currentPane` / `contentScroll`
+/// 由 private 放宽为 internal，仅供本扩展使用。
 extension SettingsWindow {
 
     /// 快照自证（仅 DEBUG）：用一个全新窗口复现「用户第一次打开设置」的路径
     ///
     /// 与 `prepareForSnapshot` 的区别是**不做任何显式布局**，用来复现首次进入的版式问题。
+    /// 侧栏直接复用 `SettingsSidebarBuilder`：结构改过之后探针图必须与真实窗口同构，
+    /// 否则「首次进入空白」这类回归会被探针图掩盖。
     func makeFreshForFirstOpenProbe() -> NSView? {
         guard let factory = factories[.general] else { return nil }
-        let probeWindow = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsStyle.windowSize),
+        let probeWindow = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsTheme.windowSize),
                                    styleMask: [.titled, .closable, .miniaturizable],
                                    backing: .buffered, defer: false)
-        let root = SettingsSurfaceView { SettingsStyle.pageBackground }
-        let sidebar = SettingsSurfaceView { .underPageBackgroundColor }
-        // 侧栏也要照实际样式填上，否则探针图会误导成「侧栏是空的」
-        let probeSidebarStack = NSStackView()
-        probeSidebarStack.orientation = .vertical
-        probeSidebarStack.alignment = .leading
-        probeSidebarStack.spacing = 2
-        probeSidebarStack.distribution = .fill
-        probeSidebarStack.translatesAutoresizingMaskIntoConstraints = false
-        for section in SettingsSection.allCases {
-            let item = SettingsSidebarItemView(section: section)
-            item.isSelected = (section == .general)
-            probeSidebarStack.addArrangedSubview(item)
-            item.widthAnchor.constraint(equalTo: probeSidebarStack.widthAnchor).isActive = true
-        }
-        sidebar.addSubview(probeSidebarStack)
-        NSLayoutConstraint.activate([
-            probeSidebarStack.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 8),
-            probeSidebarStack.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -8),
-            probeSidebarStack.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 12),
-        ])
+        let root = SettingsSurfaceView { SettingsTheme.surface }
+        let built = SettingsSidebarBuilder.make { _ in }
+        built.items[.general]?.isSelected = true
+        let sidebar = built.view
+
         let scroll = NSScrollView()
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.hasVerticalScroller = true
@@ -57,17 +43,21 @@ extension SettingsWindow {
             sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             sidebar.topAnchor.constraint(equalTo: root.topAnchor),
             sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            sidebar.widthAnchor.constraint(equalToConstant: SettingsStyle.sidebarWidth),
+            sidebar.widthAnchor.constraint(equalToConstant: SettingsTheme.sidebarWidth),
             scroll.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             scroll.topAnchor.constraint(equalTo: root.topAnchor),
             scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             container.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
             container.heightAnchor.constraint(greaterThanOrEqualTo: scroll.contentView.heightAnchor),
-            pane.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: SettingsStyle.contentInset),
-            pane.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -SettingsStyle.contentInset),
-            pane.topAnchor.constraint(equalTo: container.topAnchor, constant: SettingsStyle.contentInset),
-            pane.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -SettingsStyle.contentInset),
+            pane.leadingAnchor.constraint(equalTo: container.leadingAnchor,
+                                          constant: SettingsTheme.contentInset),
+            pane.trailingAnchor.constraint(equalTo: container.trailingAnchor,
+                                           constant: -SettingsTheme.contentInset),
+            pane.topAnchor.constraint(equalTo: container.topAnchor,
+                                      constant: SettingsTheme.contentInset),
+            pane.bottomAnchor.constraint(equalTo: container.bottomAnchor,
+                                         constant: -SettingsTheme.contentInset),
         ])
         probeWindow.contentView = root
         return root
@@ -107,7 +97,7 @@ extension SettingsWindow {
         let viewportHeight = contentScroll.contentView.bounds.height
         let maxOffset = max(0, contentContainer.bounds.height - viewportHeight)
         // 卡片顶端贴到视口上方留一个内容内边距，避免被页头遮住
-        let target = min(max(0, cardRect.minY - SettingsStyle.contentInset), maxOffset)
+        let target = min(max(0, cardRect.minY - SettingsTheme.contentInset), maxOffset)
         contentScroll.contentView.scroll(to: NSPoint(x: 0, y: target))
         contentScroll.reflectScrolledClipView(contentScroll.contentView)
         return rootView

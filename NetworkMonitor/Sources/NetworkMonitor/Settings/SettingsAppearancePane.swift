@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 外观设置页
 
@@ -40,6 +41,8 @@ final class SettingsAppearancePane: SettingsPaneView {
         themeControl.target = self
         themeControl.action = #selector(themeChanged)
         themeControl.setAccessibilityLabel("主题")
+        themeControl.font = SettingsTheme.rowTitleFont
+        SettingsControlChrome.applyStandardHeight(to: themeControl)
 
         glassSwitch.target = self
         glassSwitch.action = #selector(glassChanged)
@@ -49,6 +52,8 @@ final class SettingsAppearancePane: SettingsPaneView {
         tierControl.target = self
         tierControl.action = #selector(tierChanged)
         tierControl.setAccessibilityLabel("渲染帧率")
+        tierControl.font = SettingsTheme.rowTitleFont
+        SettingsControlChrome.applyStandardHeight(to: tierControl)
 
         themeRow.trailingStack.addArrangedSubview(themeControl)
         glassRow.trailingStack.addArrangedSubview(glassSwitch)
@@ -86,6 +91,18 @@ final class SettingsAppearancePane: SettingsPaneView {
             tierControl.selectItem(at: index)
         }
         tierRow.update(subtitle: tier.detail)
+
+        refreshStatusChip()
+    }
+
+    /// 页头胶囊：主题名 + 渲染档名（两个都是本页正在显示的真实偏好值）
+    ///
+    /// 单独成方法是因为「切主题」这条动作只写偏好 + 发事件，不走整页 refresh，
+    /// 不在这里补一次的话页头会停在旧主题名上。
+    private func refreshStatusChip() {
+        page.setStatusChip(SettingsStatusChip(subject: preferences.themeID.displayName,
+                                              detail: preferences.renderTier.displayName,
+                                              tone: .ok))
     }
 
     #if DEBUG
@@ -129,6 +146,7 @@ final class SettingsAppearancePane: SettingsPaneView {
         let theme = ThemeID.allCases[index]
         preferences.themeID = theme
         themeRow.update(subtitle: theme.detail)
+        refreshStatusChip()
         AppEvents.postAppearanceChanged()
         logger.info("设置页切换主题：\(theme.displayName)")
     }
