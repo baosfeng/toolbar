@@ -18,7 +18,10 @@ import NetworkMonitorCore
 ///
 /// 与额度页的关系：本页**展示全部已启用实例**（含未配置的，用户必须有配置入口），
 /// 额度页只展示已配置的（判据在 Core 的 `BillingVisibilityRule`）。
-final class SettingsProvidersPane: SettingsPaneView {
+///
+/// 三类额度通知的「推送 / 声音 / 提醒方式 / 触觉」也放在本页（`notificationCard`）：
+/// 业务开关（是否产生提醒）与推送形式在同一页，用户配额度时一次调完。
+final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHosting {
 
     // MARK: - 依赖
 
@@ -27,6 +30,8 @@ final class SettingsProvidersPane: SettingsPaneView {
     let preferences: BillingProviderPreferences
     /// 恢复提醒偏好（窗口重置 / 余额回升 / 回升阈值）
     let alertPreferences: BillingAlertPreferences
+    /// 三类额度通知的推送形式（放宽为 internal：DEBUG 快照要按协议取到它）
+    let notificationCard: SettingsNotificationEventCard
 
     // MARK: - 子视图
 
@@ -47,10 +52,14 @@ final class SettingsProvidersPane: SettingsPaneView {
 
     init(monitor: BillingMonitor,
          preferences: BillingProviderPreferences = BillingProviderPreferences(),
-         alertPreferences: BillingAlertPreferences? = nil) {
+         alertPreferences: BillingAlertPreferences? = nil,
+         notificationContext: SettingsNotificationEventContext) {
         self.monitor = monitor
         self.preferences = preferences
         self.alertPreferences = alertPreferences ?? BillingAlertPreferences()
+        self.notificationCard = SettingsNotificationEventCard(
+            events: [.billingAlert, .billingWindowReset, .billingRecovery],
+            context: notificationContext)
         super.init(section: .providers)
     }
 
@@ -58,15 +67,24 @@ final class SettingsProvidersPane: SettingsPaneView {
 
     override func buildContent() {
         let registrations = monitor.registry.registrations
-        guard !registrations.isEmpty else {
+        if registrations.isEmpty {
             page.addNote("暂无已注册的额度 Provider。")
-            return
+        } else {
+            buildProviderCards(registrations)
+            buildAlertCard()
         }
-        buildProviderCards(registrations)
-        buildAlertCard()
+        buildNotificationCard()
         buildToast()
         page.addNote("同一 provider 可配多个实例（如工作号 / 个人号），每个实例一份 Key。"
                      + "默认实例的键与旧版本一致；关闭开关不会删除凭据，未配置的实例不会出现在额度页。")
+    }
+
+    /// 额度通知 — 三类事件的推送形式（业务开关在上一张卡，两处各管一层）
+    private func buildNotificationCard() {
+        page.addCard(notificationCard.card, sectionTitle: "额度通知")
+        page.addNote("系统通知的横幅样式由 macOS 决定：位置、停留时长与是否出横幅都在系统设置「通知」里，"
+                     + "应用只能决定「有没有声音」「要不要横幅」「要不要进通知中心」。"
+                     + "「额度偏低提醒」总开关在「通用」页。")
     }
 
     private func buildProviderCards(_ registrations: [BillingRegistration]) {
@@ -156,6 +174,7 @@ final class SettingsProvidersPane: SettingsPaneView {
                        lastAttempt: monitor.lastAttempts[instanceID],
                        now: now)
         }
+        notificationCard.refresh()
     }
 
     // MARK: - 生命周期（倒计时）

@@ -93,6 +93,26 @@ extension SettingsWindow {
     /// 快照自证（仅 DEBUG）：当前页实例（探针要按页面类型取控件状态）
     var currentPaneForSnapshot: SettingsPaneView? { currentPane }
 
+    /// 快照自证（仅 DEBUG）：切到指定分类，并滚到「本页通知事件卡」完整可见的位置
+    ///
+    /// 事件卡已按功能下沉到各页（额度 / 截图 / 剪贴板 / 互传 / 通用），在页内位置靠后，
+    /// 首屏图看不到它；这里按卡片在文档里的实际坐标滚一段，让图能直接证明「行确实在这页」。
+    func prepareForSnapshotShowingNotificationCard(_ section: SettingsSection) -> NSView? {
+        window.contentView = rootView
+        select(section)
+        rootView.layoutSubtreeIfNeeded()
+        guard let host = currentPane as? SettingsNotificationEventHosting else { return rootView }
+        let card = host.notificationCard.card
+        let cardRect = card.convert(card.bounds, to: contentContainer)
+        let viewportHeight = contentScroll.contentView.bounds.height
+        let maxOffset = max(0, contentContainer.bounds.height - viewportHeight)
+        // 卡片顶端贴到视口上方留一个内容内边距，避免被页头遮住
+        let target = min(max(0, cardRect.minY - SettingsStyle.contentInset), maxOffset)
+        contentScroll.contentView.scroll(to: NSPoint(x: 0, y: target))
+        contentScroll.reflectScrolledClipView(contentScroll.contentView)
+        return rootView
+    }
+
     /// 快照自证（仅 DEBUG）：切到指定分类并返回内容视图，供离屏渲染
     func prepareForSnapshot(_ section: SettingsSection) -> NSView? {
         // 上一次渲染把根视图借进了离屏容器并移除，这里先挂回去再切页

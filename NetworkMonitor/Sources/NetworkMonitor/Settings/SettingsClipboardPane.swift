@@ -11,7 +11,10 @@ import NetworkMonitorCore
 ///
 /// 文件拆分：忽略应用列表在 `SettingsClipboardPane+IgnoredApps.swift`，
 /// 三页共用控件在 `SettingsSharedComponents.swift`。
-final class SettingsClipboardPane: SettingsPaneView {
+///
+/// 「剪贴板动作」的通知行也放本页（旧的「操作音效 / 触觉反馈」两个开关已由它取代：
+/// 那两个开关迁移后没有读取方，纯属死开关）。
+final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHosting {
 
     /// 跨文件访问：忽略应用列表扩展使用
     let preferences: ClipboardPreferences
@@ -28,9 +31,8 @@ final class SettingsClipboardPane: SettingsPaneView {
     private let heightValueLabel = MenuPanelLabel.text("", font: SettingsStyle.rowValueFont,
                                                       color: .secondaryLabelColor)
     private let quickPasteSwitch = NSSwitch()
-    // 操作反馈（跨文件访问：SettingsClipboardPane+Feedback.swift）
-    let soundEffectsSwitch = NSSwitch()
-    let hapticsSwitch = NSSwitch()
+    /// 剪贴板动作的通知行（放宽为 internal：DEBUG 快照要按协议取到它）
+    let notificationCard: SettingsNotificationEventCard
     private let captureModePopup = NSPopUpButton()
     private let maxItemsField = NSTextField()
     private let retentionField = NSTextField()
@@ -62,9 +64,12 @@ final class SettingsClipboardPane: SettingsPaneView {
 
     init(preferences: ClipboardPreferences = ClipboardPreferences(),
          delegate: ClipboardSettingsDelegate? = nil,
+         notificationContext: SettingsNotificationEventContext,
          logger: LoggingService = AppContext.shared.logger) {
         self.preferences = preferences
         self.settingsDelegate = delegate
+        self.notificationCard = SettingsNotificationEventCard(events: [.clipboardAction],
+                                                              context: notificationContext)
         self.logger = logger
         super.init(section: .clipboard)
     }
@@ -112,7 +117,7 @@ final class SettingsClipboardPane: SettingsPaneView {
         accessibilityRow.trailingStack.addArrangedSubview(accessibilityStateLabel)
         accessibilityRow.trailingStack.addArrangedSubview(accessibilityButton)
 
-        buildFeedbackCard()
+        page.addCard(notificationCard.card, sectionTitle: "通知与音效")
         buildStorageCard()
 
         let permissionCard = SettingsCardView()
@@ -232,7 +237,7 @@ final class SettingsClipboardPane: SettingsPaneView {
         maxItemsField.stringValue = "\(preferences.maxItems)"
         retentionField.stringValue = "\(preferences.retentionDays)"
         reloadIgnoredApps()
-        refreshFeedbackSwitches()
+        notificationCard.refresh()
         refreshStorageCard()
         refreshPermissionStatus()
     }

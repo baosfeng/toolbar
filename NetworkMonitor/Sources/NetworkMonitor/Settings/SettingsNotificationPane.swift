@@ -3,14 +3,14 @@ import NetworkMonitorCore
 
 // MARK: - 通知与音效设置页
 
-/// 通知与音效 — 按事件配置声音、提醒方式与触控板手感
+/// 通知与音效 — 只放**全局项**：授权状态、应用内音量、音效库、恢复默认
 ///
-/// 版式：授权状态 → 事件表（开关）→ 提示音（每行一个下拉 + 试听）→ 提醒方式 →
-/// 触控板手感 → 音效库（自定义上传，见扩展文件）→ 恢复默认。
+/// 事件配置（开关 / 提示音 / 提醒方式 / 触觉）已按功能归属下沉到各事件自己的设置页：
+/// 额度三行在「额度 Provider」，截图完成在「截图与贴图」，剪贴板动作在「剪贴板」，
+/// 传输完成在「局域网互传」，面板展开收起在「通用」。
 ///
-/// 为什么把开关、声音、提醒方式拆成三张卡而不是「每个事件一大行」：
-/// 设置窗内容宽只有 ~540pt，一行塞四个控件会让下拉被压到看不出内容；
-/// 按维度成卡后每行只有「名称 + 一个控件」，六个事件也能一眼扫完。
+/// 为什么音效库不跟着拆：它是**资源管理**（导入 / 试听 / 重命名 / 删除 + 自定义列表），
+/// 同时被多个事件引用，属于跨功能的公共资产，不是某一个功能的配置。
 final class SettingsNotificationPane: SettingsPaneView {
 
     /// 放宽为 internal：扩展文件（音效库）要用同一份依赖
@@ -20,15 +20,6 @@ final class SettingsNotificationPane: SettingsPaneView {
     let service: any NotificationServicing
     let logger: LoggingService
 
-    /// 事件开关
-    // 放宽为 internal：+Pickers 扩展文件（提示音 / 提醒方式 / 手感三张卡）要复用同一批控件
-    var eventSwitches: [NotificationEvent: NSSwitch] = [:]
-    /// 声音下拉
-    var soundPopups: [NotificationEvent: NSPopUpButton] = [:]
-    /// 提醒方式下拉
-    var presentationPopups: [NotificationEvent: NSPopUpButton] = [:]
-    /// 触觉下拉
-    var hapticPopups: [NotificationEvent: NSPopUpButton] = [:]
     /// 授权状态行
     private let authDot = SettingsStatusDotView()
     private let authLabel = MenuPanelLabel.text("", font: SettingsStyle.rowSubtitleFont,
@@ -57,12 +48,11 @@ final class SettingsNotificationPane: SettingsPaneView {
 
     override func buildContent() {
         buildAuthorizationCard()
-        buildEventCard()
-        buildSoundCard()
-        buildPresentationCard()
-        buildHapticCard()
         buildSoundLibraryCard()
         buildResetCard()
+        page.addNote("各功能的通知与声音在那件事自己的设置页：额度提醒 / 额度重置 / 额度回升在「额度 Provider」，"
+                     + "截图完成在「截图与贴图」，剪贴板动作在「剪贴板」，传输完成在「局域网互传」，"
+                     + "面板展开收起在「通用」。")
         page.addNote("提醒方式与横幅样式：App 能决定的是「有没有声音」「前台要不要弹横幅」，"
                      + "横幅在屏幕上的位置和停留时长由系统「通知」设置决定，App 改不了。"
                      + "触觉档位对应系统三种触控板图案，不是数值强度。")
@@ -84,28 +74,10 @@ final class SettingsNotificationPane: SettingsPaneView {
         page.addCard(card, sectionTitle: "权限")
     }
 
-    /// 事件表：六个事件的开关
-    private func buildEventCard() {
-        let card = SettingsCardView()
-        for event in NotificationEvent.allCases {
-            let toggle = NSSwitch()
-            toggle.target = self
-            toggle.action = #selector(eventToggled(_:))
-            toggle.tag = NotificationEvent.allCases.firstIndex(of: event) ?? 0
-            toggle.setAccessibilityLabel(event.label)
-            eventSwitches[event] = toggle
-            let row = SettingsRowView(title: event.label,
-                                      subtitle: event.detail)
-            row.trailingStack.addArrangedSubview(toggle)
-            card.addRow(row)
-        }
-        page.addCard(card, sectionTitle: "事件")
-    }
-
     /// 恢复默认
     private func buildResetCard() {
         let row = SettingsRowView(title: "恢复默认",
-                                  subtitle: "六个事件回到出厂配置，音量回到 100%，自定义音效保留")
+                                  subtitle: "七类事件回到出厂配置，音量回到 100%，自定义音效保留")
         let reset = NSButton(title: "恢复默认", target: self, action: #selector(resetTapped))
         reset.bezelStyle = .rounded
         row.trailingStack.addArrangedSubview(reset)
@@ -119,19 +91,6 @@ final class SettingsNotificationPane: SettingsPaneView {
     override func refresh() {
         service.refreshAuthorizationState()
         renderAuthorizationState()
-        for event in NotificationEvent.allCases {
-            let config = preferences.config(for: event)
-            eventSwitches[event]?.state = config.enabled ? .on : .off
-            rebuildSoundPopup(event)
-            if let popup = presentationPopups[event],
-               let index = NotificationPresentation.allCases.firstIndex(of: config.presentation) {
-                popup.selectItem(at: index)
-            }
-            if let popup = hapticPopups[event],
-               let index = NotificationHaptic.allCases.firstIndex(of: config.haptic) {
-                popup.selectItem(at: index)
-            }
-        }
         refreshSoundLibrary()
     }
 
@@ -148,45 +107,6 @@ final class SettingsNotificationPane: SettingsPaneView {
 
     // MARK: - 动作
 
-    @objc private func eventToggled(_ sender: NSSwitch) {
-        guard let event = event(for: sender) else { return }
-        preferences.setEnabled(sender.state == .on, for: event)
-        // 关掉一个发系统通知的事件后，通知目录里的副本该清就清
-        service.syncInstalledSounds()
-    }
-
-    // 放宽为 internal：+Pickers 扩展文件的「试听」按钮指向这个 action
-    @objc func previewTapped(_ sender: NSButton) {
-        guard let event = event(for: sender) else { return }
-        preview(event: event)
-    }
-
-    /// 试听：发系统通知的事件走真实通知（能验证系统这一侧），其余走应用内音效
-    func preview(event: NotificationEvent) {
-        let config = preferences.config(for: event)
-        if event.postsSystemNotification, service.authorizationState == .authorized {
-            service.post(NotificationMessage(event: event, title: "试听 · \(event.label)",
-                                             body: "这是「\(event.label)」的提醒效果"))
-            return
-        }
-        // 未授权 / 非通知事件：直接播应用内提示音（跳过开关与去重，试听必须立刻有反馈）
-        guard let cue = Self.previewCue(for: event) else { return }
-        player.preview(selection: config.sound, cue: cue)
-    }
-
-    /// 事件 → 试听用的 cue（系统通知事件回落到各自的默认 cue）
-    static func previewCue(for event: NotificationEvent) -> NotificationCue? {
-        switch event {
-        case .billingAlert: return .billingAlert
-        case .billingWindowReset: return .billingWindowReset
-        case .billingRecovery: return .billingRecovery
-        case .transferFinished: return .transferFinished
-        case .snipCaptured: return .snipCapture
-        case .clipboardAction: return .copy
-        case .panelToggle: return .panelToggle
-        }
-    }
-
     @objc private func resetTapped() {
         preferences.resetToDefaults()
         service.syncInstalledSounds()
@@ -198,41 +118,4 @@ final class SettingsNotificationPane: SettingsPaneView {
         let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")
         if let url { NSWorkspace.shared.open(url) }
     }
-
-    // MARK: - 控件映射
-
-    /// 按 tag 反查事件（六行控件共用一个 action；+Pickers 扩展文件也用）
-    func event(for control: NSControl) -> NotificationEvent? {
-        let cases = NotificationEvent.allCases
-        guard cases.indices.contains(control.tag) else { return nil }
-        return cases[control.tag]
-    }
-
-    /// 下拉 → 声音选择（+Pickers 扩展文件也用）
-    func selectedSound(for popup: NSPopUpButton) -> NotificationSoundSelection? {
-        let index = popup.indexOfSelectedItem
-        let options = soundOptions()
-        guard options.indices.contains(index) else { return nil }
-        return options[index].selection
-    }
-
-    // MARK: - 自证（仅 DEBUG）
-
-    #if DEBUG
-    /// 把六个事件的开关勾选态与偏好真值并排落盘（离屏快照看不出 NSSwitch 的 on/off）
-    func debugLogControlStates(_ tag: String) {
-        var lines: [String] = []
-        for event in NotificationEvent.allCases {
-            let pref = preferences.config(for: event)
-            let ui = eventSwitches[event]?.state == .on
-            lines.append("\(tag) \(event.rawValue) enabled=\(pref.enabled)/\(ui ? "on" : "off") "
-                         + "sound=\(pref.sound.storageValue) "
-                         + "presentation=\(pref.presentation.rawValue) haptic=\(pref.haptic.rawValue)")
-        }
-        guard let path = ProcessInfo.processInfo.environment["NM_SNAPSHOT_DIR"], !path.isEmpty else { return }
-        let url = URL(fileURLWithPath: path, isDirectory: true)
-            .appendingPathComponent("settings-notifications-states.txt")
-        try? (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
-    }
-    #endif
 }

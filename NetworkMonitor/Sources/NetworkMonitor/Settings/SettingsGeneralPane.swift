@@ -10,11 +10,15 @@ import NetworkMonitorCore
 /// 与菜单栏齿轮菜单读同一份状态，避免两处勾选态不一致。
 /// 「数值单位」写 `NumberUnitPreferences`（Core），切档后发 `AppEvents.numberUnitStyleChanged`，
 /// 菜单面板据此立即重渲染，不用重启。
-final class SettingsGeneralPane: SettingsPaneView {
+///
+/// 「面板展开收起」的通知行放本页：面板行为归通用，它的声音与触觉也跟着通用设置走。
+final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHosting {
 
     private let launchAtStartup: LaunchAtStartupService
     private let alertPreferences: BillingAlertPreferences
     private let unitPreferences: NumberUnitPreferences
+    /// 面板展开收起通知行（放宽为 internal：DEBUG 快照要按协议取到它）
+    let notificationCard: SettingsNotificationEventCard
     private let launchRow = SettingsRowView(title: "开机自启动",
                                             subtitle: "登录后自动启动 \(AppIdentity.displayName)")
     private let alertRow = SettingsRowView(title: "额度阈值提醒",
@@ -54,10 +58,13 @@ final class SettingsGeneralPane: SettingsPaneView {
     init(launchAtStartup: LaunchAtStartupService = LaunchAtStartupService(),
          alertPreferences: BillingAlertPreferences = BillingAlertPreferences(),
          unitPreferences: NumberUnitPreferences = NumberUnitPreferences(),
-         storage: any KeyValueStorage = AppContext.shared.storage) {
+         storage: any KeyValueStorage = AppContext.shared.storage,
+         notificationContext: SettingsNotificationEventContext) {
         self.launchAtStartup = launchAtStartup
         self.alertPreferences = alertPreferences
         self.unitPreferences = unitPreferences
+        self.notificationCard = SettingsNotificationEventCard(events: [.panelToggle],
+                                                              context: notificationContext)
         self.storage = storage
         self.displayPreferences = MenuBarDisplayPreferences(storage: storage)
         self.panelTabPreferences = PanelTabPreferences(storage: storage)
@@ -93,6 +100,7 @@ final class SettingsGeneralPane: SettingsPaneView {
         page.addCard(launchCard, sectionTitle: "启动")
         page.addCard(alertCard, sectionTitle: "额度提醒")
         page.addCard(unitCard, sectionTitle: "显示")
+        page.addCard(notificationCard.card, sectionTitle: "通知与音效")
 
         buildOrderableCards()
         page.addNote("设置会立即生效；菜单栏指标与面板分页的顺序用行尾「上移 / 下移」调整，"
@@ -109,6 +117,7 @@ final class SettingsGeneralPane: SettingsPaneView {
         launchRow.update(subtitle: launchAtStartup.isEnabled
                          ? "登录后自动启动 \(AppIdentity.displayName)"
                          : "当前未登记开机自启动")
+        notificationCard.refresh()
         refreshOrderableControls()
     }
 

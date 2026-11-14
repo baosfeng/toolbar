@@ -64,13 +64,13 @@ enum SettingsSection: CaseIterable {
     /// 页头副标题（一句话说明这一页管什么）
     var subtitle: String {
         switch self {
-        case .general:   return "启动行为与额度提醒。"
+        case .general:   return "启动行为、额度提醒、面板通知与显示排序。"
         case .appearance: return "主题、玻璃拟态与渲染帧率档。"
-        case .providers: return "启用开关只影响查询与额度页展示，凭据继续保留。"
-        case .clipboard: return "面板唤起、采集范围与系统权限。"
-        case .capture:   return "截图、标注与贴图的默认参数。"
-        case .transfer:  return "接收目录、免配对窗口与提示音。"
-        case .notifications: return "按事件配置声音、提醒方式与触控板手感。"
+        case .providers: return "启用开关只影响查询与额度页展示，凭据继续保留；三类额度通知也在这里调。"
+        case .clipboard: return "面板唤起、采集范围、操作通知与系统权限。"
+        case .capture:   return "截图、标注、贴图与截图完成通知的默认参数。"
+        case .transfer:  return "接收目录、免配对窗口与传输完成通知。"
+        case .notifications: return "通知权限、应用内音量与音效库；事件行已跟随功能页。"
         case .system:    return "采样周期与面板显示项。"
         case .about:     return "版本信息与项目地址。"
         }

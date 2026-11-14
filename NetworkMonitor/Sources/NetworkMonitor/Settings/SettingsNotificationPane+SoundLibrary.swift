@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 /// 音效库 — 应用内音量、自定义音效的上传 / 试听 / 重命名 / 删除
 ///
-/// 拆出原因：主文件已含授权、事件表、提示音、提醒方式、手感五张卡，
+/// 拆出原因：主文件负责授权、恢复默认与页内说明，
 /// 音效库的增删改查自带面板与对话框，合在一处会顶到单文件 15 KiB 上限。
 ///
 /// 能力边界（实测结论，界面里如实写）：
@@ -199,9 +199,11 @@ extension SettingsNotificationPane {
         }
     }
 
-    /// 音效库变化后统一收尾：重建下拉与列表、同步通知副本
+    /// 音效库变化后统一收尾：重画自定义列表、同步通知副本
+    ///
+    /// 事件行的声音下拉已分散到各功能页，且设置页切走即释放、
+    /// 下次进入按当时的音效库重建选项，因此这里不做跨页刷新。
     func afterSoundLibraryChange() {
-        for event in NotificationEvent.allCases { rebuildSoundPopup(event) }
         refreshSoundLibrary()
         service.syncInstalledSounds()
     }

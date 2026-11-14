@@ -7,7 +7,9 @@ import NetworkMonitorCore
 ///
 /// 迁移自 `TransferSettingsWindow`：目录占用与清理走 `TransferService` 既有方法，
 /// 倒计时由 `TransferPreferences.windowRemainingText()` 每秒刷新，设置写入同一份偏好。
-final class SettingsTransferPane: SettingsPaneView {
+///
+/// 「传输完成」的通知行放在本页：传输这件事的声音、提醒方式与触觉跟着接收设置走。
+final class SettingsTransferPane: SettingsPaneView, SettingsNotificationEventHosting {
 
     private let preferences: TransferPreferences
     /// 放宽为 internal：接收目录扩展文件（`SettingsTransferPane+ReceiveDirectory`）要用
@@ -29,17 +31,20 @@ final class SettingsTransferPane: SettingsPaneView {
     var chooseButton: NSButton?
     /// 放宽为 internal：接收目录扩展文件要在清理时禁用
     var clearButton: NSButton?
-    /// 打开「通知与音效」页（提示音已统一到那一页，这里不再单独放五个开关）
-    var onOpenNotificationSettings: (() -> Void)?
+    /// 传输完成的通知行（放宽为 internal：DEBUG 快照要按协议取到它）
+    let notificationCard: SettingsNotificationEventCard
     private var countdownTimer: Timer?
     /// 放宽为 internal：接收目录扩展文件要拼副标题
     var usageText = "统计中…"
 
     init(preferences: TransferPreferences = TransferPreferences(),
          service: TransferService,
+         notificationContext: SettingsNotificationEventContext,
          logger: LoggingService = AppContext.shared.logger) {
         self.preferences = preferences
         self.service = service
+        self.notificationCard = SettingsNotificationEventCard(events: [.transferFinished],
+                                                              context: notificationContext)
         self.logger = logger
         super.init(section: .transfer)
     }
@@ -130,27 +135,18 @@ final class SettingsTransferPane: SettingsPaneView {
         page.addCard(card, sectionTitle: "传输")
     }
 
-    /// 提示音 — 已并入「通知与音效」页的传输完成一行，这里只留一个入口
+    /// 通知与音效 — 传输完成 / 失败的声音、提醒方式与触觉
     ///
-    /// 迁移动机：旧页五个事件（接收 / 发送 / 失败 / 新设备 / 配对码）各一个开关，
-    /// 与「通知与音效」页的传输完成一行重复；两处各写一份必然分叉，
-    /// 因此这里不再放开关，改为指路。默认值不变（完成类开、其余关）。
+    /// 旧页五个事件（接收 / 发送 / 失败 / 新设备 / 配对码）各一个开关，收成「传输完成」一行：
+    /// 完成类默认开、其余默认关，失败与成功共用同一行（原先分两处写必然分叉）。
     private func buildSoundSection() {
-        // 老用户可能配过「配对码生成」「新设备出现」两个分项开关，升级后它们并入了传输完成一行：
+        page.addCard(notificationCard.card, sectionTitle: "通知与音效")
+        // 老用户可能配过「配对码生成」「新设备出现」两个分项开关，升级后并入传输完成一行：
         // 不提示的话会看到「我明明开过配对码提示音，怎么不响了」
-        let subtitle = preferences.legacySoundKeysPresent()
-            ? "旧版逐项开关已并入「通知与音效」的传输完成一行（含失败）"
-            : "传输完成 / 失败的声音、提醒方式已统一到「通知与音效」"
-        let row = SettingsRowView(title: "提示音与通知", subtitle: subtitle)
-        let open = SettingsLinkButton.make("去设置…", target: self, action: #selector(openNotificationSettings))
-        row.trailingStack.addArrangedSubview(open)
-        let card = SettingsCardView()
-        card.addRow(row)
-        page.addCard(card, sectionTitle: "提示音")
-    }
-
-    @objc private func openNotificationSettings() {
-        onOpenNotificationSettings?()
+        if preferences.legacySoundKeysPresent() {
+            page.addNote("旧版的「配对码生成 / 新设备出现」两个分项开关已并入「传输完成」一行；"
+                         + "系统通知的横幅样式由 macOS 决定。")
+        }
     }
 
     // MARK: - 刷新
@@ -158,6 +154,7 @@ final class SettingsTransferPane: SettingsPaneView {
     override func refresh() {
         refreshValues()
         refreshUsage()
+        notificationCard.refresh()
         startCountdown()
     }
 

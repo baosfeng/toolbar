@@ -12,6 +12,9 @@ func runNotificationPreferenceTests() {
     print("\n🧪 Testing 通知偏好（合并 / 恢复默认 / 旧键迁移）...")
     testNotificationPreferences()
 
+    print("\n🧪 Testing 通知配置下沉到各功能页（同一键两处读写一致）...")
+    testNotificationPreferencesSharedAcrossPages()
+
     print("\n🧪 Testing 音效文件校验与自定义音效目录...")
     testSoundFileValidation()
     testNotificationSoundFileStore()
@@ -91,6 +94,55 @@ func testNotificationPreferences() {
                 "还在的文件不受影响")
     assertEqual(heal.sanitizeCustomSoundReferences(availableFiles: ["在的.aiff"]), [],
                 "再跑一遍无事可修")
+}
+
+// MARK: - 跨页共享
+
+/// 通知配置下沉到各功能页后，同一事件的键在两处读写一致
+///
+/// 界面位置变了、键名与合并语义不变：用两个 `NotificationPreferences` 实例模拟
+/// 「额度 Provider 页的事件行」与「剪贴板页的事件行」——两页写读同一份存储。
+/// 老用户升级后落在旧键上的配置因此原样生效，不需要迁移。
+func testNotificationPreferencesSharedAcrossPages() {
+    let storage = InMemoryStorage()
+    // 设置窗每页各自 new 一份偏好（与生产装配同构：同存储、不同实例）
+    let billingPage = NotificationPreferences(storage: storage)
+    let clipboardPage = NotificationPreferences(storage: storage)
+
+    // 额度页写 → 另一页立刻读到
+    billingPage.setEnabled(false, for: .billingAlert)
+    billingPage.setSound(.systemSound("Pop"), for: .billingAlert)
+    assertEqual(clipboardPage.config(for: .billingAlert).enabled, false,
+                "另一页读到额度页写的开关")
+    assertEqual(clipboardPage.config(for: .billingAlert).sound, .systemSound("Pop"),
+                "另一页读到额度页写的声音")
+
+    // 键名契约不变：notify.<event>.<field>（老配置继续落在原键）
+    assertEqual(storage.object(forKey: "notify.billingAlert.enabled") != nil, true,
+                "开关仍写在旧键名上")
+    assertEqual(storage.bool(forKey: "notify.billingAlert.enabled"), false,
+                "旧键值 = 关")
+    assertEqual(storage.string(forKey: "notify.billingAlert.sound"), "system:Pop" as String?,
+                "声音仍写在旧键名上")
+
+    // 反向：剪贴板页写 → 额度页读到
+    clipboardPage.setHaptic(.strong, for: .clipboardAction)
+    clipboardPage.setPresentation(.bannerOnly, for: .billingWindowReset)
+    assertEqual(billingPage.config(for: .clipboardAction).haptic, .strong,
+                "额度页读到剪贴板页写的触觉")
+    assertEqual(billingPage.config(for: .billingWindowReset).presentation, .bannerOnly,
+                "额度页读到另一处写的提醒方式")
+
+    // 事件之间互不串键
+    assertEqual(billingPage.config(for: .billingRecovery).presentation, .bannerAndSound,
+                "未改的事件保持默认")
+
+    // 恢复默认只清一遍：两处同时回到出厂配置
+    clipboardPage.resetToDefaults()
+    assertEqual(billingPage.config(for: .billingAlert).enabled, true,
+                "恢复默认对另一处同样生效")
+    assertEqual(billingPage.config(for: .billingAlert).sound, .systemDefault,
+                "恢复默认把声音也清回跟随系统")
 }
 
 // MARK: - 校验
