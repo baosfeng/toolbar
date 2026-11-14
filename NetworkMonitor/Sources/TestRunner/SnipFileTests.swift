@@ -15,6 +15,25 @@ func runSnipFileTests() {
     assertEqual(SnipFileNaming.fileName(for: date, calendar: calendar).hasSuffix(".png"), true, "文件名以 png 结尾")
     assertEqual(SnipFileNaming.fileName(for: date, calendar: calendar).hasPrefix("Snipaste_"), true, "文件名前缀固定")
 
+    // 输出格式：默认 PNG；JPEG 只换扩展名，时间戳规则不动
+    assertEqual(SnipFileNaming.fileName(for: date, format: .jpeg, calendar: calendar).hasSuffix(".jpg"),
+                true, "JPEG 文件名以 jpg 结尾")
+    assertEqual(SnipFileNaming.fileName(for: date, format: .png, calendar: calendar),
+                SnipFileNaming.fileName(for: date, calendar: calendar),
+                "显式 PNG 与默认口径一致（老调用点不受影响）")
+    assertEqual(SnipImageFormat.resolved(raw: nil), SnipImageFormat.png, "缺失格式偏好落到 PNG")
+    assertEqual(SnipImageFormat.resolved(raw: "gif"), SnipImageFormat.png, "未知格式落到 PNG")
+    assertEqual(SnipImageFormat.resolved(raw: "jpeg"), SnipImageFormat.jpeg, "jpeg 能解析")
+    assertEqual(SnipImageFormat.jpeg.fileExtension, "jpg", "JPEG 扩展名统一写 jpg")
+    assertEqual(SnipImageFormat.jpeg.displayName, "JPEG", "格式显示名")
+    assertEqual(SnipImageFormat.clampedQuality(1.8), SnipImageFormat.jpegQualityRange.upperBound,
+                "质量上限夹紧")
+    assertEqual(SnipImageFormat.clampedQuality(0.01), SnipImageFormat.jpegQualityRange.lowerBound,
+                "质量下限夹紧")
+    assertEqual(SnipImageFormat.clampedQuality(0.75), 0.75, "区间内质量原样保留")
+    assertEqual(SnipImageFormat.clampedQuality(Double.nan), SnipImageFormat.defaultJPEGQuality,
+                "非法质量回落默认 0.9")
+
     let home = URL(fileURLWithPath: "/Users/tester")
     assertEqual(SnipFileNaming.quickSaveDirectory(homeDirectory: home).path,
                 "/Users/tester/Pictures/NetworkMonitor Snips", "快速保存目录")
