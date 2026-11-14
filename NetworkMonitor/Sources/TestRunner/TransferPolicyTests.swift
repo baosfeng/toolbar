@@ -172,7 +172,7 @@ private enum PolicyScenario {
         preferences.autoAcceptEnabled = true
         preferences.autoAcceptMinutes = 5
         preferences.startWindow()
-        let windowResult = try await service.handleOffer(makeOffer(sender: "and-window", name: "w.txt", size: 1024),
+        let windowResult = await service.handleOffer(makeOffer(sender: "and-window", name: "w.txt", size: 1024),
                                                          pairKey: nil)
         guard case .success(let windowOutcome) = windowResult else {
             throw ScenarioError.failed("窗口内 offer 返回失败")
@@ -184,7 +184,7 @@ private enum PolicyScenario {
 
         // 2) 窗口过期：回到 pending + PIN
         preferences.startWindow(now: Date().addingTimeInterval(-3_600))
-        let expiredResult = try await service.handleOffer(makeOffer(sender: "and-expired", name: "e.bin", size: 2048),
+        let expiredResult = await service.handleOffer(makeOffer(sender: "and-expired", name: "e.bin", size: 2048),
                                                          pairKey: nil)
         guard case .success(let expiredOutcome) = expiredResult else {
             throw ScenarioError.failed("过期后 offer 返回失败")
@@ -198,13 +198,13 @@ private enum PolicyScenario {
         preferences.autoAcceptEnabled = false
         preferences.stopWindow()
         preferences.sizeThresholdMB = 1
-        let smallResult = try await service.handleOffer(makeOffer(sender: "and-small", name: "s.txt", size: 512 * 1024),
+        let smallResult = await service.handleOffer(makeOffer(sender: "and-small", name: "s.txt", size: 512 * 1024),
                                                        pairKey: nil)
         guard case .success(let smallOutcome) = smallResult else {
             throw ScenarioError.failed("阈值内 offer 返回失败")
         }
         assertEqual(smallOutcome.result.state, .approved, "阈值内 offer 直接 approved")
-        let largeResult = try await service.handleOffer(makeOffer(sender: "and-large", name: "l.bin", size: 2 * 1024 * 1024),
+        let largeResult = await service.handleOffer(makeOffer(sender: "and-large", name: "l.bin", size: 2 * 1024 * 1024),
                                                         pairKey: nil)
         guard case .success(let largeOutcome) = largeResult else {
             throw ScenarioError.failed("超阈值 offer 返回失败")
