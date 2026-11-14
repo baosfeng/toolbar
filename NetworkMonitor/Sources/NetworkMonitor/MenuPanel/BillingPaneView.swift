@@ -134,15 +134,21 @@ final class BillingPaneView: MenuPanelPaneView {
         syncBlocks(snapshot.states)
         let stamp = Self.latestStamp(snapshot.states)
         headerView.updateMeta(stamp)
-        // 还没成功刷新过时不拼「实时 —」：那是把「不可得」写成了半句话
+        // 暂停态更要说清「为什么不动」：否则用户只看到时间戳停住（这正是「额度没用了」的现场）
         heroView.update(hero: Self.hero(from: snapshot.states),
-                        clock: stamp == "—" ? "尚未刷新" : "实时 " + stamp)
+                        clock: BillingRefreshStatusLogic.clockText(isPaused: false, latestStamp: stamp),
+                        isPaused: snapshot.isPaused)
+        // 三项统一带 tone 位：混用二元 / 三元组会让数组元素类型推断失败（同一个 update 有两个重载）
         stateBand.update(items: [
-            (key: "Provider", value: "\(snapshot.states.count)"),
-            (key: "最近刷新", value: stamp),
+            // 状态带在 346pt 面板里只放得下四项：键名一律取两字，长键会把首项挤成「Prov…」
+            (key: "数量", value: "\(snapshot.states.count)", tone: nil),
+            (key: "刷新", value: stamp, tone: nil),
             // 单位档取自 Core 的 NumberUnitPreferences（设置页「显示 › 数值单位」写入），
             // 视图只透传文案，不参与判断当前档位。
-            (key: "单位", value: Self.unitLabel),
+            (key: "单位", value: Self.unitLabel, tone: nil),
+            (key: "状态", value: BillingRefreshStatusLogic.bandText(isPaused: snapshot.isPaused),
+             tone: BillingRefreshStatusLogic.bandWarns(isPaused: snapshot.isPaused)
+                 ? PaneCardStyle.warnInk : nil),
         ])
         for state in snapshot.states {
             blocks[state.descriptor.id]?.update(state: state,

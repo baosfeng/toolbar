@@ -154,6 +154,10 @@ func testOpenDesignProviderCapabilities() {
     assertEqual(minimal.supportedUsageRanges, BillingRange.allCases, "默认支持全部范围")
     assertEqual(openDesign.id, "open-design", "provider id 稳定")
     assertEqual(openDesign.credentialHint, "Open Design session token", "凭据提示")
+
+    // 2026-11 实测：/billing/usage 的顶层 summary 与 totalCount 已消失（limit 上限 100，翻页不可行），
+    // 用量明细不再可得 —— 关掉能力位后状态管理器不发这个必然失败的请求，面板也不留错误条。
+    assertEqual(openDesign.supportsUsage, false, "Open Design 只查额度（用量汇总已下线）")
 }
 
 // MARK: - 最小测试替身

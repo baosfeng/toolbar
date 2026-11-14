@@ -40,7 +40,10 @@ enum MenuPanelEvidence {
             manager.forceEmptyForEvidence()
         }
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            // 必须晚于 schedulePrewarm 的 1.2s 预热 + 它的 performClose：
+            // 预热关闭面板会写 lastCloseDate，而 toggle 有 0.25s 防抖，同步时序下
+            // 取证这一下会被判成「本次关闭的续动作」直接 return，面板根本不会展开。
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
             manager.openPanelForEvidence()
             try? await Task.sleep(nanoseconds: 300_000_000)
             if let appearance = environment[appearanceEnvKey]?.lowercased(), !appearance.isEmpty {
@@ -60,6 +63,10 @@ enum MenuPanelEvidence {
         switch value {
         case "network": return .network
         case "clipboard": return .clipboard
+        case "transfer": return .transfer
+        // 额度页此前没有映射：取证时给 NM_EVIDENCE_TAB=credits 只会静默停在网络页，
+        // 于是「面板上额度有没有数据」这类问题拿不到真实截图（已按分页枚举补齐）
+        case "credits": return .credits
         case "token": return .token
         case "system": return .system
         default: return nil

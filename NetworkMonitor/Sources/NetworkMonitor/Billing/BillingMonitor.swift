@@ -38,7 +38,8 @@ final class BillingMonitor {
     /// 限流退避截止时间（429 后按 Retry-After 设置，全局生效）
     private var retryNotBefore: Date?
     /// 屏幕锁定 / 休眠时暂停后台刷新（不调接口，也不发提醒）
-    private var isPaused = false
+    // 放宽为 internal：`BillingMonitorSnapshot` 的快照要带出暂停态供面板显示
+    var isPaused = false
     /// 暂停期间是否已回报过快照（避免每秒重复 emit 触发布局）
     private var didReportWhilePaused = false
 
@@ -151,17 +152,24 @@ final class BillingMonitor {
     // MARK: - 屏幕活动
 
     /// 屏幕锁定 / 休眠：暂停后台刷新
+    ///
+    /// 暂停态要立即回报一次快照（面板据此显示「已暂停」）：只把 isPaused 置位而不 emit，
+    /// 界面会停在「查询中」或旧时间戳，用户看到的就是「额度没用了」却说不出原因。
     func pause() {
         guard !isPaused else { return }
         isPaused = true
-        logger.debug("计费刷新暂停：屏幕锁定 / 休眠")
+        logger.info("计费刷新暂停：屏幕锁定 / 休眠")
+        didReportWhilePaused = true
+        emit()
     }
 
     /// 解锁 / 唤醒：恢复并立即刷新一次
     func resume() {
         guard isPaused else { return }
         isPaused = false
-        logger.debug("计费刷新恢复：屏幕可用")
+        logger.info("计费刷新恢复：屏幕可用")
+        didReportWhilePaused = false
+        emit()
         refresh(force: true)
     }
 
@@ -249,6 +257,9 @@ final class BillingMonitor {
             switch result.balance {
             case .success(let value):
                 states[index].balance = value
+                // 余额成功就算「刷新成功」：用量接口失败（如 Open Design 的解析 400）
+                // 不该让卡头一直写「未刷新」—— 那会让「刚拉到额度」被读成「根本没查」
+                states[index].lastUpdated = Date()
                 alertService?.handle(balance: value,
                                      providerID: result.id,
                                      providerName: states[index].descriptor.displayName)
@@ -320,6 +331,7 @@ final class BillingMonitor {
     /// 回调最新快照 —— 回调前按 Core 的可见性规则过滤（未配置者不占位）
     // 放宽为 internal：BillingMonitor+Providers 的启用开关扩展要发快照
     func emit() {
-        onUpdate?(Snapshot.make(from: states, enabledProviderCount: states.count))
+        onUpdate?(Snapshot.make(from: states, enabledProviderCount: states.count,
+                                 isPaused: isPaused))
     }
 }

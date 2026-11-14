@@ -46,7 +46,8 @@ extension MenuPanelController {
                 }
                 if let billingMonitor = self.billingMonitor {
                     self.content.updateBilling(BillingMonitor.Snapshot.make(from: billingMonitor.states,
-                                                                           enabledProviderCount: billingMonitor.states.count),
+                                                                           enabledProviderCount: billingMonitor.states.count,
+                                                                           isPaused: billingMonitor.isPaused),
                                                notifySize: self.popover.isShown)
                 }
             }

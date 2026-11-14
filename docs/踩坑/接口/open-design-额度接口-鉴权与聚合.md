@@ -8,6 +8,10 @@
 2. `GET /billing/usage` 想按时间范围取明细时，`granularity` / `group_by` / `aggregate` / `bucket` 等参数全部被忽略，仍返回明细数组。
 3. 30 天区间 `totalCount` 达 1.6 万条，`limit` 上限 100，翻页要 160+ 次请求；且 `cursor` 必须 URL 编码，否则报 `invalid_workspace_usage_cursor`。
 4. 用量面板切到「7 天 / 30 天」报 400 `invalid_workspace_usage_time_range`，24 小时档正常。
+5. **（2026-11 起）顶层 `summary` / `totalCount` 双双消失**，响应只剩 `entries` / `hasMore` / `nextCursor` / `workspaceId`；
+   按旧契约解码必然 keyNotFound，面板显示「出错 · 响应解析失败：The data couldn't be read because it is missing」。
+   `aggregate` / `includeSummary` / `granularity` / `group_by` 等参数一律被忽略；`/usage/summary`、`/usage/aggregate` 端点 404。
+6. `limit` 上限为 100：`limit=200` 起直接 400，不带 `limit` 也 400 —— 想靠翻页自己聚合，7 天 1.6 万条要 160+ 页。
 
 ## 原因
 
@@ -24,6 +28,20 @@
 - provider 声明 `supportsTimeSeries = false`，UI 隐藏柱状图——用「明细首 100 条」拼图会严重低估用量。
 - 查询窗口终点一律夹到 `now`、起点不早于 7 天前（`BillingRange.queryWindow`）；24 小时档用 `Calendar.dateInterval(of: .hour, for:)` 取小时起点做锚点，不要用 `date(bySetting: .minute, value: 0, of:)`——后者取的是**严格之后**的匹配，端点会落到未来整点。
 - 30 天窗口服务端无数据可取，provider 声明 `supportedUsageRanges = [.last24Hours, .last7Days]`，UI 只渲染这两档；状态管理器切范围时也按该能力位拦截，避免发出必然 400 的请求。
+
+## 2026-11 处置：用量下线，只查额度
+
+顶层聚合消失后，「用量汇总」已经没有可信来源：
+
+- 按旧契约解码 → 每次刷新都记一条错误，面板留一条点「重试」也修不好的错误条；
+- 靠翻页自己聚合 → `limit` 上限 100，7 天 1.6 万条要 160+ 次请求，必然触发限流；
+- 只取首 100 条当总量 → 严重低估，比不显示更糟。
+
+**做法**：`supportsUsage = false`（与 OpenCode Go 同一口径），`BillingMonitor` 不再发起用量请求；
+`fetchUsage` 保留协议实现但直接抛「已停止提供用量汇总」，防止未来误开能力位时拿明细充当汇总。
+额度（`/billing/coding-plan-usage`）不受影响，照旧返回 `windows[]`（`usedCredits` / `limitCredits` / `remainingCredits` / `resetsAt`）。
+
+**判别**：额度页某 provider 长期显示「出错 + 响应解析失败」而余额数字又偶尔更新，先按本条核对用量接口响应顶层键。
 
 ## 反例
 

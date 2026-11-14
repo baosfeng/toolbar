@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - provider 卡（与 Token 分族卡同族）
 
@@ -149,8 +150,8 @@ final class BillingProviderBlockView: NSView {
         }
 
         applyStatus(state)
-        timeLabel.stringValue = state.lastUpdated.map(Self.stamp)
-            ?? (state.isLoading ? "查询中" : "—")
+        // 「—」对用户没有信息量：区分「正在查」/「从未刷新」/「已暂停」
+        timeLabel.stringValue = Self.timeText(state)
 
         limitsRow.isHidden = false
         summaryRow.isHidden = !supportsUsage
@@ -187,17 +188,27 @@ final class BillingProviderBlockView: NSView {
         invalidateIntrinsicContentSize()
     }
 
-    /// 状态胶囊：出错 > 限流 > 查询中 > 正常
+    /// 状态胶囊：出错 > 限流 > 查询中 > 未刷新 > 正常（判据在 NetworkMonitorUI，可单测）
+    ///
+    /// 「未刷新」这一档是现场反馈的修复点：余额为 nil 的 provider 此前落到 else 显示
+    /// 绿色的「正常」，用户看到的却是「正常 + —」，无法判断是哪一环坏了。
     private func applyStatus(_ state: BillingMonitor.ProviderState) {
-        if state.errorMessage != nil {
-            chip.update(kind: .error, text: "出错")
-        } else if let worst = state.balance?.percentLimits.map(\.remainingFraction).min(),
-                  worst < 0.2 {
-            chip.update(kind: .warn, text: "限流")
-        } else if state.isLoading {
-            chip.update(kind: .loading, text: "查询中")
-        } else {
-            chip.update(kind: .ok, text: "正常")
+        let kind = BillingProviderStatusLogic.kind(
+            errorMessage: state.errorMessage,
+            remainingFractions: (state.balance?.percentLimits ?? []).map(\.remainingFraction),
+            isLoading: state.isLoading,
+            hasBalance: state.balance.map { !$0.isEmpty } ?? false)
+        chip.update(kind: Self.chipKind(kind), text: BillingProviderStatusLogic.text(kind))
+    }
+
+    /// 语义档 → 视图档（两者一一对应，集中一处避免散落映射）
+    private static func chipKind(_ kind: BillingStatusKind) -> BillingStatusChipView.Kind {
+        switch kind {
+        case .ok: return .ok
+        case .warn: return .warn
+        case .error: return .error
+        case .loading: return .loading
+        case .idle: return .idle
         }
     }
 
@@ -205,4 +216,11 @@ final class BillingProviderBlockView: NSView {
 
     /// 块头「最近刷新」时分：跟随系统 12/24 小时制（见 BillingTimeFormat）
     static func stamp(_ date: Date) -> String { BillingTimeFormat.string(date) }
+
+    /// 块头右侧时间文案：成功过给时分，否则说明「为什么还没有时间」
+    static func timeText(_ state: BillingMonitor.ProviderState) -> String {
+        if let updated = state.lastUpdated { return stamp(updated) }
+        if state.isLoading { return "查询中" }
+        return "未刷新"
+    }
 }

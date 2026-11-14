@@ -77,6 +77,8 @@ extension BillingMonitor {
         var states: [ProviderState]
         /// 已启用（但可能未配置）的 provider 总数 —— 用于区分两种空态
         var enabledProviderCount: Int = 0
+        /// 是否因锁屏 / 休眠暂停了后台刷新（面板据此显示暂停态，而不是装作在查询）
+        var isPaused: Bool = false
 
         /// 整页空态的原因
         var emptyReason: BillingEmptyReason? {
@@ -102,12 +104,15 @@ extension BillingMonitor {
         ///   - states: 全部已启用 provider 的运行时状态（可能含未配置的）
         ///   - enabledProviderCount: 已启用 provider 总数（区分两种空态）
         /// - Returns: 只保留可见那些，`enabledProviderCount` 原样记录
-        static func make(from states: [ProviderState], enabledProviderCount: Int) -> Snapshot {
+        /// - Parameter isPaused: 后台刷新是否处于暂停态（锁屏 / 休眠）
+        static func make(from states: [ProviderState], enabledProviderCount: Int,
+                         isPaused: Bool = false) -> Snapshot {
             Snapshot(states: BillingVisibilityRule.visibleEntries(
                         states,
                         isConfigured: { $0.isConfigured },
                         isEnabled: { _ in true }),
-                     enabledProviderCount: enabledProviderCount)
+                     enabledProviderCount: enabledProviderCount,
+                     isPaused: isPaused)
         }
     }
 

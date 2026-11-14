@@ -119,6 +119,9 @@ runBillingTests()
 // MARK: - 额度页可见性（未配置 provider 不占位）+ 同一 provider 唯一配置
 runBillingVisibilityTests()
 
+// MARK: - 屏幕活动（锁屏 / 休眠暂停额度刷新）与快照暂停态
+runScreenActivityRelayTests()
+
 // MARK: - 数值单位（设置项 + 万/亿化简口径）
 runNumberUnitTests()
 

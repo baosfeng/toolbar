@@ -9,21 +9,21 @@ import Foundation
 ///
 /// 凭据只填 token 一段，工作区自动发现（`GET /api/v1/workspaces` 取首个 workspaceId 并缓存）。
 ///
-/// 用量接口特性（实测）：
-/// - 窗口上限：只接受最近 7 天（跨度超 7 天或起点更早 → 400 `invalid_workspace_usage_time_range`）
-/// - 顶层 `summary` / `totalCount` 是**全范围聚合**，与 `limit` 无关 → 汇总不需要翻页
-///   （30 天区间明细可达 1.6 万条，翻页不可接受）
-/// - 服务端**不提供服务端分桶**（`granularity` / `group_by` 等参数被忽略）→ 不画柱状图，
-///   `supportsTimeSeries = false`；按模型明细走 `?runtime=<name>` 逐模型查 `summary`
-/// - `chargeCredits` 全为 0、`listChargedUsd` 只是标价 → 不展示金额，避免虚高花费
+/// **只查额度**（`supportsUsage = false`）：`/billing/usage` 自 2026-11 起实测**不再返回顶层聚合**，
+/// 详见下方「用量为何下线」与 docs/踩坑/接口/open-design-额度接口-鉴权与聚合.md。
+///
+/// 额度接口特性（实测，`/billing/coding-plan-usage`）：
+/// - 返回 `eligible` / `tier` / `windows[]`（每窗口 `usedCredits` / `limitCredits` / `remainingCredits` /
+///   `resetsAt` / `durationSeconds`），据此换算成百分比限额；金额维度不存在。
+/// - 服务端不分桶、无金额扣费（`chargeCredits` 恒 0，`listChargedUsd` 只是标价）。
 public final class OpenDesignBillingProvider: BillingProvider {
     public let id = "open-design"
     public let displayName = "Open Design"
     public let symbolName = "paintpalette"
     public let supportsModelBreakdown = true
-    /// 服务端不分桶：UI 隐藏柱状图，只显示指标与按模型明细
+    /// 服务端不分桶（且用量已下线）：UI 隐藏柱状图
     public let supportsTimeSeries = false
-    /// 服务端只接受最近 7 天的用量窗口（30 天跨度直接 400），UI 不提供 30 天入口
+    /// 服务端只接受最近 7 天的用量窗口（30 天跨度直接 400）
     public let supportedUsageRanges: [BillingRange] = [.last24Hours, .last7Days]
     public let credentialHint = "Open Design session token"
     public let credentialPageURL: URL? = URL(string: "https://open-design.ai/")
@@ -34,8 +34,6 @@ public final class OpenDesignBillingProvider: BillingProvider {
     /// 登录态 Cookie 名（用户从浏览器复制的键名）
     public static let sessionCookieName = "__Secure-better-auth.session_token"
 
-    /// 按模型查用量时的模型数上限（每个模型一次请求，控制限流风险）
-    static let modelQueryLimit = 5
 
     private let baseURL: URL
     private let session: URLSession
@@ -51,6 +49,19 @@ public final class OpenDesignBillingProvider: BillingProvider {
         self.logger = logger
     }
 
+    // MARK: - 能力位
+
+    /// 用量明细不可得 —— 与 OpenCode Go 同一处置口径（只查额度的 provider 一律关掉用量）
+    ///
+    /// 实测（2026-11-13，本机真实凭据）：`GET /billing/usage?from=&to=&limit=N` 的响应顶层只剩
+    /// `entries` / `hasMore` / `nextCursor` / `workspaceId`，**`summary` 与 `totalCount` 双双消失**
+    /// （`aggregate` / `includeSummary` / `granularity` 等参数一律被忽略）。于是：
+    /// - 按旧契约解码必然 keyNotFound（面板显示「响应解析失败：The data couldn't be read because it is missing」）；
+    /// - 想靠翻页自己聚合也不行：`limit` 上限 100（200 起直接 400），7 天窗口 1.6 万条要 160+ 页。
+    /// 结论：这台服务只可信地提供额度。关掉用量后，状态管理器不再发这个必然失败的请求，
+    /// 面板也不再留一条无法自愈的错误条。
+    public let supportsUsage = false
+
     // MARK: - BillingProvider
 
     public func fetchBalance(credential: String) async throws -> BillingBalance {
@@ -62,32 +73,14 @@ public final class OpenDesignBillingProvider: BillingProvider {
         return try Self.decodeBalance(from: result.data)
     }
 
+    /// 用量查询 —— 保留协议实现，但服务端已不再提供可用的聚合汇总
+    ///
+    /// `supportsUsage = false` 后 `BillingMonitor` 不会调用本方法；这里显式抛可读错误，
+    /// 避免未来误开能力位时拿着一份「只有 100 条明细」的数据去充当全范围汇总。
     public func fetchUsage(range: BillingRange, credential: String) async throws -> BillingUsage {
-        guard supportedUsageRanges.contains(range) else {
-            throw BillingError.invalidRequest("服务端仅支持最近 7 天的用量")
-        }
-        let token = try Self.normalizedToken(credential)
-        let workspaceID = try await resolveWorkspaceID(token: token)
-        let window = range.queryWindow()
-        let path = "/api/v1/workspaces/\(workspaceID)/billing/usage"
-        let query = [("from", Self.iso8601(window.start)),
-                     ("to", Self.iso8601(window.end)),
-                     ("limit", "1")]
-
-        let request = try makeRequest(path: path, query: query, token: token)
-        let result = try await perform(request)
-        let summary = try Self.decodeUsageSummary(from: result.data, requestedRange: range, window: window)
-
-        let groups = try await fetchModelGroups(token: token, path: path, window: window,
-                                                runtimes: summary.runtimes)
-        return BillingUsage(range: range,
-                            granularity: range.granularity,
-                            start: window.start,
-                            end: window.end,
-                            totals: summary.totals,
-                            buckets: [],
-                            groups: groups)
+        throw BillingError.invalidRequest("Open Design 已停止提供用量汇总，仅支持额度查询")
     }
+
 
     // MARK: - 工作区发现
 
@@ -129,33 +122,6 @@ public final class OpenDesignBillingProvider: BillingProvider {
         workspaceCache.store(id, for: token)
         return id
     }
-
-    // MARK: - 按模型用量
-
-    /// 逐个模型查询全范围汇总（模型数按上限截断，避免请求数失控）
-    private func fetchModelGroups(token: String, path: String, window: DateInterval,
-                                  runtimes: [String]) async throws -> [BillingGroup] {
-        let targets = Array(runtimes.prefix(Self.modelQueryLimit))
-        guard !targets.isEmpty else { return [] }
-        var groups: [BillingGroup] = []
-        for runtime in targets {
-            let query = [("from", Self.iso8601(window.start)),
-                         ("to", Self.iso8601(window.end)),
-                         ("limit", "1"),
-                         ("runtime", runtime)]
-            do {
-                let request = try makeRequest(path: path, query: query, token: token)
-                let result = try await perform(request)
-                let totals = try Self.decodeUsageTotals(from: result.data)
-                groups.append(BillingGroup(name: runtime, metrics: totals))
-            } catch let error as BillingError {
-                // 模型级查询失败不影响总量展示：跳过该模型并记日志
-                logger.warning("Open Design 模型用量查询失败（\(runtime)）：\(error.userMessage)")
-            }
-        }
-        return groups
-    }
-
     // MARK: - 网络
 
     private struct HTTPResult {

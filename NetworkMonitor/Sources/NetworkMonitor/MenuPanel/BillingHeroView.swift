@@ -71,7 +71,30 @@ final class BillingHeroView: NSView {
     }
 
     /// 应用派生结果；nil 时主数值显示「—」而不是 0%
-    func update(hero: BillingHeroValue?, clock: String) {
+    ///
+    /// - Parameters:
+    ///   - hero: 最低剩余窗口（nil = 还没有可用数据）
+    ///   - clock: 正常态且无数据时的时钟文案（如「尚未刷新」）
+    ///   - isPaused: 是否因锁屏 / 休眠暂停了刷新；暂停时右侧一律显示暂停原因，
+    ///     否则用户看到的是「一个不动的数字 + 一个不动的重置时间」，只会以为额度坏了。
+    ///     重置时间并不丢：同屏的两格额度里各自写着「xx:xx 重置」。
+    func update(hero: BillingHeroValue?, clock: String, isPaused: Bool = false) {
+        if isPaused {
+            if let hero {
+                titleLabel.stringValue = hero.label
+                applyPercent(hero.remaining)
+                setAccessibilityLabel("\(hero.label) 剩余 \(valueLabel.stringValue)%（已暂停刷新）")
+            } else {
+                titleLabel.stringValue = "最低剩余"
+                valueLabel.stringValue = "—"
+                unitLabel.stringValue = "%"
+                setAccessibilityLabel("已暂停刷新，暂无可用额度数据")
+            }
+            clockLabel.stringValue = BillingRefreshStatusLogic.clockText(isPaused: true, latestStamp: clock)
+            clockLabel.textColor = PaneCardStyle.warnInk
+            return
+        }
+        clockLabel.textColor = PaneCardStyle.tertiaryText
         if let hero {
             titleLabel.stringValue = hero.label
             applyPercent(hero.remaining)
