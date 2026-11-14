@@ -13,6 +13,8 @@ enum DrawnUIProbe {
 
     static func runIfRequested() {
         if ClipboardCardProbe.runIfRequested() { return }
+        // 悬停全文浮层：真实 NSPanel 的显示 / 收起 / 滚轮消费（见 ClipboardOverlayProbe）
+        if ClipboardOverlayProbe.runIfRequested() { return }
         if DrawnInteractionProbe.runIfRequested() { return }
         if ClipboardPerfProbe.runIfRequested() { return }
         if runViewAuditIfRequested() { return }
