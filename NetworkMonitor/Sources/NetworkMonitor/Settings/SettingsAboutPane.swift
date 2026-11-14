@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorCore
 
 // MARK: - 关于页
 
@@ -11,7 +12,7 @@ final class SettingsAboutPane: SettingsPaneView {
     private let buildRow = SettingsRowView(title: "构建号")
     private let repoRow = SettingsRowView(title: "项目地址",
                                           subtitle: "github.com/baosfeng/toolbar")
-    private let quitRow = SettingsRowView(title: "退出 NetworkMonitor")
+    private let quitRow = SettingsRowView(title: "退出 \(AppIdentity.displayName)")
 
     init() {
         super.init(section: .about)
@@ -31,7 +32,7 @@ final class SettingsAboutPane: SettingsPaneView {
         quitButton.bezelStyle = .rounded
         quitButton.controlSize = .small
         quitButton.contentTintColor = .systemRed
-        quitButton.setAccessibilityLabel("退出 NetworkMonitor")
+        quitButton.setAccessibilityLabel("退出 \(AppIdentity.displayName)")
         quitRow.trailingStack.addArrangedSubview(quitButton)
 
         let appCard = SettingsCardView()
@@ -43,7 +44,7 @@ final class SettingsAboutPane: SettingsPaneView {
         let quitCard = SettingsCardView()
         quitCard.addRow(quitRow)
         page.addCard(quitCard, sectionTitle: "会话")
-        page.addNote("NetworkMonitor 是菜单栏应用：关闭本窗口不会退出，退出请用上面的按钮或齿轮菜单。")
+        page.addNote("\(AppIdentity.displayName) 是菜单栏应用：关闭本窗口不会退出，退出请用上面的按钮或齿轮菜单。")
     }
 
     // MARK: - 动作

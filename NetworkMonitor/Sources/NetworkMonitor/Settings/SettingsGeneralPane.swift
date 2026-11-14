@@ -15,7 +15,7 @@ final class SettingsGeneralPane: SettingsPaneView {
     private let alertPreferences: BillingAlertPreferences
     private let unitPreferences: NumberUnitPreferences
     private let launchRow = SettingsRowView(title: "开机自启动",
-                                            subtitle: "登录后自动启动 NetworkMonitor")
+                                            subtitle: "登录后自动启动 \(AppIdentity.displayName)")
     private let alertRow = SettingsRowView(title: "额度阈值提醒",
                                            subtitle: "剩余跌破 5% / 4% / 3% / 2% / 1% 时发送系统通知")
     private let unitRow = SettingsRowView(title: "数值单位",
@@ -246,7 +246,7 @@ final class SettingsGeneralPane: SettingsPaneView {
         unitControl.selectItem(at: styleIndex)
         unitRow.update(subtitle: style.detailText)
         launchRow.update(subtitle: launchAtStartup.isEnabled
-                         ? "登录后自动启动 NetworkMonitor"
+                         ? "登录后自动启动 \(AppIdentity.displayName)"
                          : "当前未登记开机自启动")
         for (tab, toggle) in tabToggles {
             toggle.state = panelTabPreferences.visibleTabs.contains(tab) ? .on : .off
@@ -277,7 +277,7 @@ final class SettingsGeneralPane: SettingsPaneView {
             launchRow.update(subtitle: "系统未允许开机自启动（需在系统设置中检查登录项）")
         } else {
             launchRow.update(subtitle: target
-                             ? "登录后自动启动 NetworkMonitor"
+                             ? "登录后自动启动 \(AppIdentity.displayName)"
                              : "当前未登记开机自启动")
         }
     }

@@ -17,6 +17,11 @@ cd "$(dirname "$0")/.."
 BUILD_MODE="${1:-debug}"
 
 APP_NAME="NetworkMonitor"
+# 对外显示名（中文产品名）：只写进 Info.plist 的显示字段与权限用途说明。
+# 与 Sources/NetworkMonitorCore/Infrastructure/AppIdentity.swift 的 displayName 同源，改名两处一起改。
+# 刻意不动 APP_NAME / CFBundleIdentifier / CFBundleExecutable / 签名身份：它们绑着 TCC 授权、
+# 本地偏好域（~/Library/Preferences/com.example.NetworkMonitor.plist）与 SMAppService 登录项注册路径。
+APP_DISPLAY_NAME="一览"
 # 目标架构：显式指定则交叉 / 同架构构建，产物后缀区分；未指定即本机架构、产物名不变
 TARGET_ARCH="${ARCH:-}"
 HOST_ARCH="$(uname -m)"
@@ -64,7 +69,10 @@ if [ -f "Scripts/AppIcon.icns" ]; then
 fi
 
 # 5. 写入 Info.plist
-cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
+# heredoc 刻意不加引号：显示名由 APP_DISPLAY_NAME 展开注入（模板本身不含 $ 与反引号，展开不会误伤）。
+# CFBundleDisplayName 是系统各处显示名的首选位（通知横幅 / 登录项 / 权限列表），
+# CFBundleName 作为回落并受 15 字符上限约束，「一览」两个字符安全。
+cat > "$APP_DIR/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -75,7 +83,9 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <key>CFBundleIdentifier</key>
     <string>com.example.NetworkMonitor</string>
     <key>CFBundleName</key>
-    <string>NetworkMonitor</string>
+    <string>${APP_DISPLAY_NAME}</string>
+    <key>CFBundleDisplayName</key>
+    <string>${APP_DISPLAY_NAME}</string>
     <key>CFBundleVersion</key>
     <string>18</string>
     <key>CFBundleShortVersionString</key>
@@ -85,9 +95,9 @@ cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
     <key>LSUIElement</key>
     <true/>
     <key>NSInputMonitoringUsageDescription</key>
-    <string>NetworkMonitor 需要输入监控权限来统计键盘敲击次数，不会记录按键内容。</string>
+    <string>${APP_DISPLAY_NAME} 需要输入监控权限来统计键盘敲击次数，不会记录按键内容。</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>NetworkMonitor 需要访问本地网络来发现同一 Wi-Fi 下的设备并互传文件，不会上传到任何服务器。</string>
+    <string>${APP_DISPLAY_NAME} 需要访问本地网络来发现同一 Wi-Fi 下的设备并互传文件，不会上传到任何服务器。</string>
 </dict>
 </plist>
 PLIST

@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorCore
 
 // MARK: - 标题栏设置菜单
 
@@ -35,7 +36,7 @@ extension MenuPanelView: NSMenuDelegate {
                             action: #selector(handleToggleLaunchAtStartup),
                             tag: Self.launchMenuItemTag)
         settingsButton.menu?.addItem(.separator())
-        addSettingsMenuItem(title: "退出 NetworkMonitor",
+        addSettingsMenuItem(title: "退出 \(AppIdentity.displayName)",
                             action: #selector(handleQuit),
                             keyEquivalent: "q")
 

@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsItem.target = menuBarManager
             appMenu.addItem(settingsItem)
             appMenu.addItem(.separator())
-            appMenu.addItem(NSMenuItem(title: "退出 NetworkMonitor", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+            appMenu.addItem(NSMenuItem(title: "退出 \(AppIdentity.displayName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
             appItem.submenu = appMenu
             NSApp.mainMenu = mainMenu
         }
