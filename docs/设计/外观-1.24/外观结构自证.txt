@@ -1,0 +1,13 @@
+=== 外观结构自证 ===
+系统：macOS Version 27.0.1 (Build 26A434) 支持 Liquid Glass=true 支持交互玻璃=true
+[默认] 主题=Apple 玻璃=true tick=1.0s 摘要=档位=标准 tick=1.0s 中频=5.0s 采样=1.0s 点数=60 动效=开 玻璃=开 桶=24 排行=8
+[档位:标准] tick=1.0s 中频=5.0s 采样点=60 动效=[state=0.12 expand=0.34 overlay=0.22 stagger=0.024] 玻璃=true 摘要=档位=标准 tick=1.0s 中频=5.0s 采样=1.0s 点数=60 动效=开 玻璃=开 桶=24 排行=8
+[档位:标准] 面板底：玻璃=NSGlassEffectView 圆角=12.0pt 基色层alpha=0.82 玻璃在最底层=true
+[档位:极致] tick=0.5s 中频=2.0s 采样点=120 动效=[state=0.12 expand=0.4 overlay=0.22 stagger=0.024] 玻璃=true 摘要=档位=极致 tick=0.5s 中频=2.0s 采样=0.5s 点数=120 动效=开 玻璃=开 桶=24 排行=8
+[档位:极致] 面板底：玻璃=NSGlassEffectView 圆角=12.0pt 基色层alpha=0.82 玻璃在最底层=true
+[档位:省电] tick=2.0s 中频=15.0s 采样点=30 动效=[state=0.12 expand=0.34 overlay=0.22 stagger=0.024] 玻璃=false 摘要=档位=省电 tick=2.0s 中频=15.0s 采样=3.0s 点数=30 动效=关 玻璃=关 桶=12 排行=4
+[档位:省电] 面板底：玻璃=无（降级为纯实色） 圆角=0.0pt 基色层alpha=1.0 玻璃在最底层=true
+[主题:Apple] 当前=Apple 玻璃=false
+[主题:冷调石墨] 当前=冷调石墨 玻璃=false
+[主题:暖调米白] 当前=暖调米白 玻璃=false
+=== 自证结束 ===
