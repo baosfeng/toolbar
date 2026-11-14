@@ -112,6 +112,13 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     var lastContentSizeCheck: Date = .distantPast
     /// 节流窗口内到达的多次请求合并成的一次补算任务
     var pendingContentSizeTask: DispatchWorkItem?
+    /// 额度推送是否正在处理中（重入保护）
+    ///
+    /// 额度刷新是推送式：`refresh()` → `emit()` → 面板 `updateBilling` → 面板通知
+    /// `menuPanelViewDidChangeContent`，而后者在额度页又会回头调 `refresh()`。
+    /// 空态下每轮都 emit 时这条反馈边会同步无限递归（栈写爆 → SIGSEGV）。
+    /// 置位期间收到的「内容变更」不再回拉，见 `BillingRefreshGate`。
+    var billingPushInFlight = false
     /// 是否已做过启动预热（只做一次）
     // 放宽为 internal：预热逻辑在 MenuPanelController+Open.swift
     var hasPrewarmed = false

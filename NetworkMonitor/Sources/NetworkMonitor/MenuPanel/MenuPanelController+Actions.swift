@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 import ServiceManagement
 
 // MARK: - 菜单面板动作（MenuPanelController 扩展）
@@ -71,10 +72,15 @@ extension MenuPanelController: MenuPanelViewDelegate {
     func menuPanelViewDidChangeContent(_ view: MenuPanelView) {
         // 数据刷新：高度通常不变，交给签名 + 节流判断（签名不变即零布局）
         updateContentSize()
-        // 切到额度页时才触发刷新（monitor 内部 60 秒节流）
-        if view.currentTab == .credits {
-            billingMonitor?.refresh()
-        }
+        // 额度页在内容变化时回拉一次（monitor 内部 60 秒节流）。
+        // 必须挡住「由额度推送自己引起的那一次」：推送 → updateBilling → 本回调 → refresh → emit
+        // 是同步闭环，空态下每次都 emit 会无限递归直到栈溢出（见 BillingRefreshGate 注释）。
+        guard BillingRefreshGate.shouldPullForContentChange(
+            isBillingTab: view.currentTab == .credits,
+            isPushingSnapshot: billingPushInFlight) else { return }
+        billingPushInFlight = true
+        defer { billingPushInFlight = false }
+        billingMonitor?.refresh()
     }
 
     func menuPanelViewDidSelectTab(_ view: MenuPanelView) {
@@ -129,7 +135,9 @@ extension MenuPanelController: MenuPanelViewDelegate {
     /// 额度是推送式回调（`billingMonitor.onUpdate`）：该页还没装配时收到的推送会被跳过，
     /// 切回来时必须用最后一帧状态补一次，否则要等下一轮刷新（最坏 60 秒节流）。
     private func renderBillingSnapshot() {
-        guard let billingMonitor else { return }
+        guard let billingMonitor, !billingPushInFlight else { return }
+        billingPushInFlight = true
+        defer { billingPushInFlight = false }
         let snapshot = BillingMonitor.Snapshot.make(from: billingMonitor.states,
                                                     enabledProviderCount: billingMonitor.states.count,
                                                     isPaused: billingMonitor.isPaused)
