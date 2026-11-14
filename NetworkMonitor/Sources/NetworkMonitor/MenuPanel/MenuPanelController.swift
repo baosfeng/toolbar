@@ -85,9 +85,14 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     /// 折线采样（60 个 1 秒点）
     var downHistory: [Double] = []
     var upHistory: [Double] = []
-    static let maxHistory = 60
-    /// 中频刷新间隔
-    static let midInterval: TimeInterval = 5.0
+    // 两个节流参数改为**实例可变**：渲染帧率档切换要重写它们。
+    // 原先是 static let，切档后永远停在默认值——「设置页切了但没生效」的典型成因。
+    /// 折线采样点上限（1 点 = 1 个 tick），默认取标准档
+    var maxHistory: Int = RenderTierLogic.standard.historyPoints
+    /// 中频刷新间隔，默认取标准档
+    var midInterval: TimeInterval = RenderTierLogic.standard.midInterval
+    /// 当前渲染档位（切档后由 `applyRenderTier` 更新，tick 据此判定是否停摆）
+    var currentRenderTier: RenderTier = .standard
     var lastMidRefresh: Date = .distantPast
 #if DEBUG
     /// 取证专用（仅 DEBUG）：强制进程/剪贴板空态，用于核对空态字号
@@ -109,7 +114,11 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     // 放宽为 internal：数据绑定扩展要注册 / 移除
     nonisolated(unsafe) var harnessObserver: NSObjectProtocol?
     // 放宽为 internal：数据绑定扩展要注册 / 移除
+    // 放宽为 internal：数据绑定扩展要注册 / 移除
     nonisolated(unsafe) var unitObserver: NSObjectProtocol?
+    // 放宽为 internal：外观绑定扩展（+Appearance）要注册 / 移除
+    nonisolated(unsafe) var appearanceObserver: NSObjectProtocol?
+    nonisolated(unsafe) var renderTierObserver: NSObjectProtocol?
 
     // MARK: - 初始化
 
@@ -149,6 +158,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         bindBilling()
         bindHarnessUsage()
         bindNumberUnitStyle()
+        bindAppearance()
+        applyRenderTier(AppearancePreferences(storage: storage).renderTier)
     }
 
     nonisolated deinit {
@@ -160,6 +171,12 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         }
         if let unitObserver {
             NotificationCenter.default.removeObserver(unitObserver)
+        }
+        if let appearanceObserver {
+            NotificationCenter.default.removeObserver(appearanceObserver)
+        }
+        if let renderTierObserver {
+            NotificationCenter.default.removeObserver(renderTierObserver)
         }
     }
 

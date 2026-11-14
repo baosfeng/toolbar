@@ -91,13 +91,9 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         panel.onPerformKeyEquivalent = { [weak self] event in self?.handleKeyDown(event) ?? false }
         content.delegate = self; content.autoresizingMask = [.width, .height]
 
-        // 面板底：NSVisualEffectView(.hudWindow)，圆角 14pt
-        let background = NSVisualEffectView(frame: NSRect(origin: .zero, size: panel.frame.size))
-        background.material = .hudWindow
-        background.blendingMode = .behindWindow; background.state = .active
-        background.wantsLayer = true
-        background.layer?.cornerRadius = 14; background.layer?.masksToBounds = true
-        background.autoresizingMask = [.width, .height]
+        // 面板底（弹窗层的玻璃）：macOS 26+ 且玻璃开启时走 NSGlassEffectView，
+        // 否则回落原 `.hudWindow` 材质路径（视觉不塌）。圆角恒 14pt。
+        let background = makePanelBackground()
         content.frame = background.bounds
         background.addSubview(content)
         panel.contentView = background
@@ -107,6 +103,30 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
             guard let self, event.window === self.panel, self.panel.isVisible else { return event }
             return self.handleKeyDown(event) ? nil : event
         }
+    }
+
+    /// 造剪贴板面板的底 —— 弹窗层玻璃的落点
+    ///
+    /// - Returns: 玻璃（26+ 且开关打开）或原 `.hudWindow` 材质视图；两者都带 14pt 圆角
+    private func makePanelBackground() -> NSView {
+        let frame = NSRect(origin: .zero, size: panel.frame.size)
+        if let glass = GlassStyle.makePanelGlass(interactive: false) {
+            glass.frame = frame
+            glass.autoresizingMask = [.width, .height]
+            glass.wantsLayer = true
+            glass.layer?.cornerRadius = 14
+            glass.layer?.masksToBounds = true
+            return glass
+        }
+        let effect = NSVisualEffectView(frame: frame)
+        effect.material = .hudWindow
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.wantsLayer = true
+        effect.layer?.cornerRadius = 14
+        effect.layer?.masksToBounds = true
+        effect.autoresizingMask = [.width, .height]
+        return effect
     }
 
     private func observeClipboardChanges() {

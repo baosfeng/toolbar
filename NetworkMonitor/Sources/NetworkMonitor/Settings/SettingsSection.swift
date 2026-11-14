@@ -7,6 +7,7 @@ import AppKit
 /// 新增分类：加 case + 在组合根提供对应 pane 工厂；侧栏与窗口宽度自适应，无需改视图代码。
 enum SettingsSection: CaseIterable {
     case general
+    case appearance
     case providers
     case clipboard
     case capture
@@ -18,6 +19,7 @@ enum SettingsSection: CaseIterable {
     var title: String {
         switch self {
         case .general:   return "通用"
+        case .appearance: return "外观"
         case .providers: return "额度 Provider"
         case .clipboard: return "剪贴板"
         case .capture:   return "截图与贴图"
@@ -31,6 +33,7 @@ enum SettingsSection: CaseIterable {
     var symbolName: String {
         switch self {
         case .general:   return "gearshape"
+        case .appearance: return "paintpalette"
         case .providers: return "creditcard"
         case .clipboard: return "doc.on.clipboard"
         case .capture:   return "camera.viewfinder"
@@ -44,6 +47,7 @@ enum SettingsSection: CaseIterable {
     var fileSuffix: String {
         switch self {
         case .general:   return "general"
+        case .appearance: return "appearance"
         case .providers: return "providers"
         case .clipboard: return "clipboard"
         case .capture:   return "capture"
@@ -57,6 +61,7 @@ enum SettingsSection: CaseIterable {
     var subtitle: String {
         switch self {
         case .general:   return "启动行为与额度提醒。"
+        case .appearance: return "主题、玻璃拟态与渲染帧率档。"
         case .providers: return "启用开关只影响查询与额度页展示，凭据继续保留。"
         case .clipboard: return "面板唤起、采集范围与系统权限。"
         case .capture:   return "截图、标注与贴图的默认参数。"

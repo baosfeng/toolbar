@@ -66,24 +66,29 @@ enum SystemPalette {
 
     // MARK: 底与轨道
 
-    static var background: NSColor { color(.background) }
-    static var surface: NSColor { color(.surface) }
-    static var bandBackground: NSColor { color(.bandBackground) }
+    // 壳层角色**转发主题**：面板底 / 卡片面 / 带底 / 轨道 / 线 / 文字在三套主题下必须与
+    // 六页其余部分同一套面系，否则「系统页切主题后面还是老的」。
+    // **指标族**（cpu / gpu / memory / load / disk / temperature / battery / wifi / power /
+    // process）继续独占 `SystemPaletteTokens`：那是数据语义，v3 定稿后不随皮肤漂移。
+
+    static var background: NSColor { ThemeStyle.color(.surface) }
+    static var surface: NSColor { ThemeStyle.color(.cardFill) }
+    static var bandBackground: NSColor { ThemeStyle.color(.bandFill) }
     /// 轻量填充（返回条 / 设置菜单悬停）：与状态带底同色
-    static var softFill: NSColor { color(.bandBackground) }
+    static var softFill: NSColor { ThemeStyle.color(.bandFill) }
     /// 轨道底（未填充）
-    static var track: NSColor { color(.track) }
+    static var track: NSColor { ThemeStyle.color(.track) }
     /// 轨道第二档（柱底 / 繁忙条底）
-    static var trackSecondary: NSColor { color(.trackSecondary) }
+    static var trackSecondary: NSColor { ThemeStyle.color(.trackStrong) }
     /// 图表参考线
-    static var grid: NSColor { color(.grid) }
+    static var grid: NSColor { ThemeStyle.color(.grid) }
 
     // MARK: 文字
 
-    static var foreground: NSColor { color(.foreground) }
-    static var foregroundSecondary: NSColor { color(.foregroundSecondary) }
-    static var muted: NSColor { color(.muted) }
-    static var meta: NSColor { color(.meta) }
+    static var foreground: NSColor { ThemeStyle.color(.textPrimary) }
+    static var foregroundSecondary: NSColor { ThemeStyle.color(.textSecondary) }
+    static var muted: NSColor { ThemeStyle.color(.textTertiary) }
+    static var meta: NSColor { ThemeStyle.color(.textTertiary) }
 
     // MARK: 语义族
 
