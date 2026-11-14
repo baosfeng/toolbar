@@ -200,6 +200,9 @@ runSnipMosaicTests()
 // MARK: - 文字标注
 runSnipTextTests()
 
+// MARK: - 序号标注（工具分层 / 编号递增 / 几何 / 命中）
+runSnipNumberAnnotationTests()
+
 // MARK: - 贴图旋转与镜像
 runSnipTransformTests()
 

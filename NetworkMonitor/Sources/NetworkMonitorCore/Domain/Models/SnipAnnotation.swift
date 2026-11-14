@@ -62,6 +62,8 @@ public enum SnipAnnotationKind: String, Equatable, Sendable, CaseIterable {
     case mosaic
     case blur
     case text
+    /// 序号：圆底数字，点一下落一个（编号在落笔时定死，见 SnipNumberSequence）
+    case number
 
     public var displayName: String {
         switch self {
@@ -74,6 +76,7 @@ public enum SnipAnnotationKind: String, Equatable, Sendable, CaseIterable {
         case .mosaic: return "马赛克"
         case .blur: return "模糊"
         case .text: return "文字"
+        case .number: return "序号"
         }
     }
 
@@ -82,9 +85,9 @@ public enum SnipAnnotationKind: String, Equatable, Sendable, CaseIterable {
         self == .mosaic || self == .blur
     }
 
-    /// 是否是可拖拽绘制的图元（文字走点击输入，橡皮擦是操作）
+    /// 是否是可拖拽绘制的图元（文字走点击输入，序号是单击落点，橡皮擦是操作）
     public var isDrawable: Bool {
-        self != .text
+        self != .text && self != .number
     }
 
     /// 轨迹类图元（画笔 / 折线）— 命中带较宽，点击不该把它选走

@@ -130,6 +130,10 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         // 二次编辑最小集：点在同类型的已绘制图形上 → 选中它（Del 删除、可见选中描边），
         // 而不是又压一个新图形上去。官方口径是「选中某一类型时对同类型形状二次编辑」。
         if selectSameKindAnnotationIfHit(at: point, kind: kind) { return true }
+        if kind == .number {
+            addNumberAnnotation(at: point)
+            return true
+        }
         if kind == .text {
             // 点在已有文字上 → 选中它（滚轮改字号、⌘R 旋转）；点在空白 → 新建
             if let index = annotationStack.annotations.indices.last(where: {
@@ -146,6 +150,21 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         draftAnnotation = SnipAnnotation(kind: kind, start: point, end: point, style: currentStyle)
         needsDisplay = true
         return true
+    }
+
+    // MARK: - 序号
+
+    /// 点一下落一个序号：编号 = 已有序号最大值 + 1（删掉中间项不重排）
+    func addNumberAnnotation(at point: CGPoint) {
+        let radius = SnipNumberAnnotation.radius(forLineWidth: currentStyle.lineWidth)
+        let next = SnipNumberSequence.next(after: SnipNumberSequence.values(in: annotationStack.annotations))
+        let annotation = SnipAnnotation(kind: .number,
+                                        start: CGPoint(x: point.x - radius, y: point.y - radius),
+                                        end: CGPoint(x: point.x + radius, y: point.y + radius),
+                                        text: String(next),
+                                        style: currentStyle)
+        annotationStack.add(annotation)
+        needsDisplay = true
     }
 
     // MARK: - 文字输入

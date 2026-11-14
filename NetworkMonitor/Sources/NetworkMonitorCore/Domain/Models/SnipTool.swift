@@ -2,7 +2,9 @@ import Foundation
 
 // MARK: - 标注工具
 
-/// 工具条上的工具 — 除橡皮擦外都对应一种标注图元
+/// 工具条上的工具 —— 标注图元 + 一个「动作型」条目（橡皮擦）
+///
+/// 判据：`annotationKind` 非空 = 落笔时生成一条标注图元；为 nil 的是就地执行的操作（橡皮擦擦除）。
 public enum SnipTool: String, Equatable, Sendable, CaseIterable {
     case rectangle
     case ellipse
@@ -13,11 +15,17 @@ public enum SnipTool: String, Equatable, Sendable, CaseIterable {
     case mosaic
     case blur
     case text
+    case number
     case eraser
 
     /// 对应的图元类型；橡皮擦返回 nil（它是操作而不是图元）
     public var annotationKind: SnipAnnotationKind? {
         SnipAnnotationKind(rawValue: rawValue)
+    }
+
+    /// 是否是「就地执行的动作」，而不是会落一个图元的标注工具
+    public var isActionTool: Bool {
+        self == .eraser
     }
 
     public var displayName: String {
@@ -49,6 +57,7 @@ public enum SnipTool: String, Equatable, Sendable, CaseIterable {
         case .mosaic: return "square.grid.3x3.fill"
         case .blur: return "drop.halffull"
         case .text: return "character.textbox"
+        case .number: return "number.circle"
         case .eraser: return "eraser"
         }
     }
