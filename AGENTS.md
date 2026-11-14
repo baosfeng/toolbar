@@ -1,4 +1,4 @@
-# NetworkMonitor / macMonitor — macOS 菜单栏监控
+# 一览（NetworkMonitor / macMonitor）— macOS 菜单栏监控
 
 ## 项目简介
 - **版本:** 1.23.0
