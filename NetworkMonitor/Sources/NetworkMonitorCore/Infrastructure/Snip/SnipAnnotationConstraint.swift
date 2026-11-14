@@ -44,7 +44,8 @@ public enum SnipAnnotationConstraint {
         case .freehand:
             // 画笔中途按 Shift → 直线：由调用方在拖拽时直接清掉中间点，这里只约束终点
             return snappedAngle(start: start, end: end)
-        case .text, .polyline:
+        case .text, .polyline, .number:
+            // 文字/折线/序号不按 Shift 约束：序号是单击落点，没有拖拽方向可吸附
             return end
         }
     }

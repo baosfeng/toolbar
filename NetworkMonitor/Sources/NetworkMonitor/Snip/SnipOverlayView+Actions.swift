@@ -23,6 +23,12 @@ extension SnipOverlayView {
         delegate?.overlayView(self, didRequestSave: selection, quick: quick)
     }
 
+    /// 请求对当前选区做 OCR 识别（⌘O、工具条「更多 → 识别文字」、选中该工具后点选区）
+    func requestTextRecognition() {
+        guard let selection = state.selection else { return }
+        delegate?.overlayView(self, didRequestTextRecognition: selection)
+    }
+
     // MARK: - 单击选窗
 
     /// 松手时若位移小于阈值，且按下时悬停在某个窗口上，就判定为「单击选窗」

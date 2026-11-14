@@ -17,6 +17,12 @@ public enum SnipPreferenceKey {
     public static let pinDisplayImageFiles = "snip.pinDisplayImageFiles"
     /// 可被恢复的已关闭贴图数（默认 1，范围 1...10）
     public static let pinRecoverableCount = "snip.pinRecoverableCount"
+    /// 输出格式（png / jpeg，缺失按 PNG）
+    public static let saveFormat = "snip.saveFormat"
+    /// JPEG 质量（0.3…1.0，默认 0.9；仅 jpeg 时生效）
+    public static let jpegQuality = "snip.jpegQuality"
+    /// OCR 识别成功后是否额外把文字贴到屏幕上（默认关）
+    public static let ocrPinResult = "snip.ocrPinResult"
 
     /// 快速保存目录键不在这里：`SnipSaveDirectory.key`（Core，解析时要和落盘规则共用默认目录）
 }

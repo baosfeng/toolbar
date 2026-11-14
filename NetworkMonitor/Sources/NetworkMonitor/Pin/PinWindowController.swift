@@ -228,11 +228,15 @@ final class PinWindowController {
     }
 
     private func saveImage(from window: PinWindow) {
-        // 跟随设置页的快速保存目录（未自定义时为默认目录）
+        // 跟随设置页的快速保存目录（未自定义时为默认目录）与输出格式
         let directory = SnipSaveDirectory.resolvedQuickSaveDirectory(storage: storage)
+        let format = SnipImageFormat.resolved(raw: storage.string(forKey: SnipPreferenceKey.saveFormat))
+        let quality = SnipImageFormat.clampedQuality(
+            storage.object(forKey: SnipPreferenceKey.jpegQuality) as? Double
+                ?? SnipImageFormat.defaultJPEGQuality)
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.png]
-        panel.nameFieldStringValue = SnipFileNaming.fileName(for: Date())
+        panel.allowedContentTypes = [format.contentType]
+        panel.nameFieldStringValue = SnipFileNaming.fileName(for: Date(), format: format)
         panel.directoryURL = directory
         panel.canCreateDirectories = true
         // 贴图窗口在 screenSaver 层级，先让开避免盖住面板
@@ -241,8 +245,8 @@ final class PinWindowController {
         window.orderFrontRegardless()
         guard response == .OK, let url = panel.url else { return }
         do {
-            try SnipFileWriter.writePNG(window.currentImage, to: url)
-            logger.info("贴图已保存：\(LogRedaction.path(url.path))")
+            try SnipFileWriter.write(window.currentImage, to: url, format: format, quality: quality)
+            logger.info("贴图已保存（\(format.displayName)）：\(LogRedaction.path(url.path))")
         } catch {
             logger.error("贴图保存失败：\(error)")
         }
