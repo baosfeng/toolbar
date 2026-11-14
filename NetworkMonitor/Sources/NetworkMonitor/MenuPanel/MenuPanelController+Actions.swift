@@ -63,7 +63,13 @@ extension MenuPanelController: MenuPanelViewDelegate {
 
     // MARK: - MenuPanelViewDelegate
 
+    func menuPanelViewDidChangeHeight(_ view: MenuPanelView) {
+        // 结构变化（切页 / 进出二级详情 / 分段条显隐）：立即重算，不排队
+        updateContentSize(force: true)
+    }
+
     func menuPanelViewDidChangeContent(_ view: MenuPanelView) {
+        // 数据刷新：高度通常不变，交给签名 + 节流判断（签名不变即零布局）
         updateContentSize()
         // 切到额度页时才触发刷新（monitor 内部 60 秒节流）
         if view.currentTab == .credits {

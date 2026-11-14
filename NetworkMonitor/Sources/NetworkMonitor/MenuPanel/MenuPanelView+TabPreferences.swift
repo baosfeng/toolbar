@@ -45,7 +45,7 @@ extension MenuPanelView {
         if tabChanged {
             delegate?.menuPanelViewDidSelectTab(self)
         }
-        // 高度会随分段条与当前页变化：无论是否切页都通知控制器重算
-        delegate?.menuPanelViewDidChangeContent(self)
+        // 分段条显隐或当前页都可能改高度：走立即重算通道
+        delegate?.menuPanelViewDidChangeHeight(self)
     }
 }

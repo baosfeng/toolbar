@@ -106,6 +106,12 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     var contentBatchDepth = 0
     /// 批处理期间是否收到过强制尺寸重算请求
     var contentBatchNeedsForceSize = false
+    /// 上次内容高度的轻量签名（分页 + 当前页可交互行数）：相同则跳过整树布局
+    var lastContentSizeSignature = ""
+    /// 上次真正算过高度的时间（合并节流用）
+    var lastContentSizeCheck: Date = .distantPast
+    /// 节流窗口内到达的多次请求合并成的一次补算任务
+    var pendingContentSizeTask: DispatchWorkItem?
     /// 是否已做过启动预热（只做一次）
     // 放宽为 internal：预热逻辑在 MenuPanelController+Open.swift
     var hasPrewarmed = false

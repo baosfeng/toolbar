@@ -182,20 +182,60 @@ extension MenuPanelController {
     ///
     /// 内容高于 520pt 时不做硬截断：面板内部 NSScrollView 转为垂直滚动（隐式滚动条），
     /// 因此进程数变多 / 字体放大 / 多语言换行时仍能看到全部内容。
+    ///
+    /// 两道闸门（依据：展开态 5–8.7% CPU 里 AutoLayout 1.9% 全在这一条路径上）：
+    /// 1. 轻量签名没变（分页 + 当前页可交互行数）→ 直接返回，一次布局都不跑；
+    /// 2. 签名变了但距上次重算不足节流窗口 → 合并成一次补算（极致档更短、省电档更长）。
+    /// 用户交互类变化（切页 / 二级详情）走 force 通道，不等节流，保证手感。
     func updateContentSize(force: Bool = false) {
         // 批处理期间只记账：整段刷新结束时统一算一次（避免每步都全树布局）
         guard contentBatchDepth == 0 else {
             contentBatchNeedsForceSize = contentBatchNeedsForceSize || force
             return
         }
+        let signature = content.contentHeightSignature
+        if !force, signature == lastContentSizeSignature {
+            return
+        }
+        let now = Date()
+        let interval = contentSizeThrottleInterval
+        if !force, now.timeIntervalSince(lastContentSizeCheck) < interval {
+            scheduleDeferredContentSizeCheck(after: interval - now.timeIntervalSince(lastContentSizeCheck))
+            return
+        }
+        lastContentSizeCheck = now
+        lastContentSizeSignature = signature
+        pendingContentSizeTask?.cancel()
+        pendingContentSizeTask = nil
         PanelOpenProbe.bucket("updateContentSize") {
-            // desiredContentHeight 内部已先 layoutSubtreeIfNeeded，这里不重复跑一遍整树布局
+            // desiredContentHeight 只布局当前页子树（不再跑整棵面板）
             let needed = PanelOpenProbe.bucket("desiredContentHeight") { content.desiredContentHeight }
             let height = min(max(needed, 180), MenuPanelStyle.maxHeight)
             guard force || abs(popover.contentSize.height - height) > 0.5 else { return }
             PanelOpenProbe.bucket("popover.contentSize 赋值") {
                 popover.contentSize = NSSize(width: MenuPanelStyle.panelWidth, height: height)
             }
+        }
+    }
+
+    /// 节流窗口内的多次请求合并成一次补算（窗口内最多补一次，不堆积）
+    private func scheduleDeferredContentSizeCheck(after delay: TimeInterval) {
+        guard pendingContentSizeTask == nil else { return }
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingContentSizeTask = nil
+            self.updateContentSize()
+        }
+        pendingContentSizeTask = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(delay, 0.02), execute: item)
+    }
+
+    /// 高度重算的合并节流间隔：越省电的档位越保守（与刷新节拍同向）
+    private var contentSizeThrottleInterval: TimeInterval {
+        switch currentRenderTier {
+        case .standard: return 0.35
+        case .extreme: return 0.2
+        case .powerSave: return 0.8
         }
     }
 
