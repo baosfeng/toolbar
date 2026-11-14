@@ -37,8 +37,8 @@ SwiftPM 的 `swift run` 与 `.build/.../NetworkMonitor` 都跑在「无 bundle�
 
 ```bash
 cd NetworkMonitor
-SKIP_INSTALL=1 ./Scripts/build-app.sh debug        # 产出 dist/NetworkMonitor.app，不装 /Applications
-NM_SNAPSHOT_DIR=/tmp/nm-shots ./dist/NetworkMonitor.app/Contents/MacOS/NetworkMonitor
+SKIP_INSTALL=1 ./Scripts/build-app.sh debug        # 产出 dist/一览.app，不装 /Applications
+NM_SNAPSHOT_DIR=/tmp/nm-shots ./dist/一览.app/Contents/MacOS/NetworkMonitor
 ls /tmp/nm-shots                                   # 出图
 rm -rf dist                                        # 取证后清掉
 ```
@@ -48,7 +48,7 @@ rm -rf dist                                        # 取证后清掉
 ## 反例
 
 - 看到「崩了」先去怀疑快照钩子代码：**先确认是不是裸二进制**。钩子没问题，是 bundle 缺失。
-- 用 `open dist/NetworkMonitor.app` 代替直接跑可执行文件：LaunchServices 会丢弃 stdout，
+- 用 `open dist/一览.app` 代替直接跑可执行文件：LaunchServices 会丢弃 stdout，
   `NM_SNAPSHOT_DIR` 也传不进 GUI 进程的环境，图仍然出不来。
 - 取证后忘记删 `dist/`：它体积不小，且会被误当成发布产物。
 

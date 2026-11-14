@@ -17,7 +17,7 @@
 ## 实测
 
 ```bash
-sample $(pgrep -f '^/Applications/NetworkMonitor.app/Contents/MacOS/NetworkMonitor') 1
+sample $(pgrep -f '^/Applications/一览.app/Contents/MacOS/NetworkMonitor') 1
 # 主线程停在：
 #   KeychainSecretStore.secret(forKey:)
 #   SecItemCopyMatching → SecKeychainItemCopyContent → ...
@@ -32,7 +32,7 @@ sample $(pgrep -f '^/Applications/NetworkMonitor.app/Contents/MacOS/NetworkMonit
 2. 真要启用钥匙串，前置条件是稳定签名身份：
 
    ```bash
-   codesign -d -r- /Applications/NetworkMonitor.app   # designated requirement 不能含 cdhash
+   codesign -d -r- /Applications/一览.app   # designated requirement 不能含 cdhash
    ```
 
    `build-app.sh` 的 `assert_stable_signature` 已能拦这一条（ad-hoc 分支只警告，不拦）；
