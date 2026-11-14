@@ -49,7 +49,9 @@ final class VisionTextRecognizer: SnipTextRecognizing, @unchecked Sendable {
         } catch {
             return .failure(.recognitionFailed(error.localizedDescription))
         }
-        let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
+        // request.results 的类型已经是 [VNRecognizedTextObservation]?（VNRequest 的泛型结果），
+        // 再 as? 一次是冗余下转型（编译器会报 "conditional downcast does nothing"），直接解包即可
+        let observations: [VNRecognizedTextObservation] = request.results ?? []
         let lines: [SnipTextLine] = observations.compactMap { observation in
             guard let candidate = observation.topCandidates(1).first else { return nil }
             let box = observation.boundingBox
