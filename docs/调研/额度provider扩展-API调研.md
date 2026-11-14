@@ -108,7 +108,7 @@ let billingMonitor = BillingMonitor(registry: billingRegistry, credentialStore: 
 
 ### 1.3 现状锁：三处「一个 provider 一份配置」的硬约束
 
-1. `AGENTS.md` 功能模块表：「额度 Provider（启用开关＝下线、行内凭据编辑、**同一 provider 只有一份凭据**、凭据以 AES-GCM 密文本地存储）」。
+1. `AGENTS.md` 功能模块表：「额度 Provider（启用开关＝下线、行内凭据编辑、**同一 provider 只有一份凭据**、凭据以 AES-GCM 密文本地存储）」。**勘误**：1.24.0 已改为实例语义（一个 provider 可多实例），本条是调研当时的快照，现行表述见 [AGENTS.md](../../AGENTS.md) 功能模块表。
 2. `BillingCredentialStore.swift:5-13` 契约注释（唯一键 `billing.credential.<providerID>`、写入永远覆盖）。
 3. 单测 `BillingVisibilityTests.swift:51-102` `testSingleConfigurationContract()`：
    - `:56-61` 断言 `registry.all.count == 2`、同 id 唯一、「覆盖后移到末位」；
@@ -333,7 +333,7 @@ public struct BillingProviderInstance: BillingProvider {
 - **默认实例 id == kindID** → `billing.credential.<id>`、`billing.enabled.<id>`、提醒状态键 `<id>.<resource>` 全部原样命中，老用户升级零感知（不需要新的迁移函数）。
 - 首次写入实例列表时，对注册表里每个 kind 生成默认实例（`slug = nil`），避免「列表为空 → 额度页空态」。
 - 删除实例时按「先清凭据 → 再清启用键 → 最后改列表」的顺序，并对在途请求递增代次（沿用 `BillingMonitor.swift:318-322` 的 `nextGeneration` 语义），防止已删实例的回包写回状态。
-- `AGENTS.md` 与 `SettingsProvidersPane` 页脚文案、`BillingCredentialStore` 头注释三处「同一 provider 只有一份凭据」的表述**必须同步改写为实例语义**（`docs/索引.md` 与 `AGENTS.md` 的功能表同源）。
+- `AGENTS.md` 与 `SettingsProvidersPane` 页脚文案、`BillingCredentialStore` 头注释三处「同一 provider 只有一份凭据」的表述**必须同步改写为实例语义**（`docs/索引.md` 与 `AGENTS.md` 的功能表同源）。**已完成（1.24.0）**：三处均已改为实例语义。
 
 ### 3.5 单测口径改写示例（关键三行）
 

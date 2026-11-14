@@ -10,8 +10,10 @@
 | **仓储（Repository）** | 按领域拆分的数据库接口：`ClipboardRepository` | 数据访问层 |
 | **AppDatabase** | `DatabaseService & ClipboardRepository` 组合 typealias，UI 注入用 | 数据库对象 |
 | **分层刷新** | 菜单栏更新频率分层：网速 1s / 流量 5s | 定时器策略 |
-| **计费 provider** | 实现 `BillingProvider` 协议的云服务商额度源（Ollama / Open Design），注册后自动出现在额度页 provider 选择器 | 计费插件、余额接口 |
+| **计费 provider** | 实现 `BillingProvider` 协议的云服务商额度源（Ollama / Open Design / OpenCode Go / Claude / Codex / Cursor），注册后自动出现在额度页 provider 选择器（实际显示的是它的**计费实例**） | 计费插件、余额接口 |
 | **编码计划窗口** | Open Design 按 credits 计量的滚动额度窗口（5 小时 / 每周），映射为 `BillingPercentLimit` | 套餐、配额 |
+| **计费实例** | `BillingInstance`：一个 provider 类型（`kindID`，如 `cursor`）下的一份独立配置。默认实例 `id == kindID`（沿用旧凭据键 / 启用键，升级零迁移），命名实例 `id == "kindID::slug"`（如 `cursor::work`，后缀 ≤24 字符） | provider 配置项、账号槽位 |
+| **实例 id** | 凭据键 / 启用键 / 提醒状态键的唯一键；`BillingProviderInstance` 装饰器把它直接当 provider 的 `id`，因此状态机、凭据存储无需感知「实例」概念 | provider id、kindID |
 | **用量聚合** | Open Design `/billing/usage` 顶层 `summary` + `totalCount` 为全范围汇总（与分页 `limit` 无关） | 明细列表 |
 | **Token 用量** | DSH 会话事件流中 `assistant/message` 的 `usage` 聚合（未缓存输入 / 输出 / 缓存读），按 Asia/Shanghai 分桶 | token 统计、消耗量 |
 | **会话去重** | 同一会话目录的 v0/v3/v4 多版本文件按内容键（time + model + 四项计数）合并；`seq` 跨版本会重启，不可作键 | 去重、合并 |
@@ -20,7 +22,10 @@
 | **P/E 核顺序** | 每核利用率下标 **E 核在前、P 核在后**（实测 `ioreg cluster-type`），分组一律走 `splitCores` | 大小核、异构核 |
 | **sqrt 绝对刻度** | 进程 CPU 榜条形长度 `min(1, sqrt(cpuPercent) × 13 / 100)`，满条 = 100% = 占满一个核。**不是榜首归一化**：榜首跳变会让所有条联动缩放（实测同一条 15.77% 的进度在 26.2–197.1pt 间摆动，波动 170.8pt；绝对刻度下恒 51.6pt，波动 0） | 相对刻度、按最大值归一化 |
 | **首屏预算** | `maxHeight = 520pt` 下的信息优先级分配。v6 版2 把四处信息下沉到二级详情页（每核柱阵 / 显存条 / 内存四段数值 / 磁盘读写曲线），目标是四联 + 五卡 + 状态带一屏看全；实测以快照为准 | 一屏显示、压缩排版 |
+| **额度窗口** | `BillingQuotaWindow`：`kind`（会话 / 每日 / 每周 / 每月 / 自定义）+ `duration` + `resetsAt`；`cycleID = "kind@重置时刻"` 是周期稳定标识，重置时刻前进即视为新周期 | 套餐周期、限额区间 |
+| **三类额度提醒** | `BillingAlertKind`：`threshold(5…1%)` 跌破阈值 / `windowReset` 窗口进入新周期 / `balanceRecovered` 余额回升（默认 +10pt、冷却 3600s）；判据是「相邻两次观测」的基线（上次剩余比例 / 上次窗口 / 上次重置时刻），三类可分别关闭 | 额度告警、余额通知 |
 | **估算功耗** | 状态带「估功耗」= IOReport `Energy Model` 的 `GPU Energy` 累加器差分（单位 nJ），是估算不是功耗计读数；CPU 功耗恒 0 无法合成整机功耗 | 功耗、整机功率 |
+| **识别文字（OCR）** | `SnipTool.ocr`：工具条上的**动作型**工具（`annotationKind == nil`、`isActionTool`），不落图元；触发即把当前选区交给 OCR，结果可复制或直接贴图，入口为 ⌘O 或工具条二级面板 | 文字标注、截图文字提取 |
 
 ## 关键事实（易错点）
 
