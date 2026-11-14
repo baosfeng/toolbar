@@ -14,12 +14,15 @@ final class MenuBarManager: NSObject {
     private let statusItem: NSStatusItem
     /// 放宽为 internal：状态栏文本组装拆在 MenuBarManager+StatusTitle.swift
     let monitor: any NetworkMonitoringService
-    private let processMonitor: any ProcessNetworkMonitoringService
+    // 放宽为 internal：采样节流拆在 MenuBarManager+Sampling.swift（读两个服务 + 面板可见性）
+    let processMonitor: any ProcessNetworkMonitoringService
     private let trafficTracker: any TrafficTrackingService
-    private let panel: MenuPanelController
+    // 放宽为 internal：采样节流要读 panel.isShown
+    let panel: MenuPanelController
     private let logger: LoggingService
     /// 系统指标采样服务（nil = 未装配；采样频率跟随偏好周期）
-    private let systemMonitor: (any SystemMonitoringService)?
+    // 放宽为 internal：采样节流扩展要读它
+    let systemMonitor: (any SystemMonitoringService)?
     private let systemPreferences: SystemMonitorPreferences?
     /// 放宽为 internal：显示偏好订阅与渲染都拆在 MenuBarManager+DisplayPreferences.swift
     let displayPreferences: MenuBarDisplayPreferences
@@ -27,8 +30,12 @@ final class MenuBarManager: NSObject {
     let storage: any KeyValueStorage
     private let harnessUsage: (any HarnessUsageServicing)?
     /// 系统指标采样周期（秒）— 由偏好给出，1 秒链按此节流
-    private let systemSampleInterval: TimeInterval
-    private var lastSystemPoll: Date = .distantPast
+    // 放宽为 internal：采样节流扩展（+Sampling）要读它
+    let systemSampleInterval: TimeInterval
+    // 放宽为 internal：采样节流扩展（MenuBarManager+Sampling）要读写这两个时刻
+    var lastSystemPoll: Date = .distantPast
+    /// 上次发起进程网速采样的时间（收起时降频用）
+    var lastProcessPoll: Date = .distantPast
     private var timer: Timer?
     /// 当前定时器周期（秒）— 恢复默认值后需按偏好重建，故单独记账
     // 放宽为 internal：定时器重建与偏好订阅拆在 MenuBarManager+DisplayPreferences.swift
@@ -312,14 +319,8 @@ final class MenuBarManager: NSObject {
             statusItem.button?.attributedTitle = title
         }
 
-        // 系统指标采样：按偏好周期节流（poll 内部防重入，采集在后台串行队列执行）
-        let now = Date()
-        if now.timeIntervalSince(lastSystemPoll) >= systemSampleInterval {
-            lastSystemPoll = now
-            systemMonitor?.poll()
-        }
-        // 进程采样（内部 3 秒节流 + 后台队列执行，不阻塞主线程）
-        processMonitor.poll()
+        // 采样节拍跟随面板可见性（实现见 MenuBarManager+Sampling.swift）
+        pollSamplingIfNeeded(now: Date())
         // 面板自身按 1 秒 / 5 秒分层刷新（内部按时间差节流，收起时直接返回），与状态栏刷新周期无关
         panel.tick()
     }
