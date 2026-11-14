@@ -13,10 +13,13 @@ import Foundation
 // 默认产出：<输出目录>/AppIcon.iconset（16…512 全 10 档）+ <输出目录>/AppIcon.icns，
 // 成功后删除 iconset；加 --keep-iconset 可保留中间产物。
 //
-// 图形语言（原型 .open-design/drafts/s1-icons/s1-icon-a2-rings.html 定稿的 A2「同心环」）：
-// 22% 圆角微渐变盘面 + 渐变色外环 + 白色中环 + 深色玻璃核 + 一处高光 + 玻璃内外描边。
-// 小尺寸按 detailCompression 连续压缩：外环加粗、中环让位、核相对放大，
-// 保证 16px 下仍是「亮盘 + 蓝环 + 暗心」而不是一团蓝。
+// 图形语言（原型 .open-design/drafts/s1-icons-r2/s1-r2-d2-stacked-cards.html 定稿的 D2 方向）：
+// 22% 圆角微渐变盘面 + 三张错位微旋转的玻璃卡片（一屏装下多块面板），
+// 正面卡里露出彩色的读数条。小尺寸按 compression 连续压缩：
+//   128px 以上：三层卡片（-12° / +9° / 0°）；
+//   64~32px：后卡淡出成两层，读数条加粗、条内高光撤掉；
+//   32px 以下：只剩主卡 + 一道斜切边，读数条压成两条对比最强的（蓝 / 橙）。
+// 全程没有圆环、没有暗心、没有红点 —— 避免与录屏 / 镜头类图标混淆。
 
 // MARK: - 错误
 
@@ -39,18 +42,16 @@ func srgb(_ hex: UInt32, alpha: CGFloat = 1) -> CGColor {
 }
 
 /// 线性插值
-func mix(_ from: CGFloat, _ to: CGFloat, _ t: CGFloat) -> CGFloat { from + (to - from) * t }
+func mixValue(_ from: CGFloat, _ to: CGFloat, _ t: CGFloat) -> CGFloat { from + (to - from) * t }
 
 /// 渐变定义（色标 + 位置）
 struct GradientSpec {
     let stops: [(color: CGColor, location: CGFloat)]
 
     func gradient() -> CGGradient? {
-        let colors = stops.map(\.color) as CFArray
-        let locations = stops.map { $0.location }
-        return CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                          colors: colors,
-                          locations: locations)
+        CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                   colors: stops.map(\.color) as CFArray,
+                   locations: stops.map { $0.location })
     }
 }
 
@@ -58,73 +59,120 @@ struct GradientSpec {
 
 /// 单档像素尺寸下的绘制几何
 ///
-/// compression 是核心变量：0 = 128px 以上的精细版，1 = 16px 的极简版。
-/// 所有长度都是「占盘面边长的比例 × side」，因此同一套参数可画出任意尺寸。
+/// compression 是核心变量：0 = 128px 以上的精细版（三层卡片），
+/// 1 = 16px 的极简版（主卡 + 斜切边 + 两条粗读数条）。所有长度都从它插值而来。
 struct IconGeometry {
     let side: CGFloat
-    /// 小尺寸压缩系数（0…1）
     let compression: CGFloat
 
-    /// 22% 大圆角
+    /// 盘面 22% 大圆角
     let cornerRadius: CGFloat
-    /// 外环中心半径 / 线宽
-    let outerRingRadius: CGFloat
-    let outerRingWidth: CGFloat
-    /// 核半径
-    let coreRadius: CGFloat
-    /// 中白环中心半径 / 线宽 / 不透明度
-    let innerRingRadius: CGFloat
-    let innerRingWidth: CGFloat
-    let innerRingAlpha: CGFloat
-    /// 核上高光强度（0 = 不画）
-    let highlightAlpha: CGFloat
-    /// 玻璃内外描边（小尺寸只保留极细外缘）
-    let usesGlassEdges: Bool
+    /// 卡片尺寸与圆角
+    let cardWidth: CGFloat
+    let cardHeight: CGFloat
+    let cardRadius: CGFloat
+    /// 卡片中心（主卡居中，略偏上给底部留呼吸）
+    let center: CGPoint
+
+    /// 后卡（-12° 方向）：偏移 / 旋转 / 填充不透明度
+    let backOffset: CGPoint
+    let backRotation: CGFloat
+    let backAlpha: CGFloat
+    /// 中卡（+9° 方向）
+    let midOffset: CGPoint
+    let midRotation: CGFloat
+    let midAlpha: CGFloat
+    let midScale: CGFloat
+    /// 主卡填充不透明度
+    let mainAlpha: CGFloat
+
+    /// 卡内内容
+    let titleAlpha: CGFloat
+    let thirdBarAlpha: CGFloat
+    let barHeight: CGFloat
+    let barGap: CGFloat
+    let barSpecular: CGFloat
+
+    /// 阴影强度（0 = 不画）
+    let shadowStrength: CGFloat
+    let shadowBlur: CGFloat
+    let shadowOffsetY: CGFloat
 
     /// 由像素尺寸推导压缩系数：128px 及以上为 0，16px 为 1，中间连续过渡
     static func compression(for side: CGFloat) -> CGFloat {
         guard side > 1 else { return 1 }
-        let level = log2(side)
-        return min(max((7 - level) / 3, 0), 1)
+        return min(max((7 - log2(side)) / 3, 0), 1)
     }
 
     init(side: CGFloat) {
-        let t = Self.compression(for: side)
+        let u = Self.compression(for: side)
         self.side = side
-        self.compression = t
+        self.compression = u
+
         cornerRadius = side * 0.22
-        // 外环：小尺寸从 6.45% 加粗到 11%（16px 上 1.76px，仍是一整圈实线）
-        outerRingRadius = side * mix(0.2598, 0.2620, t)
-        outerRingWidth = side * mix(0.0620, 0.1100, t)
-        // 核：小尺寸从 10.4% 放大到 12.5%（16px 上直径 4px），保证暗心可辨
-        coreRadius = side * mix(0.1040, 0.1250, t)
-        // 中白环：32px 及以下完全让位（否则与核、外环糊成一条脏线）
-        innerRingRadius = side * 0.1760
-        innerRingAlpha = max(0, (0.55 - t) / 0.55)
-        innerRingWidth = side * 0.0430 * innerRingAlpha
-        // 高光只保留 1 处，64px 以下衰减到 0
-        highlightAlpha = max(0, (0.5 - t) / 0.5)
-        usesGlassEdges = t < 0.5
+        // 卡片：小尺寸放大卡片占比（16px 上只有 8.8px 宽，再小就看不出叠卡）
+        cardWidth = side * mixValue(0.5469, 0.6200, u)
+        cardHeight = side * mixValue(0.3828, 0.5200, u)
+        cardRadius = side * mixValue(0.0508, 0.0750, u)
+        // 主卡中心：精细版 y=0.523，极简版略上移给斜切边让位
+        center = CGPoint(x: side * 0.5, y: side * mixValue(0.5234, 0.5000, u))
+
+        // 后卡：64px 起淡出，32px 及以下完全消失（压成两层）
+        backOffset = CGPoint(x: side * mixValue(-0.0957, -0.1250, u),
+                             y: side * mixValue(-0.0879, -0.1050, u))
+        backRotation = mixValue(-12, -17, u)
+        backAlpha = max(0, (0.5 - u) / 0.5)
+
+        // 中卡：始终保留，越往小越收窄，最终只剩一道斜切边
+        midOffset = CGPoint(x: side * mixValue(0.1172, 0.1150, u),
+                            y: side * mixValue(-0.0195, -0.0250, u))
+        midRotation = mixValue(9, 16, u)
+        midAlpha = mixValue(0.60, 0.78, u)
+        // 小尺寸中卡要比主卡略大，斜切边才露得出来（否则被主卡完全遮住）
+        midScale = mixValue(1.0, 1.065, u)
+
+        mainAlpha = mixValue(0.76, 0.92, u)
+
+        // 内容：标题条与条内高光在小尺寸消失；第三条读数条 32px 以下淡出
+        titleAlpha = max(0, (0.5 - u) / 0.5)
+        thirdBarAlpha = min(max((0.65 - u) / 0.25, 0), 1)
+        barHeight = cardHeight * mixValue(0.0969, 0.1150, u)
+        barGap = cardHeight * mixValue(0.0561, 0.1500, u)
+        barSpecular = max(0, (0.4 - u) / 0.4)
+
+        // 阴影：小尺寸收紧，否则 16px 上会糊成一团
+        shadowStrength = mixValue(1.0, 0.45, u)
+        shadowBlur = side * mixValue(0.0264, 0.0120, u)
+        shadowOffsetY = side * mixValue(0.0215, 0.0100, u)
+    }
+
+    /// 每条读数条相对卡宽的宽度（0 = 蓝，1 = 青，2 = 橙）
+    func barWidthRatio(at index: Int) -> CGFloat {
+        switch index {
+        case 0: return mixValue(0.8071, 0.8600, compression)
+        case 1: return mixValue(0.4893, 0.7200, compression)
+        default: return mixValue(0.6464, 0.7200, compression)
+        }
     }
 
     /// 自检打印用的一行摘要
     var summary: String {
-        let ring = String(format: "%.2f", Double(outerRingWidth))
-        let core = String(format: "%.2f", Double(coreRadius * 2))
-        let inner = innerRingAlpha > 0.01 ? String(format: "%.2f", Double(innerRingWidth)) : "—"
-        let mark = highlightAlpha > 0.01 ? "√" : "—"
+        let layers = backAlpha > 0.02 ? (midAlpha > 0.02 ? 3 : 2) : (midAlpha > 0.02 ? 2 : 1)
+        let bars = thirdBarAlpha > 0.02 ? 3 : 2
+        let card = String(format: "%.1f×%.1f", Double(cardWidth), Double(cardHeight))
+        let bar = String(format: "%.2f", Double(barHeight))
         return [String(format: "%4.0fpx", Double(side)),
-                String(format: "t=%.2f", Double(compression)),
-                "环宽 \(ring)",
-                "核径 \(core)",
-                "中环 \(inner)",
-                "高光 \(mark)"].joined(separator: "  ")
+                String(format: "u=%.2f", Double(compression)),
+                "卡 \(card)",
+                "层 \(layers)",
+                "条 \(bars)×\(bar)",
+                "后卡 \(String(format: "%.2f", Double(backAlpha)))"].joined(separator: "  ")
     }
 }
 
-// MARK: - 绘制
+// MARK: - 渐变
 
-/// 盘面线性渐变（左上 → 右下，158° 视觉方向）
+/// 盘面线性渐变（左上 → 右下）
 let panelGradient = GradientSpec(stops: [
     (srgb(0xFFFFFF), 0.00),
     (srgb(0xEDF3FC), 0.38),
@@ -132,53 +180,26 @@ let panelGradient = GradientSpec(stops: [
     (srgb(0xBCCCE6), 1.00),
 ])
 
-/// 外环渐变（左上深蓝 → 右下青）
-let ringGradient = GradientSpec(stops: [
-    (srgb(0x2447C6), 0.00),
-    (srgb(0x3E7DF0), 0.50),
-    (srgb(0x2CC0E0), 1.00),
-])
+/// 三条读数条的渐变（蓝 / 青 / 橙，与面板语义族同源）
+let barGradients: [GradientSpec] = [
+    GradientSpec(stops: [(srgb(0x1B3488), 0.0), (srgb(0x3E9BFF), 1.0)]),
+    GradientSpec(stops: [(srgb(0x0B6D64), 0.0), (srgb(0x2DD4BF), 1.0)]),
+    GradientSpec(stops: [(srgb(0xA83A0B), 0.0), (srgb(0xFB923C), 1.0)]),
+]
 
-/// 核渐变（左上深靛 → 右下青）
-let coreGradient = GradientSpec(stops: [
-    (srgb(0x0E1E4E), 0.00),
-    (srgb(0x1B55B8), 0.60),
-    (srgb(0x38C4E4), 1.00),
-])
+// MARK: - 绘制
 
-/// 小尺寸核渐变（更暗，16px 上要能压出硬对比）
-let denseCoreGradient = GradientSpec(stops: [
-    (srgb(0x0A1640), 0.00),
-    (srgb(0x15459F), 1.00),
-])
-
-/// 画一档图标（返回 CGImage，像素尺寸精确等于 side）
-func renderIcon(_ geometry: IconGeometry) throws -> CGImage {
-    let side = Int(geometry.side)
-    guard let ctx = CGContext(data: nil,
-                              width: side,
-                              height: side,
-                              bitsPerComponent: 8,
-                              bytesPerRow: 0,
-                              space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
-        throw IconGenerationError.bitmapContextUnavailable(pixels: side)
-    }
-
+/// 画盘面：22% 圆角 + 微渐变 + 玻璃内外描边
+func drawPanel(_ ctx: CGContext, _ geometry: IconGeometry) {
     let size = geometry.side
-    let center = CGPoint(x: size / 2, y: size / 2)
-    let panelRect = CGRect(x: 0, y: 0, width: size, height: size)
-    let panelPath = CGPath(roundedRect: panelRect,
-                           cornerWidth: geometry.cornerRadius,
-                           cornerHeight: geometry.cornerRadius,
-                           transform: nil)
+    let rect = CGRect(x: 0, y: 0, width: size, height: size)
+    let path = CGPath(roundedRect: rect,
+                      cornerWidth: geometry.cornerRadius,
+                      cornerHeight: geometry.cornerRadius,
+                      transform: nil)
 
-    ctx.setShouldAntialias(true)
-    ctx.interpolationQuality = .high
-
-    // 1. 盘面：22% 圆角 + 微渐变（裁到圆角内，圆角外保持透明）
     ctx.saveGState()
-    ctx.addPath(panelPath)
+    ctx.addPath(path)
     ctx.clip()
     if let gradient = panelGradient.gradient() {
         ctx.drawLinearGradient(gradient,
@@ -186,110 +207,209 @@ func renderIcon(_ geometry: IconGeometry) throws -> CGImage {
                                end: CGPoint(x: size * 0.72, y: 0),
                                options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
     }
-    // 底部冷色光晕：小尺寸几乎看不出，随压缩系数淡出，避免吃掉对比
-    if geometry.usesGlassEdges,
+    // 底部冷色光晕（小尺寸淡出，避免吃掉对比）
+    if geometry.compression < 0.6,
        let glow = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                             colors: [srgb(0x4F6BFF, alpha: 0.22 * (1 - geometry.compression)),
-                                      srgb(0x4F6BFF, alpha: 0)] as CFArray,
+                             colors: [srgb(0x5B7BF0, alpha: 0.20 * (1 - geometry.compression)),
+                                      srgb(0x5B7BF0, alpha: 0)] as CFArray,
                              locations: [0, 1]) {
         ctx.drawRadialGradient(glow,
-                               startCenter: CGPoint(x: size / 2, y: size * 0.14), startRadius: 0,
-                               endCenter: CGPoint(x: size / 2, y: size * 0.14), endRadius: size * 0.62,
+                               startCenter: CGPoint(x: size / 2, y: size * 0.12), startRadius: 0,
+                               endCenter: CGPoint(x: size / 2, y: size * 0.12), endRadius: size * 0.66,
                                options: [])
     }
     ctx.restoreGState()
 
-    // 2. 外环：描边路径本身当裁剪区，才能让渐变沿着环走
+    // 玻璃边：内亮线 + 外轮廓（小尺寸只留极细外缘，保证在浅色桌面上有轮廓）
     ctx.saveGState()
-    ctx.addEllipse(in: CGRect(x: center.x - geometry.outerRingRadius,
-                              y: center.y - geometry.outerRingRadius,
-                              width: geometry.outerRingRadius * 2,
-                              height: geometry.outerRingRadius * 2))
-    ctx.setLineWidth(geometry.outerRingWidth)
-    ctx.replacePathWithStrokedPath()
-    ctx.clip()
-    if let gradient = ringGradient.gradient() {
-        ctx.drawLinearGradient(gradient,
-                               start: CGPoint(x: size * 0.15, y: size * 0.85),
-                               end: CGPoint(x: size * 0.85, y: size * 0.15),
-                               options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    ctx.addPath(path)
+    ctx.setStrokeColor(srgb(0xFFFFFF, alpha: geometry.compression < 0.5 ? 0.95 : 0.45))
+    ctx.setLineWidth(max(1, size * 0.0024))
+    ctx.strokePath()
+    ctx.addPath(path)
+    ctx.setStrokeColor(srgb(0x18264A, alpha: geometry.compression < 0.5 ? 0.22 : 0.30))
+    ctx.setLineWidth(max(1, size * 0.0018))
+    ctx.strokePath()
+    ctx.restoreGState()
+}
+
+/// 画一张圆角卡（中心 + 旋转 + 缩放 + 可选阴影）
+func drawCard(_ ctx: CGContext,
+              geometry: IconGeometry,
+              center: CGPoint,
+              rotationDegrees: CGFloat,
+              scale: CGFloat,
+              fillAlpha: CGFloat,
+              shadowStrength: CGFloat,
+              tintAlpha: CGFloat = 0) {
+    ctx.saveGState()
+    ctx.translateBy(x: center.x, y: center.y)
+    ctx.rotate(by: rotationDegrees * .pi / 180)
+    if scale != 1 {
+        ctx.scaleBy(x: scale, y: scale)
+    }
+    let rect = CGRect(x: -geometry.cardWidth / 2, y: -geometry.cardHeight / 2,
+                      width: geometry.cardWidth, height: geometry.cardHeight)
+    let path = CGPath(roundedRect: rect,
+                      cornerWidth: geometry.cardRadius,
+                      cornerHeight: geometry.cardRadius,
+                      transform: nil)
+
+    if shadowStrength > 0.01 {
+        ctx.setShadow(offset: CGSize(width: 0, height: -geometry.shadowOffsetY),
+                      blur: geometry.shadowBlur,
+                      color: srgb(0x16213C, alpha: 0.24 * shadowStrength))
+    }
+    ctx.addPath(path)
+    ctx.setFillColor(srgb(0xFFFFFF, alpha: fillAlpha))
+    ctx.fillPath()
+    // 小尺寸：背后那张卡补一层极淡墨色，与白主卡拉开明暗差（16px 上靠它读层次）
+    if tintAlpha > 0.01 {
+        ctx.addPath(path)
+        ctx.setFillColor(srgb(0x18264A, alpha: tintAlpha))
+        ctx.fillPath()
+    }
+    // 描边不带阴影，否则边缘会发虚
+    ctx.setShadow(offset: .zero, blur: 0, color: nil)
+    ctx.addPath(path)
+    ctx.setStrokeColor(srgb(0xFFFFFF, alpha: min(1, fillAlpha + 0.22)))
+    ctx.setLineWidth(max(1, geometry.side * 0.0024))
+    ctx.strokePath()
+    // 小尺寸补一圈淡墨边：叠卡之间的分界靠它才看得清
+    if geometry.compression > 0.5 {
+        ctx.addPath(path)
+        ctx.setStrokeColor(srgb(0x18264A, alpha: 0.14))
+        ctx.setLineWidth(max(1, geometry.side * 0.0018))
+        ctx.strokePath()
     }
     ctx.restoreGState()
+}
 
-    // 3. 中白环（≥64px 才出现）
-    if geometry.innerRingAlpha > 0.01 {
+/// 画主卡里的内容：标题条（仅大尺寸）+ 2~3 条彩色读数条
+func drawCardContent(_ ctx: CGContext, _ geometry: IconGeometry) {
+    let g = geometry
+    let left = g.center.x - g.cardWidth / 2 + g.cardWidth * 0.0964
+    let top = g.center.y + g.cardHeight / 2
+
+    // 标题条：代表「卡头」，小尺寸直接省掉
+    if g.titleAlpha > 0.02 {
+        let titleRect = CGRect(x: left,
+                               y: top - g.cardHeight * 0.0867 - g.cardHeight * 0.0561,
+                               width: g.cardWidth * 0.2464,
+                               height: g.cardHeight * 0.0561)
+        let titlePath = CGPath(roundedRect: titleRect,
+                               cornerWidth: titleRect.height / 2,
+                               cornerHeight: titleRect.height / 2,
+                               transform: nil)
+        ctx.addPath(titlePath)
+        ctx.setFillColor(srgb(0x18264A, alpha: 0.26 * g.titleAlpha))
+        ctx.fillPath()
+    }
+
+    let startOffset = g.cardHeight * mixValue(0.2347, 0.2600, g.compression)
+    let step = g.barHeight + g.barGap
+    for index in 0..<3 {
+        let alpha: CGFloat = index == 2 ? g.thirdBarAlpha : 1
+        guard alpha > 0.02 else { continue }
+        let width = g.cardWidth * g.barWidthRatio(at: index)
+        // 第二条：大尺寸是青、小尺寸换成橙（蓝橙冷暖对比最强）。
+        // 交叉区间收窄到 u 0.45~0.60，避免中间档位出现青橙混合的褐色。
+        let secondarySwap: CGFloat = index == 1
+            ? min(max((g.compression - 0.45) / 0.15, 0), 1)
+            : 0
+        let palette: [(gradient: GradientSpec, weight: CGFloat)] = index == 1
+            ? [(barGradients[1], 1 - secondarySwap), (barGradients[2], secondarySwap)]
+            : [(barGradients[index], 1)]
+        let rect = CGRect(x: left,
+                          y: top - startOffset - CGFloat(index) * step - g.barHeight,
+                          width: width,
+                          height: g.barHeight)
+        let path = CGPath(roundedRect: rect,
+                          cornerWidth: rect.height / 2,
+                          cornerHeight: rect.height / 2,
+                          transform: nil)
+        for entry in palette where entry.weight > 0.02 {
+            ctx.saveGState()
+            ctx.addPath(path)
+            ctx.clip()
+            ctx.setAlpha(alpha * entry.weight)
+            if let gradient = entry.gradient.gradient() {
+                ctx.drawLinearGradient(gradient,
+                                       start: CGPoint(x: rect.minX, y: rect.midY),
+                                       end: CGPoint(x: rect.maxX, y: rect.midY),
+                                       options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+            }
+            ctx.restoreGState()
+        }
+        // 条内 16% 高光（小尺寸撤掉，避免把细条糊成一片）
+        if g.barSpecular > 0.02 {
+            ctx.addPath(path)
+            ctx.setFillColor(srgb(0xFFFFFF, alpha: 0.16 * alpha * g.barSpecular))
+            ctx.fillPath()
+        }
+    }
+}
+
+/// 画一档图标（返回 CGImage，像素尺寸精确等于 side）
+func renderIcon(_ geometry: IconGeometry) throws -> CGImage {
+    let pixels = Int(geometry.side)
+    guard let ctx = CGContext(data: nil,
+                              width: pixels,
+                              height: pixels,
+                              bitsPerComponent: 8,
+                              bytesPerRow: 0,
+                              space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+        throw IconGenerationError.bitmapContextUnavailable(pixels: pixels)
+    }
+    ctx.setShouldAntialias(true)
+    ctx.interpolationQuality = .high
+
+    drawPanel(ctx, geometry)
+
+    // 后卡 → 中卡 → 主卡：错位叠放，形成「一屏装多块面板」的剪影
+    if geometry.backAlpha > 0.02 {
+        drawCard(ctx, geometry: geometry,
+                 center: CGPoint(x: geometry.center.x + geometry.backOffset.x,
+                                 y: geometry.center.y + geometry.backOffset.y),
+                 rotationDegrees: geometry.backRotation,
+                 scale: 1,
+                 fillAlpha: 0.44 * geometry.backAlpha + 0.12,
+                 shadowStrength: geometry.shadowStrength * geometry.backAlpha)
+    }
+    drawCard(ctx, geometry: geometry,
+             center: CGPoint(x: geometry.center.x + geometry.midOffset.x,
+                             y: geometry.center.y + geometry.midOffset.y),
+             rotationDegrees: -geometry.midRotation,
+             scale: geometry.midScale,
+             fillAlpha: geometry.midAlpha,
+             shadowStrength: geometry.shadowStrength * 0.8,
+             tintAlpha: max(0, (geometry.compression - 0.45) / 0.55) * 0.10)
+    drawCard(ctx, geometry: geometry,
+             center: geometry.center,
+             rotationDegrees: 0,
+             scale: 1,
+             fillAlpha: geometry.mainAlpha,
+             shadowStrength: geometry.shadowStrength)
+
+    drawCardContent(ctx, geometry)
+
+    // 主卡顶部一道镜面高光（大尺寸才有意义）
+    if geometry.titleAlpha > 0.02 {
         ctx.saveGState()
-        ctx.setStrokeColor(srgb(0xFFFFFF, alpha: 0.94 * geometry.innerRingAlpha))
-        ctx.setLineWidth(geometry.innerRingWidth)
-        let radius = geometry.innerRingRadius
-        ctx.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius,
-                                  width: radius * 2, height: radius * 2))
+        ctx.setStrokeColor(srgb(0xFFFFFF, alpha: 0.9 * geometry.titleAlpha))
+        ctx.setLineWidth(max(1, geometry.side * 0.0024))
+        let inset = geometry.cardRadius
+        ctx.move(to: CGPoint(x: geometry.center.x - geometry.cardWidth / 2 + inset,
+                             y: geometry.center.y + geometry.cardHeight / 2 - geometry.cardRadius * 0.18))
+        ctx.addLine(to: CGPoint(x: geometry.center.x + geometry.cardWidth / 2 - inset,
+                                y: geometry.center.y + geometry.cardHeight / 2 - geometry.cardRadius * 0.18))
         ctx.strokePath()
         ctx.restoreGState()
     }
-
-    // 4. 核：暗底玻璃球
-    let coreRect = CGRect(x: center.x - geometry.coreRadius,
-                          y: center.y - geometry.coreRadius,
-                          width: geometry.coreRadius * 2,
-                          height: geometry.coreRadius * 2)
-    ctx.saveGState()
-    ctx.addEllipse(in: coreRect)
-    ctx.clip()
-    let coreSpec = geometry.compression > 0.6 ? denseCoreGradient : coreGradient
-    if let gradient = coreSpec.gradient() {
-        ctx.drawLinearGradient(gradient,
-                               start: CGPoint(x: coreRect.minX + coreRect.width * 0.2,
-                                              y: coreRect.maxY - coreRect.height * 0.1),
-                               end: CGPoint(x: coreRect.minX + coreRect.width * 0.8,
-                                            y: coreRect.minY + coreRect.height * 0.05),
-                               options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-    }
-    // 核上唯一一处高光：左上方椭圆，径向渐变自带柔边
-    if geometry.highlightAlpha > 0.01,
-       let highlight = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                                  colors: [srgb(0xFFFFFF, alpha: 0.42 * geometry.highlightAlpha),
-                                           srgb(0xFFFFFF, alpha: 0)] as CFArray,
-                                  locations: [0, 1]) {
-        let radius = geometry.coreRadius * 0.46
-        ctx.saveGState()
-        ctx.translateBy(x: center.x - geometry.coreRadius * 0.32, y: center.y + geometry.coreRadius * 0.36)
-        ctx.rotate(by: -28 * .pi / 180)
-        ctx.scaleBy(x: 1, y: 0.66)
-        ctx.drawRadialGradient(highlight,
-                               startCenter: .zero, startRadius: 0,
-                               endCenter: .zero, endRadius: radius,
-                               options: [])
-        ctx.restoreGState()
-    }
-    ctx.restoreGState()
-
-    // 5. 核的白描边（小尺寸省略，避免糊边）
-    if geometry.usesGlassEdges {
-        ctx.saveGState()
-        ctx.setStrokeColor(srgb(0xFFFFFF, alpha: 0.52))
-        ctx.setLineWidth(max(1, size * 0.0024))
-        ctx.addEllipse(in: coreRect)
-        ctx.strokePath()
-        ctx.restoreGState()
-    }
-
-    // 6. 玻璃边：内高光 + 外轮廓（小尺寸只留一条极细外缘确保在浅色桌面上有轮廓）
-    let innerWidth = max(1, size * 0.0024)
-    let outerWidth = max(1, size * 0.0018)
-    ctx.saveGState()
-    ctx.addPath(panelPath)
-    ctx.setStrokeColor(srgb(0xFFFFFF, alpha: geometry.usesGlassEdges ? 0.95 : 0.45))
-    ctx.setLineWidth(innerWidth)
-    ctx.strokePath()
-    ctx.addPath(panelPath)
-    ctx.setStrokeColor(srgb(0x18264A, alpha: geometry.usesGlassEdges ? 0.22 : 0.30))
-    ctx.setLineWidth(outerWidth)
-    ctx.strokePath()
-    ctx.restoreGState()
 
     guard let image = ctx.makeImage() else {
-        throw IconGenerationError.imageEncodingFailed(pixels: side)
+        throw IconGenerationError.imageEncodingFailed(pixels: pixels)
     }
     return image
 }
