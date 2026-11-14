@@ -39,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 提前付掉这份一次性开销，首次点击不必再等 1 秒
         menuBarManager?.schedulePrewarm()
 #if DEBUG
+        // 仅 DEBUG：设置 NM_DRAWN_PROBE 时渲染自绘组件样例并退出（见 DrawnUIProbe）
+        DrawnUIProbe.runIfRequested()
         // 仅 DEBUG：设置 NM_SNAPSHOT_DIR 时渲染面板快照并退出（见 MenuPanelSnapshot）
         MenuPanelSnapshot.runIfRequested(repository: coordinator.snapshotClipboardRepository,
                                           harness: coordinator.snapshotHarnessService,

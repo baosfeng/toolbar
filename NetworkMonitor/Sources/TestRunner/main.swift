@@ -290,6 +290,7 @@ runPaneHeightBudgetTests()
 // MARK: - 面板分页懒装配（冷启动只装配首屏 / 首次切到才建 / 重复切页不重建）
 runPaneAssemblyTests()
 runBillingRefreshGateTests()
+runDrawnRowLayoutTests()
 
 // MARK: - 剪贴板动态轮询调度（三档边界 / 归一化 / 停止后不再重排）
 runClipboardPollScheduleTests()
