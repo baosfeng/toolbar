@@ -43,11 +43,13 @@ public final class AppCoordinator {
     /// 采集器（分支 A / 分支 B 是同一个实现的两种模式；放宽为 internal：设置页切换采集模式要重启它）
     var clipboardWatcher: PasteboardWatcher!
     /// 粘贴器（写回剪贴板 + 合成 ⌘V）
-    private var clipboardPaster: ClipboardPaster!
+    // 放宽为 internal：`AppCoordinator+Clipboard` 的剪贴板装配扩展要写
+    var clipboardPaster: ClipboardPaster!
     /// Paste Stack 状态机（放宽为 internal：设置页权限查询与跳转走它）
     var clipboardStack: PasteStackController!
     /// 面板控制器
-    private var clipboardPanel: ClipboardPanelController!
+    // 放宽为 internal：`AppCoordinator+Clipboard` 的装配与热键回调要读写
+    var clipboardPanel: ClipboardPanelController!
     /// 统一设置窗口（长期持有）
     var settingsWindow: SettingsWindow?
     /// 全局热键（放宽为 internal：设置页重新录制快捷键要重注册）
