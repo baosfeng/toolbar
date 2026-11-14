@@ -69,8 +69,12 @@ final class SnipHintWindow: NSWindow {
                 context.duration = 0.24
                 window.animator().alphaValue = 0
             } completionHandler: {
-                window.close()
-                if SnipHintWindow.current === window { SnipHintWindow.current = nil }
+                // completionHandler 是 @Sendable 非隔离闭包；NSAnimationContext 的完成为
+                // 主线程回调，故用 assumeIsolated 声明这一前提，不改回调时序
+                MainActor.assumeIsolated {
+                    window.close()
+                    if SnipHintWindow.current === window { SnipHintWindow.current = nil }
+                }
             }
         }
     }
