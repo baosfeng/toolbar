@@ -74,7 +74,9 @@ extension MenuPanelController {
     }
 }
 
-// MARK: - 结构自证
+#if DEBUG
+
+// MARK: - 结构自证（仅 DEBUG：被 MenuBarManager+Evidence 与 Debug/AppearanceEvidence 调用）
 
 /// 面板玻璃 / 基色层的运行时结构 —— 材质类改动的**主判据**
 ///
@@ -97,3 +99,5 @@ extension MenuPanelController {
         content.backdropStructureForEvidence()
     }
 }
+
+#endif
