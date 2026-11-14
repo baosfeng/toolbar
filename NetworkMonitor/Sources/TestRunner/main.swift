@@ -81,6 +81,8 @@ runClipboardRelativeTimeTests()
 // MARK: - 剪贴板：图片像素守卫与落盘（内存护栏）
 runClipboardImagePolicyTests()
 runClipboardImageStoreTests()
+// 卡片流滑动窗口（内存削减口径）
+runClipboardCardWindowTests()
 
 // MARK: - 剪贴板：图片磁盘回收（删除 / 清空 / 超限清理 / 孤儿清扫）
 runClipboardImageGCTests()
@@ -284,6 +286,9 @@ runSnipPinSourceTextTests()
 
 // MARK: - 面板高度预算（五页补齐页头 / 状态带后仍不触发外框滚动）
 runPaneHeightBudgetTests()
+
+// MARK: - 面板分页懒装配（冷启动只装配首屏 / 首次切到才建 / 重复切页不重建）
+runPaneAssemblyTests()
 
 // MARK: - 剪贴板动态轮询调度（三档边界 / 归一化 / 停止后不再重排）
 runClipboardPollScheduleTests()

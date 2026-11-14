@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 卡片流视图
 
@@ -7,7 +8,7 @@ import NetworkMonitorCore
 ///
 /// 三层各有界，互不牵连：
 /// 1. 布局：卡片单行横向排列，容器宽度 = 条目数 ×（卡宽 + 间距），只横向滚动，不换行、不纵向滚动；
-/// 2. 视图：同一时刻最多存在 `windowSize` 张卡片视图 —— 数量不足才补建、多余只隐藏，
+/// 2. 视图：同一时刻最多存在 `ClipboardCardWindowPolicy.windowSize` 张卡片视图 —— 数量不足才补建、多余只隐藏，
 ///    已存在的视图只做 `configure(with:isSelected:number:)` 与 frame 重设，禁止全删全建；
 /// 3. 窗口：`windowStart` 决定当前建的是哪一段条目；选中项接近窗口边缘时窗口滑动到新位置并复用视图，
 ///    因此 `items` 可以是全部匹配项（上限由偏好 maxItems 决定），任意条数都能靠方向键走到。
@@ -18,10 +19,6 @@ import NetworkMonitorCore
 @MainActor
 final class ClipboardCardFlowView: NSView {
 
-    /// 视图窗口大小：同一时刻最多保留的卡片视图数量（决定建视图开销与内存上限）
-    static let windowSize = 120
-    /// 窗口边缘缓冲：选中项落在窗口两端这么多条以内时滑动窗口
-    private static let windowMargin = 8
     /// 卡片间距（设计规格 10pt）
     private static let spacing: CGFloat = 10
     /// 卡片流左右内边距
@@ -163,19 +160,18 @@ final class ClipboardCardFlowView: NSView {
     }
 
     /// 窗口滑动：选中项接近窗口边缘时把窗口重新居中到选中项，保证任意下标都能走到
+    ///
+    /// 算术在 `ClipboardCardWindowPolicy`（纯函数，TestRunner 覆盖 0…N 全下标可达性）。
     private func slideWindow(force: Bool) {
-        let count = items.count
-        guard count > Self.windowSize else { windowStart = 0; return }
-        let selected = max(0, selectedIndex)
-        let inside = selected >= windowStart + Self.windowMargin
-            && selected < windowStart + Self.windowSize - Self.windowMargin
-        guard force || !inside else { return }
-        windowStart = min(max(0, selected - Self.windowSize / 2), count - Self.windowSize)
+        windowStart = ClipboardCardWindowPolicy.windowStart(itemCount: items.count,
+                                                           selectedIndex: selectedIndex,
+                                                           currentStart: windowStart,
+                                                           force: force)
     }
 
     /// 当前窗口内应收纳的卡片数（internal：缩略图扩展按它裁可见卡片）
     func visibleCount() -> Int {
-        min(max(0, items.count - windowStart), Self.windowSize)
+        ClipboardCardWindowPolicy.visibleCount(itemCount: items.count, windowStart: windowStart)
     }
 
     // MARK: 视图池
