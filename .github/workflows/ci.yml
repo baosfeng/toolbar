@@ -33,21 +33,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 工具链版本要在日志里显式可见：swift-tools-version 是 6.3，
-      # runner 默认 Xcode 低于 26 时会在 swift build 第一步直接报「installed version is 6.1.0」
-      - name: Show toolchain
-        run: |
-          swift --version
-          xcodebuild -version || true
-          uname -m
+      # 工具链展示与版本校验收在 .github/actions/setup-build 里，release 复用同一份；
+      # CI 无 tag、无证书，两项都走默认空值跳过
+      - name: Setup build
+        uses: ./.github/actions/setup-build
 
+      # 只缓存编译产物目录：.build/checkouts、.build/repositories、.build/artifacts 不进缓存。
+      # 当前 Package.swift 没有外部依赖，依赖目录为空；将来引入依赖时这个边界仍然成立——
+      # 只复用编译结果，依赖解析继续交给 swift build 自己保证正确性。
+      # key 是「依赖指纹」，restore-keys 做前缀回退：指纹变化时命中上一次产物做增量重编；
+      # 缓存未命中也能正常构建（fail-closed），缓存只影响耗时。
+      # 实测（本机 arm64 debug）：冷构建 73s；把产物目录还原、源码 mtime 刷新后重编 30s；
+      # 源码无任何变化时 0.2s —— 缓存省掉的是重复编译与构建初始化，源码变更仍会重新编译
       - name: Cache SwiftPM build
         uses: actions/cache@v4
         with:
-          path: NetworkMonitor/.build
-          key: ${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('NetworkMonitor/Package.swift', 'NetworkMonitor/.swiftpm/**') }}
+          path: NetworkMonitor/.build/${{ matrix.arch }}-apple-macosx
+          key: ${{ runner.os }}-swift-${{ matrix.arch }}-${{ hashFiles('NetworkMonitor/Package.swift', 'NetworkMonitor/Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.arch }}-
+            ${{ runner.os }}-swift-${{ matrix.arch }}-
 
       - name: File size gate
         run: bash NetworkMonitor/Scripts/check-file-size.sh
@@ -55,15 +59,18 @@ jobs:
       # 与发版脚本走同一条后端：release.yml 用 build-app.sh（完整 Xcode 环境用默认后端），
       # 本机文档与项目 skill 强制 native。CI 原先只跑默认后端，等于两条路径各自
       # 只验证一半——CI 绿不代表本机能打出的包能发。
-      - name: Build (debug)
+      # --build-tests 一次编好源码与测试目标：TestRunner 是 executableTarget，随源码一起产出，
+      # 下面 Test 步骤用 --skip-build 复用同一份产物，不再为测试单独编一遍
+      - name: Build (debug, with test targets)
         working-directory: NetworkMonitor
-        run: swift build --disable-sandbox --build-system native
+        run: swift build --build-tests --disable-sandbox --build-system native
 
       # release 构建单独跑一遍：生产方法误放进 DEBUG 块时只有这一步会红
       - name: Build (release)
         working-directory: NetworkMonitor
         run: swift build -c release --disable-sandbox --build-system native
 
+      # --skip-build 缺产物会直接报错，不会静默回退去重新编译（保持 fail-closed）
       - name: Test
         working-directory: NetworkMonitor
-        run: swift run --disable-sandbox --build-system native TestRunner
+        run: swift run --skip-build --disable-sandbox --build-system native TestRunner

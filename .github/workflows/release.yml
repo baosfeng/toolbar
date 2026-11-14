@@ -13,6 +13,12 @@ on:
 permissions:
   contents: write
 
+# 同一 tag 的发布串行排队：自动触发与手动重发同时出现时，两个 publish 会抢建同一个 release（422），
+# 因此按 tag 分组、不打断正在跑的发布，后来的排队等它结束
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   package:
     name: Package ${{ matrix.arch }}
@@ -29,9 +35,6 @@ jobs:
             runner: macos-26
           - arch: x86_64
             runner: macos-26-intel
-    env:
-      # 配置了签名证书则走证书签名，否则由脚本回退 ad-hoc
-      HAS_SIGNING_CERT: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
 
     steps:
       - name: Checkout
@@ -39,47 +42,27 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Show toolchain
-        run: |
-          swift --version
-          xcodebuild -version || true
-          uname -m
+      # 工具链展示 / 证书导入 / tag 与 plist 版本校验，与 ci.yml 共用同一份实现。
+      # 签名证书 secret 未配置时 setup-build 自动跳过导入，build-app.sh 回落 ad-hoc 签名
+      - name: Setup build
+        uses: ./.github/actions/setup-build
+        with:
+          tag: ${{ inputs.tag || github.ref_name }}
+          certificate-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.P12_PASSWORD }}
+          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
 
-      - name: Import signing certificate
-        if: env.HAS_SIGNING_CERT == 'true'
-        env:
-          CERT_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
-          echo -n "$CERT_BASE64" | base64 --decode -o "$CERT_PATH"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-
-      # tag 与 App 内的 CFBundleShortVersionString 必须一致：发 v1.20.0 却忘改 plist 时
-      # Release 标题写 1.20.0、用户下载到的「关于」却显示旧版本，属于静默错版
-      # （版本号唯一真源是 build-app.sh 里的内联 Info.plist，仓库中没有独立模板）
-      - name: Version matches tag
-        working-directory: NetworkMonitor
-        run: |
-          tag_version="${GITHUB_REF_NAME#v}"
-          [ -n "${INPUT_TAG:-}" ] && tag_version="${INPUT_TAG#v}"
-          plist_version=$(grep -A1 '<key>CFBundleShortVersionString</key>' Scripts/build-app.sh \
-            | sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p' | head -1)
-          echo "tag=${tag_version} plist=${plist_version}"
-          if [ "${tag_version}" != "${plist_version}" ]; then
-            echo "::error::tag 与 build-app.sh 的 CFBundleShortVersionString ${plist_version} 不一致"
-            exit 1
-          fi
-        env:
-          INPUT_TAG: ${{ inputs.tag }}
+      # 缓存编译产物：build-app.sh 的产物目录同样是 .build/<arch>-apple-macosx/release。
+      # key 带 rel- 前缀与 CI 的 native 后端分开，避免两套后端共用同一份增量状态；
+      # 缓存未命中仍能完整构建（fail-closed），架构自证（lipo）照旧在打包后执行；
+      # release 配置的产物在同一个目录下（.build/<arch>-apple-macosx/release），命中缓存后同样减少重编时间
+      - name: Cache SwiftPM build
+        uses: actions/cache@v4
+        with:
+          path: NetworkMonitor/.build/${{ matrix.arch }}-apple-macosx
+          key: ${{ runner.os }}-swift-rel-${{ matrix.arch }}-${{ hashFiles('NetworkMonitor/Package.swift', 'NetworkMonitor/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-swift-rel-${{ matrix.arch }}-
 
       - name: Build, sign and package
         working-directory: NetworkMonitor
@@ -121,6 +104,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # release notes 要逐条列出 prev..tag 的提交，需要完整历史与 tag 才能算出上一个 v* tag
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
       # 两个架构各自上传 artifact，这里一次性取回再建 release：
       # 让矩阵里的 job 各自 softprops/action-gh-release 会并发建同一个 release，撞 422
       - name: Download packaged artifacts
@@ -133,10 +124,34 @@ jobs:
       - name: List assets
         run: ls -lh artifacts
 
+      # 先由脚本产出逐条明细（按 conventional 前缀分组），再用 body_path 作为 release 正文。
+      # 脚本自身在无 git 环境时会输出可用文案并 exit 0；真失败也只打 ::warning 不阻断发布
+      - name: Generate release notes
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -uo pipefail
+          notes_file="release-notes.md"
+          printf '%s\n\n' '**下载**：`NetworkMonitor-arm64.app.zip` 面向 Apple Silicon，`NetworkMonitor-x86_64.app.zip` 面向 Intel；两个 zip 解压后都是 NetworkMonitor.app。' > "$notes_file"
+          if bash NetworkMonitor/Scripts/generate-release-notes.sh --tag "$TAG" >> "$notes_file"; then
+            echo "::notice::release notes 已由脚本生成"
+          else
+            echo "::warning::release notes 脚本退出码非 0，回退到通用说明（发布继续）"
+            printf '%s\n' '本次发布说明查看下方完整变更链接。' >> "$notes_file"
+          fi
+          if [ ! -s "$notes_file" ]; then
+            printf '%s\n' '本次发布说明查看下方完整变更链接。' > "$notes_file"
+          fi
+          echo "----- release-notes.md -----"
+          cat "$notes_file"
+          echo "----------------------------"
+
+      # generate_release_notes 已关闭：官方自动生成只有一行 Full Changelog，与本脚本末尾的完整变更链接重复；
+      # 逐条明细由脚本统一口径（中文分组 + 短 hash），避免正文里出现两套说明
       - name: Create or update release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          name: NetworkMonitor ${{ inputs.tag || github.ref_name }}
+          name: NetworkMonitor ${{ inputs.tag || github.ref_name }} · Apple Silicon + Intel 双架构
+          body_path: release-notes.md
           files: artifacts/*.zip
-          generate_release_notes: true
