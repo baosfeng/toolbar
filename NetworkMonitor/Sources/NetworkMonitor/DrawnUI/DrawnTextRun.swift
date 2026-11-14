@@ -78,6 +78,27 @@ struct DrawnTextRun {
     /// 实测行高（走缓存）
     var lineHeight: CGFloat { DrawnTextMeasurer.shared.lineHeight(font: font) }
 
+    /// 按基线绘制：`baselineY` 是文字基线（flipped 坐标，向下为正）
+    ///
+    /// 用于大小字号混排（如额度格的 19pt 数值 + 9.5pt 单位）：两者共用一条基线，
+    /// 视觉上才是「95 %」而不是「95 悬空的 %」。
+    func draw(baselineAt baselineY: CGFloat, x: CGFloat, width: CGFloat, alignment: NSTextAlignment = .left) {
+        guard !string.isEmpty, width > 0 else { return }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = alignment
+        paragraph.lineBreakMode = truncates ? .byTruncatingTail : .byClipping
+        let attributed = NSAttributedString(string: string, attributes: [
+            .font: font,
+            .foregroundColor: color,
+            .paragraphStyle: paragraph,
+        ])
+        // 行框顶 = 基线 - ascender；AppKit 在行框内按字体度量落基线
+        let y = baselineY - font.ascender
+        attributed.draw(with: CGRect(x: x, y: y, width: width, height: lineHeight),
+                        options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+                        context: nil)
+    }
+
     /// 把文字画在 rect 里：垂直居中，水平按 `alignment`
     func draw(in rect: CGRect, alignment: NSTextAlignment = .left) {
         guard !string.isEmpty, rect.width > 0 else { return }

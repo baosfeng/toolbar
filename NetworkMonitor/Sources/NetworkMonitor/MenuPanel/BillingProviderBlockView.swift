@@ -37,8 +37,8 @@ final class BillingProviderBlockView: NSView {
                                                 color: PaneCardStyle.tertiaryText)
     private let chevronView: NSImageView?
 
-    /// 额度格（预建 3 个复用）
-    var limitCells: [BillingLimitCellView] = []
+    /// 额度格（预建 3 个复用；自绘，每格 1 个视图）
+    var limitCells: [DrawnBillingCell] = []
     private let limitsRow = NSStackView()
 
     let trendView = BillingMiniTrendView()
@@ -72,7 +72,7 @@ final class BillingProviderBlockView: NSView {
         if let chevronView { headerRow.contentStack.addArrangedSubview(chevronView) }
         headerRow.onClick = { [weak self] in self?.onToggleExpand?() }
 
-        limitCells = (0..<Self.maxLimitColumns).map { _ in BillingLimitCellView() }
+        limitCells = (0..<Self.maxLimitColumns).map { _ in DrawnBillingCell() }
         limitsRow.orientation = .horizontal
         limitsRow.distribution = .fillEqually
         limitsRow.alignment = .top

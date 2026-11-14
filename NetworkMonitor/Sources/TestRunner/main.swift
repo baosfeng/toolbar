@@ -291,6 +291,7 @@ runPaneHeightBudgetTests()
 runPaneAssemblyTests()
 runBillingRefreshGateTests()
 runDrawnRowLayoutTests()
+runBillingCellLayoutTests()
 
 // MARK: - 剪贴板动态轮询调度（三档边界 / 归一化 / 停止后不再重排）
 runClipboardPollScheduleTests()
