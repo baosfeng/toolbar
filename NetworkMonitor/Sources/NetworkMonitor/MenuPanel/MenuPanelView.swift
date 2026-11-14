@@ -26,8 +26,10 @@ protocol MenuPanelViewDelegate: AnyObject {
 
 /// 菜单栏面板根视图 — 顶部细分段六 tab + 互斥内容区
 ///
-/// 背景是**不透明**的 `NSColor.windowBackgroundColor`（跟随系统外观），不再叠 NSVisualEffectView 材质：
-/// 真实 popover 合成下 `.popover` 材质会把背景压成中灰，与语义文字色对比度不足（实机截图打回）。
+/// 背景分三层（自下而上）：**玻璃**（macOS 26+ `NSGlassEffectView`，可被档位或开关关掉）
+/// → **不透明基色层**（`theme.surface`，alpha 0.82）→ 内容。
+/// 基色层是必须的：真实 popover 合成下单纯用 `.popover` 材质会把背景压成中灰、
+/// 与语义文字色对比度不足（实机截图打回，见 `MenuPanelView+Backdrop` 的说明）。
 /// 圆角与投影由 NSPopover 自身提供，内容层不重复绘制。
 /// 内容区包在 `NSScrollView` 里：高度仍 clamp ≤520pt，但内容超出（进程变多 / 字体放大 / 多语言）
 /// 时改为垂直滚动而不是被裁掉；隐式滚动条（overlay + autohides）。
@@ -39,6 +41,9 @@ final class MenuPanelView: NSView {
 
     /// 面板分页可见性/顺序偏好（构造器注入存储，测试与取证可用隔离 suite，不污染真实偏好）
     let panelTabPreferences: PanelTabPreferences
+
+    /// 面板底（玻璃 + 基色层）；层级恒在所有内容之下，由 `installBackdrop()` 安装
+    let backdrop = MenuPanelBackdropView()
 
     let tabBar = MenuTabBarView()
     /// 设置菜单入口（标题栏右侧齿轮：传送设置 / 开机自启动 / 退出）
@@ -54,9 +59,11 @@ final class MenuPanelView: NSView {
     var launchAtStartupEnabled = false
 
     /// 可滚动内容区（高度 clamp 后仍能容纳超高内容）
-    private let scrollView = NSScrollView()
+    // 放宽为 internal：DEBUG 快照扩展（MenuPanelView+Snapshot）要读文档高度与视口
+    let scrollView = NSScrollView()
     /// 分页容器（作为 scrollView 的 documentView；flipped 保证初始停在顶部）
-    private let paneStack = MenuPanelDocumentStack()
+    // 放宽为 internal：DEBUG 快照扩展要滚它
+    let paneStack = MenuPanelDocumentStack()
     /// 放宽为 internal（含 setter）：分页偏好事件驱动要重设当前页，见 MenuPanelView+TabPreferences.swift
     var currentTab: MenuPanelTab = .network
     /// 当前键盘聚焦下标（行在前、卡片在后；nil = 未聚焦任何元素）
@@ -153,6 +160,7 @@ final class MenuPanelView: NSView {
         }
         applyTab()
         observePanelTabChanges()
+        installBackdrop()
     }
 
     @available(*, unavailable)
@@ -165,19 +173,9 @@ final class MenuPanelView: NSView {
     }
 
     // MARK: - 背景
-
-    /// 不透明底色（windowBackgroundColor 随外观切换：浅色近白、深色近黑）
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.windowBackgroundColor.setFill()
-        bounds.fill()
-        super.draw(dirtyRect)
-    }
-
-    /// 系统外观切换时重绘底色（避免 layer 缓存旧颜色）
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
+    //
+    // 底色与玻璃都交给 `backdrop`（MenuPanelView+Backdrop.swift）：本体不再自绘不透明底，
+    // 也不监听外观变化——那两件事都在 backdrop 里做，避免同一块底被画两遍。
 
     /// 内容所需高度（pt）：顶 10 + 分段 28 + 间距 12 + 当前页高度 + 底部留白 12
     ///
@@ -188,30 +186,6 @@ final class MenuPanelView: NSView {
         let paneHeight = activePane.fittingSize.height
         return 10 + MenuTabBarView.barHeight + 12 + paneHeight + MenuPanelStyle.inset
     }
-
-#if DEBUG
-    /// 快照自证专用：返回（文档高度, 滚动视口高度）
-    func snapshotScrollMetrics() -> (document: CGFloat, viewport: CGFloat) {
-        layoutSubtreeIfNeeded()
-        return (paneStack.frame.height, scrollView.contentView.bounds.height)
-    }
-
-    /// 快照自证专用：把内容滚到指定比例（0 = 顶部，1 = 底部）
-    func scrollForSnapshot(fraction: CGFloat) {
-        layoutSubtreeIfNeeded()
-        let maxY = max(0, paneStack.frame.height - scrollView.contentView.bounds.height)
-        scrollView.contentView.scroll(to: NSPoint(x: 0, y: maxY * min(max(fraction, 0), 1)))
-        scrollView.reflectScrolledClipView(scrollView.contentView)
-    }
-
-    /// 快照自证专用：滚到内容底部
-    func scrollToBottomForSnapshot() {
-        layoutSubtreeIfNeeded()
-        let maxY = max(0, paneStack.frame.height - scrollView.contentView.bounds.height)
-        scrollView.contentView.scroll(to: NSPoint(x: 0, y: maxY))
-        scrollView.reflectScrolledClipView(scrollView.contentView)
-    }
-#endif
 
     // MARK: - 分页切换
 
@@ -287,6 +261,8 @@ final class MenuPanelView: NSView {
 // MARK: - 可滚动内容容器
 
 /// 分页容器 — flipped，保证作为 NSScrollView.documentView 时初始停在顶部
-private final class MenuPanelDocumentStack: NSStackView {
+///
+/// 放宽为 internal：`paneStack` 属性已放宽给 DEBUG 快照扩展，其类型不能是 private
+final class MenuPanelDocumentStack: NSStackView {
     override var isFlipped: Bool { true }
 }
