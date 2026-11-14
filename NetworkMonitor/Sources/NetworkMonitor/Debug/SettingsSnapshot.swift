@@ -51,10 +51,42 @@ enum SettingsSnapshot {
                                          appearanceName: appearance, to: url)
             }
         }
-        // 首次打开路径（不做任何显式布局）：复现「第一次进设置页中间一大片空白」，
-        // 每次快照都重出，作为该版式问题的回归证据
+        // 截图页滚动到底部：本轮新增的「识别」卡与「保存」卡（输出格式 / JPEG 质量）在首屏之外，
+        // 单独出一组作为其可见性证据；版式基线仍是上面的首屏图
+        captureScrolledCapture(directory: directory, settings: settings)
         captureScrolledClipboard(directory: directory, settings: settings)
         captureFirstOpen(directory: directory, settings: settings)
+    }
+
+    /// 截图页滚动到底部（识别卡 / 保存卡在首屏之外，单独出一组作为可见性证据）
+    static func captureScrolledCapture(directory: URL, settings: SettingsWindow?) {
+        guard let settings else { return }
+        // 滚到「距底部 340pt」：识别卡与保存卡（输出格式 / JPEG 质量 / 目录）同时进视野
+        guard let view = settings.prepareForSnapshotScrolled(toBottomOffset: 340, section: .capture) else {
+            return
+        }
+        writeCaptureScrollMetrics(directory: directory, settings: settings)
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let suffix = appearance == .aqua ? "light" : "dark"
+            let url = directory.appendingPathComponent("settings-capture-cards-\(suffix).png")
+            MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
+                                     appearanceName: appearance, to: url)
+        }
+    }
+
+    /// 截图页滚动度量：核对「保存卡确实在首屏之外」而不靠肉眼
+    private static func writeCaptureScrollMetrics(directory: URL, settings: SettingsWindow) {
+        guard let documentHeight = settings.snapshotScrollDocumentHeight else { return }
+        let viewportHeight = SettingsStyle.windowSize.height - SettingsStyle.contentInset * 2
+        let overflow = max(0, documentHeight - viewportHeight)
+        let text = """
+        capture_page_document_pt = \(Int(documentHeight.rounded()))
+        capture_page_viewport_pt = \(Int(viewportHeight.rounded()))
+        capture_page_scroll_needed_pt = \(Int(overflow.rounded()))
+        save_and_ocr_cards_on_first_screen = \(overflow <= 0)
+        """
+        try? text.write(to: directory.appendingPathComponent("settings-capture-metrics.txt"),
+                        atomically: true, encoding: .utf8)
     }
 
     /// 剪贴板页滚动到底部（存储卡在首屏之外，单独出一组作为可见性证据）
