@@ -72,6 +72,7 @@ if [ "$DRY_RUN" = "0" ]; then
     say "3/6 门禁与测试"
     ( cd "$PROJECT_DIR" && bash Scripts/check-file-size.sh )
     ( cd "$PROJECT_DIR" && bash Scripts/check-file-families.sh )
+    ( cd "$PROJECT_DIR" && bash Scripts/test-release-notes.sh ) || fail "发布说明生成器回归失败（链接 / hash / @提及）"
     ( cd "$PROJECT_DIR" && swift build --disable-sandbox --build-system native > /tmp/release-build.log 2>&1 ) || fail "swift build 失败，见 /tmp/release-build.log"
     ( cd "$PROJECT_DIR" && swift run --disable-sandbox --build-system native TestRunner > /tmp/release-test.log 2>&1 ) || fail "测试失败，见 /tmp/release-test.log"
     grep -q "所有测试通过" /tmp/release-test.log || fail "测试没打「所有测试通过」，见 /tmp/release-test.log"

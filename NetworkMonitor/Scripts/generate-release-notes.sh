@@ -95,7 +95,15 @@ repo_slug() {
         normalize_repo "${GITHUB_REPOSITORY}"
         return 0
     fi
-    local url
+    # 优先取 GitHub remote：本仓 origin 指向 codeup（bsfeng/toolbar），
+    # 拿它拼出的 compare 链接在 GitHub 上是 404——v1.27.0 的「完整变更」就这么点不动过。
+    local name url
+    for name in github origin; do
+        url=$(git config --get "remote.${name}.url" 2>/dev/null || true)
+        case "$url" in
+            *github.com*) normalize_repo "$url"; return 0 ;;
+        esac
+    done
     url=$(git config --get remote.origin.url 2>/dev/null || true)
     [ -n "$url" ] || return 1
     normalize_repo "$url"
@@ -119,6 +127,12 @@ strip_prefix() {
         subject="${subject:${#BASH_REMATCH[0]}}"
     fi
     printf '%s\n' "$subject"
+}
+
+# 中和 @mention：提交标题里的 @Sendable 这类写法会被 GitHub 渲染成用户 / 组织提及，
+# v1.27.0 的 Release 页脚因此多出一个「贡献者 sendable」。包进行内代码就只当普通文本。
+neutralize_mentions() {
+    printf '%s\n' "$1" | sed -E 's/(^|[^A-Za-z0-9_.-])@([A-Za-z0-9_-][A-Za-z0-9_.-]*)/\1`@\2`/g'
 }
 
 # 输出一个分组；空组跳过
@@ -156,8 +170,11 @@ build_notes() {
     local log_lines
     log_lines=$(git log --reverse --no-merges --pretty=format:'%h|%s' "${prev}..${tag}" 2>/dev/null || true)
 
+    local repo
+    repo=$(repo_slug || true)
+
     local total=0
-    local line hash subject type desc entry
+    local line hash subject type desc entry commit_link
     while IFS= read -r line; do
         [ -n "$line" ] || continue
         hash="${line%%|*}"
@@ -165,8 +182,14 @@ build_notes() {
         # 没有分隔符说明不是预期格式，跳过该行
         [ "$subject" != "$line" ] || continue
         type=$(commit_type "$subject")
-        desc=$(strip_prefix "$subject")
-        entry="${desc}（\`${hash}\`）"
+        desc=$(neutralize_mentions "$(strip_prefix "$subject")")
+        # 短 hash 直接点进该提交：逐条都能追溯，不用手抄 hash 去搜
+        if [ -n "$repo" ]; then
+            commit_link="[\`${hash}\`](https://github.com/${repo}/commit/${hash})"
+        else
+            commit_link="\`${hash}\`"
+        fi
+        entry="${desc}（${commit_link}）"
         total=$((total + 1))
         case "$type" in
             feat) G_FEAT+=("$entry") ;;
@@ -193,8 +216,7 @@ build_notes() {
     print_section '构建与 CI' "${G_BUILD[@]}"
     print_section '其他' "${G_OTHER[@]}"
 
-    local repo link_end
-    repo=$(repo_slug || true)
+    local link_end
     link_end="$tag"
     if [ "$tag" = "HEAD" ] || [ "$tag" = "head" ]; then
         # HEAD 不是可比较的 ref，换成具体提交号

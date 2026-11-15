@@ -129,6 +129,11 @@ jobs:
 
       # 先由脚本产出逐条明细（按 conventional 前缀分组），再用 body_path 作为 release 正文。
       # 脚本自身在无 git 环境时会输出可用文案并 exit 0；真失败也只打 ::warning 不阻断发布
+      # 生成器回归先跑：v1.27.0 的正文是发出去才发现「链接 404 + 逐条点不动 + 页脚多一个假贡献者」，
+      # 那时改已发布的正文要额外一次 PATCH。这一道红了就别发，比发完再补便宜得多
+      - name: Release notes regression
+        run: bash NetworkMonitor/Scripts/test-release-notes.sh
+
       - name: Generate release notes
         env:
           TAG: ${{ inputs.tag || github.ref_name }}

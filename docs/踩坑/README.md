@@ -25,6 +25,7 @@
 - [生产日志不可观测](构建/生产日志不可观测.md) — LaunchServices 启动的 .app 丢弃 stdout，默认 ConsoleLogger 导致生产零日志；需在组合根注入 OSLogLogger
 - [菜单项清理误删无关条目](构建/菜单项清理误删无关条目.md) — 按「tag >= 阈值」无界扫描清理菜单项会误删其他模块的高位 tag 入口；须改用有界区间 [base, base+span)
 - [Swift 扩展不能有存储属性](构建/Swift扩展不能有存储属性.md) — 按门禁拆文件时，存储属性与 override 方法必须留在主类，跨文件成员需放宽为 internal
+- [发布说明在 GitHub 上「点不动」还挂了个假贡献者](构建/发布说明在GitHub上点不动.md) — compare 链接拼了 origin 的 codeup owner（404）、短 hash 不是链接、提交标题里的 `@Sendable` 被当成用户提及挂进 Contributors；回归脚本 `Scripts/test-release-notes.sh`
 - [快照取证需打包成 app](构建/快照取证需打包成app.md) — 裸二进制跑 `NM_SNAPSHOT_DIR` 必崩 `bundleProxyForCurrentProcess is nil`，须 `SKIP_INSTALL=1 ./Scripts/build-app.sh debug` 后跑包内可执行文件
 
 ### 运行时

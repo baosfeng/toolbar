@@ -56,6 +56,11 @@ jobs:
       - name: File size gate
         run: bash NetworkMonitor/Scripts/check-file-size.sh
 
+      # 发布说明生成器回归：v1.27.0 的三处「发出去才发现」在这里前置
+      # （compare 链接指向 404 的 codeup owner / 逐条 hash 不可点 / @Sendable 在页脚挂出假贡献者）
+      - name: Release notes regression
+        run: bash NetworkMonitor/Scripts/test-release-notes.sh
+
       # 与发版脚本走同一条后端：release.yml 用 build-app.sh（完整 Xcode 环境用默认后端），
       # 本机文档与项目 skill 强制 native。CI 原先只跑默认后端，等于两条路径各自
       # 只验证一半——CI 绿不代表本机能打出的包能发。
