@@ -51,8 +51,8 @@ say "2/6 检查版本号"
 old_version=$(grep -A1 "<key>CFBundleShortVersionString</key>" "$PLIST_SOURCE" | sed -n "s/.*<string>\(.*\)<\/string>.*/\1/p" | head -1)
 old_build=$(grep -A1 "<key>CFBundleVersion</key>" "$PLIST_SOURCE" | sed -n "s/.*<string>\(.*\)<\/string>.*/\1/p" | head -1)
 new_build=$((old_build + 1))
-say "   当前 $old_version（构建号 $old_build）→ 目标 $VERSION（构建号 $new_build）"
-[ "$old_version" = "$VERSION" ] && fail "版本号已经是 $VERSION"
+say "   当前 ${old_version}（构建号 ${old_build}）→ 目标 ${VERSION}（构建号 ${new_build}）"
+[ "$old_version" = "$VERSION" ] && fail "版本号已经是 ${VERSION}"
 
 # 语义化比较：逐段按数值比（字符串比会把 1.9 判成大于 1.10）
 higher=$(awk -v a="$old_version" -v b="$VERSION" "BEGIN {
