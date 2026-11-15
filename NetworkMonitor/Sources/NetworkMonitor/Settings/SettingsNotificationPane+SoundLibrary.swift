@@ -38,6 +38,12 @@ extension SettingsNotificationPane {
         volumeRow.trailingStack.addArrangedSubview(volumeValueLabel)
         card.addRow(volumeRow)
 
+        // 内建音由代码合成：只有试听，不给删除与重命名
+        let builtInRow = SettingsRowView(title: "内建（咔哒）", subtitle: "合成的设计音：复制脆响、收藏双击、删除下行")
+        builtInRow.trailingStack.addArrangedSubview(
+            SettingsLinkButton.make("试听内建", target: self, action: #selector(previewBuiltIn)))
+        card.addRow(builtInRow)
+
         // 上传
         let uploadRow = SettingsRowView(title: "自定义音效",
                                         subtitle: "支持 wav / aiff / caf / mp3 / m4a，≤10 MB、≤30 秒")
@@ -58,9 +64,8 @@ extension SettingsNotificationPane {
         customListStack.widthAnchor.constraint(equalTo: card.widthAnchor, constant: -24).isActive = true
 
         page.addCard(card, sectionTitle: "音效库")
-        page.addNote("上传的音频会转成 AIFF 并复制一份到 ~/Library/Sounds"
-                     + "（系统通知只从这个目录按文件名取音效）。删除音效时这份副本一并清理；"
-                     + "「恢复默认」不会删你的自定义音效。")
+        page.addNote("提示音会复制一份到 ~/Library/Sounds（系统通知只从这个目录按文件名取音效）；"
+                     + "删除音效时副本一并清理，「恢复默认」不删你的自定义音效。")
     }
 
     // MARK: - 列表刷新
@@ -72,20 +77,10 @@ extension SettingsNotificationPane {
         let files = library.customFiles()
         customListStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         guard !files.isEmpty else {
-            let empty = MenuPanelLabel.text("还没有自定义音效，点「上传…」选一段音频",
-                                            font: SettingsTheme.rowSubtitleFont,
-                                            color: SettingsTheme.textTertiary)
-            let holder = NSView()
-            holder.translatesAutoresizingMaskIntoConstraints = false
-            empty.translatesAutoresizingMaskIntoConstraints = false
-            holder.addSubview(empty)
-            NSLayoutConstraint.activate([
-                empty.leadingAnchor.constraint(equalTo: holder.leadingAnchor, constant: 12),
-                empty.topAnchor.constraint(equalTo: holder.topAnchor, constant: 10),
-                empty.bottomAnchor.constraint(equalTo: holder.bottomAnchor, constant: -10),
-            ])
-            customListStack.addArrangedSubview(holder)
-            holder.widthAnchor.constraint(equalTo: customListStack.widthAnchor).isActive = true
+            // 空态与其它行同款（行内自带内缩与行高），不必手搭 holder + 手工约束
+            let empty = SettingsRowView(title: "还没有自定义音效", subtitle: "点「上传…」选一段音频")
+            customListStack.addArrangedSubview(empty)
+            empty.widthAnchor.constraint(equalTo: customListStack.widthAnchor).isActive = true
             return
         }
         for file in files {
@@ -99,7 +94,7 @@ extension SettingsNotificationPane {
     private func makeCustomRow(_ file: String) -> NSView {
         let size = library.store.totalBytes()
         let row = SettingsRowView(title: library.displayTitle(for: file),
-                                  subtitle: "自定义音效 · 目录共 \(formatBytes(size))")
+                                  subtitle: "自定义音效 · 目录共 \(Self.formatBytes(size))")
         let preview = SettingsLinkButton.make("试听", target: self, action: #selector(previewCustom(_:)))
         preview.identifier = NSUserInterfaceItemIdentifier(file)
         row.trailingStack.addArrangedSubview(preview)
@@ -139,6 +134,11 @@ extension SettingsNotificationPane {
         }
     }
 
+    /// 试听内建音：用「复制」那一声（最常听到、也最能代表这套设计音的性格）
+    @objc func previewBuiltIn() {
+        player.preview(selection: .builtIn, cue: .copy)
+    }
+
     @objc func previewCustom(_ sender: NSButton) {
         guard let file = sender.identifier?.rawValue else { return }
         // 试听直接用自定义文件本身，不读事件配置：用户点的是这份文件，听到的就该是它
@@ -170,7 +170,7 @@ extension SettingsNotificationPane {
         guard let file = sender.identifier?.rawValue else { return }
         let alert = NSAlert()
         alert.messageText = "删除自定义音效「\(library.displayTitle(for: file))」？"
-        alert.informativeText = "引用它的场景会回到「跟随系统」；已同步到 ~/Library/Sounds 的副本一并清理。"
+        alert.informativeText = "引用它的场景会回到「内建（咔哒）」；已同步到 ~/Library/Sounds 的副本一并清理。"
         alert.addButton(withTitle: "删除")
         alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -193,11 +193,11 @@ extension SettingsNotificationPane {
         }
     }
 
-    /// 删除后把引用它的事件回落成「跟随系统」
+    /// 删除后把引用它的事件回落成默认档（内建音）
     func clearSoundReferences(to fileName: String) {
         for event in NotificationEvent.allCases
         where preferences.config(for: event).sound == .customFile(fileName) {
-            preferences.setSound(.systemDefault, for: event)
+            preferences.setSound(event.defaultSound, for: event)
         }
     }
 
@@ -222,7 +222,7 @@ extension SettingsNotificationPane {
     }
 
     /// 字节数 → 可读体积（音效目录只有 KB 级，固定 KB/MB 两档即可）
-    func formatBytes(_ bytes: Int) -> String {
+    static func formatBytes(_ bytes: Int) -> String {
         if bytes < 1024 { return "\(bytes) B" }
         if bytes < 1024 * 1024 { return String(format: "%.0f KB", Double(bytes) / 1024) }
         return String(format: "%.1f MB", Double(bytes) / (1024 * 1024))

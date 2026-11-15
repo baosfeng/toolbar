@@ -8,8 +8,8 @@ import NetworkMonitorCore
 ///
 /// 口径：
 /// - 每次调用现读偏好（NotificationPreferences）与音效目录，改完设置立即生效；
-/// - 「跟随系统」按 cue 的经典系统音播（失败 Basso、成功 Tink……），
-///   选具体系统音 / 自定义文件时全部 cue 用同一个声音；
+/// - 「内建（咔哒）」按 cue 播合成的设计音，「跟随系统」按 cue 的经典系统音播
+///   （失败 Basso、成功 Tink……），选具体系统音 / 自定义文件时全部 cue 用同一个声音；
 /// - 静音与事件关闭都是「什么都不做」，不 beep 兜底；
 /// - 同一 cue 200ms 内去重，连按不刷音；音量取通知页的「应用内音量」。
 @MainActor
@@ -26,7 +26,7 @@ final class NotificationSoundPlayer {
     /// 正在播放的实例：NSSound 被释放就停播，必须强持有到播完
     private var playing: [NSSound] = []
     #if DEBUG
-    /// 自证用：最近一次真正起播的声音名（系统音名或自定义文件名）
+    /// 自证用：最近一次真正起播的声音名（系统音名 / 内建文件名 / 自定义文件名）
     private(set) var debugLastPlayedName = ""
     #endif
 
@@ -77,6 +77,13 @@ final class NotificationSoundPlayer {
             return
         }
         switch target {
+        case .builtIn(let targetCue):
+            guard let url = library.builtInURL(for: targetCue),
+                  let sound = NSSound(contentsOf: url, byReference: true) else {
+                logger.debug("内建音效读取失败：\(targetCue.rawValue)（cue=\(cue.rawValue)）")
+                return
+            }
+            start(sound, debugName: "builtin:\(targetCue.rawValue)")
         case .system(let name):
             guard let sound = NSSound(named: name) else {
                 logger.debug("系统音效缺失：\(name)（cue=\(cue.rawValue)）")

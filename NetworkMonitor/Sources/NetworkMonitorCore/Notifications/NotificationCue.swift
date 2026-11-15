@@ -61,4 +61,18 @@ public enum NotificationCue: String, CaseIterable, Sendable {
         case .billingRecovery: return "Glass"
         }
     }
+
+    /// 「内建（咔哒）」档下按 cue 合成的性格族
+    ///
+    /// 复制与截图都是「做完一件事」的机械咔嚓，粘贴与面板开合都是「落下」的钝嗒，
+    /// 收藏 / 传输完成 / 额度好消息用清亮的双击，删除是收走的唰，失败与告警才低沉。
+    public var builtInFamily: CueSoundFamily {
+        switch self {
+        case .copy, .snipCapture: return .crisp
+        case .paste, .panelToggle: return .thud
+        case .pin, .transferFinished, .billingRecovered, .billingRecovery: return .chime
+        case .delete: return .swipe
+        case .error, .billingAlert: return .alert
+        }
+    }
 }

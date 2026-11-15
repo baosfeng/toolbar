@@ -83,8 +83,11 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
         }
     }
 
-    /// 默认声音：跟随系统（应用内按各 cue 的经典系统音，系统通知用系统默认音）
-    public var defaultSound: NotificationSoundSelection { .systemDefault }
+    /// 默认声音：内建（按 cue 合成的设计音；系统通知挂同名生成文件）
+    ///
+    /// 用户反馈系统音（Tink / Pop）不像「咔嚓」，默认档因此改成内建设计音；
+    /// 「跟随系统」保留给老配置，语义仍是「按 cue 播经典系统音」。
+    public var defaultSound: NotificationSoundSelection { .builtIn }
 
     /// 默认提醒方式：横幅 + 声音
     public var defaultPresentation: NotificationPresentation { .bannerAndSound }

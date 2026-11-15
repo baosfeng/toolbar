@@ -186,11 +186,15 @@ final class SettingsNotificationEventCard: NSObject {
         }
     }
 
-    /// 声音下拉的全部选项（跟随系统 / 静音 / 系统音效库 / 自定义）
+    /// 声音下拉的全部选项（内建 / 跟随系统 / 静音 / 系统音效库 / 自定义）
+    ///
+    /// 标题与顺序都取自 NotificationSoundSelection.menuTitle：一处定义，
+    /// 免得下拉文案与「当前选中态」在别处又落一份口径。
     private func soundOptions() -> [(selection: NotificationSoundSelection, title: String)] {
         var options: [(NotificationSoundSelection, String)] = [
-            (.systemDefault, "跟随系统"),
-            (.silent, "静音"),
+            (.builtIn, NotificationSoundSelection.builtIn.menuTitle),
+            (.systemDefault, NotificationSoundSelection.systemDefault.menuTitle),
+            (.silent, NotificationSoundSelection.silent.menuTitle),
         ]
         for sound in context.library.systemSounds() {
             options.append((.systemSound(sound.name), "系统 · \(sound.title)"))
@@ -256,21 +260,8 @@ final class SettingsNotificationEventCard: NSObject {
             return
         }
         // 未授权 / 非通知事件：直接播应用内提示音（跳过开关与去重，试听必须立刻有反馈）
-        guard let cue = Self.previewCue(for: event) else { return }
-        context.player.preview(selection: config.sound, cue: cue)
-    }
-
-    /// 事件 → 试听用的 cue（系统通知事件回落到各自的默认 cue）
-    static func previewCue(for event: NotificationEvent) -> NotificationCue? {
-        switch event {
-        case .billingAlert: return .billingAlert
-        case .billingRecovered: return .billingRecovered
-        case .billingRecovery: return .billingRecovery
-        case .transferFinished: return .transferFinished
-        case .snipCaptured: return .snipCapture
-        case .clipboardAction: return .copy
-        case .panelToggle: return .panelToggle
-        }
+        // 试听 cue 的映射下沉在 Core（event.previewCue），设置页不另写一份
+        context.player.preview(selection: config.sound, cue: event.previewCue)
     }
 
     // MARK: - 控件映射

@@ -114,7 +114,7 @@ private func testBillingRowsAreIndependent() {
     preferences.setSound(.systemSound("Ping"), for: .billingAlert)
     preferences.setPresentation(.bannerOnly, for: .billingAlert)
     preferences.setEnabled(false, for: .billingRecovered)
-    assertEqual(preferences.config(for: .billingRecovered).sound, .systemDefault,
+    assertEqual(preferences.config(for: .billingRecovered).sound, .builtIn,
                 "恢复行声音不受提醒行影响")
     assertEqual(preferences.config(for: .billingRecovered).enabled, false, "恢复行可单独关")
     assertEqual(preferences.config(for: .billingRecovery).presentation, .bannerAndSound,
