@@ -183,7 +183,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
 
     func windowDidResignKey(_ notification: Notification) { hide(animated: true) }
 
-    /// 定位：几何计算见 ClipboardPanelGeometry（目标屏 visibleFrame 底部）
+    /// 定位：几何计算见 ClipboardPanelGeometry（目标屏 visibleFrame 底部；高度夹紧口径在偏好层）
     private func positionPanel() {
         let mouse = NSEvent.mouseLocation, position = preferences.panelPosition
         let visible = ClipboardPanelGeometry.targetScreen(position: position, mouse: mouse).visibleFrame
@@ -269,7 +269,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     func panelView(_ view: ClipboardPanelView, didSelect index: Int) {
         guard index >= 0, index < filteredItems.count else { return }
         selectedIndex = index
-        content.updateSelection(index)
+        content.updateSelection(index, item: selectedItem)
         clearDeleteConfirmHint()
     }
 

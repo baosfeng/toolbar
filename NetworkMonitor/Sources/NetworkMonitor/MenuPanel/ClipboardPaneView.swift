@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 剪贴板页
 
@@ -201,17 +202,10 @@ final class MenuPanelClipboardRow: MenuPanelRow {
 
     /// 类型标签：URL 文本显示为「链接」，其余按条目类型中文名
     ///
+    /// 口径本体在 `ClipboardItemKindLabel`（UI 目标，剪贴板面板详情区也用它）：
+    /// 两处各写一份会让「链接」这类判定在界面之间漂移。
     /// 放宽为 internal：同文件的剪贴板页页脚状态带要用它统计类型分布。
     static func kindLabel(for item: ClipboardItem) -> String {
-        if item.kind == .text {
-            let text = item.text ?? item.preview
-            if text.hasPrefix("http://") || text.hasPrefix("https://") { return "链接" }
-        }
-        switch item.kind {
-        case .text: return "文本"
-        case .image: return "图片"
-        case .file: return "文件"
-        case .rtf: return "富文本"
-        }
+        ClipboardItemKindLabel.label(for: item)
     }
 }

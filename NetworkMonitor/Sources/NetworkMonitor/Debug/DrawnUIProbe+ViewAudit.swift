@@ -44,7 +44,7 @@ extension DrawnUIProbe {
     /// 画布与取证快照同口径（640×260），条目夹具复用性能探针的 32 条（= 视图池窗口大小）。
     private static func runClipboardViewAudit(path: String) -> Bool {
         let items = ClipboardPerfProbe.fixtureItems()
-        let size = NSSize(width: 640, height: 260)
+        let size = SnapshotClipboardPanel.panelSize
         let canvas = SnapshotClipboardPanel(size: size, items: items).makeView()
         let scratch = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("drawn-view-audit-clipboard.png")

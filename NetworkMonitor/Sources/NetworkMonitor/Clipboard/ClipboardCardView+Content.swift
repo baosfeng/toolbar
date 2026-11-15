@@ -129,6 +129,9 @@ extension ClipboardCardView {
     ///
     /// 改造前收藏星是独立子视图（可单独弹入），现在改成一次绘制 + 缩放进度，
     /// 位置与层序不变：星标压在 meta 文字之上（原 starView 在 contentView 之后加入）。
+    ///
+    /// 位图（来源 App 图标）要局部翻正：卡片是 flipped 视图，绘制位图不会自动翻。
+    /// 色块与文字不需要——文字由 CoreText 在 flipped 上下文里自行翻正。
     func drawMeta(item: ClipboardItem, in bounds: CGRect) {
         let content = ClipboardCardGeometry.contentRect(in: bounds)
         let rowY = ClipboardCardGeometry.metaRowY(in: bounds)
@@ -157,10 +160,13 @@ extension ClipboardCardView {
         var rightX = content.maxX
         let appIcon = Self.appIconSize
         if let icon = Self.applicationIcon(bundleID: item.sourceBundleID) {
-            icon.draw(in: CGRect(x: rightX - appIcon,
-                                 y: rowY + (Self.metaHeight - appIcon) / 2,
-                                 width: appIcon, height: appIcon),
-                      from: .zero, operation: .sourceOver, fraction: 0.75)
+            // 与缩略图同一条翻正路径：卡片是 flipped 视图，位图绘制不翻正会上下颠倒
+            let iconRect = CGRect(x: rightX - appIcon,
+                                  y: rowY + (Self.metaHeight - appIcon) / 2,
+                                  width: appIcon, height: appIcon)
+            DrawnInk.withUnflippedIfNeeded(around: iconRect) {
+                icon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 0.75)
+            }
             rightX -= appIcon + Self.metaGap
         }
         let time = DrawnTextRun(string: ClipboardRelativeTime.string(from: item.createdAt, now: SnapshotClock.now),

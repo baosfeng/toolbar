@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 自绘 UI 的基础原语
 
@@ -169,16 +170,18 @@ enum DrawnInk {
     ///
     /// 原生组件（SystemRingView / WiFiSignalDotView 等）都是非 flipped 视图，
     /// 自绘卡片统一 flipped；局部翻正后就能直接复用同一段路径代码。
-    private static func withUnflippedIfNeeded(around rect: CGRect, _ body: () -> Void) {
-        guard NSGraphicsContext.current?.isFlipped == true,
+    /// 位图绘制同样要用它：文本绘制自己会翻正，`NSImage.draw(in:from:operation:fraction:)` 不会，
+    /// 卡片缩略图与详情区缩略图都靠这一处翻正（镜像轴取值由 `DrawnUnflip` 给出，不另写一套）。
+    /// internal 而非 private：剪贴板卡片（`ClipboardCardView+Resources.swift`）跨文件复用。
+    static func withUnflippedIfNeeded(around rect: CGRect, _ body: () -> Void) {
+        let flipped = NSGraphicsContext.current?.isFlipped == true
+        guard let transform = DrawnUnflip.transform(around: rect, contextIsFlipped: flipped),
               let ctx = NSGraphicsContext.current?.cgContext else {
             body()
             return
         }
         ctx.saveGState()
-        ctx.translateBy(x: 0, y: rect.midY)
-        ctx.scaleBy(x: 1, y: -1)
-        ctx.translateBy(x: 0, y: -rect.midY)
+        ctx.concatenate(transform)
         body()
         ctx.restoreGState()
     }

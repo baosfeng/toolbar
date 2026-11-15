@@ -59,7 +59,7 @@ extension ClipboardPanelController {
         if next < 0 { next = filteredItems.count - 1 }
         if next >= filteredItems.count { next = 0 }
         selectedIndex = next
-        content.updateSelection(next)
+        content.updateSelection(next, item: selectedItem)
         clearDeleteConfirmHint()
     }
 
@@ -80,7 +80,7 @@ extension ClipboardPanelController {
         let index = number - 1
         guard index >= 0, index < filteredItems.count else { return }
         selectedIndex = index
-        content.updateSelection(index)
+        content.updateSelection(index, item: selectedItem)
         pasteSelected(asPlainText: false)
     }
 }

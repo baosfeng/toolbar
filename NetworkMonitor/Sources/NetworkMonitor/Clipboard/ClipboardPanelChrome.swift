@@ -77,15 +77,15 @@ final class ClipboardPanelSeparatorView: NSView {
 /// 两个装饰层的布局接线 —— 放在本文件，避免「ClipboardPanelView」主文件继续膨胀
 extension ClipboardPanelView {
 
-    /// 按面板边界同步两个装饰层：内衬内缩固定量且不参与布局计算，分隔线坐标与工具条 / 提示行同源
+    /// 按面板边界同步两个装饰层：内衬内缩固定量且不参与布局计算
     ///
-    /// - Parameters:
-    ///   - toolbarHeight: 工具条高度（第一条分隔线落在其底部）
-    ///   - footerHeight: 提示行顶部纵坐标（翻转坐标，自上而下）
-    func layoutPanelChrome(toolbarHeight: CGFloat, footerHeight: CGFloat) {
+    /// - Parameter separatorYs: 面板层分隔线纵坐标（翻转坐标，自上而下）；
+    ///   由 `ClipboardPanelLayout.sections(in:)` 与工具条 / 提示行同源给出，这里不复制高度常量。
+    ///   详情区顶那条线画在详情区视图自己身上（它是详情区高度里的 1pt）。
+    func layoutPanelChrome(separatorYs: [CGFloat]) {
         let inset = ClipboardPanelInnerMaterialView.inset
         innerMaterial.frame = bounds.insetBy(dx: inset, dy: inset)
         separatorView.frame = bounds
-        separatorView.linePositions = [toolbarHeight, footerHeight]
+        separatorView.linePositions = separatorYs
     }
 }

@@ -50,10 +50,13 @@ enum ClipboardPanelGeometry {
 
     /// 面板 frame：目标屏 visibleFrame 底部，宽 = width - 40（下限 420），底边距 12pt；
     /// 鼠标位置策略下贴到鼠标附近，并夹紧在可见区域内
+    ///
+    /// 高度上限用「屏高 − 上下各 12pt 留白」而不是屏高的三分之一：面板多了一块常驻详情区，
+    /// 按三分之一压扁会让卡片区露不出整卡（卡片 198pt 是设计下限，不能为了贴屏而被裁）。
     static func panelFrame(visible: NSRect, panelHeight: Double,
                            position: ClipboardPanelPosition, mouse: NSPoint) -> NSRect {
         let width = max(420, visible.width - 40)
-        let height = min(CGFloat(panelHeight), visible.height / 3)
+        let height = min(CGFloat(panelHeight), max(0, visible.height - 24))
         var origin = NSPoint(x: visible.minX + 20, y: visible.minY + 12)
         if position == .mouseLocation {
             origin = NSPoint(x: min(max(mouse.x - width / 2, visible.minX + 10), visible.maxX - width - 10),

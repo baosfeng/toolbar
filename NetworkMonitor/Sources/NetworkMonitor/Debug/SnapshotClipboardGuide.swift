@@ -17,10 +17,10 @@ enum SnapshotClipboardGuide {
     /// 取证开关（与 `NM_SNAPSHOT_DIR` 组合使用）
     static let envKey = "NM_SNAPSHOT_CLIPBOARD_GUIDE"
 
-    /// 画布尺寸（与 07-contract 的剪贴板画布一致）
-    private static let canvasSize = NSSize(width: 640, height: 260)
+    /// 画布尺寸（与其余剪贴板取证同一份，见 `SnapshotClipboardPanel.panelSize`）
+    private static let canvasSize = SnapshotClipboardPanel.panelSize
     /// 窄画布：面板最窄 420pt，用于验证帮助浮层两列不压字
-    private static let narrowCanvasSize = NSSize(width: 420, height: 260)
+    private static let narrowCanvasSize = NSSize(width: 420, height: SnapshotClipboardPanel.panelSize.height)
 
     /// 取证入口：开关打开时出引导态与帮助浮层两张图
     static func captureIfRequested(directory: URL) {

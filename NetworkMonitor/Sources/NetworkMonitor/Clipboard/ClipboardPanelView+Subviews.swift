@@ -106,6 +106,12 @@ extension ClipboardPanelView {
         addSubview(helpButton)
     }
 
+    /// 底部详情区：内容由控制器在渲染 / 切选中时灌入，视图只负责展示
+    func buildDetailStrip() {
+        detailStrip.setAccessibilityIdentifier("clipboard.detailStrip")
+        addSubview(detailStrip)
+    }
+
     /// 首次引导态与快捷键帮助浮层：都挂在面板最上层，帮助浮层压在引导态之上
     func buildOverlays() {
         guideView.onDismiss = { [weak self] in
@@ -130,6 +136,8 @@ extension ClipboardPanelView {
         guideView.isHidden = !visible
         // 引导态独占卡片区：历史为空，卡片流里只有空态文案，隐藏后不与引导文案叠字
         cardFlow.isHidden = visible
+        // 详情区一并让位：历史为空时没有可展示的选中项，留着只会念一句「选中一条查看详情」
+        detailStrip.isHidden = visible
         needsLayout = true
     }
 

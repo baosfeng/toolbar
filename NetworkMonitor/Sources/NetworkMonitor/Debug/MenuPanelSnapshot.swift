@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 开发期面板快照钩子（仅 DEBUG）
 
@@ -23,9 +24,6 @@ enum MenuPanelSnapshot {
     static let billingMockEnvKey = "NM_BILLING_MOCK"
     /// 启动后延迟（等 Dock / 菜单栏 / 剪贴板采集初始化完成）
     private static let delayNanoseconds: UInt64 = 700_000_000
-    /// 剪贴板面板画布尺寸（与 07-contract 的 640×260 画布口径一致）
-    private static let clipboardPanelSize = NSSize(width: 640, height: 260)
-
     private static var logger: LoggingService { AppContext.shared.logger }
 
     /// 入口：环境变量存在时延时执行快照并退出进程；未设置时立即返回
@@ -113,7 +111,7 @@ enum MenuPanelSnapshot {
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let suffix = appearance == .aqua ? "light" : "dark"
             let url = directory.appendingPathComponent("panel-clipboard\(appearanceFileSuffix)-\(suffix).png")
-            render(view: clipboardBackdrop.makeView(), size: clipboardPanelSize,
+            render(view: clipboardBackdrop.makeView(), size: SnapshotClipboardPanel.panelSize,
                    appearanceName: appearance, to: url)
         }
 
@@ -166,7 +164,7 @@ enum MenuPanelSnapshot {
 
     /// 构建剪贴板面板画布：背景 + 真实面板同款材质底 + ClipboardPanelView
     private static func makeClipboardPanel(items: [ClipboardItem]) -> SnapshotClipboardPanel {
-        SnapshotClipboardPanel(size: clipboardPanelSize, items: items)
+        SnapshotClipboardPanel(size: SnapshotClipboardPanel.panelSize, items: items)
     }
 
     // MARK: - 离屏渲染

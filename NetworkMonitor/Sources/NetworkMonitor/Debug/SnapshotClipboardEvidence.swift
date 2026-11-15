@@ -21,8 +21,8 @@ enum SnapshotClipboardEvidence {
     /// 取证开关（与 `NM_SNAPSHOT_DIR` 组合使用；不设置时不产出任何图）
     static let envKey = "NM_SNAPSHOT_CLIPBOARD_EVIDENCE"
 
-    /// 画布尺寸（与 07-contract 的剪贴板画布一致）
-    private static let canvasSize = NSSize(width: 640, height: 260)
+    /// 画布尺寸（与其余剪贴板取证同一份，见 `SnapshotClipboardPanel.panelSize`）
+    private static let canvasSize = SnapshotClipboardPanel.panelSize
 
     /// 等缩略图就绪的上限（后台解码是毫秒级；取 3 秒留足余量）
     private static let readyTimeout: TimeInterval = 3
