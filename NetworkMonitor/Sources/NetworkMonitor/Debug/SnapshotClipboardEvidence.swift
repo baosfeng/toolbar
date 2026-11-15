@@ -101,7 +101,7 @@ enum SnapshotClipboardEvidence {
 
     /// 组装 2 条图片条目 + 2 条文本条目（图片走真实落盘目录与真实内容哈希）
     private static func makeFixtureItems(evidenceDirectory: URL, logger: LoggingService) -> [ClipboardItem]? {
-        let now = Date()
+        let now = SnapshotClock.now
         guard let first = makePNGData(label: "图片 A", colors: [.systemTeal, .systemBlue],
                                      size: NSSize(width: 512, height: 384)),
               let second = makePNGData(label: "图片 B", colors: [.systemOrange, .systemPink],

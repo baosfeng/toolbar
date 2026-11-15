@@ -163,7 +163,7 @@ extension ClipboardCardView {
                       from: .zero, operation: .sourceOver, fraction: 0.75)
             rightX -= appIcon + Self.metaGap
         }
-        let time = DrawnTextRun(string: ClipboardRelativeTime.string(from: item.createdAt),
+        let time = DrawnTextRun(string: ClipboardRelativeTime.string(from: item.createdAt, now: SnapshotClock.now),
                                 font: font, color: color)
         time.draw(at: CGPoint(x: rightX - time.exactSize.width,
                               y: rowY + (Self.metaHeight - time.exactSize.height) / 2))

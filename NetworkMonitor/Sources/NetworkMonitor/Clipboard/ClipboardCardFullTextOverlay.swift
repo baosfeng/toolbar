@@ -226,7 +226,7 @@ final class ClipboardCardFullTextOverlay {
     private static func metaText(for item: ClipboardItem) -> String {
         var parts = [MenuPanelClipboardRow.kindLabel(for: item)]
         if let name = item.sourceAppName, !name.isEmpty { parts.append(name) }
-        parts.append(ClipboardRelativeTime.string(from: item.createdAt))
+        parts.append(ClipboardRelativeTime.string(from: item.createdAt, now: SnapshotClock.now))
         parts.append("复制 \(item.copyCount) 次")
         return parts.joined(separator: " · ")
     }

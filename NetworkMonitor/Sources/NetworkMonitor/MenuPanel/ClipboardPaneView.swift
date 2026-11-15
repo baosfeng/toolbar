@@ -176,7 +176,8 @@ final class MenuPanelClipboardRow: MenuPanelRow {
     init(item: ClipboardItem) {
         super.init(height: MenuPanelStyle.rowHeight, onClick: {})
 
-        let timeLabel = MenuPanelLabel.text(ClipboardRelativeTime.string(from: item.createdAt),
+        // 相对时间走 SnapshotClock：冻结模式下固定，否则同一份代码两次截图会差在「N 分钟前」这几个字上
+        let timeLabel = MenuPanelLabel.text(ClipboardRelativeTime.string(from: item.createdAt, now: SnapshotClock.now),
                                             font: PaneCardStyle.metaFont, color: PaneCardStyle.secondaryText)
         timeLabel.widthAnchor.constraint(equalToConstant: Self.timeWidth).isActive = true
         timeLabel.setContentHuggingPriority(.required, for: .horizontal)

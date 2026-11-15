@@ -259,11 +259,7 @@ extension SettingsCapturePane {
         }.joined(separator: " ")
         let line = "[\(tag)] mode=\(config.labelMode.rawValue) groups: \(groupStates) "
             + "actions: \(actionStates) tools: \(toolStates)"
-        guard let path = ProcessInfo.processInfo.environment["NM_SNAPSHOT_DIR"], !path.isEmpty else { return }
-        let url = URL(fileURLWithPath: path, isDirectory: true)
-            .appendingPathComponent("settings-toolbar-states.txt")
-        let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        try? (existing + line + "\n").write(to: url, atomically: true, encoding: .utf8)
+        SnapshotEvidenceLine.write(line, tag: tag, fileName: "settings-toolbar-states.txt")
     }
     #endif
 
