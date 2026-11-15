@@ -37,19 +37,30 @@ if [ ! -d "$SOURCES_DIR" ]; then
     exit 1
 fi
 
-# 族名 = 文件名第一段（遇到 + 或 . 截断）：SystemPaneView+CardView.swift → SystemPaneView
+# 族名 = target 目录 + 文件名第一段（遇到 + 或 . 截断）
+# 带上 target 是必须的：不同 target 里同名的 main.swift（App / TestRunner / nmcli）是不同的东西，
+# 聚成一族会让「往 TestRunner 加一条测试用例」被判成「App 的 main 变大了」。
 compute_families() {
+    # 输出：<target/族名> <合计行数> <文件数>
     find "$SOURCES_DIR" -type f -name "*.swift" -print0 \
-        | xargs -0 -n1 basename \
-        | sed -E "s/\.swift$//; s/\+.*$//; s/\..*$//" \
+        | while IFS= read -r -d "" file; do
+            target=$(basename "$(dirname "$file")")
+            base=$(basename "$file" .swift)
+            family="${base%%+*}"
+            family="${family%%.*}"
+            printf "%s/%s\n" "$target" "$family"
+        done \
         | sort -u \
-        | while IFS= read -r family; do
+        | while IFS= read -r key; do
+            target="${key%%/*}"
+            family="${key##*/}"
             [ -z "$family" ] && continue
-            lines=$(find "$SOURCES_DIR" -type f \( -name "${family}.swift" -o -name "${family}+*.swift" \) \
-                | xargs -I{} awk "END { print NR }" {} 2>/dev/null | awk "{s+=\$1} END {print s+0}")
-            files=$(find "$SOURCES_DIR" -type f \( -name "${family}.swift" -o -name "${family}+*.swift" \) | wc -l | tr -d " ")
+            matched=$(find "$SOURCES_DIR" -type d -name "$target" -exec find {} -maxdepth 1 -type f \( -name "${family}.swift" -o -name "${family}+*.swift" \) \; )
+            [ -z "$matched" ] && continue
+            lines=$(printf "%s\n" "$matched" | xargs -I{} awk "END { print NR }" {} 2>/dev/null | awk "{s+=\$1} END {print s+0}")
+            files=$(printf "%s\n" "$matched" | wc -l | tr -d " ")
             if [ "${lines:-0}" -ge "$MIN_FAMILY_LINES" ] && [ "${files:-0}" -gt 1 ]; then
-                printf "%s %s %s\n" "$family" "$lines" "$files"
+                printf "%s %s %s\n" "$key" "$lines" "$files"
             fi
         done \
         | sort
