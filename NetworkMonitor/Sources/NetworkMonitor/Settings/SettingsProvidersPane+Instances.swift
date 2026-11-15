@@ -82,15 +82,15 @@ extension SettingsProvidersPane {
     func buildAlertCard() {
         let card = SettingsCardView()
 
-        let resetRow = SettingsRowView(title: "窗口重置通知",
-                                       subtitle: "会话 / 每周 / 月度额度进入新周期时提醒")
-        let resetSwitch = NSSwitch()
-        resetSwitch.state = alertPreferences.isResetNotificationEnabled ? .on : .off
-        resetSwitch.target = self
-        resetSwitch.action = #selector(toggleResetNotification(_:))
-        resetSwitch.setAccessibilityLabel("额度窗口重置通知开关")
-        resetRow.trailingStack.addArrangedSubview(resetSwitch)
-        card.addRow(resetRow)
+        let recoveredRow = SettingsRowView(title: "额度恢复通知",
+                                           subtitle: "仅在额度用尽后重新可用时提醒")
+        let recoveredSwitch = NSSwitch()
+        recoveredSwitch.state = alertPreferences.isRecoveredNotificationEnabled ? .on : .off
+        recoveredSwitch.target = self
+        recoveredSwitch.action = #selector(toggleRecoveredNotification(_:))
+        recoveredSwitch.setAccessibilityLabel("额度恢复通知开关")
+        recoveredRow.trailingStack.addArrangedSubview(recoveredSwitch)
+        card.addRow(recoveredRow)
 
         let recoveryRow = SettingsRowView(title: "额度回升通知",
                                           subtitle: "剩余额度回升达到阈值时提醒")
@@ -129,9 +129,9 @@ extension SettingsProvidersPane {
         return values.sorted()
     }
 
-    @objc func toggleResetNotification(_ sender: NSSwitch) {
-        alertPreferences.setResetNotificationEnabled(sender.state == .on)
-        showToast(sender.state == .on ? "窗口重置提醒已开启" : "窗口重置提醒已关闭")
+    @objc func toggleRecoveredNotification(_ sender: NSSwitch) {
+        alertPreferences.setRecoveredNotificationEnabled(sender.state == .on)
+        showToast(sender.state == .on ? "额度恢复提醒已开启" : "额度恢复提醒已关闭")
     }
 
     @objc func toggleRecoveryNotification(_ sender: NSSwitch) {

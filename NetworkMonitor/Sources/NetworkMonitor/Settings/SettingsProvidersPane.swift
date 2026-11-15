@@ -29,7 +29,7 @@ final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHo
     // 以下成员放宽为 internal：`SettingsProvidersPane+Instances` 扩展要做实例增删改
     let monitor: BillingMonitor
     let preferences: BillingProviderPreferences
-    /// 恢复提醒偏好（窗口重置 / 余额回升 / 回升阈值）
+    /// 恢复提醒偏好（用尽提醒 / 额度恢复 / 额度回升 / 回升阈值）
     let alertPreferences: BillingAlertPreferences
     /// 三类额度通知的推送形式（放宽为 internal：DEBUG 快照要按协议取到它）
     let notificationCard: SettingsNotificationEventCard
@@ -59,7 +59,7 @@ final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHo
         self.preferences = preferences
         self.alertPreferences = alertPreferences ?? BillingAlertPreferences()
         self.notificationCard = SettingsNotificationEventCard(
-            events: [.billingAlert, .billingWindowReset, .billingRecovery],
+            events: [.billingAlert, .billingRecovered, .billingRecovery],
             context: notificationContext)
         super.init(section: .providers)
     }

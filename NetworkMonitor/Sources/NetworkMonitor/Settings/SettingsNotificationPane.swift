@@ -51,7 +51,7 @@ final class SettingsNotificationPane: SettingsPaneView {
         buildAuthorizationCard()
         buildSoundLibraryCard()
         buildResetCard()
-        page.addNote("各功能的通知与声音在那件事自己的设置页：额度提醒 / 额度重置 / 额度回升在「额度 Provider」，"
+        page.addNote("各功能的通知与声音在那件事自己的设置页：额度提醒 / 额度恢复 / 额度回升在「额度 Provider」，"
                      + "截图完成在「截图与贴图」，剪贴板动作在「剪贴板」，传输完成在「局域网互传」，"
                      + "面板展开收起在「通用」。")
         page.addNote("提醒方式与横幅样式：App 能决定的是「有没有声音」「前台要不要弹横幅」，"

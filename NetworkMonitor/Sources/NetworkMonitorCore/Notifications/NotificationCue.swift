@@ -26,8 +26,8 @@ public enum NotificationCue: String, CaseIterable, Sendable {
     case transferFinished
     /// 额度提醒（同上兜底；系统通知已授权时不会重复响）
     case billingAlert
-    /// 额度重置（兜底）
-    case billingWindowReset
+    /// 额度恢复（兜底）
+    case billingRecovered = "billingWindowReset"
     /// 额度回升（兜底）
     case billingRecovery
 
@@ -39,7 +39,7 @@ public enum NotificationCue: String, CaseIterable, Sendable {
         case .snipCapture: return .snipCaptured
         case .transferFinished: return .transferFinished
         case .billingAlert: return .billingAlert
-        case .billingWindowReset: return .billingWindowReset
+        case .billingRecovered: return .billingRecovered
         case .billingRecovery: return .billingRecovery
         }
     }
@@ -56,8 +56,8 @@ public enum NotificationCue: String, CaseIterable, Sendable {
         case .snipCapture: return "Glass"
         case .transferFinished: return "Glass"
         case .billingAlert: return "Basso"
-        // 重置与回升是好消息，用轻快的 Glass；阈值跌破才用低沉的 Basso
-        case .billingWindowReset: return "Glass"
+        // 恢复与回升是好消息，用轻快的 Glass；额度跌破才用低沉的 Basso
+        case .billingRecovered: return "Glass"
         case .billingRecovery: return "Glass"
         }
     }
