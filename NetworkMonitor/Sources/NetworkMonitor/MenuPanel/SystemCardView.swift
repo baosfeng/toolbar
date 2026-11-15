@@ -98,7 +98,7 @@ class SystemCardView: NSView {
 
     /// 卡内无障碍子元素台账（卡头按钮 + 内容读数）
     ///
-    /// 存储留在类里（Swift 扩展不能声明存储属性），构建与刷新在 SystemPaneView+CardAccessibility.swift。
+    /// 存储留在类里（Swift 扩展不能声明存储属性），构建与刷新在 DrawnCardAccessibilityElements.swift。
     var accessibilityElements = DrawnCardAccessibilityElements()
 
     // MARK: 子类钩子

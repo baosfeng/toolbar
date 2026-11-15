@@ -58,7 +58,7 @@ final class SystemPaneView: MenuPanelPaneView {
     //
     // 改造前每张卡是「NSStackView 卡头 + 内容视图树」（五卡内部共 113 个视图）；
     // 现在每张卡是一个视图，卡头与内容都在一次 draw 里画完。
-    // 各卡的内容口径见 SystemPaneView+DrawnCards.swift。
+    // 各卡的内容口径见 SystemDrawnText.swift。
 
     /// CPU 卡（版2：不画每核柱阵，加卡内大号数值 + 卡头用户态 / 系统态双图例）
     let cpuCard = SystemCPUCardView(title: "CPU", wash: SystemPalette.wash(.cpu))

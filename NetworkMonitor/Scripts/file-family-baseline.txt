@@ -29,7 +29,7 @@ SnipOverlayView 1436 8
 SnipToolBarView 472 3
 SystemDetailPaneView 826 6
 SystemMonitor 365 2
-SystemPaneView 2761 18
+SystemPaneView 621 4
 TokenDerive 705 4
 TokenDetailPages 593 4
 TokenPaneSnapshot 1041 8

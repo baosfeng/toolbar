@@ -2,7 +2,7 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorUI
 
-// MARK: - 整卡的无障碍上报（从 SystemPaneView+CardView.swift 拆出）
+// MARK: - 整卡的无障碍上报（从 SystemCardView.swift 拆出）
 
 /// 整卡的子元素台账 —— 卡头按钮与内容读数在无障碍树里各是一个元素
 ///

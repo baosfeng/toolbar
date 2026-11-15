@@ -5,8 +5,8 @@ import NetworkMonitorUI
 // MARK: - 首屏五卡（整卡自绘，卡内零视图）
 //
 // 五张卡共用 SystemCardView（卡底 + 卡头 + 内容区钩子），按职责分三个文件：
-// 本文件 = 文字取色 + CPU 卡 + GPU 卡；内存 / 磁盘卡在 SystemPaneView+DrawnCardsMemory.swift；
-// 压力卡在 SystemPaneView+DrawnCardsLoad.swift。几何口径走 SystemCardLayout（纯逻辑、可断言），
+// 本文件 = 文字取色 + CPU 卡 + GPU 卡；内存 / 磁盘卡在 SystemMemoryCardView.swift；
+// 压力卡在 SystemLoadCardView.swift。几何口径走 SystemCardLayout（纯逻辑、可断言），
 // 图上内容走 SystemChartDrawing（与二级详情页里的同名视图共用同一份绘制）。
 // 改造前五卡内部共 113 个视图（连状态带 132 个），改造后卡内 0 个。
 

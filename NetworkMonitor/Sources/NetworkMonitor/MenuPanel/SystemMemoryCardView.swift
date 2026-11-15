@@ -4,7 +4,7 @@ import NetworkMonitorUI
 
 // 首屏五卡：内存 / 磁盘
 // 堆叠条与容量读数类卡片 —— 只写各自的数据与内容区绘制，卡底 / 卡头由 SystemCardView 统一绘制。
-// CPU / GPU 卡在 SystemPaneView+DrawnCards.swift，压力卡在 SystemPaneView+DrawnCardsLoad.swift。
+// CPU / GPU 卡在 SystemDrawnText.swift，压力卡在 SystemLoadCardView.swift。
 
 // MARK: - 内存卡
 
