@@ -40,6 +40,17 @@ let package = Package(
             name: "TestRunner",
             dependencies: ["NetworkMonitorCore", "NetworkMonitorUI"]
         ),
+        // UI 自动化 CLI（nmcli）：纯系统框架直连目标进程做程序化验收，
+        // 不依赖 cua、零第三方依赖，用法见 docs/开发指南/UI-自动化-CLI.md
+        .executableTarget(
+            name: "nmcli",
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("ApplicationServices"),
+                .linkedFramework("CoreGraphics"),
+                .linkedFramework("ImageIO")
+            ]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )
