@@ -68,7 +68,8 @@ public final class AppCoordinator {
     /// 应用内音效播放器
     var soundPlayer: NotificationSoundPlayer!
     /// 系统通知入口（额度 / 传输等全部系统通知的唯一出口）
-    var notificationService: any NotificationServicing!
+    // 隐式解包要写在括号外：`any P!` 在 Swift 6.3 会报「optional 'any' type must be written '(any P)?'」
+    var notificationService: (any NotificationServicing)!
 
     /// 局域网互传面板控制器
     // 放宽为 internal：AppCoordinator+Transfer 装配扩展要写
