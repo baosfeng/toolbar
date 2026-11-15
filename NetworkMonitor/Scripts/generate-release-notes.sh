@@ -169,6 +169,11 @@ build_notes() {
 
     local log_lines
     log_lines=$(git log --reverse --no-merges --pretty=format:'%h|%s' "${prev}..${tag}" 2>/dev/null || true)
+    if [ -z "$log_lines" ]; then
+        # 区间为空（全新的单提交仓库、或 prev 恰好就是根提交）时退回最近 200 条提交：
+        # 否则正文只剩一句「本版本没有代码提交记录」，逐条明细与可点链接全部消失
+        log_lines=$(git log --reverse --no-merges --max-count=200 --pretty=format:'%h|%s' "$tag" 2>/dev/null || true)
+    fi
 
     local repo
     repo=$(repo_slug || true)

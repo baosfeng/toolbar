@@ -28,14 +28,14 @@ check_contains() {
     if printf '%s' "$haystack" | grep -qF -- "$needle"; then
         pass "$label"
     else
-        fail "$label（找不到：$needle）"
+        fail "${label}（找不到：${needle}）"
     fi
 }
 
 check_absent() {
     local label="$1" needle="$2" haystack="$3"
     if printf '%s' "$haystack" | grep -qF -- "$needle"; then
-        fail "$label（不该出现：$needle）"
+        fail "${label}（不该出现：${needle}）"
     else
         pass "$label"
     fi
@@ -54,19 +54,36 @@ if [ -n "$PREV" ]; then
     notes=$(bash "$SCRIPT" --tag "$TAG" --prev "$PREV" 2>&1)
     range="${PREV}..${TAG}"
 else
-    notes=$(bash "$SCRIPT" --tag HEAD 2>&1)
-    range="全部历史"
+    # 没有 tag（浅克隆 / 全新分支）：退到「最近 20 条提交」的父提交当基线，
+    # 仍然至少有一条真实提交可供断言——空区间会让「每一条 hash 都可点」白通过
+    BASE=$(git rev-list --max-count=21 HEAD 2>/dev/null | tail -1 || true)
+    if [ -n "$BASE" ]; then
+        notes=$(bash "$SCRIPT" --tag HEAD --prev "$BASE" 2>&1)
+        range="${BASE}..HEAD（最近提交）"
+    else
+        notes=$(bash "$SCRIPT" --tag HEAD 2>&1)
+        range="全部历史"
+    fi
 fi
 
 echo "回归区间：${range}"
 echo
 
-# ① 完整变更链接必须指向真实 GitHub 仓库（不能是 origin 的 codeup 用户名）
-check_contains "完整变更链接指向 ${REPO}" "github.com/${REPO}/compare/" "$notes"
-check_absent   "完整变更链接不指向 bsfeng（404 的那次）" "github.com/bsfeng/" "$notes"
+# 仓库身份判定：脚本据此把 hash 拼成链接，取不到时退化为纯文本
+has_repo_identity=0
+if [ -n "${GITHUB_REPOSITORY:-}" ] || git config --get remote.github.url >/dev/null 2>&1 \
+   || git config --get remote.origin.url 2>/dev/null | grep -q github.com; then
+    has_repo_identity=1
+fi
 
-# ② 逐条提交的短 hash 必须可点
-check_contains "commit 链接指向 ${REPO}/commit" "github.com/${REPO}/commit/" "$notes"
+# ① 完整变更链接必须指向真实 GitHub 仓库（不能是 origin 的 codeup 用户名）
+check_absent "完整变更链接不指向 bsfeng（404 的那次）" "github.com/bsfeng/" "$notes"
+if [ "$has_repo_identity" = "1" ]; then
+    check_contains "完整变更链接指向 ${REPO}" "github.com/${REPO}/compare/" "$notes"
+    check_contains "commit 链接指向 ${REPO}/commit" "github.com/${REPO}/commit/" "$notes"
+else
+    echo "⚠️  跳过链接断言：当前副本没有 GitHub remote 也没有 GITHUB_REPOSITORY（CI 与主仓都会真跑）"
+fi
 
 # ③ @提及必须被中和成行内代码，否则 GitHub 会在页脚挂出假贡献者
 mention_hits=$(printf '%s' "$notes" | grep -cE '(^|[^`A-Za-z0-9_.-])@[A-Za-z0-9_-]' || true)

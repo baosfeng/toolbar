@@ -30,8 +30,12 @@ jobs:
             runner: macos-26-intel
 
     steps:
+      # fetch-depth: 0 —— 发布说明回归要跑真实提交区间：浅克隆里 git log 只有 1 条，
+      # 「每条 hash 都可点」这类断言会因为没有条目而假红
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # 工具链展示与版本校验收在 .github/actions/setup-build 里，release 复用同一份；
       # CI 无 tag、无证书，两项都走默认空值跳过
