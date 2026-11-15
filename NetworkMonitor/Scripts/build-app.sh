@@ -147,7 +147,7 @@ package_app() {
     <key>CFBundleVersion</key>
     <string>21</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.27.0</string>
+    <string>1.28.0</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSUIElement</key>
