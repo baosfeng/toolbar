@@ -8,6 +8,7 @@ import NetworkMonitorUI
 ///
 /// 一个卡片 = 1 个容器视图 + 1 个行列表视图（行本身零视图）。
 /// 容器只负责画底、画卡头、给列表排版；行的绘制与交互全在 `DrawnRowList`。
+/// 卡头排布与系统页五卡共用 `SystemCardLayout.head()`（同一份纯口径，不再各算一遍）。
 /// 视觉令牌取自 `PaneCardStyle`：圆角 9pt、内边距 7/4、卡头 11pt 粗体、行高 28pt。
 @MainActor
 final class DrawnCard: NSView {
@@ -39,6 +40,9 @@ final class DrawnCard: NSView {
     var paddingY: CGFloat = PaneCardStyle.cardPaddingY { didSet { needsLayout = true } }
     /// 卡头与行的间距
     var headSpacing: CGFloat = 3 { didSet { needsLayout = true } }
+
+    /// 卡头内「标题」与「右侧说明」之间的最小间距（与系统页同源；说明超宽时先让位）
+    static let headGap: CGFloat = 6
 
     private var titleRun: DrawnTextRun {
         DrawnTextRun(string: title, font: PaneCardStyle.cardTitleFont, color: PaneCardStyle.primaryText)
@@ -87,15 +91,24 @@ final class DrawnCard: NSView {
                               y: paddingY,
                               width: max(bounds.width - paddingX * 2, 0),
                               height: PaneCardStyle.cardHeadHeight)
-        if !caption.isEmpty {
-            let captionWidth = captionRun.width(limit: headRect.width)
-            captionRun.draw(in: CGRect(x: headRect.maxX - captionWidth,
+        // 卡头排布与系统页五卡同源；本卡没有附属件与最右端块，两槽位传 0
+        let head = SystemCardLayout.head(width: headRect.width,
+                                         titleWidth: titleRun.layoutWidth,
+                                         accessoryWidth: 0,
+                                         captionWidth: caption.isEmpty ? 0 : captionRun.width(limit: headRect.width),
+                                         trailingWidth: 0,
+                                         gap: Self.headGap)
+        if head.captionWidth > 0 {
+            captionRun.draw(in: CGRect(x: headRect.minX + head.captionX,
                                        y: headRect.minY,
-                                       width: captionWidth,
+                                       width: head.captionWidth,
                                        height: headRect.height),
-                             alignment: .right)
+                            alignment: .right)
         }
-        let titleWidth = max(headRect.width - (caption.isEmpty ? 0 : captionRun.width(limit: headRect.width) + 6), 1)
-        titleRun.draw(in: CGRect(x: headRect.minX, y: headRect.minY, width: titleWidth, height: headRect.height))
+        let titleWidth = max(head.captionWidth > 0 ? head.captionX - Self.headGap : headRect.width, 1)
+        titleRun.draw(in: CGRect(x: headRect.minX + head.titleX,
+                                 y: headRect.minY,
+                                 width: titleWidth,
+                                 height: headRect.height))
     }
 }

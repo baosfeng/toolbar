@@ -13,4 +13,5 @@ set -euo pipefail
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-exec bash "NetworkMonitor/Scripts/check-file-size.sh"
+bash "NetworkMonitor/Scripts/check-file-size.sh"
+exec bash "NetworkMonitor/Scripts/check-file-families.sh"
