@@ -33,10 +33,10 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
 
     /// 写队列 — 写入 / 索引 / 建表在此队列上执行（internal：供同模块仓储扩展访问）
     /// 队列自带排队等待计时（> 200 ms 记一条，见 DatabaseQueue）
-    let serialQueue = DatabaseQueue(label: "com.example.NetworkMonitor.database")
+    let serialQueue = DatabaseQueue(label: "com.bsfeng.yilan.database")
 
     /// 只读队列 — 只读查询在此队列上执行，与写队列并行（internal：供同模块仓储扩展访问）
-    let readQueue = DatabaseQueue(label: "com.example.NetworkMonitor.database.read")
+    let readQueue = DatabaseQueue(label: "com.bsfeng.yilan.database.read")
 
     /// 只读连接指针（只在 readQueue 上使用；nil = 不可用，只读查询退化为写队列）
     private var readDB: OpaquePointer?

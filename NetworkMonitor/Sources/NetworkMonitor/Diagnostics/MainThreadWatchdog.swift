@@ -43,7 +43,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
     func start() {
         guard timer == nil else { return }
         let source = DispatchSource.makeTimerSource(
-            queue: DispatchQueue(label: "com.example.NetworkMonitor.mainThreadWatchdog", qos: .utility)
+            queue: DispatchQueue(label: "com.bsfeng.yilan.mainThreadWatchdog", qos: .utility)
         )
         source.schedule(deadline: .now() + MainThreadWatchdogPolicy.tickSeconds,
                         repeating: MainThreadWatchdogPolicy.tickSeconds)

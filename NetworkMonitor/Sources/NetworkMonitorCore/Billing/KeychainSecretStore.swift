@@ -41,7 +41,7 @@ public final class KeychainSecretStore: SecretStorage {
     }
 
     /// 默认 service（与 App bundle id 保持一致，便于在钥匙串访问里辨认）
-    public static let defaultService = "com.example.NetworkMonitor.billing"
+    public static let defaultService = "com.bsfeng.yilan.billing"
 
     /// 钥匙串与偏好是两个独立存储：旧明文可以安全搬迁
     public var sharesStorageWithPreferences: Bool { false }

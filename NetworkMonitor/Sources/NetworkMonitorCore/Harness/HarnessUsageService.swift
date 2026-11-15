@@ -63,7 +63,7 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
         self.store = store
         self.logger = logger
         self.nowProvider = nowProvider
-        self.queue = DispatchQueue(label: "com.example.NetworkMonitor.harnessTokenIndexing", qos: .utility)
+        self.queue = DispatchQueue(label: "com.bsfeng.yilan.harnessTokenIndexing", qos: .utility)
     }
 
     /// 状态变化回调（在索引队列上回调，UI 侧请自行切回主线程）

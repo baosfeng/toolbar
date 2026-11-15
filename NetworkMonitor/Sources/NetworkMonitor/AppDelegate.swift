@@ -10,6 +10,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppContext.shared.configure(logger: OSLogLogger(category: "App"))
+        // 偏好域迁移必须在**任何读偏好的服务之前**：改了 bundle id 就等于换了偏好域，
+        // 晚于首读会被「当前域已有键」判成跳过，用户设置表现为全部回到默认。
+        PreferenceDomainMigrator.runIfNeeded(currentBundleIdentifier: Bundle.main.bundleIdentifier)
         // 启动自愈：包名改成「一览.app」后旧的 SMAppService 登记仍指向旧包路径（偏好是开、
         // 系统侧却没登记）。偏好为开时重新登记一次；失败则回滚偏好，设置页不会显示虚假的「已开启」。
         LaunchAtStartupService().reconcileAtLaunch()

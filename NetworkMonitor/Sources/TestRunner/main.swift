@@ -362,5 +362,8 @@ runLatestRequestGateTests()
 // MARK: - 快照冻结时钟（缺省回落 / now 对齐整分钟 / epoch 固定 / 日期键不漂移）
 runSnapshotClockTests()
 
+// MARK: - 偏好域迁移（bundle id 变更时的设置搬迁：全量 / 幂等 / 跳过已有 / 空域）
+runPreferenceDomainMigrationTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")

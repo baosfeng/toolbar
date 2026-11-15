@@ -15,4 +15,14 @@ public enum AppIdentity {
 
     /// 产品显示名（退出菜单 / 关于页 / 权限引导 / 通知口径共用）
     public static let displayName = "一览"
+
+    /// bundle id 真源（`build-app.sh` 的 `APP_BUNDLE_ID` 与之同源，改名两处一起改）
+    ///
+    /// 从 `com.example.NetworkMonitor` 迁到 `com.bsfeng.yilan`：这个值决定 TCC 判据、
+    /// 偏好域文件名与登录项登记，改它必须配套 `PreferenceDomainMigrator`（偏好搬迁）
+    /// 与一次用户手动的权限重授。
+    public static let bundleIdentifier = "com.bsfeng.yilan"
+
+    /// 上一个 bundle id：偏好域迁移的来源，迁完后只用于判定「要不要迁」
+    public static let legacyBundleIdentifier = "com.example.NetworkMonitor"
 }

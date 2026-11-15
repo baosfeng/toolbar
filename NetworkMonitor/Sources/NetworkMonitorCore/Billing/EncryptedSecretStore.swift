@@ -104,6 +104,9 @@ public struct LocalKeyMaterial: Sendable {
     /// 派生 AES-256 密钥（HKDF 把两段材料与用途标签绑定，换用途不会撞钥匙）
     public func deriveKey() -> SymmetricKey {
         let input = SymmetricKey(data: machineSeed + fileSeed)
+        // salt 刻意**不随 bundle id 变化**：它是 KDF 参数不是身份标识。
+        // 改 salt = 换密钥派生参数 = 用户已存的全部凭据密文永久解不开，且没有任何报错，
+        // 表现为「额度页全部凭据无效」。字符串里的旧 id 是历史值，不要清理。
         return HKDF<SHA256>.deriveKey(inputKeyMaterial: input,
                                       salt: Data("com.example.NetworkMonitor.credentials".utf8),
                                       info: Data("billing-credential-v1".utf8),

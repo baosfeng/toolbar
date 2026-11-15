@@ -24,8 +24,9 @@ BUILD_MODE="${1:-debug}"
 APP_NAME="NetworkMonitor"
 # 对外显示名（中文产品名）：只写进 Info.plist 的显示字段与权限用途说明。
 # 与 Sources/NetworkMonitorCore/Infrastructure/AppIdentity.swift 的 displayName 同源，改名两处一起改。
-# 保持不动的只有 CFBundleIdentifier 与签名身份：它们绑着 TCC 的 designated requirement
-# 与本地偏好域（~/Library/Preferences/com.example.NetworkMonitor.plist）。
+# CFBundleIdentifier 与签名 identifier 绑着 TCC 的 designated requirement 与本地偏好域，
+# 改名会让用户全部 TCC 授权失效、偏好域换新（由 PreferenceDomainMigrator 自动搬迁）。
+APP_BUNDLE_ID="com.bsfeng.yilan"
 APP_DISPLAY_NAME="一览"
 # 包内可执行名（Contents/MacOS/<此名> 与 Info.plist 的 CFBundleExecutable）
 #
@@ -33,7 +34,7 @@ APP_DISPLAY_NAME="一览"
 # 做法是**打包时复制改名**——构建产物仍叫 NetworkMonitor（SwiftPM target 名不变），
 # 拷进 .app 时命名为「一览」，CFBundleExecutable 写「一览」。
 # 崩溃报告文件名随之变成「一览-<时间>.ips」（历史 .ips 仍留在原处，不影响追溯）；
-# 签名 identifier 仍是 com.example.NetworkMonitor，所以换可执行名不改 TCC 授权判据。
+# 签名 identifier 是 $APP_BUNDLE_ID，改名可执行名不影响它。
 APP_EXECUTABLE_NAME="一览"
 # .app 目录名（Finder / 启动台 / 权限列表 / 卸载路径里看到的包名）：与显示名同源，用中文「一览」。
 # 中文路径因此全程加引号（本文件所有路径引用均已加），迁移旧包见下方「部署」段。
@@ -138,7 +139,7 @@ package_app() {
     <key>CFBundleExecutable</key>
     <string>${APP_EXECUTABLE_NAME}</string>
     <key>CFBundleIdentifier</key>
-    <string>com.example.NetworkMonitor</string>
+    <string>${APP_BUNDLE_ID}</string>
     <key>CFBundleName</key>
     <string>${APP_DISPLAY_NAME}</string>
     <key>CFBundleDisplayName</key>
@@ -231,14 +232,14 @@ sign_app() {
         done <<< "$nested"
     fi
 
-    # 主可执行文件：固定标识符（com.example.NetworkMonitor）是 TCC 授权稳定的关键
+    # 主可执行文件：固定标识符（$APP_BUNDLE_ID）是 TCC 授权稳定的关键
     local exe="$target/Contents/MacOS/${APP_EXECUTABLE_NAME}"
     if [ -f "$exe" ]; then
-        sign_object "$exe" "com.example.NetworkMonitor"
+        sign_object "$exe" "$APP_BUNDLE_ID"
     fi
 
     # 包体
-    sign_object "$target" "com.example.NetworkMonitor"
+    sign_object "$target" "$APP_BUNDLE_ID"
 
     if [ "$USE_SIGNING_CERT" = "1" ]; then
         echo "      使用证书：${SIGN_IDENTITY}"
@@ -407,7 +408,7 @@ done
 cp -R "$APP_DIR" "$INSTALL_PATH"
 echo "   ✅ 已复制到 ${INSTALL_PATH}"
 
-# 显式签名并固定标识符（com.example.NetworkMonitor）。
+# 显式签名并固定标识符（$APP_BUNDLE_ID）。
 # 不指定 --identifier 时系统会生成「NetworkMonitor-<hash>」临时标识，每次构建都变，
 # 导致 macOS 把 App 当成新应用，本地网络权限每次重新部署都失效（表现为 UDP errno 65）。
 echo "   🔏 签名（固定标识符 + 固定证书）..."

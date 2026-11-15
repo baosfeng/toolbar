@@ -75,7 +75,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     ///
     /// 并发而非串行：两页各自独立，一页的重活（Token 聚合补算）不该把另一页的首屏拖住；
     /// 「只渲染最新一次结果」由 LatestRequestGate 保证，不依赖队列顺序。
-    let dataReadQueue = DispatchQueue(label: "com.example.NetworkMonitor.panelDataRead",
+    let dataReadQueue = DispatchQueue(label: "com.bsfeng.yilan.panelDataRead",
                                      qos: .userInitiated, attributes: .concurrent)
     /// 剪贴板刷新请求闸门（异步读 + 只接受最新一次结果）
     var clipboardRequests = LatestRequestGate()
