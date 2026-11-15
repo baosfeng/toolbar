@@ -55,14 +55,12 @@ say "   当前 ${old_version}（构建号 ${old_build}）→ 目标 ${VERSION}�
 [ "$old_version" = "$VERSION" ] && fail "版本号已经是 ${VERSION}"
 
 # 语义化比较：逐段按数值比（字符串比会把 1.9 判成大于 1.10）
-higher=$(awk -v a="$old_version" -v b="$VERSION" "BEGIN {
-  split(a, x, "."); split(b, y, ".");
-  for (i = 1; i <= 3; i++) {
-    if (y[i] + 0 > x[i] + 0) { print 1; exit }
-    if (y[i] + 0 < x[i] + 0) { print 0; exit }
-  }
-  print 0
-}")
+higher=$(python3 -c "
+import sys
+def parts(v): return [int(x) for x in v.split(".")[:3]]
+old, new = parts(sys.argv[1]), parts(sys.argv[2])
+print(1 if new > old else 0)
+" "$old_version" "$VERSION")
 [ "$higher" = "1" ] || fail "新版本号必须大于当前 $old_version"
 git rev-parse -q --verify "refs/tags/$TAG" > /dev/null && fail "本地已有 tag $TAG"
 git ls-remote --tags "$REMOTE" "refs/tags/$TAG" 2>/dev/null | grep -q . && fail "远端已有 tag $TAG"
