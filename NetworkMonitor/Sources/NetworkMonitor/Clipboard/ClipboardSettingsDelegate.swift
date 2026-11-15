@@ -15,12 +15,6 @@ protocol ClipboardSettingsDelegate: AnyObject {
     func settingsDidChangeCaptureMode()
     /// 忽略应用清单变更（内部重载忽略集合）
     func settingsDidChangeIgnoredApps()
-    /// 当前是否已获得辅助功能权限
-    func settingsAccessibilityGranted() -> Bool
-    /// 请求跳转系统设置的辅助功能授权页
-    func settingsDidRequestAccessibilityPermission()
-    /// 请求打开剪贴板相关系统设置（剪贴板访问权限）
-    func settingsDidRequestClipboardSettings()
     /// 图片落盘目录的当前占用（设置页「存储」卡每次刷新现取）
     func settingsClipboardImageUsage() -> ClipboardStorageUsage.Summary
     /// 请求清空图片存储（内部复用既有清空 + 孤儿清扫，返回删了多少）

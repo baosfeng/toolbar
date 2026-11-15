@@ -23,15 +23,17 @@
 | **sqrt 绝对刻度** | 进程 CPU 榜条形长度 `min(1, sqrt(cpuPercent) × 13 / 100)`，满条 = 100% = 占满一个核。**不是榜首归一化**：榜首跳变会让所有条联动缩放（实测同一条 15.77% 的进度在 26.2–197.1pt 间摆动，波动 170.8pt；绝对刻度下恒 51.6pt，波动 0） | 相对刻度、按最大值归一化 |
 | **首屏预算** | `maxHeight = 520pt` 下的信息优先级分配。v6 版2 把四处信息下沉到二级详情页（每核柱阵 / 显存条 / 内存四段数值 / 磁盘读写曲线），目标是四联 + 五卡 + 状态带一屏看全；实测以快照为准 | 一屏显示、压缩排版 |
 | **额度窗口** | `BillingQuotaWindow`：`kind`（会话 / 每日 / 每周 / 每月 / 自定义）+ `duration` + `resetsAt`；`cycleID = "kind@重置时刻"` 是周期稳定标识，重置时刻前进即视为新周期 | 套餐周期、限额区间 |
-| **三类额度提醒** | `BillingAlertKind`：`threshold(5…1%)` 跌破阈值 / `windowReset` 窗口进入新周期 / `balanceRecovered` 余额回升（默认 +10pt、冷却 3600s）；判据是「相邻两次观测」的基线（上次剩余比例 / 上次窗口 / 上次重置时刻），三类可分别关闭 | 额度告警、余额通知 |
+| **四类额度提醒** | `BillingAlertKind`：`exhausted` 用尽（剩余跌破 `BillingAlertThresholds.exhaustedPercent`，默认 1%）/ `threshold(5…2%)` 偏低预告 / `recovered` 恢复（**只对本周期曾用尽过的额度发**，`BillingAlert.State.exhaustedCycleID` 记本周期用尽；没用尽过的额度切多少个窗口周期都静默）/ `balanceRecovered` 余额回升（默认 +10pt、冷却 3600s，与恢复是两条独立信号）；判据是「相邻两次观测」的基线，四类可分别关闭 | 额度告警、余额通知 |
 | **估算功耗** | 状态带「估功耗」= IOReport `Energy Model` 的 `GPU Energy` 累加器差分（单位 nJ），是估算不是功耗计读数；CPU 功耗恒 0 无法合成整机功耗 | 功耗、整机功率 |
 | **主题** | `ThemeID`：Apple（默认）/ 冷调石墨 / 暖调米白，每套给浅深两档语义色（深浅同级、都是一等公民）；只描述界面壳层，系统页的指标族色仍归 `SystemPaletteTokens` | 皮肤、配色方案 |
 | **主题角色** | `ThemeRole`：按「用在哪」命名的语义色槽（surface / cardFill / bandFill / track / hairline / textPrimary / accent / family1…4）；`ThemeStyle` 是界面层唯一取色入口，`PaneCardStyle` 整体转发它 | 颜色常量、hex 表 |
 | **玻璃配方** | `ThemeMaterialRecipe`（style + 卡片底 alpha / 高光 / 描边 / 面板着色）+ `ThemeShadowRecipe`；面板 macOS 26+ 走 `NSGlassEffectView`、< 26 回落 `NSVisualEffectView`，卡片不套玻璃 | 背景透明度 |
 | **渲染档** | `RenderTier`（标准 / 极致 / 省电）+ `RenderTierProfile`：tick 1.0 / 0.5 / 2.0s、中频 5 / 2 / 15s、动效与玻璃开关、图表降采样；档位只改刷新节奏与精度，不改任何数据口径 | 帧率、性能模式 |
-| **通知事件** | `NotificationEvent` 七行：额度提醒 / 额度重置 / 额度回升 / 截图完成 / 剪贴板动作 / 传输完成 / 面板展开收起；`postsSystemNotification` 为假的三行（截图 / 剪贴板 / 面板）只有应用内音效与触觉 | 提示项、消息类型 |
+| **通知事件** | `NotificationEvent` 七行：额度提醒（用尽与偏低共用）/ 额度恢复（rawValue 沿用 `billingWindowReset`，语义已收紧为「曾用尽的额度重新可用」，偏好键因此零迁移）/ 额度回升 / 截图完成 / 剪贴板动作 / 传输完成 / 面板展开收起；`postsSystemNotification` 为假的三行（截图 / 剪贴板 / 面板）只有应用内音效与触觉 | 提示项、消息类型 |
 | **通知通道** | 每个事件四列：开关 + 提示音（`NotificationSoundSelection`）+ 提醒方式（`NotificationPresentation` 三档：横幅+声音 / 仅横幅 / 仅通知中心）+ 触觉（`NotificationHaptic` 四档：关 / 轻 / 标准 / 有力；系统只有 3 种反馈图案，没有强度值） | 通知设置、声音开关 |
-| **音效库安装** | 系统音只读 `/System/Library/Sounds`；自定义音效导入即转 AIFF 16-bit PCM 落 Store，发送前按确定性文件名同步一份到 `~/Library/Sounds`，并只清理自己前缀下的孤儿副本 | 音频目录、音效文件 |
+| **内建合成音** | `NotificationSoundSelection.builtIn`（存储串 `builtin`）是默认档：`CueSoundSynth` 按 cue 的五个音色族（crisp / thud / chime / swipe / alert）确定性合成 44.1kHz / 16-bit / 单声道 PCM，`CueSoundFileStore` 落 `~/Library/Application Support/macMonitor/sounds`，sidecar `cue-manifest.json` 记配方版本故幂等；仓库不打包音频资源 | 提示音资源、内置音效 |
+| **音效库安装** | 内建音与自定义音效都按确定性文件名同步一份到 `~/Library/Sounds`（系统通知只认 bundle 与该目录、不认子目录），按前缀 `NetworkMonitor-` 有界清理孤儿；系统音效库只读 `/System/Library/Sounds`，自定义音效导入即转 AIFF 16-bit PCM 落 Store | 音频目录、音效文件 |
+| **底部详情区** | 剪贴板面板四段几何（`ClipboardPanelLayout`：工具条 32 / 卡片区弹性 / 详情区 102 / 提示行 24）里常驻的那一段：显示选中条目的完整内容与元信息，高度恒定（不随选中项与正文长短变），超长在内部滚动；取代了早期「悬停弹全文浮层」的方案 | 全文浮层、预览弹窗 |
 | **识别文字（OCR）** | `SnipTool.ocr`：工具条上的**动作型**工具（`annotationKind == nil`、`isActionTool`），不落图元；触发即把当前选区交给 OCR，结果可复制或直接贴图，入口为 ⌘O 或工具条二级面板 | 文字标注、截图文字提取 |
 
 ## 关键事实（易错点）

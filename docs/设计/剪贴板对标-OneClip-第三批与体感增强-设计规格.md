@@ -41,16 +41,14 @@
 2. App 层解码加一级兜底：ImageIO `CGImageSource` 主路径失败后，回退 `NSBitmapImageRep(data:)` → `CGImage`，再走既有降采样出口；两路都失败才记失败。
 3. 失败记忆改由 `ClipboardThumbnailRetryPolicy` 判定，面板重开 / 重绘时按策略决定是否重新请求。
 
-### A3 卡片悬停态与全文展开（P1，面板 UI）
+### A3 卡片悬停态（P1，面板 UI）｜全文浮层已由底部详情区取代
 
 **问题**：卡片正文固定 7 行截断，`NetworkMonitor/Clipboard/` 全目录 `mouseEntered` / `trackingArea` 0 命中，鼠标滑过毫无反应。
 
 **设计**：
-1. 卡片新增 hover 态：描边加粗 + 底色微提亮（不改尺寸、不改布局、不缩放）。
-2. 悬停 `0.45s` 后在卡片**下方**（空间不足则上方）弹出全文浮层：`.hudWindow` 材质、圆角 12、宽 `280pt`、最大 `9` 行、超长内部滚动，显示完整正文 + 类型 / 来源 / 时间 / 复制次数。
-3. 浮层不抢焦点、不拦截鼠标（`ignoresMouseEvents = true`），移出卡片或面板收起即消失。
-4. 全文仍是纯文本渲染，不做富文本；图片 / 文件条目浮层显示既有摘要与元信息。
-5. 无障碍：浮层内容设置 `setAccessibilityLabel`。
+1. 卡片 hover 态：描边加粗 + 底色微提亮（不改尺寸、不改布局、不缩放）。这是本项保留下来的部分。
+2. 早期设计里悬停 `0.45s` 会弹一个全文浮层（`.hudWindow` 材质、圆角 12、宽 `280pt`、最多 9 行）。该方案已由**面板底部常驻详情区**取代：完整正文与元信息改在面板自己的四段几何里常驻显示（见[剪贴板底部详情区](剪贴板底部详情区.md)），鼠标怎么移都不会留下收不掉的浮层，面板高度也不随选中项跳动。历史说明保留在此，浮层实现已删除。
+3. 详情区高度恒定、超长在内部滚动；读屏整块按 group 上报一个元素。
 
 ### A4 首次引导与快捷键帮助（P2，面板 UI + 偏好接线）
 
@@ -129,7 +127,7 @@
 **体感验收（lead 自测）**
 
 1. `NM_SNAPSHOT_DIR=/tmp/nm-l3 <可执行>` 出图，逐张核对：面板材质两级、卡片阴影、选中态。
-2. 真机：开/收面板、悬停卡片看浮层、收藏、删除、栈粘贴各一次，确认动效不卡顿且「减弱动态效果」开启时全部落终态。
+2. 真机：开/收面板、悬停卡片看提亮、切选中项看底部详情区、收藏、删除、栈粘贴各一次，确认动效不卡顿且「减弱动态效果」开启时全部落终态。
 3. 声效默认静音；打开开关后复制/粘贴有提示音，连按不刷音。
 
 ## 6. 工程化要求
@@ -149,7 +147,7 @@
 |---|---|---|
 | A1 文件条目分类聚合摘要 | `NetworkMonitorCore/Infrastructure/Clipboard/ClipboardFileSummary.swift`、`NetworkMonitor/Clipboard/PasteboardWatcher.swift`、`TestRunner/ClipboardFileSummaryTests.swift` | 纯函数 `summarize(paths:)` 与带回落文本的 `summarize(paths:fallbackText:)`；采集只改 `preview` 生成处，`text` 列仍存原始路径 |
 | A2 缩略图多级兜底 + 失败可重试 | `NetworkMonitorCore/Infrastructure/Clipboard/ClipboardThumbnailRetryPolicy.swift`、`NetworkMonitor/Clipboard/ClipboardThumbnailLoader.swift`、`NetworkMonitorCore/Infrastructure/Clipboard/ClipboardThumbnailLoadGate.swift`、`NetworkMonitorCore/Infrastructure/Clipboard/ClipboardImageDecoder.swift`、`TestRunner/ClipboardThumbnailRetryPolicyTests.swift` | 策略负责冷却 30s 与上限 3 次；闸门只留并发 3 + 在途去重；解码在 ImageIO 之后接 `NSBitmapImageRep` → `thumbnail(from: CGImage)` 兜底，再退回原图直读 |
-| A3 卡片悬停与全文浮层 | `NetworkMonitor/Clipboard/ClipboardCardView.swift`、`NetworkMonitor/Clipboard/ClipboardCardFullTextOverlay.swift`、`NetworkMonitor/Clipboard/ClipboardCardFlowView.swift` | hover 走 trackingArea + 0.45s 计时；浮层 `.hudWindow` 280pt / 最多 9 行、`ignoresMouseEvents`，超长内容的滚轮由卡片流转发（[踩坑](../踩坑/运行时/忽略鼠标事件的浮层自己收不到滚轮.md)） |
+| A3 卡片悬停（全文浮层已删除） | `NetworkMonitor/Clipboard/ClipboardCardView.swift`、`NetworkMonitor/Clipboard/ClipboardCardFlowView.swift`；替代落点 `NetworkMonitorUI/ClipboardPanelLayout.swift`、`NetworkMonitorUI/ClipboardDetailStrip.swift`、`NetworkMonitor/Clipboard/ClipboardDetailStripView.swift` | hover 走 trackingArea，只保留提亮 + 描边；完整内容改由面板底部的常驻详情区显示，四段几何与高度恒定口径见[剪贴板底部详情区](剪贴板底部详情区.md) |
 | A4 首次引导与快捷键帮助 | `NetworkMonitor/Clipboard/ClipboardPanelOverlays.swift`、`NetworkMonitor/Clipboard/ClipboardPanelSupport.swift`、`NetworkMonitor/Clipboard/ClipboardPanelController+Stack.swift`、`NetworkMonitor/Clipboard/ClipboardPreferences.swift`、`NetworkMonitor/Debug/SnapshotClipboardGuide.swift` | 引导态判定与一次性标记接线在控制器（库里有数据即视为已引导）；12 条键位是纯数据，界面与读屏共用一份；离屏取证入口 `NM_SNAPSHOT_CLIPBOARD_GUIDE` |
 | B1 统一动效基础设施 | `NetworkMonitor/Motion/MotionKit.swift` | 时长令牌与 `TransferMotion` 同口径；跟随「减弱动态效果」，关闭时所有方法直接落终态 |
 | B2 面板与卡片动效接线 | `NetworkMonitor/Clipboard/ClipboardCardFlowView+Motion.swift`、`NetworkMonitor/Clipboard/ClipboardCardView.swift`、`NetworkMonitor/Clipboard/ClipboardPanelController.swift` | 卡片进场前 12 张错峰、选中与 hover 走 `crossFade`、收藏星与栈角标 `popIn`、删除 0.15s 缩小淡出；面板展开收起见下方偏差 |
@@ -169,7 +167,7 @@
 **实现期偏差与处置（2026-11-14 收口）**
 
 - §3 B2「面板展开」已补齐：`MotionKit.stageWindowEntrance` / `fadeIn(window:toFrame:duration:)` / `fadeOut(window:duration:completion:)` 三个窗口级方法接管，控制器不再自写 `NSAnimationContext`（`Clipboard/ClipboardPanelController*.swift` 0 处）；`isEnabled == false` 时起始态直接落终态、`fadeOut` 同步回调 orderOut。敏感时序（先记前台 App → 再 `makeKeyAndOrderFront`）原样保留，动画只在成为 key 之后播放。
-- §3 B5 第 1 条已补齐：`ClipboardPanelInnerMaterialView`（`.underWindowBackground`、圆角 12、相对面板边界内缩 1pt、`hitTest` 返回 nil）挂在面板内容视图首层，层次为 `.hudWindow` → 内衬 → 发丝分隔线 → 控件与卡片 → 浮层；父视图自绘的两条分隔线改为 `ClipboardPanelSeparatorView` 独立层（与改动前层次一致）。
+- §3 B5 第 1 条已补齐：`ClipboardPanelInnerMaterialView`（`.underWindowBackground`、圆角 12、相对面板边界内缩 1pt、`hitTest` 返回 nil）挂在面板内容视图首层，层次为 `.hudWindow` → 内衬 → 发丝分隔线 → 控件与卡片 → 浮层（浮层已随底部详情区一并删除，见 §2 A3）；父视图自绘的两条分隔线改为 `ClipboardPanelSeparatorView` 独立层（与改动前层次一致）。
 - §3 B3 所列「现有 4 处 `NSSound.beep()`」实为 3 处（Pin 越界 / Snip 失败 / 热键录制）；互传通知走 `NSSound(named:)`，不是 beep。
 - §2 A4 标为 P2、而本批另有一项记号同为 P2-1 的存储管理（来自取证表编号），两套编号不互通，引用时请写全称。
 

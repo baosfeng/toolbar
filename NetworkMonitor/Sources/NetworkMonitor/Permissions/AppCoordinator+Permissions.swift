@@ -27,29 +27,6 @@ extension AppCoordinator {
         chain.bootstrap()
     }
 }
-// MARK: - 剪贴板设置页的权限回调
-
-/// 协议里的三个权限入口 —— 转发到统一权限链，不再直接问 Paste Stack
-///
-/// 设置页已改读 `SystemPermissionProviding` 快照，这三个方法目前没有调用方；
-/// 协议文件（`ClipboardSettingsDelegate`）不在本轮 scope，先把实现口径指向同一份快照，
-/// 不留下第二条读取路径。放在这里而不是剪贴板设置文件里，是为了让「权限」这条链路
-/// 的实现聚在一起，也不把组合根的装配文件撑大。
-extension AppCoordinator {
-
-    func settingsAccessibilityGranted() -> Bool {
-        permissionChain?.snapshot.accessibility == .granted
-    }
-
-    func settingsDidRequestAccessibilityPermission() {
-        permissionChain?.request(.accessibility)
-    }
-
-    func settingsDidRequestClipboardSettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") else { return }
-        NSWorkspace.shared.open(url)
-    }
-}
 // MARK: - 剪贴板面板入口
 
 /// 唤出剪贴板面板 —— 两个入口（状态栏菜单、全局热键）共用这一处
