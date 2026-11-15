@@ -45,14 +45,12 @@ final class PasteStackController {
     // MARK: 生命周期
 
     func start() {
-        refreshAccessibility()
+        syncAccessibility(Self.probeAccessibility())
         reloadStack()
-        installMonitor()
     }
 
     func stop() {
-        if let monitor { NSEvent.removeMonitor(monitor) }
-        monitor = nil
+        removeMonitor()
     }
 
     // MARK: 状态读取（视图只读）
@@ -120,17 +118,36 @@ final class PasteStackController {
 
     // MARK: 辅助功能权限
 
-    /// 刷新权限状态（启动时与设置窗打开时调用）
+    /// 静默读取辅助功能授权态（不弹系统框）
+    ///
+    /// 唯一读取入口：`SystemPermissionCenter` 与设置页都走这里，不各写一份 API 调用与选项字典。
+    /// 命名常量 kAXTrustedCheckOptionPrompt 在 Swift 6 下是可变全局量，改用其文档字面值。
+    nonisolated static func probeAccessibility() -> Bool {
+        AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": false] as CFDictionary)
+    }
+
+    /// 把最新授权态下发进来（授权后补装全局监听，撤销后拆除）
+    ///
+    /// 为什么需要外部驱动：用户去系统设置勾上后回到应用，全局 monitor 不会自己长出来——
+    /// 旧实现只在 `start()` 读一次，授权后必须重启应用才能用 Paste Stack。
     @discardableResult
-    func refreshAccessibility() -> Bool {
-        // 键名常量 kAXTrustedCheckOptionPrompt 在 Swift 6 下是可变全局量，改用其文档字面值
-        let options = ["AXTrustedCheckOptionPrompt": false] as CFDictionary
-        accessibilityGranted = AXIsProcessTrustedWithOptions(options)
-        if !accessibilityGranted {
-            logger.warning("未获得辅助功能权限：Paste Stack 的 ⌘V 监听不会生效")
+    func syncAccessibility(_ granted: Bool) -> Bool {
+        let changed = granted != accessibilityGranted
+        accessibilityGranted = granted
+        if granted {
+            installMonitor()
+        } else {
+            removeMonitor()
         }
-        onStateChange?()
-        return accessibilityGranted
+        if changed {
+            if granted {
+                logger.info("辅助功能权限已生效：Paste Stack 的 ⌘V 监听已就绪")
+            } else {
+                logger.warning("未获得辅助功能权限：Paste Stack 的 ⌘V 监听不会生效")
+            }
+            onStateChange?()
+        }
+        return granted
     }
 
     /// 请求权限并跳转系统设置（用户显式点击时调用）
@@ -147,6 +164,12 @@ final class PasteStackController {
     }
 
     // MARK: 内部实现
+
+    /// 拆除全局 ⌘V 监听（授权被撤销 / 应用退出时）
+    private func removeMonitor() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
 
     /// 安装全局 ⌘V 监听（无权限时不安装，避免假装在工作）
     private func installMonitor() {

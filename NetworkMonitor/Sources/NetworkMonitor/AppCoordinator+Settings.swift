@@ -31,8 +31,10 @@ extension AppCoordinator {
                                              notificationContext: self.settingsNotificationContext)
             },
             .clipboard: { [weak self] in
-                guard let self else { return Self.unavailable(.clipboard) }
-                return SettingsClipboardPane(delegate: self,
+                guard let self, let permissions = self.permissionChain else {
+                    return Self.unavailable(.clipboard, message: "系统权限状态尚未就绪，请稍后重开设置。")
+                }
+                return SettingsClipboardPane(delegate: self, permissions: permissions,
                                              notificationContext: self.settingsNotificationContext,
                                              logger: self.logger)
             },

@@ -27,19 +27,6 @@ extension AppCoordinator: ClipboardSettingsDelegate {
         logger.info("剪贴板忽略应用已更新，共 \(clipboardPreferences.ignoredBundleIDs.count) 项")
     }
 
-    func settingsAccessibilityGranted() -> Bool {
-        clipboardStack.refreshAccessibility()
-    }
-
-    func settingsDidRequestAccessibilityPermission() {
-        clipboardStack.requestAccessibilityPermission()
-    }
-
-    func settingsDidRequestClipboardSettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") else { return }
-        NSWorkspace.shared.open(url)
-    }
-
     // MARK: 图片存储
 
     /// 图片目录当前占用（设置页每次刷新现算，不缓存）

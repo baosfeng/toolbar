@@ -107,7 +107,8 @@ extension AppCoordinator {
     /// 放宽 internal：设置窗重新录制快捷键时由 AppCoordinator+ClipboardSettings 调用
     @discardableResult
     func registerClipboardHotKey(_ combo: HotKeyCombo, presentingAlert: Bool) -> Bool {
-        let result = globalHotKey.register(combo) { [weak self] in self?.clipboardPanel.toggle() }
+        // 热键唤出前同样先重读权限：面板页脚与设置页读同一份快照（授权后不必重启）
+        let result = globalHotKey.register(combo) { [weak self] in self?.toggleClipboardPanel() }
         switch result {
         case .success:
             return true
