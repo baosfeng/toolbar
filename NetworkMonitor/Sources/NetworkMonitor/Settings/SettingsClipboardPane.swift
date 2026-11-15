@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 剪贴板设置页
 
@@ -24,6 +25,9 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
 
     /// 跨文件访问：存储卡与权限扩展要写日志
     let logger: LoggingService
+
+    /// 跨文件访问：权限扩展（SettingsClipboardPane+Permission.swift）按它渲染状态卡
+    let permissions: any SystemPermissionProviding
 
     private let hotKeyRecorder = HotKeyRecorderView()
     private let positionPopup = NSPopUpButton()
@@ -53,22 +57,20 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
     var clearStorageButton = NSButton()
     var storageActionRow: SettingsRowView?
 
-    // 权限状态控件与按钮（跨文件访问：SettingsClipboardPane+Permission.swift 只读状态与显隐）
-    let clipboardDot = SettingsStatusDotView()
-    let clipboardStateLabel = MenuPanelLabel.text("", font: SettingsTheme.rowTitleFont,
-                                                  color: SettingsTheme.textSecondary)
-    var clipboardSettingsButton = NSButton()
-    let accessibilityDot = SettingsStatusDotView()
-    let accessibilityStateLabel = MenuPanelLabel.text("", font: SettingsTheme.rowTitleFont,
-                                                      color: SettingsTheme.textSecondary)
-    var accessibilityButton = NSButton()
+    // 系统权限卡（三类权限 × 三态；构建与刷新在 SettingsPermissionCard.swift）
+    /// 放宽为 internal：页头胶囊扩展（SettingsClipboardPane+Permission）刷新时要用
+    var permissionCard: SystemPermissionCard?
+    /// 最近一次图片存储读数（页头胶囊同时表达「权限合计 + 文件数」，两处共用这一份）
+    var lastStorageUsage: ClipboardStorageUsage.Summary?
 
     init(preferences: ClipboardPreferences = ClipboardPreferences(),
          delegate: ClipboardSettingsDelegate? = nil,
+         permissions: any SystemPermissionProviding,
          notificationContext: SettingsNotificationEventContext,
          logger: LoggingService = AppContext.shared.logger) {
         self.preferences = preferences
         self.settingsDelegate = delegate
+        self.permissions = permissions
         self.notificationCard = SettingsNotificationEventCard(events: [.clipboardAction],
                                                               context: notificationContext)
         self.logger = logger
@@ -109,24 +111,11 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         buildIgnoredCard()
         page.addCard(ignoredCard)
 
-        let clipboardRow = SettingsRowView(title: "剪贴板访问")
-        clipboardRow.trailingStack.addArrangedSubview(clipboardDot)
-        clipboardRow.trailingStack.addArrangedSubview(clipboardStateLabel)
-        clipboardRow.trailingStack.addArrangedSubview(clipboardSettingsButton)
-        let accessibilityRow = SettingsRowView(title: "辅助功能")
-        accessibilityRow.trailingStack.addArrangedSubview(accessibilityDot)
-        accessibilityRow.trailingStack.addArrangedSubview(accessibilityStateLabel)
-        accessibilityRow.trailingStack.addArrangedSubview(accessibilityButton)
-
         page.addCard(notificationCard.card, sectionTitle: "通知与音效")
         buildStorageCard()
+        buildPermissionCard()
 
-        let permissionCard = SettingsCardView()
-        [clipboardRow, accessibilityRow].forEach(permissionCard.addRow)
-        page.addCard(permissionCard, sectionTitle: "权限")
-
-        page.addNote("辅助功能用于 Paste Stack 的 ⌘V 监听；剪贴板访问权限由系统在首次读取时询问。"
-                     + "开机自启动已移至「通用」页。")
+        page.addNote("开机自启动已移至「通用」页。")
     }
 
     private func heightStack() -> NSView {
@@ -194,18 +183,13 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         ignoredToggleButton.action = #selector(toggleIgnoredList)
         updateIgnoredToggleTitle(count: 0)
 
-        for label in [clipboardStateLabel, accessibilityStateLabel] {
-            label.alignment = .right
-            label.widthAnchor.constraint(equalToConstant: 88).isActive = true
-            label.setContentHuggingPriority(.required, for: .horizontal)
-            label.setContentCompressionResistancePriority(.required, for: .horizontal)
-        }
-        clipboardSettingsButton = SettingsLinkButton.make("前往系统设置",
-                                                          target: self,
-                                                          action: #selector(requestClipboardAccess))
-        accessibilityButton = SettingsLinkButton.make("前往系统设置",
-                                                      target: self,
-                                                      action: #selector(requestAccessibility))
+    }
+
+    /// 系统权限卡：三类权限各一行 + 卡头「检测状态」+ 卡下说明（全部在 SystemPermissionCard 里）
+    private func buildPermissionCard() {
+        let card = SystemPermissionCard(permissions: permissions, logger: logger)
+        permissionCard = card
+        card.attach(to: page)
     }
 
     /// 下拉框统一配置：选项标题 + representedObject 存 rawValue
@@ -243,11 +227,12 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         retentionField.stringValue = "\(preferences.retentionDays)"
         reloadIgnoredApps()
         notificationCard.refresh()
+        // 权限在切页时重读一次（另两处是应用激活与卡头「检测状态」），保证看到的永远是最新快照
+        refreshPermissionChip()
         // 目录只扫一次：存储卡与页头胶囊共用同一份读数（图片目录可能上千个文件，
         // 两处各扫一遍等于把打开设置页的磁盘开销翻倍）
         let imageUsage = settingsDelegate?.settingsClipboardImageUsage() ?? ClipboardStorageUsage.empty
         refreshStorageCard(usage: imageUsage)
-        refreshPermissionStatus()
     }
 
     private func index(of rawValue: String, in popup: NSPopUpButton) -> Int {

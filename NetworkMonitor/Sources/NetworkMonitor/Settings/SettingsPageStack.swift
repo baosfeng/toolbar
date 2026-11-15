@@ -108,6 +108,23 @@ final class SettingsPageStack: NSStackView {
         }
     }
 
+    /// 追加自定义控件（按下文元素的间距规则与上一个元素隔开）
+    ///
+    /// 用途：内容要在状态变化后整块重写的元素（如权限页的提示块）不能走 `addNote`。
+    func addRow(_ view: NSView, gapBefore: CGFloat? = nil) {
+        let gap: CGFloat
+        if let gapBefore {
+            gap = gapBefore
+        } else {
+            switch lastKind {
+            case .header: gap = SettingsTheme.groupSpacingTop
+            case .note:   gap = SettingsTheme.noteGap
+            default:      gap = SettingsTheme.noteSpacing
+            }
+        }
+        append(view, gapBefore: gap, kind: .note)
+    }
+
     /// 页尾说明（三级色小字）
     func addNote(_ text: String) {
         let note = MenuPanelLabel.text(text, font: SettingsTheme.noteFont,

@@ -2,74 +2,36 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorUI
 
-// MARK: - 剪贴板设置页（权限）
+// MARK: - 剪贴板设置页（页头状态胶囊）
 
-/// 权限状态与跳转 — 从主文件拆出：主文件要腾出空间放「存储」卡
+/// 页头胶囊与权限卡的接线 — 从主文件拆出：主文件要腾出空间放「存储」卡
 ///
-/// 跨文件访问：`clipboardDot` / `clipboardStateLabel` / `clipboardSettingsButton` /
-/// `accessibilityDot` / `accessibilityStateLabel` / `accessibilityButton` 与
-/// `settingsDelegate` 由 private 放宽为 internal，仅供本扩展使用。
+/// 口径收敛：状态一律读 `permissions.snapshot`（`SystemPermissionCenter` 的统一快照），
+/// 本页不再调 AXIsProcessTrusted / CGPreflight / NSPasteboard.accessBehavior。
+/// 刷新时机由权限链统一驱动（应用激活、面板打开、卡头「检测状态」），
+/// 所以用户从系统设置勾选回来、切回本应用时状态灯立即变绿，不必重启。
+///
+/// 跨文件访问：`lastStorageUsage` / `permissionCard` 与 `permissions` 由 private 放宽为
+/// internal，仅供本扩展与页面 refresh 使用。
 extension SettingsClipboardPane {
 
-    /// 权限状态：无权限时必须显式呈现并提供跳转（不得静默失败）
-    func refreshPermissionStatus() {
-        let granted = settingsDelegate?.settingsAccessibilityGranted() ?? false
-        accessibilityDot.setColor(granted ? SettingsTheme.okInk : SettingsTheme.warnInk)
-        accessibilityStateLabel.stringValue = granted ? "已授权" : "待授权"
-        accessibilityButton.isHidden = granted
-
-        // 文案与色调是 Core 纯规则（ClipboardAccessState），这里只做 API 读取与色值映射
-        let access = Self.clipboardAccessState()
-        clipboardDot.setColor(SettingsTheme.statusDotColor(Self.statusTone(for: access.tone)))
-        clipboardStateLabel.stringValue = access.label
-        clipboardSettingsButton.isHidden = !access.needsSettingsJump
-    }
-
-    /// 页头胶囊：剪贴板访问授权态 + 图片文件数
+    /// 页头胶囊：三类权限合计授权态 + 图片文件数（与权限卡、存储卡同一份读数）
     ///
-    /// 为什么是「文件数」而不是契约示例里的「条目数」：历史条目数只在组合根的数据库里，
-    /// 设置页没有同步读数（`ClipboardSettingsDelegate` 只暴露图片目录占用）；
-    /// 图片文件数是本页「存储」卡同一个读数，口径一致且不新开数据源。
-    /// 文案写「文件」而不是「条」，避免与实际条目口径对不上。
-    func refreshHeaderChip(usage: ClipboardStorageUsage.Summary) {
-        let access = Self.clipboardAccessState()
-        page.setStatusChip(SettingsStatusChip(subject: access.label,
-                                              detail: "\(usage.fileCount) 个文件",
-                                              tone: Self.statusTone(for: access.tone)))
+    /// 文件数只在存储卡刷新时传进来一次，之后权限刷新复用 —— 两处各扫一遍目录没有意义。
+    func refreshHeaderChip(usage: ClipboardStorageUsage.Summary? = nil) {
+        if let usage { lastStorageUsage = usage }
+        let snapshot = permissions.snapshot
+        page.setStatusChip(SettingsStatusChip(subject: snapshot.summaryLabel,
+                                              detail: lastStorageUsage.map { "\($0.fileCount) 个文件" },
+                                              tone: snapshot.summaryTone))
     }
 
-    // MARK: 权限映射
-
-    /// 读取系统剪贴板访问行为（15.4+ 才有该 API，低版本返回未知）
-    private static func clipboardAccessState() -> ClipboardAccessState {
-        if #available(macOS 15.4, *) {
-            switch NSPasteboard.general.accessBehavior {
-            case .alwaysAllow: return .allowed
-            case .alwaysDeny:  return .denied
-            case .ask:         return .ask
-            default:           return .unspecified
-            }
-        }
-        return .unknown
-    }
-
-    /// Core 的三档色调 → 设置页胶囊 / 状态点的三档语义（一处映射，两处显示不各判一遍）
-    private static func statusTone(for tone: ClipboardAccessTone) -> SettingsStatusTone {
-        switch tone {
-        case .ok:      return .ok
-        case .warning: return .warn
-        case .muted:   return .muted
-        }
-    }
-
-    // MARK: 动作
-
-    @objc func requestAccessibility() {
-        settingsDelegate?.settingsDidRequestAccessibilityPermission()
-        refreshPermissionStatus()
-    }
-
-    @objc func requestClipboardAccess() {
-        settingsDelegate?.settingsDidRequestClipboardSettings()
+    /// 权限侧刷新：重读快照（权限卡通过订阅自行重绘）+ 同步页头胶囊
+    ///
+    /// 卡片不在这里手动重绘：`permissions.refresh()` 会把新快照推给所有订阅者，
+    /// 由卡片自己决定怎么画。
+    func refreshPermissionChip() {
+        permissions.refresh()
+        refreshHeaderChip()
     }
 }

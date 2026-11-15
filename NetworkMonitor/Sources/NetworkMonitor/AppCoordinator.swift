@@ -70,6 +70,9 @@ public final class AppCoordinator {
     /// 系统通知入口（额度 / 传输等全部系统通知的唯一出口）；隐式解包写在括号外——`any P!` 在 Swift 6.3 会被拒
     var notificationService: (any NotificationServicing)!
 
+    /// 系统权限链路（三类权限的唯一读取与请求入口；设置页与面板页脚共用同一份快照）
+    /// 放宽为 internal：权限接线扩展与设置页工厂要用
+    var permissionChain: (any SystemPermissionProviding)?
     /// 局域网互传面板控制器
     // 放宽为 internal：AppCoordinator+Transfer 装配扩展要写
     var transferController: TransferController?
@@ -116,6 +119,9 @@ public final class AppCoordinator {
         setupClipboard(database: database)
 
         setupSnip()
+
+        // 4c. 系统权限链路：必须在 setupSnip 之后（屏幕录制状态读捕获服务 preflight）
+        setupPermissions()
 
         // 5. 局域网互传（发现层 + 传输服务 + 面板控制器）
         let transfer = makeTransferController()
@@ -212,7 +218,8 @@ public final class AppCoordinator {
             systemMonitor: systemContext.monitor,
             systemPreferences: systemContext.preferences
         )
-        manager.onOpenClipboardHistory = { [weak self] in self?.clipboardPanel.toggle() }
+        // 面板打开前先重读权限：页脚与设置页读同一份快照，授权后不必重启
+        manager.onOpenClipboardHistory = { [weak self] in self?.toggleClipboardPanel() }
         manager.onOpenSettings = { [weak self] section in self?.settingsWindow?.show(section: section) }
 
         // 8. 累计流量定期落盘（崩溃 / 强杀时也能保住当日基准）

@@ -47,13 +47,22 @@ final class ScreenCaptureService: SnipCaptureServicing {
         let capture: (SnipDisplay) async throws -> SnipCapturedImage
     }
 
+    /// 静默检查（不弹系统框、不把应用登记进清单）
     func isAuthorized() -> Bool {
         CGPreflightScreenCaptureAccess()
     }
 
+    /// 请求授权：让应用出现在「屏幕录制」清单里并弹一次系统提示
+    ///
+    /// 与 `isAuthorized()` 的分工是这套权限的全部要点：
+    /// preflight 只查不登记，`CGRequestScreenCaptureAccess()` 才会让系统把应用
+    /// 列进「隐私与安全性 → 屏幕录制」（这正是用户说的「不支持把我们的 app 放进去」）。
+    /// 因此启动阶段只 preflight，请求只挂在用户显式点击的路径上。
     @discardableResult
     func requestAuthorization() -> Bool {
-        CGRequestScreenCaptureAccess()
+        let granted = CGRequestScreenCaptureAccess()
+        logger.info("屏幕录制授权请求：本次读数 \(granted ? "已授权" : "未授权（需用户在系统设置勾选后重启 app）")")
+        return granted
     }
 
     // MARK: - 窗口列表
