@@ -14,8 +14,8 @@ import NetworkMonitorUI
 ///    因此 `items` 可以是全部匹配项（上限由偏好 maxItems 决定），任意条数都能靠方向键走到。
 ///
 /// 拆文件口径：容器与空态在 `ClipboardCardFlowChrome.swift`，缩略图在
-/// `ClipboardCardFlowView+Thumbnails.swift`，动效与 hover 浮层在
-/// `ClipboardCardFlowView+Motion.swift`。
+/// `ClipboardCardFlowView+Thumbnails.swift`，动效在 `ClipboardCardFlowView+Motion.swift`。
+/// 全文不再有悬停浮层：选中项的完整内容常驻在面板底部的详情区（`ClipboardDetailStripView`）。
 @MainActor
 final class ClipboardCardFlowView: NSView {
 
@@ -88,7 +88,6 @@ final class ClipboardCardFlowView: NSView {
         guard vanished.isEmpty else {
             pendingRender = (items, selectedIndex)
             isPlayingRemoval = true
-            hideFullTextOverlay(owner: nil)
             playRemoval(on: vanished) { [weak self] in
                 guard let self else { return }
                 self.isPlayingRemoval = false
@@ -110,8 +109,6 @@ final class ClipboardCardFlowView: NSView {
         syncCards()
         layoutCards()
         scrollToSelection()
-        // 换了选中项，全文浮层指向的已不是用户关注的那张卡片
-        hideFullTextOverlay(owner: nil)
         if previous != selectedIndex { onSelectionChanged?() }
         refreshShadows()
     }
@@ -227,10 +224,6 @@ final class ClipboardCardFlowView: NSView {
             guard let self, let index = self.cardViews.firstIndex(of: card) else { return }
             self.onActivate?(self.windowStart + index)
         }
-        card.onHoverStateChange = { [weak self] card, hovering in
-            guard let self else { return }
-            if hovering { self.showFullTextOverlay(for: card) } else { self.hideFullTextOverlay(owner: card) }
-        }
         card.onShadowStateChange = { [weak self] in self?.refreshShadows() }
         cardsContainer.addSubview(card)
         return card
@@ -244,21 +237,11 @@ final class ClipboardCardFlowView: NSView {
         card.scrollToVisible(card.bounds.insetBy(dx: -16, dy: -16))
     }
 
-    // MARK: 鼠标
-
-    /// 竖向滚轮：全文浮层开着且正文超长时，滚轮改由浮层吞掉（浮层自身不收鼠标事件，
-    /// 只有这样才能既「不拦截点击」又「超长内容可滚」）
-    override func scrollWheel(with event: NSEvent) {
-        if ClipboardCardFullTextOverlay.shared.scroll(by: event.scrollingDeltaY) { return }
-        super.scrollWheel(with: event)
-    }
-
     // MARK: 生命周期
 
-    /// 换窗口时重挂通知：离开窗口（面板收起 / 快照结束）收起全文浮层、复位进场中间态与进场订阅
+    /// 换窗口时重挂通知：离开窗口（面板收起 / 快照结束）复位进场中间态与进场订阅
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        hideFullTextOverlay(owner: nil)
         stopObservingOnScreen()
         guard let window else { resetCardsForNextEntrance(); return }
         // 面板每次打开（makeKeyAndOrderFront 触发 didBecomeKey）播一次卡片错峰进场；

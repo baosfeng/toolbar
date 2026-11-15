@@ -14,7 +14,7 @@ import NetworkMonitorUI
 /// - 本文件：状态、配置、选中 / 收藏 / 栈角标的过渡驱动、无障碍、图层阴影；
 /// - `ClipboardCardView+Drawing.swift`：整卡绘制（层序与颜色口径与改造前逐项一致）；
 /// - `ClipboardCardView+Content.swift`：正文 / 图片占位 / 缩略图 / meta 行的绘制与实测宽；
-/// - `ClipboardCardView+Interaction.swift`：鼠标命中、hover 计时与全文浮层触发；
+/// - `ClipboardCardView+Interaction.swift`：鼠标命中与 hover 提亮；
 /// - `ClipboardCardView+Menu.swift`：右键五项菜单；`+Resources.swift`：符号 / 缩略图 / 文案。
 ///
 /// 几何口径统一在 `ClipboardCardGeometry`（纯逻辑、TestRunner 覆盖），
@@ -54,10 +54,6 @@ final class ClipboardCardView: NSView {
     static let thumbnailCornerRadius: CGFloat = 6
     /// 缩略图就绪后的淡入时长（设计规格 §3.5 B5：0.2s）
     static let thumbnailFadeDuration: TimeInterval = 0.2
-
-    /// hover 到弹出全文浮层的等待时长（设计规格 §2.3 A3：0.45s）
-    /// internal：hover 计时在 ClipboardCardView+Interaction.swift（跨文件访问，同目录内无其他调用方）
-    static let hoverOverlayDelay: TimeInterval = 0.45
 
     /// 卡底不透明度（设计规格 §3.5 B5：半透明内衬）
     static let backgroundAlpha: CGFloat = 0.72
@@ -102,8 +98,6 @@ final class ClipboardCardView: NSView {
     var onDoubleClick: ((ClipboardCardView) -> Void)?
     /// 右键「贴到屏幕」回调
     var onPin: ((ClipboardCardView) -> Void)?
-    /// hover 满 0.45s / 移出（true = 请求弹出全文浮层，false = 收起）
-    var onHoverStateChange: ((ClipboardCardView, Bool) -> Void)?
 
     // MARK: 状态
 
@@ -131,9 +125,8 @@ final class ClipboardCardView: NSView {
     /// 栈角标弹入进度
     let badgePopBlend = DrawnBlend()
 
-    /// 悬停计时（0.45s 后请求全文浮层）与追踪区
-    /// internal：hover 计时与追踪区在 `ClipboardCardView+Interaction.swift` 里建立与取消（Swift 扩展不能声明存储属性）
-    var hoverTimer: DispatchWorkItem?
+    /// hover 追踪区（提亮与描边反馈用）
+    /// internal：追踪区在 `ClipboardCardView+Interaction.swift` 里建立与移除（Swift 扩展不能声明存储属性）
     var hoverTrackingArea: NSTrackingArea?
 
     override var isFlipped: Bool { true }
@@ -175,7 +168,6 @@ final class ClipboardCardView: NSView {
         refreshThumbnail(animated: false)
         needsLayout = true
         needsDisplay = true
-        if isHovering { scheduleOverlay() }
     }
 
     /// 设置选中态：叠色与描边走 0.12s 交叉过渡（不缩放、不改尺寸）

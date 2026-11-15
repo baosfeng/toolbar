@@ -149,8 +149,8 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
                        action: #selector(positionChanged),
                        accessibility: "面板位置")
 
-        heightSlider.minValue = 200
-        heightSlider.maxValue = 480
+        heightSlider.minValue = ClipboardPreferences.heightRange.lowerBound
+        heightSlider.maxValue = ClipboardPreferences.heightRange.upperBound
         heightSlider.isContinuous = true
         heightSlider.target = self
         heightSlider.action = #selector(heightChanged)

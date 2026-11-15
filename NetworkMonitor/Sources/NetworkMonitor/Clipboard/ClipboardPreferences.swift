@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 采集模式
 
@@ -115,11 +116,22 @@ final class ClipboardPreferences: Sendable {
         set { storage.set(newValue.rawValue, forKey: Key.panelPosition) }
     }
 
-    /// 面板高度（默认 260）
+    /// 面板高度可选范围 —— 下限是「卡片区刚好容下整卡」，上限与设置页滑块一致
+    ///
+    /// 与分段几何同源（`ClipboardPanelLayout`）：改详情区高度或卡片尺寸时这里自动跟着变，
+    /// 设置页滑块与偏好读取共用同一份边界，不会再出现「滑块能拖到裁卡的高度」。
+    static let heightRange: ClosedRange<Double> =
+        ClipboardPanelLayout.minPanelHeight...ClipboardPanelLayout.maxPanelHeight
+
+    /// 面板高度（默认由分段几何给出：工具条 + 整卡 + 详情区 + 提示行）
+    ///
+    /// 读出来的值一律夹紧到 `ClipboardPanelLayout` 的上下限：下限保证卡片不被裁、
+    /// 上限与设置页滑块一致；老用户存下的旧高度（没有详情区时的 260）会被抬到新下限。
     var panelHeight: Double {
         get {
             let value = storage.double(forKey: Key.panelHeight)
-            return value > 0 ? value : 260
+            guard value > 0 else { return ClipboardPanelLayout.defaultPanelHeight }
+            return ClipboardPanelLayout.clampedHeight(value)
         }
         set { storage.set(newValue, forKey: Key.panelHeight) }
     }

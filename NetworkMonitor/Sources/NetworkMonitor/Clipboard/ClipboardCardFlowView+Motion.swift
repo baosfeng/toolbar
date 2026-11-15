@@ -3,16 +3,15 @@ import NetworkMonitorCore
 
 // MARK: - 卡片流动效
 
-/// `ClipboardCardFlowView` 的动效接线 — 进场错峰、删除缩小淡出、缩略图淡入与 hover 浮层
+/// `ClipboardCardFlowView` 的动效接线 — 进场错峰、删除缩小淡出与缩略图淡入
 ///
 /// 动效本体全部走 `MotionKit`，本文件只负责「什么时候播、播在谁身上」：
 /// - 进场：每次重建（`render`）后前 12 张按 0.024s 错峰淡入，累计不超过 0.3s；
 /// - 删除：条目消失时先在原位置缩到 0.9 并淡出（0.15s），动效结束再重排，避免卡片硬跳；
-/// - 缩略图：就绪回调改为 0.2s 淡入替换占位符号，不改卡片内容；
-/// - hover 浮层：悬停满 0.45s 由卡片回调触发，移出即收。
+/// - 缩略图：就绪回调改为 0.2s 淡入替换占位符号，不改卡片内容。
 ///
-/// 跨文件访问：`items` / `windowStart` / `selectedIndex` / `cardViews` / `visibleCards()` /
-/// `showFullTextOverlay` / `hideFullTextOverlay` 由主文件放宽为 internal。
+/// 跨文件访问：`items` / `windowStart` / `selectedIndex` / `cardViews` / `visibleCards()`
+/// 由主文件放宽为 internal。
 extension ClipboardCardFlowView {
 
     /// 进场动画覆盖的最大卡片数（设计规格 §3.2 B2：前 12 张错峰）
@@ -60,16 +59,5 @@ extension ClipboardCardFlowView {
         for card in visibleCards() where card.item?.contentHash == hash {
             card.refreshThumbnail(animated: true)
         }
-    }
-
-    /// hover 浮层：显示卡片全文，移出即收
-    func showFullTextOverlay(for card: ClipboardCardView) {
-        guard let item = card.item, window?.isVisible == true else { return }
-        ClipboardCardFullTextOverlay.shared.show(item: item, anchor: card)
-    }
-
-    /// 收起浮层（只有归属该卡片的浮层才收；owner 为 nil 时无条件收）
-    func hideFullTextOverlay(owner: ClipboardCardView?) {
-        ClipboardCardFullTextOverlay.shared.hide(ifOwner: owner)
     }
 }

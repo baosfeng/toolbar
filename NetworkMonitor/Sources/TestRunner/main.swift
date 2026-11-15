@@ -311,6 +311,12 @@ runClipboardCardGeometryTests()
 // MARK: - 自绘交互层纯口径（等步行带命中 / 区域优先级 / 悬停目标推进与归零）
 runDrawnInteractionTests()
 
+// MARK: - 自绘位图翻正（flipped 上下文里的镜像变换 / 离屏取样验证上下缘）
+runDrawnUnflipTests()
+
+// MARK: - 剪贴板底部详情区（内容口径 / 面板四段几何 / 高度夹紧）
+runClipboardDetailStripTests()
+
 // MARK: - 自绘绘制层纯口径（层不透明度 / 阴影换算 / 焦点环路径 / 符号缓存键 / 读屏文案）
 runDrawnSurfaceMathTests()
 

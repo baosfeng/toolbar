@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 快照画布容器
 
@@ -23,6 +24,12 @@ final class SnapshotBackdropView: NSView {
 /// 剪贴板面板画布 — 复刻 ClipboardPanelController 的真实层次：材质底（14pt 圆角）+ 面板视图
 @MainActor
 final class SnapshotClipboardPanel {
+
+    /// 剪贴板面板画布尺寸 —— 宽取 07-contract 的 640pt，高取分段几何的默认面板高（否则整卡被裁）
+    ///
+    /// 一处定义、各取证入口共用：详情区让面板变高后，散落的 640×260 常量会把卡片区裁掉。
+    static let panelSize = NSSize(width: 640, height: ClipboardPanelLayout.defaultPanelHeight)
+
     private let size: NSSize
     private let items: [ClipboardItem]
 

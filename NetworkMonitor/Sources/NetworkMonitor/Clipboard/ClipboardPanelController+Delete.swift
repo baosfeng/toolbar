@@ -79,7 +79,7 @@ extension ClipboardPanelController {
         guard let index = filteredItems.firstIndex(where: { $0.id == itemID }) else { return }
         if index != selectedIndex {
             selectedIndex = index
-            content.updateSelection(index)
+            content.updateSelection(index, item: selectedItem)
         }
         switch command {
         case .copy:

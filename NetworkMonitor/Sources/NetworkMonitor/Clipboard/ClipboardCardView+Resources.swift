@@ -75,6 +75,10 @@ extension ClipboardCardView {
     }
 
     /// 等比填充绘制（铺满目标矩形，超出部分裁剪；图片卡的既有口径）
+    ///
+    /// 卡片是 flipped 视图，而 `draw(in:from:operation:fraction:)` 这个重载不做坐标补偿
+    /// （`draw(in:)` 与文字绘制会自己翻正），直接画会让缩略图上下颠倒；
+    /// 因此在目标矩形内局部翻正一次，翻正量的取值统一走 `DrawnUnflip`。
     static func drawAspectFill(image: NSImage, in rect: NSRect) {
         let imageSize = image.size
         guard imageSize.width > 0, imageSize.height > 0 else { return }
@@ -84,7 +88,9 @@ extension ClipboardCardView {
                             y: rect.midY - drawnSize.height / 2,
                             width: drawnSize.width,
                             height: drawnSize.height)
-        image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1)
+        DrawnInk.withUnflippedIfNeeded(around: target) {
+            image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1)
+        }
     }
 
     /// 角标文案：1→①，20 以上回退为数字
