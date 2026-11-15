@@ -23,7 +23,7 @@ extension BillingPaneView {
                        legacyUsage: Bool = false, openDesign: Bool = false,
                        opencodeGo: Bool = false, empty: Bool = false,
                        singleProvider: Bool = false) {
-        let now = Date()
+        let now = SnapshotClock.now
         // 数据层已过滤未配置 provider：这里构造的都是「可见」provider
         let ollama = Self.previewProvider(openDesign: false)
         if empty {

@@ -25,7 +25,7 @@ enum SnapshotFixtures {
                                 2_400_000_000, 5_600_000_000, 2_000_000_000]
         let calendar = Calendar.current
         return values.enumerated().map { offset, value in
-            let day = calendar.date(byAdding: .day, value: offset - 5, to: Date()) ?? Date()
+            let day = calendar.date(byAdding: .day, value: offset - 5, to: SnapshotClock.now) ?? SnapshotClock.now
             return MenuPanelMetrics.DailyTrafficBar(label: formatter.string(from: day),
                                                     rx: value, tx: value / 5,
                                                     isToday: offset == values.count - 1)

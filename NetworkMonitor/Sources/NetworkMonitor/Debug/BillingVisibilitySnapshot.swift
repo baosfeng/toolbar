@@ -54,7 +54,7 @@ extension MenuPanelSnapshot {
         let descriptor = BillingMonitor.ProviderDescriptor(
             id: spec.id, displayName: spec.name, symbolName: spec.symbol,
             credentialHint: "\(spec.name) API Key", supportsModelBreakdown: true)
-        let now = Date()
+        let now = SnapshotClock.now
         return BillingMonitor.ProviderState(
             descriptor: descriptor,
             range: .last24Hours,

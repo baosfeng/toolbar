@@ -18,7 +18,8 @@ extension TokenPaneView {
                                         hourScope: hourScope,
                                         hourView: hourView,
                                         metric: metric,
-                                        trendMode: trendMode)
+                                        trendMode: trendMode,
+                                        now: SnapshotClock.now)
         lastModel = model
         applyScreenVisibility()
 

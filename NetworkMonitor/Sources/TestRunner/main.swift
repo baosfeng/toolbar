@@ -359,5 +359,8 @@ runMainThreadWatchdogPolicyTests()
 // MARK: - 最新请求闸门（异步读只渲染最新一次结果）
 runLatestRequestGateTests()
 
+// MARK: - 快照冻结时钟（缺省回落 / now 对齐整分钟 / epoch 固定 / 日期键不漂移）
+runSnapshotClockTests()
+
 // MARK: - Done
 print("\n🎉 所有测试通过！")

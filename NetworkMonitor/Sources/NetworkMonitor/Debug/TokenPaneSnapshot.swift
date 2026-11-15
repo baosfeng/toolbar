@@ -210,7 +210,7 @@ enum TokenPaneSnapshot {
             lines.append("hour=\(slot.hour) requests=\(requests)")
         }
         lines.append("# 近 30 天缓存复用率（缺省 = -）")
-        let lastDay = HarnessTokenTimeWindow.dayKey(for: Date())
+        let lastDay = HarnessTokenTimeWindow.dayKey(for: SnapshotClock.now)
         let dailyMap = snapshot.daily.reduce(into: [String: HarnessTokenUsage]()) { result, item in
             result[item.day] = item.usage
         }

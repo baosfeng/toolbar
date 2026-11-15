@@ -43,8 +43,11 @@ enum MenuPanelSnapshot {
                 NSApp.terminate(nil)
                 return
             }
-            // Token 页：先等一次索引（已有落库数据时是快速增量），再用真实快照渲染
-            let tokenSnapshot = await TokenPaneSnapshot.waitForSnapshot(harness: harness)
+            // Token 页：冻结模式下用固定 fixture（不读真实索引，逐像素回归才有基座）；
+            // 未冻结时等一次索引（已有落库数据时是快速增量），再用真实快照渲染。
+            let tokenSnapshot = SnapshotFreeze.isFrozen
+                ? SnapshotFreeze.tokenSnapshot()
+                : await TokenPaneSnapshot.waitForSnapshot(harness: harness)
             await captureAll(directory: directory, repository: repository,
                              tokenSnapshot: tokenSnapshot, settings: settings)
             TokenPaneSnapshot.capture(directory: directory, tokenSnapshot: tokenSnapshot)
