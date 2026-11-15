@@ -156,7 +156,10 @@ runSettingsOrderTests()
 // MARK: - 额度阈值提醒（5%/4%/3%/2%/1%）
 runBillingAlertTests()
 
-// MARK: - 额度恢复通知（窗口重置 / 余额回升 / 同周期去重 / 冷却）
+// MARK: - 额度用尽与恢复（用尽后恢复 / 没用尽必静默）
+runBillingExhaustionTests()
+
+// MARK: - 额度恢复（回升 / 偏好 / 老状态 JSON 兼容 / 冷却）
 runBillingRecoveryTests()
 
 // MARK: - Open Design 额度（归一化 / 工作区发现 / 窗口映射 / 用量聚合）

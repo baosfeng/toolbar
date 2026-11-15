@@ -7,7 +7,7 @@ import UserNotifications
 /// 额度提醒入口 — BillingMonitor 只依赖此协议，通知实现可替换（测试用空实现）
 @MainActor
 protocol BillingAlerting: AnyObject {
-    /// 余额刷新成功后调用：按阈值 / 窗口重置 / 余额回升三类规则发系统通知并记录状态
+    /// 余额刷新成功后调用：按用尽 / 偏低 / 恢复 / 回升四类规则发系统通知并记录状态
     func handle(balance: BillingBalance, providerID: String, providerName: String)
 
     /// 删除实例时清掉该实例的提醒状态（键前缀 `<instanceID>.`）
@@ -17,18 +17,22 @@ protocol BillingAlerting: AnyObject {
 // MARK: - 额度提醒实现
 
 /// 额度提醒 — 把 Core 的评估结果发成系统通知，并把状态持久化到偏好
-///
-/// 三类通知（各自可在设置页关闭）：
-/// - 阈值：5% / 4% / 3% / 2% / 1%，同一周期同一档只提醒一次；
-/// - 窗口重置：会话 / 周 / 月额度进入新周期（同一 `cycleID` 只提醒一次）；
-/// - 余额回升：相邻两次观测剩余回升达到阈值（默认 10 个百分点，带 1 小时冷却）。
-///
+
+/// 四类通知（各自可在设置页关闭）：
+/// - 用尽：剩余跌破用尽线时提醒一次，同一周期不再重发；
+/// - 偏低：5% … 2% 只作预告，本周期发过用尽后不再补发；
+/// - 恢复：**仅本周期曾用尽**的额度在重新可用时提醒（没用尽过就静默，不按周期刷屏）；
+/// - 回升：相邻两次观测剩余回升达到阈值（默认 10 个百分点，带 1 小时冷却）。
+
+/// 同一 provider 的多条额度同时用尽 / 恢复时折叠成一条通知（见 `BillingAlertDigest`），
+/// 避免「5 小时、每周、每月」三连弹窗。
+
 /// 通知走统一的 NotificationCenterService（声音 / 提醒方式由设置页事件表决定），
-/// 三类各自落到事件表的一行（见 `NotificationEvent.forBillingKind`）；
+/// 各类各自落到事件表的一行（见 `NotificationEvent.forBillingKind`）；
 /// 系统通知未授权时退化为应用内提示音，避免用户「什么都没收到」。
-///
+
 /// 两层开关的分工（同时存在，语义不重叠）：
-/// - 额度 Provider 页的「阈值 / 重置 / 回升」开关（`BillingAlertPreferences.options`）
+/// - 额度 Provider 页的「额度提醒 / 额度恢复 / 额度回升」开关（`BillingAlertPreferences.options`）
 ///   决定**是否产生**这类提醒（连应用内提示音一起不产生）；
 /// - 「通知与音效」页对应行的开关决定这条提醒**是否真的推送**（声音 / 提醒方式也在那一行）。
 /// 任一层关掉都不打扰用户；两层都开才推送。
@@ -77,12 +81,11 @@ final class BillingAlertService: BillingAlerting {
             saveState(result.state)
         }
         guard !result.alerts.isEmpty else { return }
-        for alert in result.alerts {
-            send(kind: alert.kind,
-                 title: alert.title(providerName: providerName),
-                 body: alert.bodyText)
+        let messages = BillingAlertDigest.messages(for: result.alerts, providerName: providerName)
+        for message in messages {
+            send(kind: message.kind, title: message.title, body: message.body)
         }
-        let summaries = result.alerts.map { "\($0.title(providerName: providerName)) \($0.bodyText)" }
+        let summaries = messages.map { "\($0.title) \($0.body)" }
         logger.info("额度提醒已发送：\(summaries.joined(separator: "；"))")
     }
 
@@ -101,7 +104,7 @@ final class BillingAlertService: BillingAlerting {
 
     /// 发一条额度相关通知；系统通知未授权时改为应用内提示音
     ///
-    /// 种类 → 事件表行由 Core 的纯函数决定（三类各自可配声音与提醒方式），
+    /// 种类 → 事件表行由 Core 的纯函数决定（各类各自可配声音与提醒方式），
     /// 这里不再自己判断「这是不是恢复类通知」。
     private func send(kind: BillingAlertKind, title: String, body: String) {
         let event = NotificationEvent.forBillingKind(kind)

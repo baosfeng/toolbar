@@ -3,16 +3,16 @@ import Foundation
 // MARK: - 额度提醒偏好
 
 /// 额度提醒开关 —— 三类通知各自独立，默认都开
-///
+
 /// 只用一份实现（设置页与 `BillingAlertService` 都读它），避免两处默认值分叉：
-/// - 阈值提醒：剩余跌破 5% / 4% / 3% / 2% / 1%；
-/// - 窗口重置：会话 / 周 / 月额度进入新周期（用户明确要求「周额度重置要能通知」）；
+/// - 额度提醒：剩余跌破用尽线（默认 1%）时提醒一次，5% … 2% 只作预告；
+/// - 额度恢复：**仅在本周期额度用尽过**时，恢复才通知（键沿用 `billing.alerts.reset.enabled`，老配置零迁移）；
 /// - 余额回升：相邻两次观测剩余回升达到阈值（默认 10 个百分点）。
 public struct BillingAlertPreferences {
 
-    /// 阈值提醒开关键（缺省视为开启）
+    /// 额度提醒开关键（缺省视为开启；用尽与偏低预告共用这把键）
     public static let enabledKey = "billing.alerts.enabled"
-    /// 窗口重置通知开关键（缺省开启）
+    /// 额度恢复通知开关键（缺省开启；键名保留历史 `reset` 前缀，语义已改成「恢复」）
     public static let resetEnabledKey = "billing.alerts.reset.enabled"
     /// 余额回升通知开关键（缺省开启）
     public static let recoveryEnabledKey = "billing.alerts.recovery.enabled"
@@ -31,15 +31,15 @@ public struct BillingAlertPreferences {
         self.storage = storage
     }
 
-    /// 是否发送阈值提醒（未写过该键时默认开启）
+    /// 是否发送低额度提醒（用尽 + 偏低预告；未写过该键时默认开启）
     public var isEnabled: Bool { boolValue(forKey: Self.enabledKey, defaultValue: true) }
 
-    /// 是否发送「窗口已重置」通知
-    public var isResetNotificationEnabled: Bool {
+    /// 是否发送「额度已恢复」通知（只对本周期用尽过的额度生效）
+    public var isRecoveredNotificationEnabled: Bool {
         boolValue(forKey: Self.resetEnabledKey, defaultValue: true)
     }
 
-    /// 是否发送「额度已回升」通知
+    /// 是否发送「额度回升」通知
     public var isRecoveryNotificationEnabled: Bool {
         boolValue(forKey: Self.recoveryEnabledKey, defaultValue: true)
     }
@@ -54,7 +54,7 @@ public struct BillingAlertPreferences {
 
     public func setEnabled(_ enabled: Bool) { storage.set(enabled, forKey: Self.enabledKey) }
 
-    public func setResetNotificationEnabled(_ enabled: Bool) {
+    public func setRecoveredNotificationEnabled(_ enabled: Bool) {
         storage.set(enabled, forKey: Self.resetEnabledKey)
     }
 
@@ -67,9 +67,13 @@ public struct BillingAlertPreferences {
     }
 
     /// 组装评估器选项（评估器本身不认识偏好类型）
+    ///
+    /// 用尽与偏低共用一把开关：它们都是「额度低」的提醒，用户心智上是同一件事；
+    /// 用尽本身在同一周期只发一次，不靠开关去限流。
     public var options: BillingAlertOptions {
-        BillingAlertOptions(notifyThresholds: isEnabled,
-                            notifyWindowReset: isResetNotificationEnabled,
+        BillingAlertOptions(notifyExhausted: isEnabled,
+                            notifyThresholds: isEnabled,
+                            notifyRecovered: isRecoveredNotificationEnabled,
                             notifyRecovery: isRecoveryNotificationEnabled,
                             recoveryMinimumPercent: recoveryMinimumPercent,
                             recoveryCooldown: Self.recoveryCooldown)

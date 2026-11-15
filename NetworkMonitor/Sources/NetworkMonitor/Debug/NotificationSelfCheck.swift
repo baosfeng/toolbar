@@ -77,9 +77,9 @@ enum NotificationSelfCheck {
         // MARK: 3. 系统通知音：把两类音都指到事件上，核对副本是否就位
         let originalRecoverySound = preferences.config(for: .billingRecovery).sound
         let originalAlertSound = preferences.config(for: .billingAlert).sound
-        let originalResetSound = preferences.config(for: .billingWindowReset).sound
+        let originalRecoveredSound = preferences.config(for: .billingRecovered).sound
         preferences.setSound(.systemSound("Glass"), for: .billingRecovery)
-        preferences.setSound(.systemSound("Glass"), for: .billingWindowReset)
+        preferences.setSound(.systemSound("Glass"), for: .billingRecovered)
         if let importedFile {
             preferences.setSound(.customFile(importedFile), for: .billingAlert)
         }
@@ -107,10 +107,11 @@ enum NotificationSelfCheck {
         service.requestAuthorization()
         spin(seconds: 1.0)
         service.refreshAuthorizationState()
-        // 三类额度通知各发一条：证明「种类 → 事件行」映射在真实投递路径上成立
+        // 四类额度通知各发一条：证明「种类 → 事件行」映射在真实投递路径上成立
         let billingKinds: [(kind: BillingAlertKind, label: String)] = [
-            (.threshold(2), "额度提醒"),
-            (.windowReset, "额度重置"),
+            (.exhausted, "额度用尽"),
+            (.threshold(2), "额度偏低"),
+            (.recovered, "额度恢复"),
             (.balanceRecovered, "额度回升"),
         ]
         for item in billingKinds {
@@ -142,7 +143,7 @@ enum NotificationSelfCheck {
         preferences.setEnabled(original.enabled, for: .clipboardAction)
         preferences.setSound(originalRecoverySound, for: .billingRecovery)
         preferences.setSound(originalAlertSound, for: .billingAlert)
-        preferences.setSound(originalResetSound, for: .billingWindowReset)
+        preferences.setSound(originalRecoveredSound, for: .billingRecovered)
         if let importedFile { try? library.remove(importedFile) }
         service.syncInstalledSounds()
         sink.emit("cleanup.done importedRemoved=\(importedFile != nil)")

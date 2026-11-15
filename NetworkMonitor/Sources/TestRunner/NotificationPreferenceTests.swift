@@ -127,10 +127,10 @@ func testNotificationPreferencesSharedAcrossPages() {
 
     // 反向：剪贴板页写 → 额度页读到
     clipboardPage.setHaptic(.strong, for: .clipboardAction)
-    clipboardPage.setPresentation(.bannerOnly, for: .billingWindowReset)
+    clipboardPage.setPresentation(.bannerOnly, for: .billingRecovered)
     assertEqual(billingPage.config(for: .clipboardAction).haptic, .strong,
                 "额度页读到剪贴板页写的触觉")
-    assertEqual(billingPage.config(for: .billingWindowReset).presentation, .bannerOnly,
+    assertEqual(billingPage.config(for: .billingRecovered).presentation, .bannerOnly,
                 "额度页读到另一处写的提醒方式")
 
     // 事件之间互不串键

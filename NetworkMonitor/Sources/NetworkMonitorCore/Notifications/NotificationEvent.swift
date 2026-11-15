@@ -13,8 +13,12 @@ import Foundation
 public enum NotificationEvent: String, CaseIterable, Sendable {
     /// 额度提醒（剩余跌破 5% / 4% / 3% / 2% / 1%）
     case billingAlert
-    /// 额度重置（会话 / 周 / 月额度进入新周期）
-    case billingWindowReset
+    /// 额度恢复（本周期用尽过的额度重新可用）
+    ///
+    /// rawValue 沿用旧值 `billingWindowReset`：偏好键由 rawValue 拼成
+    /// （`notify.<rawValue>.enabled`），改名会把用户已有的声音与提醒方式配置丢掉。
+    /// 语义从「窗口重置」收紧到「曾用尽的额度恢复」，键不动故老配置零迁移。
+    case billingRecovered = "billingWindowReset"
     /// 额度回升（相邻两次观测剩余上升达到阈值）
     case billingRecovery
     /// 截图完成
@@ -32,7 +36,7 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
     public var label: String {
         switch self {
         case .billingAlert: return "额度提醒"
-        case .billingWindowReset: return "额度重置"
+        case .billingRecovered: return "额度恢复"
         case .billingRecovery: return "额度回升"
         case .snipCaptured: return "截图完成"
         case .clipboardAction: return "剪贴板动作"
@@ -45,9 +49,9 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
     public var detail: String {
         switch self {
         case .billingAlert:
-            return "额度剩余跌破 5% / 4% / 3% / 2% / 1% 时"
-        case .billingWindowReset:
-            return "会话 / 每周 / 每月额度进入新周期时"
+            return "额度跌破用尽线时提醒，5% 起先发预告"
+        case .billingRecovered:
+            return "本周期额度用尽后重新可用时（没用尽不会提醒）"
         case .billingRecovery:
             return "剩余比上一次上升达到设定百分点时"
         case .snipCaptured:
@@ -64,7 +68,7 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
     /// 是否会发系统通知（false = 只有应用内提示音与触觉，「提醒方式」对它无效）
     public var postsSystemNotification: Bool {
         switch self {
-        case .billingAlert, .billingWindowReset, .billingRecovery, .transferFinished: return true
+        case .billingAlert, .billingRecovered, .billingRecovery, .transferFinished: return true
         case .snipCaptured, .clipboardAction, .panelToggle: return false
         }
     }
@@ -74,7 +78,7 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
     /// 默认开关：提醒类默认开（额度 / 传输），操作反馈类默认关（音效默认关是既有口径）
     public var defaultEnabled: Bool {
         switch self {
-        case .billingAlert, .billingWindowReset, .billingRecovery, .transferFinished: return true
+        case .billingAlert, .billingRecovered, .billingRecovery, .transferFinished: return true
         case .snipCaptured, .clipboardAction, .panelToggle: return false
         }
     }
@@ -89,7 +93,7 @@ public enum NotificationEvent: String, CaseIterable, Sendable {
     public var defaultHaptic: NotificationHaptic {
         switch self {
         case .clipboardAction, .snipCaptured: return .standard
-        case .billingAlert, .billingWindowReset, .billingRecovery,
+        case .billingAlert, .billingRecovered, .billingRecovery,
              .transferFinished, .panelToggle: return .off
         }
     }

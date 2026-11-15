@@ -21,8 +21,8 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
     let notificationCard: SettingsNotificationEventCard
     private let launchRow = SettingsRowView(title: "开机自启动",
                                             subtitle: "登录后自动启动 \(AppIdentity.displayName)")
-    private let alertRow = SettingsRowView(title: "额度阈值提醒",
-                                           subtitle: "剩余跌破 5% / 4% / 3% / 2% / 1% 时发送系统通知")
+    private let alertRow = SettingsRowView(title: "额度用尽提醒",
+                                           subtitle: "额度剩余跌破用尽线（默认 1%）时发送，5% 起先发预告")
     private let unitRow = SettingsRowView(title: "数值单位",
                                           subtitle: "Token 与额度数字的量级写法，切换后立即生效")
     private let launchSwitch = NSSwitch()
@@ -77,7 +77,7 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         launchSwitch.setAccessibilityLabel("开机自启动")
         alertSwitch.target = self
         alertSwitch.action = #selector(alertChanged)
-        alertSwitch.setAccessibilityLabel("额度阈值提醒")
+        alertSwitch.setAccessibilityLabel("额度用尽提醒")
 
         unitControl.addItems(withTitles: NumberUnitStyle.allCases.map(\.title))
         unitControl.target = self

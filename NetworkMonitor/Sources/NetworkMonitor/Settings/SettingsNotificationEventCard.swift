@@ -264,7 +264,7 @@ final class SettingsNotificationEventCard: NSObject {
     static func previewCue(for event: NotificationEvent) -> NotificationCue? {
         switch event {
         case .billingAlert: return .billingAlert
-        case .billingWindowReset: return .billingWindowReset
+        case .billingRecovered: return .billingRecovered
         case .billingRecovery: return .billingRecovery
         case .transferFinished: return .transferFinished
         case .snipCaptured: return .snipCapture

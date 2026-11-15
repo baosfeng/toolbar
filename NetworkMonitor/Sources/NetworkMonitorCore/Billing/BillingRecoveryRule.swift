@@ -2,14 +2,15 @@ import Foundation
 
 // MARK: - 额度恢复判定（纯逻辑）
 
-/// 恢复判定的三个信号 —— 周期重置 / 余额回升 / 周窗口
+/// 恢复判定的四个信号 —— 用尽记录 / 周期重置 / 余额回升 / 冷却
 ///
-/// 「周额度重置要能通知」这条需求拆成两个可测的判定：
-/// 1. **窗口重置**：同一额度行的窗口周期标识（`cycleID`）前进，且重置时刻确实往后走；
-/// 2. **余额回升**：相邻两次观测的剩余比例差值达到阈值（默认 10 个百分点）。
+/// 「额度用尽后再恢复才通知」这条需求拆成几个可测的判定：
+/// 1. **用尽门槛**：只有 `exhaustedCycleID` 记着本周期用尽过，切周期才发「已恢复」；
+/// 2. **窗口重置**：同一额度行的窗口周期标识（`cycleID`）前进，且重置时刻确实往后走；
+/// 3. **余额回升**：相邻两次观测的剩余比例差值达到阈值（默认 10 个百分点）。
 ///
 /// 首次观测（没有上一份状态）不算重置、也不算回升 —— 否则新装用户第一次刷新
-/// 就会收到「额度已重置」的通知。
+/// 就会收到「额度已恢复」的通知；老版本状态 JSON 同样按「没用尽过」处理。
 public enum BillingRecoveryRule {
 
     /// 窗口是否发生重置
@@ -61,10 +62,19 @@ public enum BillingRecoveryRule {
         return previousState.lastResetNotifiedCycleID != cycleID
     }
 
-    /// 同一窗口周期只通知一次重置（窗口版便捷入口）
-    public static func shouldNotifyReset(previousState: BillingAlertState,
-                                         current: BillingQuotaWindow) -> Bool {
-        shouldNotifyReset(previousState: previousState, cycleID: current.cycleID)
+    /// 上一周期该额度是否用尽过 —— 恢复通知的唯一门槛
+    ///
+    /// 判据是「最近一次用尽发生的周期 == 当前记录的周期」：每次评估都会刷新
+    /// `cycleID`，因此 `exhaustedCycleID` 只会在用尽那一周期相等，之后周期一切换
+    /// 就不再相等 —— 「上上周期用过尽」不会被误判成「上一周期用过尽」。
+    ///
+    /// 老状态 JSON 没有 `exhaustedCycleID` 字段（解码为 nil），因此升级后第一轮
+    /// 一律按「没用尽过」处理：不会凭空给用户补发一条「额度已恢复」。
+    public static func wasExhaustedInPreviousCycle(_ state: BillingAlertState?) -> Bool {
+        guard let state, let exhausted = state.exhaustedCycleID else { return false }
+        // 无周期标识的 provider（只有重置时刻）无法比较周期，按「曾用尽」处理
+        guard let cycle = state.cycleID else { return true }
+        return exhausted == cycle
     }
 
     /// 回升通知是否已过冷却期（避免短时间反复触发）
