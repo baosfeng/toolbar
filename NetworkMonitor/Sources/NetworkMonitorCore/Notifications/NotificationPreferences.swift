@@ -149,13 +149,14 @@ public final class NotificationPreferences: @unchecked Sendable {
     /// 触发场景：用户在 Finder 里手删了音效文件、或备份还原后目录不完整。
     /// 不修的话事件会一直引用一个不存在的文件：应用内提示音静默、系统通知回落到默认音，
     /// 而设置页那一行仍显示「自定义 · 某某」，用户看不出问题在哪。
+    /// 回落目标是事件的默认档（内建音），与「坏值回落内建」同一口径。
     @discardableResult
     public func sanitizeCustomSoundReferences(availableFiles: Set<String>) -> [NotificationEvent] {
         var repaired: [NotificationEvent] = []
         for event in NotificationEvent.allCases {
             guard case .customFile(let file) = config(for: event).sound else { continue }
             guard !availableFiles.contains(file) else { continue }
-            setSound(.systemDefault, for: event)
+            setSound(event.defaultSound, for: event)
             repaired.append(event)
         }
         return repaired

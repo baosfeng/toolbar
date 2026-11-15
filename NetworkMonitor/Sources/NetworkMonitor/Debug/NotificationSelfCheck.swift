@@ -91,7 +91,9 @@ enum NotificationSelfCheck {
             let plan = NotificationSoundResolver.notificationPlan(
                 selection: config.sound,
                 presentation: config.presentation,
-                installedName: { selection in installedName(for: selection) })
+                installedName: { selection in
+                    installedName(for: selection, cue: event.previewCue)
+                })
             var exists = "n/a"
             if case .named(let name) = plan {
                 exists = FileManager.default.fileExists(atPath: soundsDir.appendingPathComponent(name).path)
@@ -152,9 +154,11 @@ enum NotificationSelfCheck {
     // MARK: - 辅助
 
     /// 每次 sync 的副本命名与安装器一致（自检独立算一遍，避免依赖安装器实例）
-    private static func installedName(for selection: NotificationSoundSelection) -> String? {
+    private static func installedName(for selection: NotificationSoundSelection,
+                                       cue: NotificationCue) -> String? {
         let prefix = NotificationSoundInstaller.fileNamePrefix
         switch selection {
+        case .builtIn: return CueSoundInstallName.fileName(for: cue)
         case .systemSound(let name): return "\(prefix)sys-\(name).aiff"
         case .customFile(let file):
             let stem = (file as NSString).deletingPathExtension

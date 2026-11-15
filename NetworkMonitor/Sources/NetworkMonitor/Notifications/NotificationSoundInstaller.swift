@@ -13,7 +13,7 @@ import NetworkMonitorCore
 ///   因此发送前必须复制到 ~/Library/Sounds，并按文件名引用。
 ///
 /// 命名与清理（有界判据）：
-/// - 一律以 NotificationMonitor 前缀 NetworkMonitor- 命名，分 sys-（系统音）与 custom-（自定义）两族；
+/// - 一律以 NetworkMonitor- 前缀命名，分 builtin-（内建合成音）/ sys-（系统音）/ custom-（自定义）三族；
 /// - 每次 sync 只清「本前缀且不在当前引用集」的副本，不扫描、不删除用户自己的其它音效。
 @MainActor
 final class NotificationSoundInstaller {
@@ -26,16 +26,19 @@ final class NotificationSoundInstaller {
     private static let customPrefix = "NetworkMonitor-custom-"
 
     private let store: NotificationSoundFileStore
+    private let builtInStore: CueSoundFileStore
     private let logger: LoggingService
     private let fileManager: FileManager
     /// ~/Library/Sounds（系统通知音查找目录）
     let soundsDirectory: URL
 
     init(store: NotificationSoundFileStore,
+         builtInStore: CueSoundFileStore = CueSoundFileStore(directory: CueSoundFileStore.defaultDirectory()),
          logger: LoggingService = AppContext.shared.logger,
          soundsDirectory: URL? = nil,
          fileManager: FileManager = .default) {
         self.store = store
+        self.builtInStore = builtInStore
         self.logger = logger
         self.fileManager = fileManager
         self.soundsDirectory = soundsDirectory
@@ -45,11 +48,16 @@ final class NotificationSoundInstaller {
 
     // MARK: - 名字映射
 
-    /// 声音选择 → ~/Library/Sounds 里的文件名（不需要文件已存在，名字是确定性的）
-    func installedName(for selection: NotificationSoundSelection) -> String? {
+    /// 声音选择 + cue → ~/Library/Sounds 里的文件名（不需要文件已存在，名字是确定性的）
+    ///
+    /// 只有内建档按 cue 一个文件（复制的咔嚓与失败的沉闷是两份），
+    /// 系统音与自定义音与 cue 无关，于是用户选一次就五处同声。
+    func installedName(for selection: NotificationSoundSelection, cue: NotificationCue) -> String? {
         switch selection {
         case .systemDefault, .silent:
             return nil
+        case .builtIn:
+            return CueSoundInstallName.fileName(for: cue)
         case .systemSound(let name):
             guard let safe = SoundFileValidator.sanitizedDisplayName(name) else { return nil }
             return "\(Self.systemPrefix)\(safe).aiff"
@@ -67,8 +75,10 @@ final class NotificationSoundInstaller {
         var needed: [String: URL] = [:]
         for event in NotificationEvent.allCases {
             let sound = preferences.config(for: event).sound
-            guard let target = installedName(for: sound) else { continue }
-            if let source = sourceURL(for: sound) { needed[target] = source }
+            // 内建档一个事件一个 cue，其余档与 cue 无关（文件名由选择本身决定）
+            let cue = event.previewCue
+            guard let target = installedName(for: sound, cue: cue) else { continue }
+            if let source = sourceURL(for: sound, cue: cue) { needed[target] = source }
         }
         ensureDirectory()
         for (target, source) in needed {
@@ -101,11 +111,13 @@ final class NotificationSoundInstaller {
 
     // MARK: - 内部
 
-    /// 声音选择对应的源文件（系统音走 /System/Library/Sounds，自定义走 Store）
-    private func sourceURL(for selection: NotificationSoundSelection) -> URL? {
+    /// 声音选择对应的源文件（内建走生成目录，系统音走 /System/Library/Sounds，自定义走 Store）
+    private func sourceURL(for selection: NotificationSoundSelection, cue: NotificationCue) -> URL? {
         switch selection {
         case .systemDefault, .silent:
             return nil
+        case .builtIn:
+            return builtInStore.ensure(cue: cue)
         case .systemSound(let name):
             let url = URL(fileURLWithPath: "/System/Library/Sounds")
                 .appendingPathComponent("\(name).aiff")

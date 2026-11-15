@@ -61,7 +61,7 @@ private func testNotificationSoundResolution() {
         switch selection {
         case .systemSound(let name): return "NetworkMonitor-sys-\(name).aiff"
         case .customFile(let file): return "NetworkMonitor-custom-\(file).aiff"
-        case .systemDefault, .silent: return nil
+        case .systemDefault, .silent, .builtIn: return nil
         }
     }
     assertEqual(NotificationSoundResolver.notificationPlan(selection: .systemSound("Glass"),
@@ -92,8 +92,10 @@ private func testNotificationSoundResolution() {
         assertEqual(NotificationSoundSelection(storageValue: selection.storageValue), selection,
                     "存储值往返：\(selection.storageValue)")
     }
-    assertEqual(NotificationSoundSelection(storageValue: "脏数据"), .systemDefault,
-                "脏数据回落跟随系统")
+    assertEqual(NotificationSoundSelection(storageValue: "脏数据"), .builtIn,
+                "脏数据回落内建音")
+    assertEqual(NotificationSoundSelection(storageValue: "default"), .systemDefault,
+                "老值 default 仍解析成跟随系统（语义不变）")
     assertEqual(NotificationPresentation.allCases.count, 3, "提醒方式三档（系统允许的组合）")
     assertEqual(NotificationPresentation.bannerOnly.includesSound, false, "仅横幅不含声音")
     assertEqual(NotificationHaptic.allCases.count, 4, "触觉四档（关/轻/标准/有力）")

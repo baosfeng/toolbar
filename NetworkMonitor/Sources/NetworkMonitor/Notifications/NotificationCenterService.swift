@@ -90,7 +90,9 @@ final class NotificationCenterService: NSObject, NotificationServicing {
         let plan = NotificationSoundResolver.notificationPlan(
             selection: config.sound,
             presentation: config.presentation,
-            installedName: { [weak self] selection in self?.installer.installedName(for: selection) })
+            installedName: { [weak self] selection in
+                self?.installer.installedName(for: selection, cue: message.event.previewCue)
+            })
         // 副本没装上（音效刚被删 / 复制失败）时回落系统默认音：
         // 引用一个不存在的文件名，系统会静默不响，用户完全无从察觉
         let effectivePlan: NotificationSoundPlan

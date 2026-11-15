@@ -55,6 +55,11 @@ runLaunchAtStartupTests()
 runNotificationTests()
 runBillingNotificationMappingTests()
 
+// MARK: - 内建音（合成器确定性 / 时长与峰值 / AIFF 容器 / 存储值契约 / 落盘幂等）
+runCueSoundSynthTests()
+runCueSoundStoreTests()
+runCueSoundMigrationTests()
+
 // MARK: - 本地加密凭据存储（密文落盘 / 历史明文就地加密 / 换机器降级）
 runEncryptedSecretStoreTests()
 runLocalKeyMaterialTests()

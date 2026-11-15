@@ -32,7 +32,7 @@ func testNotificationPreferences() {
     // 未写过时全部取事件默认值
     let billing = preferences.config(for: .billingAlert)
     assertEqual(billing.enabled, true, "额度提醒默认开")
-    assertEqual(billing.sound, .systemDefault, "默认跟随系统")
+    assertEqual(billing.sound, .builtIn, "默认内建（咔哒）")
     assertEqual(billing.presentation, .bannerAndSound, "默认横幅+声音")
     assertEqual(preferences.inAppVolume, 1, "音量默认 1")
 
@@ -47,7 +47,7 @@ func testNotificationPreferences() {
     assertEqual(updated.presentation, .notificationCenterOnly, "提醒方式写入")
     assertEqual(updated.haptic, .strong, "触觉写入")
     // 别的行不受影响
-    assertEqual(preferences.config(for: .transferFinished).sound, .systemDefault,
+    assertEqual(preferences.config(for: .transferFinished).sound, .builtIn,
                 "改一行不影响其它行")
 
     // 音量夹取
@@ -61,7 +61,7 @@ func testNotificationPreferences() {
     preferences.resetToDefaults()
     let reset = preferences.config(for: .billingAlert)
     assertEqual(reset.enabled, true, "恢复默认回出厂开关")
-    assertEqual(reset.sound, .systemDefault, "恢复默认回跟随系统")
+    assertEqual(reset.sound, .builtIn, "恢复默认回内建音")
     assertEqual(preferences.inAppVolume, 1, "恢复默认回满音量")
 
     // 旧剪贴板开关迁移：旧「操作音效」开着 → 新 clipboardAction 行跟着开
@@ -83,13 +83,13 @@ func testNotificationPreferences() {
     assertEqual(migrated.config(for: .clipboardAction).enabled, false,
                 "恢复默认后旧开关不会重新迁入")
 
-    // 悬空引用自愈：自定义音效文件没了就回落「跟随系统」，还在的保持不动
+    // 悬空引用自愈：自定义音效文件没了就回落默认档（内建音），还在的保持不动
     let heal = NotificationPreferences(storage: InMemoryStorage())
     heal.setSound(.customFile("在的.aiff"), for: .clipboardAction)
     heal.setSound(.customFile("没了的.aiff"), for: .snipCaptured)
     let repaired = heal.sanitizeCustomSoundReferences(availableFiles: ["在的.aiff"])
     assertEqual(repaired, [.snipCaptured], "只修真正缺文件的那一行")
-    assertEqual(heal.config(for: .snipCaptured).sound, .systemDefault, "缺文件的行回落到跟随系统")
+    assertEqual(heal.config(for: .snipCaptured).sound, .builtIn, "缺文件的行回落到内建音")
     assertEqual(heal.config(for: .clipboardAction).sound, .customFile("在的.aiff"),
                 "还在的文件不受影响")
     assertEqual(heal.sanitizeCustomSoundReferences(availableFiles: ["在的.aiff"]), [],
@@ -141,8 +141,8 @@ func testNotificationPreferencesSharedAcrossPages() {
     clipboardPage.resetToDefaults()
     assertEqual(billingPage.config(for: .billingAlert).enabled, true,
                 "恢复默认对另一处同样生效")
-    assertEqual(billingPage.config(for: .billingAlert).sound, .systemDefault,
-                "恢复默认把声音也清回跟随系统")
+    assertEqual(billingPage.config(for: .billingAlert).sound, .builtIn,
+                "恢复默认把声音也清回内建音")
 }
 
 // MARK: - 校验
