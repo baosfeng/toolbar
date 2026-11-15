@@ -36,6 +36,20 @@ enum GlassStyle {
         return false
     }
 
+    /// 设置「交互随动」
+    ///
+    /// 为什么不直接写 `glass.effectIsInteractive = x`：这个属性只在 macOS 27 的 SDK 里声明，
+    /// 而 CI 的 macos-26 镜像 SDK 里没有它——`#available` 挡的是**运行时**版本，挡不住
+    /// **编译期**缺符号，于是本地能编、CI 报 `has no member 'effectIsInteractive'`。
+    /// 改用 KVC：先确认运行时对象真有这个 setter，再赋值，两头都不炸。
+    @available(macOS 26.0, *)
+    static func applyInteractive(_ interactive: Bool, to glass: NSGlassEffectView) {
+        guard supportsInteractiveGlass else { return }
+        let setter = NSSelectorFromString("setEffectIsInteractive:")
+        guard glass.responds(to: setter) else { return }
+        glass.setValue(interactive, forKey: "effectIsInteractive")
+    }
+
     // MARK: 面板
 
     /// 造一块面板玻璃底层；返回 nil 表示走纯实色降级路径
@@ -48,9 +62,7 @@ enum GlassStyle {
             glass.style = style == ThemeMaterialRecipe.Style.clear ? .clear : .regular
             glass.cornerRadius = PaneCardStyle.cardRadius + 3
             glass.tintColor = ThemeStyle.panelTint
-            if #available(macOS 27.0, *) {
-                glass.effectIsInteractive = interactive
-            }
+            applyInteractive(interactive, to: glass)
             return glass
         }
         // macOS < 26：沿用改造前剪贴板面板的那套两级材质里层，视觉不塌
@@ -96,9 +108,7 @@ enum GlassStyle {
         glass.style = style == ThemeMaterialRecipe.Style.clear ? .clear : .regular
         glass.cornerRadius = cornerRadius
         glass.tintColor = ThemeStyle.panelTint
-        if #available(macOS 27.0, *) {
-            glass.effectIsInteractive = interactive && supportsInteractiveGlass
-        }
+        applyInteractive(interactive && supportsInteractiveGlass, to: glass)
         content.translatesAutoresizingMaskIntoConstraints = false
         glass.contentView = content
         return glass
