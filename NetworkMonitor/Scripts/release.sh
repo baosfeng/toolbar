@@ -55,12 +55,15 @@ say "   当前 ${old_version}（构建号 ${old_build}）→ 目标 ${VERSION}�
 [ "$old_version" = "$VERSION" ] && fail "版本号已经是 ${VERSION}"
 
 # 语义化比较：逐段按数值比（字符串比会把 1.9 判成大于 1.10）
-higher=$(python3 -c "
-import sys
-def parts(v): return [int(x) for x in v.split(".")[:3]]
-old, new = parts(sys.argv[1]), parts(sys.argv[2])
-print(1 if new > old else 0)
-" "$old_version" "$VERSION")
+IFS=. read -r oldMajor oldMinor oldPatch <<< "$old_version"
+IFS=. read -r newMajor newMinor newPatch <<< "$VERSION"
+higher=0
+if [ "$newMajor" -gt "$oldMajor" ]; then higher=1
+elif [ "$newMajor" -eq "$oldMajor" ]; then
+    if [ "$newMinor" -gt "$oldMinor" ]; then higher=1
+    elif [ "$newMinor" -eq "$oldMinor" ] && [ "$newPatch" -gt "$oldPatch" ]; then higher=1
+    fi
+fi
 [ "$higher" = "1" ] || fail "新版本号必须大于当前 $old_version"
 git rev-parse -q --verify "refs/tags/$TAG" > /dev/null && fail "本地已有 tag $TAG"
 git ls-remote --tags "$REMOTE" "refs/tags/$TAG" 2>/dev/null | grep -q . && fail "远端已有 tag $TAG"
