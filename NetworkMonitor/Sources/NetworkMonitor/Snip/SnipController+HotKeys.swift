@@ -112,7 +112,7 @@ extension SnipController {
     func beginWhiteboard() {
         guard overlays.isEmpty else { return }
         guard captureService.isAuthorized() else {
-            SnipPermissionGuide.present(logger: logger)
+            SnipPermissionGuide.presentIfNeeded(logger: logger)
             return
         }
         guard let display = captureService.screens().first,

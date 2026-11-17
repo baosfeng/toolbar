@@ -18,11 +18,11 @@ enum MenuPanelSnapshot {
 
     /// 触发开关的环境变量名
     static let directoryEnvKey = "NM_SNAPSHOT_DIR"
+
     /// 超高内容自证开关（进程 12 个，验证滚动兜底）
     static let stressEnvKey = "NM_SNAPSHOT_STRESS"
     /// 额度页示意数据开关（快照模式默认注入，显式设置时只用于日志标记）
     static let billingMockEnvKey = "NM_BILLING_MOCK"
-    /// 启动后延迟（等 Dock / 菜单栏 / 剪贴板采集初始化完成）
     private static let delayNanoseconds: UInt64 = 700_000_000
     private static var logger: LoggingService { AppContext.shared.logger }
 

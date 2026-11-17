@@ -38,16 +38,7 @@ extension AppCoordinator {
                                              notificationContext: self.settingsNotificationContext,
                                              logger: self.logger)
             },
-            .capture: { [weak self] in
-                guard let self else { return Self.unavailable(.capture) }
-                // 只读热键摘要来自 SnipController；未注册时给出可读兜底
-                return SettingsCapturePane(hotKeyDelegate: self,
-                                         hotKeySummary: { [weak self] in
-                    self?.snipController?.hotKeySummary ?? "热键尚未注册"
-                },
-                                         notificationContext: self.settingsNotificationContext,
-                                         logger: self.logger)
-            },
+            .capture: { [weak self] in self?.makeCapturePane() ?? Self.unavailable(.capture) },
             .transfer: { [weak self] in
                 guard let self, let service = self.transferService else {
                     return Self.unavailable(.transfer,
@@ -58,12 +49,12 @@ extension AppCoordinator {
                                             logger: self.logger)
             },
             .notifications: { [weak self] in
-                guard let self else { return Self.unavailable(.notifications) }
-                return SettingsNotificationPane(preferences: self.notificationPreferences,
-                                               player: self.soundPlayer,
-                                               library: self.soundLibrary,
-                                               service: self.notificationService,
-                                               logger: self.logger)
+                self?.makeNotificationPane() ?? Self.unavailable(.notifications)
+            },
+            // 系统权限：五类授权的唯一集中页（其余功能页只留就地简版）
+            .permissions: { [weak self] in
+                guard let self else { return Self.unavailable(.permissions) }
+                return self.makePermissionPane()
             },
             // Token 用量：数据源目录 / zstd 诊断 + 索引维护（重扫 / 清理）
             .token: { [weak self] in

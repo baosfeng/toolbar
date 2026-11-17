@@ -29,6 +29,10 @@ final class SystemPermissionChain: SystemPermissionProviding {
         self.center = center
         self.stack = stack
         self.logger = logger
+        // 中心是唯一的发布点（同步读数、通知异步回调、检测中三处都经它）
+        center.onSnapshotChanged = { [weak self] snapshot in
+            self?.deliver(snapshot)
+        }
         observeActivation()
     }
 
@@ -45,14 +49,41 @@ final class SystemPermissionChain: SystemPermissionProviding {
 
     // MARK: 动作
 
-    /// 重读三类权限，并把辅助功能授权态同步给 Paste Stack，最后通知订阅者
+    /// 重读五类权限，并把辅助功能授权态同步给 Paste Stack，最后通知订阅者
     @discardableResult
     func refresh() -> SystemPermissionSnapshot {
-        let snapshot = center.refresh()
-        stack?.syncAccessibility(snapshot.accessibility == .granted)
-        // 快照没变也照常通知：订阅方可能刚刚建出来（切页后新建的权限卡要拿到当前值）
-        for handler in observers.values { handler(snapshot) }
-        return snapshot
+        center.refresh()
+    }
+
+    /// 检测中 → 异步回填
+    func recheck() {
+        center.recheck()
+    }
+
+    /// 请求一类权限（登记进系统设置清单 + 打开对应面板），随后重读
+    func request(_ kind: SystemPermissionKind) {
+        center.request(kind)
+    }
+
+    /// 打开系统设置（深链唯一出口在中心）
+    func openSettings(for kind: SystemPermissionKind) {
+        center.openSettings(for: kind)
+    }
+
+    /// 在 Finder 中显示应用包
+    func revealAppInFinder() {
+        center.revealAppInFinder()
+    }
+
+    /// 重启应用
+    func restartApp() {
+        center.restartApp()
+    }
+
+    /// 登录项开关（失败时偏好已回滚，返回原因）
+    @discardableResult
+    func setLoginItemEnabled(_ enabled: Bool) -> String? {
+        center.setLoginItemEnabled(enabled)
     }
 
     // MARK: 订阅
@@ -69,16 +100,13 @@ final class SystemPermissionChain: SystemPermissionProviding {
         observers[token] = nil
     }
 
-    /// 请求一类权限（登记进系统设置清单 + 打开对应面板），随后重读
-    func request(_ kind: SystemPermissionKind) {
-        center.request(kind)
-        refresh()
+    /// 把新快照推给「副作用方 + 全部订阅者」
+    private func deliver(_ snapshot: SystemPermissionSnapshot) {
+        stack?.syncAccessibility(snapshot.accessibility == .granted)
+        for handler in observers.values { handler(snapshot) }
     }
 
-    /// 在 Finder 中显示应用包
-    func revealAppInFinder() {
-        center.revealAppInFinder()
-    }
+    // MARK: 启动与刷新时机
 
     /// 启动期：静默读一次 + 登记进 LaunchServices（异步，不阻塞首帧）
     ///
@@ -90,12 +118,10 @@ final class SystemPermissionChain: SystemPermissionProviding {
         LaunchServicesRegistrar.registerInBackground(appPath: center.appPath, logger: logger)
     }
 
-    // MARK: 刷新时机
-
     /// 应用激活即重读：用户十有八九刚在系统设置里勾完那一下切回来
     ///
     /// 这是「权限都设置好了还显示没权限」的正面修法 —— 辅助功能与剪贴板访问都是即时生效的，
-    /// 只要这一刻重读，状态灯无需重启就会变绿。
+    /// 只要这一刻重读，状态灯无需重启就会变绿。这里不置「检测中」：切回来就闪一下会更像卡住。
     private func observeActivation() {
         activationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
