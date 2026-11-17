@@ -1,11 +1,16 @@
 import Foundation
 import SQLite3
 
-// MARK: - 建表与迁移（user_version 1 → 2）
+// MARK: - 版本阶梯迁移（user_version 0 → 1 → 2 → 3…）
 
 extension DatabaseManager {
 
-    /// 剪贴板表与索引的幂等创建，并把 PRAGMA user_version 由 1 迁到 2
+    /// 按版本阶梯逐级迁移到 `ClipboardSchema.latestVersion`
+    ///
+    /// 每一级是一个独立段：`if clipUserVersion(db) < N` 里只做第 N 级自己的变更，
+    /// 段尾把 `PRAGMA user_version` 写成 N。**不要在一段里改别的版本号**——
+    /// 旧的一次性写法（先无条件建表、再 `guard version < 2`、最后无条件写 2）会让
+    /// v3 段每次启动把版本写回 2，v3 永远重跑。
     ///
     /// - Important: 直接操作 db 指针、不调度队列，只能在串行队列上下文（migrateIfNeeded()）
     ///   或单线程测试上下文调用；重复执行无副作用。
@@ -14,6 +19,20 @@ extension DatabaseManager {
             logger.debug("数据库未就绪，跳过剪贴板表迁移")
             return
         }
+        if clipUserVersion(db) < 1 {
+            migrateClipboardToV1(db)
+        }
+        if clipUserVersion(db) < 2 {
+            migrateClipboardToV2(db)
+        }
+        if clipUserVersion(db) < 3 {
+            migrateClipboardToV3(db)
+        }
+    }
+
+    // MARK: - v1：剪贴板历史表与索引
+
+    private func migrateClipboardToV1(_ db: OpaquePointer) {
         let statements = [
             """
             CREATE TABLE IF NOT EXISTS clipboard_items (
@@ -43,31 +62,49 @@ extension DatabaseManager {
                 return
             }
         }
+        clipAdvanceVersion(db, to: 1, label: "剪贴板历史表已就绪")
+    }
 
-        guard clipUserVersion(db) < 2 else { return }
-        if clipExec(db, "PRAGMA user_version = 2") {
-            logger.info("数据迁移 v2 完成：剪贴板历史表已就绪")
+    // MARK: - v2：补齐列（结构与 v1 相同，无 ALTER）
+
+    /// v2 段：v1 建表与索引即等同于 v2 的表结构，段内无 ALTER。
+    ///
+    /// 历史原因保留为独立段：老库（user_version = 0 但表已由旧的一次性逻辑建好）
+    /// 走到这里只需补写版本号，不做任何结构变更。
+    private func migrateClipboardToV2(_ db: OpaquePointer) {
+        clipAdvanceVersion(db, to: 2, label: "剪贴板表结构 v2 就绪")
+    }
+
+    // MARK: - v3：占位段（下一位加列 / 加表在这里）
+
+    /// v3 段：**下一位加列 / 加表在这里，勿在 v1 / v2 段里加**。
+    ///
+    /// 加一列的完整步骤：
+    /// 1. 在 `ClipboardSchema.Column` 按顺序追加 case（列串与行映射下标随之自动同步）
+    /// 2. 在本段追加一条 `ALTER TABLE clipboard_items ADD COLUMN <列名> <类型>;`
+    /// 3. 把 `ClipboardSchema.latestVersion` +1（本段改成 `to: 3` 后新开 v4 段）
+    /// 4. 在 TestRunner 的列序用例里补该字段的逐字段比对
+    private func migrateClipboardToV3(_ db: OpaquePointer) {
+        // 本段目前是空占位：空段不推版本号，否则老库会被标成 v3、真到 v3 时整段被跳过。
+        _ = db
+    }
+
+    // MARK: - 版本阶梯共用
+
+    /// 写完一级后把 user_version 推进到该级；失败只告警，不回写旧版本
+    private func clipAdvanceVersion(_ db: OpaquePointer, to version: Int32, label: String) {
+        if clipExec(db, "PRAGMA user_version = \(version)") {
+            logger.info("数据迁移 v\(version) 完成：\(label)")
         } else {
-            logger.warning("数据迁移 v2 失败: \(String(cString: sqlite3_errmsg(db)))")
+            logger.warning("数据迁移 v\(version) 失败: \(String(cString: sqlite3_errmsg(db)))")
         }
     }
 }
 
-// MARK: - 剪贴板仓储共用辅助
+// MARK: - 共用辅助
 
-/// 查询列顺序（与 clipItem(from:) 的下标一一对应）
-///
-/// 放宽为 internal：同模块的 DatabaseManager+ClipboardRepository.swift 需要复用
-enum ClipboardSchema {
-    static let columns = """
-    id, kind, text, preview, image_path, image_width, image_height, content_hash, \
-    source_bundle_id, source_app_name, copy_count, is_pinned, created_at, pinned_at, stack_position
-    """
-}
-
-/// 以下方法放宽为 internal 的原因：SQLite 行映射与绑定辅助被同模块的
-/// DatabaseManager+ClipboardRepository.swift 复用，private 会限制在单个文件内。
-/// 均须在串行队列上下文内调用，命名以 clip 前缀避免与既有辅助冲突。
+/// 以下方法放宽为 internal 的原因：被同模块的 ClipboardSchemaMapping.swift /
+/// DatabaseManager+ClipboardRepository.swift / Harness 建表复用，private 会限制在单个文件内。
 extension DatabaseManager {
 
     /// 执行无返回值的 SQL，成功返回 true
@@ -82,81 +119,5 @@ extension DatabaseManager {
         guard sqlite3_prepare_v2(db, "PRAGMA user_version", -1, &stmt, nil) == SQLITE_OK,
               sqlite3_step(stmt) == SQLITE_ROW else { return 0 }
         return sqlite3_column_int(stmt, 0)
-    }
-
-    /// 绑定可空整数：nil 绑定 NULL
-    func clipBindIntOrNull(_ stmt: OpaquePointer?, _ index: Int32, _ value: Int?) {
-        if let value {
-            sqlite3_bind_int(stmt, index, Int32(value))
-        } else {
-            sqlite3_bind_null(stmt, index)
-        }
-    }
-
-    /// 读取可空整数列
-    func clipIntOrNil(_ stmt: OpaquePointer?, _ index: Int32) -> Int? {
-        guard sqlite3_column_type(stmt, index) != SQLITE_NULL else { return nil }
-        return Int(sqlite3_column_int(stmt, index))
-    }
-
-    /// 读取可空文本列
-    func clipText(_ stmt: OpaquePointer?, _ index: Int32) -> String? {
-        guard sqlite3_column_type(stmt, index) != SQLITE_NULL,
-              let pointer = sqlite3_column_text(stmt, index) else { return nil }
-        return String(cString: pointer)
-    }
-
-    /// 读取可空时间列（SQLite REAL 秒）
-    func clipDateOrNil(_ stmt: OpaquePointer?, _ index: Int32) -> Date? {
-        guard sqlite3_column_type(stmt, index) != SQLITE_NULL else { return nil }
-        return Date(timeIntervalSince1970: sqlite3_column_double(stmt, index))
-    }
-
-    /// 行映射：关键列（id / kind / content_hash）非法时返回 nil，调用方跳过该行
-    func clipItem(from stmt: OpaquePointer?) -> ClipboardItem? {
-        guard let stmt,
-              let idText = clipText(stmt, 0), let id = UUID(uuidString: idText),
-              let kindText = clipText(stmt, 1), let kind = ClipboardItemKind(rawValue: kindText),
-              let hash = clipText(stmt, 7) else { return nil }
-        return ClipboardItem(
-            id: id,
-            kind: kind,
-            text: clipText(stmt, 2),
-            preview: clipText(stmt, 3) ?? "",
-            imagePath: clipText(stmt, 4),
-            imageWidth: clipIntOrNil(stmt, 5),
-            imageHeight: clipIntOrNil(stmt, 6),
-            contentHash: hash,
-            sourceBundleID: clipText(stmt, 8),
-            sourceAppName: clipText(stmt, 9),
-            copyCount: Int(sqlite3_column_int(stmt, 10)),
-            isPinned: sqlite3_column_int(stmt, 11) != 0,
-            createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 12)),
-            pinnedAt: clipDateOrNil(stmt, 13),
-            stackPosition: clipIntOrNil(stmt, 14)
-        )
-    }
-
-    /// 遍历结果集并映射（须在语句 bind 完成后调用）
-    func clipItems(from stmt: OpaquePointer?) -> [ClipboardItem] {
-        var items: [ClipboardItem] = []
-        while sqlite3_step(stmt) == SQLITE_ROW {
-            if let item = clipItem(from: stmt) { items.append(item) }
-        }
-        return items
-    }
-
-    /// 按内容哈希回读单条（写入后取最新行）
-    func clipItemByHash(_ db: OpaquePointer, _ contentHash: String) -> ClipboardItem? {
-        let sql = "SELECT \(ClipboardSchema.columns) FROM clipboard_items WHERE content_hash = ?;"
-        var stmt: OpaquePointer?
-        defer { sqlite3_finalize(stmt) }
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-            logger.warning("剪贴板回读准备失败: \(String(cString: sqlite3_errmsg(db)))")
-            return nil
-        }
-        sqlite3_bind_text_copy(stmt, 1, contentHash)
-        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
-        return clipItem(from: stmt)
     }
 }

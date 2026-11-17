@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 面板检索纯逻辑
 
@@ -84,7 +85,7 @@ enum ClipboardShortcutHelp {
     /// 浮层标题（同时用作悬浮层的无障碍标签）
     static let title = "快捷键帮助"
 
-    /// 全部键位（12 条，浮层按两列 × 6 行排布）
+    /// 全部键位（13 条，浮层按两列 × 7 行排布）
     static let entries: [Entry] = [
         Entry(keys: "⌘1–9", action: "快速粘贴第 N 条"),
         Entry(keys: "↵", action: "粘贴并收起"),
@@ -98,6 +99,7 @@ enum ClipboardShortcutHelp {
         Entry(keys: "Esc", action: "收起面板"),
         Entry(keys: "← →", action: "切换条目"),
         Entry(keys: "⌘,", action: "打开剪贴板设置"),
+        Entry(keys: ClipboardPauseLogic.toggleKeyHint, action: "暂停 / 恢复采集"),
     ]
 }
 

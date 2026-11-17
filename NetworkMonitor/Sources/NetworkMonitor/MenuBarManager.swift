@@ -49,6 +49,8 @@ final class MenuBarManager: NSObject {
     /// 菜单栏显示偏好变更观察者（注册与移除都在 +DisplayPreferences 扩展文件）
     nonisolated(unsafe) var displayPreferencesObserver: NSObjectProtocol?
 
+    /// 剪贴板采集服务（暂停 / 恢复的唯一真源；菜单项标题与状态栏前缀都读它）
+    let clipboardCapture: (any ClipboardCaptureService)?
     /// 剪贴板历史面板入口（由组合根装配）
     var onOpenClipboardHistory: (() -> Void)?
     /// 统一设置窗口入口（由组合根装配；参数 nil = 默认页）
@@ -60,6 +62,7 @@ final class MenuBarManager: NSObject {
          processMonitor: any ProcessNetworkMonitoringService,
          trafficTracker: any TrafficTrackingService,
          clipboardRepository: any ClipboardRepository,
+         captureService: (any ClipboardCaptureService)? = nil,
          paster: ClipboardPaster,
          transferController: TransferController? = nil,
          billingMonitor: BillingMonitor? = nil,
@@ -74,6 +77,7 @@ final class MenuBarManager: NSObject {
         self.systemMonitor = systemMonitor
         self.systemPreferences = systemPreferences
         self.storage = storage
+        self.clipboardCapture = captureService
         self.displayPreferences = MenuBarDisplayPreferences(storage: storage)
         self.harnessUsage = harnessUsage
         let appearance = AppearancePreferences(storage: storage)
@@ -149,28 +153,23 @@ final class MenuBarManager: NSObject {
         }
     }
 
-    private lazy var statusItemMenu: NSMenu = {
-        let menu = NSMenu()
-        let settingsItem = NSMenuItem(title: "设置…", action: #selector(openSettingsFromMenu), keyEquivalent: ",")
-        settingsItem.keyEquivalentModifierMask = [.command, .option]
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-        menu.addItem(.separator())
-        let quitItem = NSMenuItem(title: "退出 \(AppIdentity.displayName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        quitItem.keyEquivalentModifierMask = [.command]
-        menu.addItem(quitItem)
-        return menu
-    }()
-
+    /// 状态栏右键菜单：每次弹出现建（暂停 / 恢复标题必须反映当前状态，缓存会显示过期文案）
     private func showStatusItemMenu() {
         guard let button = statusItem.button else { return }
-        statusItemMenu.popUp(positioning: nil,
-                              at: NSPoint(x: 0, y: button.bounds.height),
-                              in: button)
+        MenuBarPauseMenu.make(target: self).popUp(positioning: nil,
+                                                   at: NSPoint(x: 0, y: button.bounds.height),
+                                                   in: button)
     }
 
     @objc func openSettingsFromMenu() {
         onOpenSettings?(nil)
+    }
+
+    /// 菜单栏「暂停 / 恢复采集」：切换后立即重画状态栏（⏸ 前缀与菜单标题同源）
+    @objc func toggleClipboardPause() {
+        guard let capture = clipboardCapture else { return }
+        logger.info("菜单栏切换剪贴板采集：isPaused=\(capture.togglePause())")
+        update()
     }
 
     /// 展开 / 收起面板（状态栏点击与 DEBUG 取证扩展共用这一条路径，故放宽为 internal）
@@ -261,7 +260,8 @@ final class MenuBarManager: NSObject {
             parts: parts,
             layout: MenuBarDisplayLogic.layout(fromRawValue: displayPreferences.layout.rawValue),
             separator: separator)
-        let text = alertPrefix.isEmpty ? body : alertPrefix + body
+        // 暂停态给一个可辨识的前缀（图标改动成本高：状态栏文本是唯一稳定的呈现面）
+        let text = alertPrefix + ClipboardPauseLogic.statusPrefix(isPaused: clipboardCapture?.isPaused ?? false) + body
         let title = NSAttributedString(string: text)
         if statusItem.button?.attributedTitle.string != text {
             statusItem.button?.attributedTitle = title

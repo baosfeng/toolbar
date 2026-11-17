@@ -38,6 +38,8 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
     /// 剪贴板动作的通知行（放宽为 internal：DEBUG 快照要按协议取到它）
     let notificationCard: SettingsNotificationEventCard
     private let captureModePopup = NSPopUpButton()
+    /// 暂停采集开关（每行一行控件；标题文案随状态在 refresh 里更新）
+    private let pauseSwitch = NSSwitch()
     private let maxItemsField = NSTextField()
     private let retentionField = NSTextField()
 
@@ -95,6 +97,8 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         [shortcutRow, positionRow, heightRow, quickPasteRow].forEach(panelCard.addRow)
         page.addCard(panelCard, sectionTitle: "唤起与面板")
 
+        let pauseRow = SettingsRowView(title: "暂停采集（复制的内容不入库）")
+        pauseRow.trailingStack.addArrangedSubview(pauseSwitch)
         let captureModeRow = SettingsRowView(title: "采集模式")
         captureModeRow.trailingStack.addArrangedSubview(captureModePopup)
         let maxItemsRow = SettingsRowView(title: "最大条数")
@@ -105,7 +109,7 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         ignoredRow.trailingStack.addArrangedSubview(ignoredToggleButton)
 
         let captureCard = SettingsCardView()
-        [captureModeRow, maxItemsRow, retentionRow, ignoredRow].forEach(captureCard.addRow)
+        [pauseRow, captureModeRow, maxItemsRow, retentionRow, ignoredRow].forEach(captureCard.addRow)
         page.addCard(captureCard, sectionTitle: "采集")
 
         buildIgnoredCard()
@@ -153,6 +157,10 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         quickPasteSwitch.target = self
         quickPasteSwitch.action = #selector(quickPasteChanged)
         quickPasteSwitch.setAccessibilityLabel("⌘1–⌘9 快速粘贴")
+
+        pauseSwitch.target = self
+        pauseSwitch.action = #selector(pauseChanged)
+        pauseSwitch.setAccessibilityLabel("暂停采集")
 
         configurePopup(captureModePopup,
                        items: [ClipboardCaptureMode.polling, .onDemand],
@@ -222,6 +230,7 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         heightSlider.doubleValue = height
         heightValueLabel.stringValue = "\(Int(height)) pt"
         quickPasteSwitch.state = preferences.quickPasteEnabled ? .on : .off
+        pauseSwitch.state = preferences.isPaused ? .on : .off
         captureModePopup.selectItem(at: index(of: preferences.captureMode.rawValue, in: captureModePopup))
         maxItemsField.stringValue = "\(preferences.maxItems)"
         retentionField.stringValue = "\(preferences.retentionDays)"
@@ -273,6 +282,14 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         preferences.retentionDays = Int(retentionField.stringValue) ?? ClipboardLimit.defaultRetentionDays
         maxItemsField.stringValue = "\(preferences.maxItems)"
         retentionField.stringValue = "\(preferences.retentionDays)"
+    }
+
+    /// 暂停开关：动作为「目标态」，实现幂等，重复点同态不会把状态翻回去
+    @objc private func pauseChanged() {
+        let paused = pauseSwitch.state == .on
+        settingsDelegate?.settingsDidChangePause(paused)
+        // 回读真源（暂停在轮询模式下会连带停采集，设置页显示不能与采集器脱节）
+        pauseSwitch.state = preferences.isPaused ? .on : .off
     }
 
     @objc private func captureModeChanged() {

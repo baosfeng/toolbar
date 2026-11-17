@@ -5,9 +5,8 @@ import NetworkMonitorCore
 
 /// 剪贴板采集器 — 同一个实现的两种模式（设计规格第 6 节分支 A / B）
 ///
-/// - 模式 B（polling，当前默认）：动态间隔 Timer 轮询 + changeCount 变更即读
-///   间隔由 `ClipboardPollSchedule` 决定（0.5s / 2.0s / 5.0s，随用户活跃度切换），
-///   另有 `com.apple.pasteboard.changed` 分布式通知作提前唤醒（只提前跑一次 capture，不改轮询节奏）
+/// - 模式 B（polling，默认）：动态间隔 Timer 轮询 + changeCount 变更即读；间隔由 `ClipboardPollSchedule`
+///   给出（0.5 / 2 / 5s 随活跃度切换），另有 `com.apple.pasteboard.changed` 通知提前唤醒一次 capture
 /// - 模式 A（onDemand）：不启动轮询，仅在打开面板或点击「采集当前剪贴板」时调 captureNow()
 ///
 /// 两种模式共用同一条流水线：changeCount 判定 → 访问权限判定 → 忽略判定 → 哈希 → 落盘 → onCapture。
@@ -15,16 +14,13 @@ import NetworkMonitorCore
 @MainActor
 final class PasteboardWatcher: ClipboardCaptureService {
 
-    /// 活跃档轮询间隔（历史固定值，增量 B 起作为最快档上限，供测试与既有断言使用）
-    ///
-    /// 实际间隔由 `ClipboardPollSchedule.interval(idleSeconds:isAppActive:)` 逐次计算，
-    /// 本常量只代表「用户刚有输入且本 App 前台」时的档位。
+    /// 活跃档间隔（最快档；实际间隔由 `ClipboardPollSchedule` 逐次计算，本常量供测试与既有断言使用）
     static let pollInterval: TimeInterval = ClipboardPollSchedule.activeInterval
 
     /// 剪贴板变更的分布式通知名（只作提前唤醒；changeCount 仍是唯一准入闸门）
     static let pasteboardChangedNotification = Notification.Name("com.apple.pasteboard.changed")
 
-    private let preferences: ClipboardPreferences
+    let preferences: ClipboardPreferences   // 放宽为 internal：暂停扩展（ClipboardPauseControl）要读写暂停偏好
     /// internal：图片后台结算在 PasteboardWatcher+Images.swift（跨文件访问，同目录内无其他调用方）
     let logger: LoggingService
     private let pasteboard: NSPasteboard
@@ -56,6 +52,8 @@ final class PasteboardWatcher: ClipboardCaptureService {
 
     func start() {
         guard !isRunning else { return }
+        // 暂停中不重启轮询（恢复走 resume()）：启动时偏好为暂停，据此保持暂停态并明确上报
+        guard !isPaused else { onStateChange?(.paused); return }
         guard preferences.captureMode == .polling else {
             // 分支 A：不轮询，退化为「打开面板读一次 + 面板内手动采集」
             logger.info("剪贴板采集启动：分支 A（按需），不启动后台轮询")
@@ -161,7 +159,7 @@ final class PasteboardWatcher: ClipboardCaptureService {
     // MARK: 采集流水线
 
     private func capture() {
-        guard checkAccessBehavior() else { return }
+        guard !isPaused, checkAccessBehavior() else { return }   // 暂停 = 不采（不只是不停轮询），captureNow 同样被挡
         let changeCount = pasteboard.changeCount
         // 第 5 节第 2 步：changeCount 未变立即返回，不读任何内容数据（含类型列表）
         guard changeCount != lastChangeCount else { return }

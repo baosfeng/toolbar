@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 卡片静态资源
 
@@ -17,12 +18,10 @@ extension ClipboardCardView {
         case .file: return ClipboardFileClassifier.category(forPaths: filePaths(of: item))?.symbolName ?? "doc"
         case .rtf: return "textformat"
         case .text:
-            let trimmed = item.preview.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") || trimmed.hasPrefix("www.") {
-                return "link"
-            }
-            if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") { return "curlybraces" }
-            return ClipboardCardTextStyle.isMonospaced(trimmed) ? "terminal" : "text.alignleft"
+            // 类型判定统一走 Core 纯函数，卡片不再自留一份前缀规则（isMonospaced 自己会去空白）
+            let kind = ClipboardTextClassifier.classify(item.preview).kind
+            if let symbol = ClipboardItemKindLabel.symbolName(forTextKind: kind) { return symbol }
+            return ClipboardCardTextStyle.isMonospaced(item.preview) ? "terminal" : "text.alignleft"
         }
     }
 

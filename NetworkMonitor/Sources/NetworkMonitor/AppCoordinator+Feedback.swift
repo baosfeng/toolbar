@@ -5,8 +5,7 @@ import NetworkMonitorCore
 
 /// 操作反馈与通知装配 — 音效库 / 播放器 / 系统通知服务 / 触觉的实例化出口
 ///
-/// 拆出原因：AppCoordinator.swift 已贴着单文件 15 KiB 上限；这几项共享同一份
-/// NotificationPreferences，集中装配才不会出现两个实例两套状态。实例由组合根持有（不是单例）。
+/// 拆出原因：主文件贴着 15 KiB 上限；这几项共享同一份 NotificationPreferences（组合根持有，非单例）。
 extension AppCoordinator {
 
     /// 装配通知与音效链路（偏好改完立即生效：播放器与通知服务每次调用现读偏好）

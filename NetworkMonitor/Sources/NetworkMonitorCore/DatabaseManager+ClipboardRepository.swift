@@ -5,7 +5,7 @@ import SQLite3
 
 /// DatabaseManager 的剪贴板仓储实现（接口隔离：见 ClipboardRepository）
 /// 线程模型：写入经 serialQueue（写连接），只读查询经 withReadDB（只读连接 / 只读队列）；
-/// 行映射辅助见 DatabaseManager+ClipboardSchema.swift。
+/// 列定义与行映射辅助见 ClipboardSchemaMapping.swift，版本阶梯迁移见 DatabaseManager+ClipboardSchema.swift。
 /// - Warning: 不得在 query(sql:handler:) 回调内或串行队列上下文调用，否则死锁。
 extension DatabaseManager: ClipboardRepository {
 

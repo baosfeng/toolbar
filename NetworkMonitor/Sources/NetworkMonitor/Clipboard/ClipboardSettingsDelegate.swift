@@ -13,6 +13,8 @@ protocol ClipboardSettingsDelegate: AnyObject {
     func settingsDidChangeHotKey(_ combo: HotKeyCombo) -> Bool
     /// 采集模式变更（内部按需重启采集器）
     func settingsDidChangeCaptureMode()
+    /// 暂停 / 恢复采集（幂等；暂停时采集器停轮询，面板打开也不读剪贴板）
+    func settingsDidChangePause(_ paused: Bool)
     /// 忽略应用清单变更（内部重载忽略集合）
     func settingsDidChangeIgnoredApps()
     /// 图片落盘目录的当前占用（设置页「存储」卡每次刷新现取）

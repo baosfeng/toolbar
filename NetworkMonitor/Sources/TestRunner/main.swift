@@ -82,6 +82,8 @@ runClipboardHashTests()
 runClipboardFuzzySearchTests()
 
 // MARK: - 剪贴板：仓储 / 全文检索 / 超限清理 / 未初始化容错
+// schema 版本阶梯（迁移幂等 / 列序不错位）先行，后续仓储断言依赖表结构已就位
+runClipboardSchemaLadderTests()
 runClipboardRepositoryTests()
 runClipboardFullTextSearchTests()
 runClipboardLimitsTests()
@@ -100,6 +102,9 @@ runClipboardCardWindowTests()
 
 // MARK: - 剪贴板：图片磁盘回收（删除 / 清空 / 超限清理 / 孤儿清扫）
 runClipboardImageGCTests()
+
+// MARK: - 剪贴板：文本内容类型判定（类型标签 / 卡片图标共用口径）
+runClipboardTextClassifierTests()
 
 // MARK: - 剪贴板：文件条目类型细分（卡片图标 / 无障碍标签）
 runClipboardFileClassifierTests()
@@ -315,6 +320,7 @@ runSystemCardLayoutTests()
 
 // MARK: - 剪贴板动态轮询调度（三档边界 / 归一化 / 停止后不再重排）
 runClipboardPollScheduleTests()
+runClipboardPauseTests()
 
 // MARK: - 剪贴板卡片几何与命中（自绘卡片的区域位置 / 点哪算哪个区域 / 区域动作一致性）
 runClipboardCardGeometryTests()

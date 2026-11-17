@@ -208,6 +208,7 @@ public final class AppCoordinator {
             processMonitor: processMonitor,
             trafficTracker: trafficTracker,
             clipboardRepository: databaseManager,
+            captureService: clipboardWatcher,
             paster: clipboardPaster,
             transferController: transfer,
             billingMonitor: billingMonitor,
