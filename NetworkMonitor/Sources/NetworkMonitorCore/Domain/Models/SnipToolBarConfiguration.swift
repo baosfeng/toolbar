@@ -109,6 +109,12 @@ public enum SnipBarAction: String, CaseIterable, Equatable, Sendable, Hashable {
         }
     }
 
+    /// 默认排列顺序 —— 与声明顺序一致
+    ///
+    /// 偏好里没有顺序键（老配置）时按它回落：漏排序的用户看到的仍是升级前那四个位置，
+    /// 升级不改变任何人的外观。
+    public static let defaultOrder: [SnipBarAction] = allCases
+
     /// 强调色按钮（主动作）
     public var isPrimary: Bool { self == .copy }
 
@@ -167,7 +173,7 @@ public struct SnipToolBarConfiguration: Equatable, Sendable {
     public var visibleGroups: Set<SnipToolBarGroup>
     /// 一级工具条常驻的工具（按 SnipTool.allCases 顺序，至少保留一个）
     public var primaryTools: [SnipTool]
-    /// 显示的动作按钮（按 SnipBarAction.allCases 顺序，至少保留一个）
+    /// 显示的动作按钮（顺序即工具条上的排列，至少保留一个）
     public var visibleActions: [SnipBarAction]
     /// 工具条相对选区的位置
     public var placement: SnipToolBarPlacement
@@ -224,9 +230,14 @@ public struct SnipToolBarConfiguration: Equatable, Sendable {
         var seenTools = Set<SnipTool>()
         let selectedTools = config.primaryTools.filter { seenTools.insert($0).inserted }
         result.primaryTools = selectedTools.isEmpty ? SnipTool.primary : selectedTools
-        // 动作按钮同样按 allCases 排序；至少保留「复制」，否则工具条没有输出出口
-        let selectedActions = SnipBarAction.allCases.filter { config.visibleActions.contains($0) }
-        result.visibleActions = selectedActions.isEmpty ? [.copy] : selectedActions
+        // 动作按钮同常驻工具：保持配置里的顺序并去重（用户排的就是工具条上的排列）；
+        // 空集回落到「复制」，否则工具条没有任何输出出口。
+        //
+        // 与顺序偏好共存的保底口径：只留一个动作时它的位置由这一项自己的位置决定，
+        // 全部关掉时固定回落到 copy（顺序偏好不参与这一步，仍保留四项全序）。
+        var seenActions = Set<SnipBarAction>()
+        let orderedActions = config.visibleActions.filter { seenActions.insert($0).inserted }
+        result.visibleActions = orderedActions.isEmpty ? [.copy] : orderedActions
         return result
     }
 

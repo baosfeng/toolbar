@@ -114,21 +114,16 @@ extension SettingsCapturePane {
         toolsCard.addRow(toolsRow)
         page.addCard(toolsCard, sectionTitle: "常驻工具")
 
-        // 动作按钮：取消 / 复制 / 保存 / 贴图 四个开关
-        let actionsCard = SettingsCardView()
-        for action in SnipBarAction.allCases {
-            let toggle = NSSwitch()
-            toggle.target = self
-            toggle.action = #selector(toolBarActionToggled(_:))
-            toggle.tag = SnipBarAction.allCases.firstIndex(of: action) ?? 0
-            toggle.setAccessibilityLabel("工具条动作：\(action.title)")
-            toolBarActionToggles[action] = toggle
-            let subtitle = action.isPrimary ? "强调色主按钮" : "快捷键 \(action.shortcutText)"
-            let row = SettingsRowView(title: action.title, subtitle: subtitle)
-            row.trailingStack.addArrangedSubview(toggle)
-            actionsCard.addRow(row)
-        }
-        page.addCard(actionsCard, sectionTitle: "输出动作")
+        // 输出动作：取消 / 复制 / 保存 / 贴图 —— 一行 = 显示开关 + 行尾上移 / 下移
+        // 顺序单独存 snip.toolbar.actionOrder（与显隐解耦），写偏好即下次截图生效
+        let actionCard = SettingsOrderedActionCard(
+            storage: storage,
+            currentConfig: { [weak self] in self?.currentToolBarConfiguration() ?? .standard },
+            applyConfig: { [weak self] config in self?.applyToolBarConfiguration(config) })
+        actionCard.build()
+        toolBarActionCard = actionCard
+        page.addCard(actionCard.card, sectionTitle: "输出动作",
+                     trailingAccessory: actionCard.resetButton)
 
         page.addNote("工具条配置立即生效：之后每次截图按新排列与文字提示档上屏。")
         // 构建完立刻按偏好灌一次：设置页首次打开就必须显示真实勾选态，
@@ -154,9 +149,7 @@ extension SettingsCapturePane {
         for (tool, chip) in toolBarToolChips {
             chip.state = config.primaryTools.contains(tool) ? .on : .off
         }
-        for (action, toggle) in toolBarActionToggles {
-            toggle.state = config.visibleActions.contains(action) ? .on : .off
-        }
+        toolBarActionCard?.refresh(visible: config.visibleActions)
     }
 
     /// 当前偏好解析出的配置（设置页与覆盖层同一份解析）
@@ -224,22 +217,6 @@ extension SettingsCapturePane {
         applyToolBarConfiguration(config)
     }
 
-    @objc func toolBarActionToggled(_ sender: NSSwitch) {
-        guard SnipBarAction.allCases.indices.contains(sender.tag) else { return }
-        let action = SnipBarAction.allCases[sender.tag]
-        var config = currentToolBarConfiguration()
-        var actions = config.visibleActions
-        if actions.contains(action) {
-            // 至少保留一个动作按钮：全关掉以后工具条没有任何输出出口
-            guard actions.count > 1 else { sender.state = .on; return }
-            actions.removeAll { $0 == action }
-        } else {
-            actions.append(action)
-        }
-        config.visibleActions = actions
-        applyToolBarConfiguration(config)
-    }
-
     #if DEBUG
     /// 仅 DEBUG：把工具条卡片的控件勾选态与偏好真值落盘，用于核对「界面显示 vs 实际配置」
     /// （离屏快照里 NSSwitch 的 on/off 只能靠这份文本确认，肉眼看不出状态是否灌对了）
@@ -250,7 +227,7 @@ extension SettingsCapturePane {
             return "\(group.rawValue)=\(config.isVisible(group))/\(state)"
         }.joined(separator: " ")
         let actionStates = SnipBarAction.allCases.map { action in
-            let state = toolBarActionToggles[action]?.state == .on ? "on" : "off"
+            let state = toolBarActionCard?.toggles[action]?.state == .on ? "on" : "off"
             return "\(action.rawValue)=\(config.visibleActions.contains(action))/\(state)"
         }.joined(separator: " ")
         let toolStates = SnipTool.allCases.map { tool in

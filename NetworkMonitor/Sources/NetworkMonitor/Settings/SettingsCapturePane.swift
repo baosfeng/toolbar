@@ -53,7 +53,8 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
     /// 组顺序卡片的装配器（行内上移 / 下移由 SettingsOrderedCardView 负责）
     var toolBarOrderCard: SettingsOrderedCardView?
     var toolBarToolChips: [SnipTool: NSButton] = [:]
-    var toolBarActionToggles: [SnipBarAction: NSSwitch] = [:]
+    /// 输出动作卡片（同一行里先摆显示开关、再摆行尾上移 / 下移；顺序与显隐解耦）
+    var toolBarActionCard: SettingsOrderedActionCard?
 
     /// 标注调色板 — hex 与 `SnipAnnotationColor` 一一对应（偏好里存 hex）
     private static let palette: [(hex: String, color: SnipAnnotationColor, name: String)] = [
