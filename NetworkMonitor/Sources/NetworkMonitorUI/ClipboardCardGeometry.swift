@@ -42,6 +42,16 @@ public enum ClipboardCardGeometry {
 
     // MARK: 矩形
 
+    /// 卡头带高度 —— 按来源 App 染色的那条横带（贴卡顶、与内容区同宽）
+    ///
+    /// 取内边距同值（10）：头带正好占据卡内上边距，正文区与 meta 行的几何完全不变。
+    public static let headBandHeight: CGFloat = 10
+
+    /// 卡头带矩形：贴卡片上沿、与卡同宽，高度吃掉上内边距（圆角由绘制侧按卡体裁切）
+    public static func headBandRect(in bounds: CGRect) -> CGRect {
+        CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: headBandHeight)
+    }
+
     /// 内容区（四边内缩 padding）
     public static func contentRect(in bounds: CGRect, metrics: Metrics = .standard) -> CGRect {
         bounds.insetBy(dx: metrics.padding, dy: metrics.padding)

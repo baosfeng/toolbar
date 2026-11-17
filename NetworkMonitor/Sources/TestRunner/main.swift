@@ -329,6 +329,9 @@ runClipboardPauseTests()
 // MARK: - 剪贴板卡片几何与命中（自绘卡片的区域位置 / 点哪算哪个区域 / 区域动作一致性）
 runClipboardCardGeometryTests()
 
+// MARK: - 来源 App 主题色（色表命中与回落 / 头带几何 / 头带黑白墨色对比度）
+runSourceAppPaletteTests()
+
 // MARK: - 自绘交互层纯口径（等步行带命中 / 区域优先级 / 悬停目标推进与归零）
 runDrawnInteractionTests()
 

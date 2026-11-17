@@ -4,9 +4,9 @@ import NetworkMonitorUI
 
 // MARK: - 整卡绘制
 
-/// ClipboardCardView 的整卡绘制 —— 一次 draw 画完卡底、描边、正文、meta、缩略图、星标与角标
+/// ClipboardCardView 的整卡绘制 —— 一次 draw 画完卡底、描边、卡头带、正文、meta、缩略图、星标与角标
 ///
-/// 层序与改造前的视图树一一对应（自下而上）：
+/// 卡头带（来源染色）实现在 `ClipboardHeadBand.swift`；层序与改造前视图树一一对应（自下而上）：
 /// 1. 卡底（controlBackgroundColor 0.72，圆角 12）；
 /// 2. 常态描边（separatorColor 1pt，内缩半个线宽）；
 /// 3. hover 提亮（白 6% 叠色 + label 45% 1.5pt 描边，alpha = hoverBlend）；
@@ -38,7 +38,7 @@ extension ClipboardCardView {
               fill: NSColor.controlAccentColor.withAlphaComponent(Self.selectionFillAlpha),
               alpha: selectionBlend.value).draw()
         guard let item else { return }
-
+        drawHeadBand(item: item, in: bounds)
         let body = ClipboardCardGeometry.bodyRect(in: bounds)
         if item.kind == .image {
             drawImageBody(item: item, in: body)
