@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 面板按键拦截（从面板控制器拆出，给操作反馈接线腾出主文件空间）
 
@@ -19,7 +20,6 @@ extension ClipboardPanelController {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let isCommand = flags.contains(.command), isShift = flags.contains(.shift)
         let isOption = flags.contains(.option), hasQuery = !content.query.isEmpty
-
         switch Int(event.keyCode) {
         case kVK_Escape:
             hide(animated: true)
@@ -42,6 +42,7 @@ extension ClipboardPanelController {
         default:
             guard isCommand, let characters = event.charactersIgnoringModifiers?.lowercased() else { return false }
             switch characters {
+            case "f": content.focusSearchField()
             case "e": beginEditingSelected()
             case "n": beginDraftingNewItem()
             case "d": togglePin()
@@ -66,12 +67,9 @@ extension ClipboardPanelController {
         clearDeleteConfirmHint()
     }
 
-    /// 过滤循环：⇧Tab 反向
+    /// 类型芯片循环：Tab 正向 / ⇧Tab 反向（口径见 ClipboardFilterCycle，来源 / 日期芯片不动）
     func cycleFilter(reverse: Bool) {
-        let all = ClipboardFilter.allCases
-        let step = reverse ? all.count - 1 : 1
-        content.selectFilter(all[(content.filter.rawValue + step) % all.count])
-        applyFilter(preferredID: selectedItem?.id)
+        content.setFilterTokens(ClipboardFilterCycle.next(after: content.filterTokens, reverse: reverse))
     }
 
     /// ⌘1–⌘9 直选并粘贴（快速粘贴开关关闭时给出文案，不静默）

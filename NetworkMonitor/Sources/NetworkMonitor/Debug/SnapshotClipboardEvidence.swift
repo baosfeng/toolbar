@@ -27,6 +27,13 @@ enum SnapshotClipboardEvidence {
     /// 等缩略图就绪的上限（后台解码是毫秒级；取 3 秒留足余量）
     private static let readyTimeout: TimeInterval = 3
 
+    /// 剪贴板三条取证入口（图片 / 引导 / 筛选）：各自由自己的 env 开关决定是否产出
+    static func captureAllClipboardEvidence(directory: URL) async {
+        await captureIfRequested(directory: directory)
+        SnapshotClipboardGuide.captureIfRequested(directory: directory)
+        SnapshotClipboardFilter.captureIfRequested(directory: directory)
+    }
+
     /// 取证入口：未开开关立即返回；开关打开时同步夹具 → 三张图依次落盘
     static func captureIfRequested(directory: URL) async {
         guard ProcessInfo.processInfo.environment[envKey]?.isEmpty == false else { return }

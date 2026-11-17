@@ -2,36 +2,6 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorUI
 
-// MARK: - 过滤类型
-
-/// 面板过滤（Tab 循环切换：全部 → 文本 → 图片 → 收藏）
-enum ClipboardFilter: Int, CaseIterable {
-    case all
-    case text
-    case image
-    case pinned
-
-    /// 中文名称（过滤控件文案与无障碍描述）
-    var label: String {
-        switch self {
-        case .all: return "全部"
-        case .text: return "文本"
-        case .image: return "图片"
-        case .pinned: return "收藏"
-        }
-    }
-
-    /// 条目是否命中该过滤
-    func matches(_ item: ClipboardItem) -> Bool {
-        switch self {
-        case .all: return true
-        case .text: return item.kind == .text || item.kind == .rtf
-        case .image: return item.kind == .image
-        case .pinned: return item.isPinned
-        }
-    }
-}
-
 // MARK: - 面板内容视图回调
 
 /// 面板内容视图回调 — 所有动作都交给面板控制器执行，视图不持有业务依赖
@@ -41,8 +11,8 @@ protocol ClipboardPanelViewDelegate: AnyObject {
     func panelViewDidRequestCapture(_ view: ClipboardPanelView)
     /// 搜索串变化（逐字过滤）
     func panelView(_ view: ClipboardPanelView, didChangeQuery query: String)
-    /// 过滤切换
-    func panelView(_ view: ClipboardPanelView, didSelectFilter filter: ClipboardFilter)
+    /// 筛选芯片变化（增删一枚芯片或清空；纯逻辑口径见 ClipboardFilterToken）
+    func panelView(_ view: ClipboardPanelView, didChangeFilterTokens tokens: [ClipboardFilterToken])
     /// 卡片被点选
     func panelView(_ view: ClipboardPanelView, didSelect index: Int)
     /// 卡片被双击（直接粘贴）
@@ -103,7 +73,8 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
 
     /// 以下控件放宽为 internal：子视图构建与尺寸计算在 ClipboardPanelView+Subviews.swift
     let searchField = NSSearchField()
-    let filterControl = NSSegmentedControl()
+    /// 筛选芯片行（类型 / 来源 App / 日期，可叠加可单个删除；视图定义见 ClipboardFilterChipRowView）
+    let chipRowView = ClipboardFilterChipRowView()
     let captureButton = NSButton()
     /// 工具条「?」快捷键帮助按钮
     let helpButton = NSButton()
@@ -119,6 +90,9 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     let accessibilityButton = NSButton()
     /// 卡片流（单行横向滚动 + 视图池 + 滑动窗口，见 ClipboardCardFlowView）
     let cardFlow = ClipboardCardFlowView()
+    /// 工具条右段（采集与「?」之间）给 pinboard 圆点组预留位置：本批不做分组，只留槽位，
+    /// 宽度由 ClipboardPanelLayout 统一分配，将来加板标签不必再动这层。
+    static let reservesPinboardSlot = true
     /// 底部常驻详情区（选中条目的完整内容与元信息，见 ClipboardDetailStripView）
     let detailStrip = ClipboardDetailStripView()
     /// 两级材质的里层内衬与发丝分隔线层（视图口径与布局接线见 ClipboardPanelChrome.swift）
@@ -127,8 +101,10 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
 
     /// 当前搜索串
     private(set) var query: String = ""
-    /// 当前过滤
-    private(set) var filter: ClipboardFilter = .all
+    /// 当前生效的筛选芯片（空数组 = 不过滤）
+    private(set) var filterTokens: [ClipboardFilterToken] = []
+    /// 「＋筛选」里来源 App 的候选数据源：视图不查库，由控制器在每次重载时按同一份数据灌入
+    var filterSourceItems: [ClipboardItem] = []
     /// 当前选中下标
     private(set) var selectedIndex = -1
 
@@ -150,7 +126,7 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         buildInnerMaterial()
         buildSeparatorLayer()
         buildSearchField()
-        buildFilterControl()
+        buildChipRow()
         buildCaptureButton()
         buildHelpButton()
         buildFooter()
@@ -221,10 +197,14 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     /// 暂停提示行的点击恢复
     @objc func resumeFromPauseBanner() { onRequestTogglePause?() }
 
-    /// 程序化切换过滤（Tab 循环）
-    func selectFilter(_ filter: ClipboardFilter) {
-        self.filter = filter
-        filterControl.selectedSegment = filter.rawValue
+    /// 替换全部筛选芯片（增删 / ⇧Tab 循环 / 清空都走这里）：视图只回传新数组，匹配交给控制器；
+    /// 芯片宽度依赖字体，换完要重排工具条。
+    func setFilterTokens(_ tokens: [ClipboardFilterToken]) {
+        guard tokens != filterTokens else { return }
+        filterTokens = tokens
+        chipRowView.update(tokens: tokens)
+        needsLayout = true
+        delegate?.panelView(self, didChangeFilterTokens: tokens)
     }
 
     /// 让搜索框成为第一响应者（面板打开即可输入）
@@ -247,10 +227,13 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         let sections = ClipboardPanelLayout.sections(in: size)
 
         // 工具条与提示行的列宽分配在 ClipboardPanelLayout（纯函数，TestRunner 覆盖）
-        let toolbar = ClipboardPanelLayout.toolbarMetrics(width: size.width,
-                                                          captureWidth: ceil(captureButton.fittingSize.width))
+        let toolbar = ClipboardPanelLayout.toolbarMetrics(
+            width: size.width,
+            captureWidth: ceil(captureButton.fittingSize.width),
+            chips: chipRowView.layoutChips())
+        chipRowView.frame = NSRect(x: 0, y: 0, width: size.width, height: ClipboardPanelLayout.toolbarHeight)
+        chipRowView.apply(toolbar.chipRow)
         searchField.frame = toolbar.search
-        filterControl.frame = toolbar.filter
         captureButton.frame = toolbar.capture
         helpButton.frame = toolbar.help
 
@@ -276,12 +259,6 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     }
 
     // MARK: 动作（子视图构建与菜单分发见 ClipboardPanelView+Subviews.swift）
-
-    @objc func filterChanged() {
-        guard let filter = ClipboardFilter(rawValue: filterControl.selectedSegment) else { return }
-        self.filter = filter
-        delegate?.panelView(self, didSelectFilter: filter)
-    }
 
     @objc func captureNow() {
         delegate?.panelViewDidRequestCapture(self)

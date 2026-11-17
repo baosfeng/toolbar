@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 面板控制器
 
@@ -199,7 +200,8 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     /// 放宽 internal：过滤循环在 ClipboardPanelController+Keyboard.swift
     func applyFilter(preferredID: UUID? = nil) {
         // 检索/过滤纯逻辑见 ClipboardPanelSearch；此处不截断 —— filteredItems 持全部匹配项，屏幕卡片数由滑动窗口控制
-        filteredItems = ClipboardPanelSearch.match(query: content.query, filter: content.filter,
+        content.filterSourceItems = items
+        filteredItems = ClipboardPanelSearch.match(query: content.query, tokens: content.filterTokens,
                                                    repository: repository, items: items,
                                                    limit: max(1, preferences.maxItems))
         if let preferredID, let index = filteredItems.firstIndex(where: { $0.id == preferredID }) {
@@ -262,7 +264,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
 
     func panelView(_ view: ClipboardPanelView, didChangeQuery query: String) { applyFilter(preferredID: selectedItem?.id) }
 
-    func panelView(_ view: ClipboardPanelView, didSelectFilter filter: ClipboardFilter) { applyFilter(preferredID: selectedItem?.id) }
+    func panelView(_ view: ClipboardPanelView, didChangeFilterTokens tokens: [ClipboardFilterToken]) { applyFilter(preferredID: selectedItem?.id) }
 
     func panelView(_ view: ClipboardPanelView, didSelect index: Int) {
         guard index >= 0, index < filteredItems.count else { return }

@@ -36,8 +36,7 @@ enum MenuPanelSnapshot {
             try? await Task.sleep(nanoseconds: delayNanoseconds)
             // 只跑剪贴板取证（改卡片视觉时反复对账用；全套快照约 2 分钟）
             if ProcessInfo.processInfo.environment["NM_SNAPSHOT_CLIPBOARD_ONLY"]?.isEmpty == false {
-                await SnapshotClipboardEvidence.captureIfRequested(directory: directory)
-                SnapshotClipboardGuide.captureIfRequested(directory: directory)
+                await SnapshotClipboardEvidence.captureAllClipboardEvidence(directory: directory)
                 NSApp.terminate(nil)
                 return
             }
@@ -49,8 +48,7 @@ enum MenuPanelSnapshot {
             await captureAll(directory: directory, repository: repository,
                              tokenSnapshot: tokenSnapshot, settings: settings)
             TokenPaneSnapshot.capture(directory: directory, tokenSnapshot: tokenSnapshot)
-            await SnapshotClipboardEvidence.captureIfRequested(directory: directory)
-            SnapshotClipboardGuide.captureIfRequested(directory: directory)
+            await SnapshotClipboardEvidence.captureAllClipboardEvidence(directory: directory)
             NSApp.terminate(nil)
         }
     }

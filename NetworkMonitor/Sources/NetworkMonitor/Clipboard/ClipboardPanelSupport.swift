@@ -13,16 +13,20 @@ enum ClipboardPanelSearch {
     ///
     /// - 查询串非空：走仓储全文检索（覆盖 text / preview / 来源 App 名，长文本中段也能命中），
     ///   再用内存 rank 重排以保住相关度；
-    /// - 查询串为空：用调用方给的全量副本做类型 / 收藏过滤；
+    /// - 查询串为空：用调用方给的全量副本做芯片过滤；
+    /// - 芯片叠加口径见 `ClipboardFilterMatcher`（同类「或」、异类「且」）；
     /// - 不做条数截断：返回全部匹配项，上限由调用方按偏好 maxItems 传 limit 决定。
     static func match(query: String,
-                      filter: ClipboardFilter,
+                      tokens: [ClipboardFilterToken],
                       repository: any ClipboardRepository,
                       items: [ClipboardItem],
-                      limit: Int) -> [ClipboardItem] {
-        guard !query.isEmpty else { return items.filter { filter.matches($0) } }
+                      limit: Int,
+                      now: Date = Date()) -> [ClipboardItem] {
+        guard !query.isEmpty else {
+            return items.filter { ClipboardFilterMatcher.matches($0, tokens: tokens, now: now) }
+        }
         let candidates = repository.searchClipboardItems(query: query, limit: limit)
-            .filter { filter.matches($0) }
+            .filter { ClipboardFilterMatcher.matches($0, tokens: tokens, now: now) }
         return rerank(query, candidates: candidates)
     }
 
@@ -109,9 +113,10 @@ enum ClipboardShortcutHelp {
     /// 浮层标题（同时用作悬浮层的无障碍标签）
     static let title = "快捷键帮助"
 
-    /// 全部键位（16 条，浮层按两列 × 8 行排布）
+    /// 全部键位（18 条，浮层按两列 × 9 行排布）
     static let entries: [Entry] = [
         Entry(keys: "⌘1–9", action: "快速粘贴第 N 条"),
+        Entry(keys: "⌘F", action: "聚焦搜索框"),
         Entry(keys: "↵", action: "粘贴并收起"),
         Entry(keys: "⌥↵", action: "粘贴为纯文本"),
         Entry(keys: ClipboardEditSession.editKeyHint, action: "编辑选中条目"),
@@ -119,7 +124,8 @@ enum ClipboardShortcutHelp {
         Entry(keys: ClipboardEditSession.saveKeyHint, action: "保存编辑"),
         Entry(keys: "⌘S", action: "加入 Paste Stack"),
         Entry(keys: "⌘⇧S", action: "清空 Paste Stack"),
-        Entry(keys: "⇧Tab", action: "反向切换过滤"),
+        Entry(keys: "Tab", action: "切换类型筛选"),
+        Entry(keys: "⇧Tab", action: "反向切换类型筛选"),
         Entry(keys: "⌘D", action: "收藏 / 取消收藏"),
         Entry(keys: "⌘⌫", action: "删除选中项"),
         Entry(keys: "⌘⇧⌫", action: "清空全部"),

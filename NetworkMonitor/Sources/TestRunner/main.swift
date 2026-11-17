@@ -336,6 +336,11 @@ runDrawnUnflipTests()
 // MARK: - 剪贴板底部详情区（内容口径 / 面板四段几何 / 高度夹紧）
 runClipboardDetailStripTests()
 
+// MARK: - 剪贴板筛选芯片（类型 / 来源 App / 日期叠加与来源清单）
+runClipboardFilterTokenTests()
+// 工具条横向分配（芯片行不溢出 / 搜索框不被压到下限以下）
+runClipboardToolbarLayoutTests()
+
 // MARK: - 自绘绘制层纯口径（层不透明度 / 阴影换算 / 焦点环路径 / 符号缓存键 / 读屏文案）
 runDrawnSurfaceMathTests()
 

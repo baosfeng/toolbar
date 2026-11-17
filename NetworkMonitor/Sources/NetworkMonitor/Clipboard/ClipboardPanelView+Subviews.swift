@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 面板视图子视图构建（从 ClipboardPanelView 拆出，守住单文件 15 KiB 上限）
 //
@@ -34,20 +35,41 @@ extension ClipboardPanelView {
         addSubview(searchField)
     }
 
-    func buildFilterControl() {
-        filterControl.segmentCount = ClipboardFilter.allCases.count
-        filterControl.segmentStyle = .texturedRounded
-        filterControl.trackingMode = .selectOne
-        filterControl.font = NSFont.systemFont(ofSize: 12)
-        for filter in ClipboardFilter.allCases {
-            filterControl.setLabel(filter.label, forSegment: filter.rawValue)
-            filterControl.setWidth(40, forSegment: filter.rawValue)
-            filterControl.setToolTip(filter.label, forSegment: filter.rawValue)
+    /// 筛选芯片行：点掉一枚芯片 = 删它；点「＋筛选」= 弹候选清单（见 ClipboardFilterMenu）
+    ///
+    /// 芯片行铺在工具条整宽上（frame 由 layout 给），只在芯片与「＋筛选」按钮处吃鼠标，
+    /// 其余位置放行 —— 它是铺满整行的，若不放行就会挡住搜索框的点击。
+    func buildChipRow() {
+        chipRowView.onRemove = { [weak self] identifier in
+            guard let self else { return }
+            self.setFilterTokens(self.filterTokens.filter { $0.id != identifier })
         }
-        filterControl.selectedSegment = ClipboardFilter.all.rawValue
-        filterControl.target = self
-        filterControl.action = #selector(filterChanged)
-        addSubview(filterControl)
+        chipRowView.onRequestMenu = { [weak self] anchor in
+            self?.showFilterMenu(anchor: anchor)
+        }
+        addSubview(chipRowView)
+    }
+
+    /// 弹「＋筛选」候选清单（锚点用按钮矩形，菜单贴着按钮出）
+    func showFilterMenu(anchor: NSRect) {
+        let menu = ClipboardFilterMenu.make(tokens: filterTokens,
+                                            sources: ClipboardSourceCatalog.topSources(items: filterSourceItems),
+                                            target: self, action: #selector(toggleFilterToken(_:)))
+        menu.popUp(positioning: nil, at: NSPoint(x: anchor.minX, y: anchor.maxY + 2), in: self)
+    }
+
+    /// 菜单项动作：已选则删、未选则加（同类可叠加，见 ClipboardFilterMatcher）
+    @objc func toggleFilterToken(_ sender: NSMenuItem) {
+        if let token = ClipboardFilterMenu.token(from: sender) {
+            let next = filterTokens.contains(token)
+                ? filterTokens.filter { $0.id != token.id }
+                : filterTokens + [token]
+            setFilterTokens(next)
+            return
+        }
+        // 没有芯片可取 = 「清除全部筛选」那一项
+        guard (sender.representedObject as? String) == ClipboardFilterMenu.clearAllID else { return }
+        setFilterTokens([])
     }
 
     func buildCaptureButton() {

@@ -150,35 +150,6 @@ func runClipboardDetailStripTests() {
     assertEqual(defaultSections.cards.height >= ClipboardPanelLayout.cardHeight, true,
                 "默认高度下卡片区能露出整卡 198pt")
 
-    // MARK: 工具条列宽分配
-
-    let wideToolbar = ClipboardPanelLayout.toolbarMetrics(width: 1200, captureWidth: 118)
-    assertEqual(wideToolbar.search.width, ClipboardPanelLayout.searchMaxWidth,
-                "面板够宽时搜索框取上限 420，不再继续变宽")
-    assertEqual(wideToolbar.capture.maxX, 1200 - ClipboardPanelLayout.paddingX, "采集按钮贴右内边距")
-
-    // 常规 640pt 面板：搜索框取下限 300（剩余空间不足 420）
-    let toolbar = ClipboardPanelLayout.toolbarMetrics(width: 640, captureWidth: 118)
-    assertEqual(toolbar.search.minX, ClipboardPanelLayout.paddingX, "搜索框贴左内边距")
-    assertEqual(toolbar.search.width, ClipboardPanelLayout.searchMinWidth, "640pt 面板下搜索框取下限 300")
-    assertEqual(toolbar.filter.minX, toolbar.search.maxX + ClipboardPanelLayout.toolbarGap,
-                "过滤紧跟搜索框（只隔一个间距）")
-    assertEqual(toolbar.capture.maxX, 640 - ClipboardPanelLayout.paddingX, "采集按钮贴右内边距")
-    assertEqual(toolbar.help.maxX, toolbar.capture.minX - ClipboardPanelLayout.toolbarGap,
-                "「?」在采集按钮左侧一个间距处")
-    assertEqual(toolbar.help.width, ClipboardPanelLayout.helpButtonWidth, "「?」固定宽 24")
-    assertEqual(toolbar.search.midY, toolbar.capture.midY, "工具条各控件同一纵向中线")
-    assertEqual(toolbar.capture.height, ClipboardPanelLayout.toolbarControlHeight, "工具条控件高 24")
-
-    // 窄面板：搜索框停在下限 300，过滤定宽不压缩
-    let narrowToolbar = ClipboardPanelLayout.toolbarMetrics(width: 480, captureWidth: 118)
-    assertEqual(narrowToolbar.search.width, ClipboardPanelLayout.searchMinWidth, "面板变窄时搜索框停在下限 300")
-    assertEqual(narrowToolbar.filter.minX, narrowToolbar.search.maxX + ClipboardPanelLayout.toolbarGap,
-                "搜索框与过滤保持一个间距")
-    assertEqual(narrowToolbar.filter.width, ClipboardPanelLayout.filterWidth, "过滤定宽不压缩")
-    assertEqual(narrowToolbar.help.maxX, narrowToolbar.capture.minX - ClipboardPanelLayout.toolbarGap,
-                "窄面板下「?」仍在采集左侧")
-
     // MARK: 提示行列宽分配
 
     let footer = ClipboardPanelLayout.footerMetrics(width: 640, height: 400,

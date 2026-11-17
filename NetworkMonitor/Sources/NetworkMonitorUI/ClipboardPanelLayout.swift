@@ -26,8 +26,6 @@ public enum ClipboardPanelLayout {
     /// 搜索框宽度范围
     public static let searchMinWidth: CGFloat = 300
     public static let searchMaxWidth: CGFloat = 420
-    /// 类型过滤定宽
-    public static let filterWidth: CGFloat = 160
     /// 「?」快捷键帮助按钮定宽（纯图标）
     public static let helpButtonWidth: CGFloat = 24
     /// 提示行文案行高
@@ -93,43 +91,67 @@ extension ClipboardPanelLayout {
 
     /// 工具条内部的控件尺寸
     public struct ToolbarMetrics: Equatable, Sendable {
-        /// 搜索框
+        /// 筛选芯片行（含「＋筛选」按钮；芯片多时收进「+N」徽标）
+        public let chipRow: ClipboardFilterChipRow.Metrics
+        /// 搜索框（弹性，紧接在芯片行右侧）
         public let search: CGRect
-        /// 类型过滤
-        public let filter: CGRect
         /// 「采集当前剪贴板」
         public let capture: CGRect
         /// 「?」快捷键帮助（纯图标按钮）
         public let help: CGRect
 
-        public init(search: CGRect, filter: CGRect, capture: CGRect, help: CGRect) {
+        public init(chipRow: ClipboardFilterChipRow.Metrics, search: CGRect,
+                    capture: CGRect, help: CGRect) {
+            self.chipRow = chipRow
             self.search = search
-            self.filter = filter
             self.capture = capture
             self.help = help
         }
     }
 
-    /// 工具条：搜索框弹性 300–420，过滤紧随其后，采集贴右边缘，「?」在采集左侧
+    /// 工具条：芯片行 +「＋筛选」在左，搜索框弹性紧跟其右，采集贴右边缘，「?」在采集左侧
+    ///
+    /// 芯片行是有界的：最多占可用宽的 45%，且必须给搜索框留下限宽度 —— 所以芯片一多就收进
+    /// 「+N」徽标而不是压缩搜索框，也不会盖住「＋筛选」按钮（那是回到「全部已选」的唯一入口）。
+    /// 窄到容不下「下限搜索框 + 按钮」时，芯片行让位、按钮仍贴左内侧，搜索框按剩余宽给（不溢出面板）。
     ///
     /// - Parameters:
     ///   - width: 面板宽
     ///   - captureWidth: 采集按钮实测宽（文案由 AppKit 量，这里不猜）
-    public static func toolbarMetrics(width: CGFloat, captureWidth: CGFloat) -> ToolbarMetrics {
+    ///   - chips: 已选芯片（宽度由视图按字体实测后传入；空数组表示没有筛选）
+    public static func toolbarMetrics(width: CGFloat, captureWidth: CGFloat,
+                                      chips: [ClipboardFilterChipRow.Chip] = []) -> ToolbarMetrics {
         let controlY = (toolbarHeight - toolbarControlHeight) / 2
-        let capture = max(96, captureWidth)
-        let searchWidth = min(searchMaxWidth,
-                              max(searchMinWidth,
-                                  width - paddingX * 2 - capture - helpButtonWidth
-                                      - filterWidth - toolbarGap * 3))
-        return ToolbarMetrics(
-            search: CGRect(x: paddingX, y: controlY, width: searchWidth, height: toolbarControlHeight),
-            filter: CGRect(x: paddingX + searchWidth + toolbarGap, y: controlY,
-                           width: filterWidth, height: toolbarControlHeight),
-            capture: CGRect(x: width - paddingX - capture, y: controlY,
-                            width: capture, height: toolbarControlHeight),
-            help: CGRect(x: width - paddingX - capture - toolbarGap - helpButtonWidth, y: controlY,
-                         width: helpButtonWidth, height: toolbarControlHeight))
+        let chipY = (toolbarHeight - ClipboardFilterChipRow.chipHeight) / 2
+        let captureWidth = max(96, captureWidth)
+        let capture = CGRect(x: width - paddingX - captureWidth, y: controlY,
+                             width: captureWidth, height: toolbarControlHeight)
+        let help = CGRect(x: capture.minX - toolbarGap - helpButtonWidth, y: controlY,
+                          width: helpButtonWidth, height: toolbarControlHeight)
+
+        let lane = max(0, help.minX - toolbarGap - paddingX)
+        let chipRow = ClipboardFilterChipRow.layout(
+            chips: chips, originX: paddingX, y: chipY,
+            available: chipBudget(lane: lane))
+        let searchX = chipRow.isVisible
+            ? chipRow.rightEdge + ClipboardFilterChipRow.searchGap
+            : paddingX
+        let search = CGRect(x: searchX, y: controlY,
+                            width: max(0, min(searchMaxWidth, help.minX - toolbarGap - searchX)),
+                            height: toolbarControlHeight)
+        return ToolbarMetrics(chipRow: chipRow, search: search, capture: capture, help: help)
+    }
+
+    /// 芯片行可用的横向预算
+    ///
+    /// 先保住搜索框的下限宽，剩下的才轮到芯片行；连「筛选按钮 + 一个省略徽标」都放不下时
+    /// 一位都不给（整行让位）——宁可这一档没有筛选入口，也不把搜索框压到下限以下。
+    private static func chipBudget(lane: CGFloat) -> CGFloat {
+        let spare = lane - searchMinWidth - ClipboardFilterChipRow.searchGap
+        let floor = ClipboardFilterChipRow.menuButtonWidth + ClipboardFilterChipRow.overflowWidth
+            + ClipboardFilterChipRow.chipGap * 2
+        guard spare >= floor else { return 0 }
+        return min(lane * ClipboardFilterChipRow.maxWidthRatio, spare)
     }
 
     /// 提示行的各段横向位置
