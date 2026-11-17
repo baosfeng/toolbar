@@ -103,6 +103,9 @@ runClipboardCardWindowTests()
 // MARK: - 剪贴板：图片磁盘回收（删除 / 清空 / 超限清理 / 孤儿清扫）
 runClipboardImageGCTests()
 
+// MARK: - 剪贴板：文本内容类型判定（类型标签 / 卡片图标共用口径）
+runClipboardTextClassifierTests()
+
 // MARK: - 剪贴板：文件条目类型细分（卡片图标 / 无障碍标签）
 runClipboardFileClassifierTests()
 
