@@ -124,20 +124,27 @@ public struct BillingPercentLimit: Sendable, Equatable {
 public struct BillingBalance: Sendable, Equatable {
     /// 套餐内含额度（nil = provider 不提供或未订阅）
     public let included: BillingIncludedBalance?
-    /// 已购买额度余额（美元，nil = 无购买额度或 provider 不提供）
+    /// 已购买额度余额（原币种金额，nil = 无购买额度或 provider 不提供）
+    ///
+    /// 字段名沿用历史 purchasedUSD（改名会波及旧状态 JSON 与调用点）；
+    /// 实际币种由 currencyCode 决定 —— DeepSeek 国内账户按 CNY 报余额。
     public let purchasedUSD: Double?
     /// 百分比限额（遗留计划 / 会话限额）
     public let percentLimits: [BillingPercentLimit]
+    /// 余额币种（ISO 4217 三字母代码；默认 USD）
+    public let currencyCode: String
 
     public init(included: BillingIncludedBalance? = nil,
                 purchasedUSD: Double? = nil,
-                percentLimits: [BillingPercentLimit] = []) {
+                percentLimits: [BillingPercentLimit] = [],
+                currencyCode: String = "USD") {
         self.included = included
         self.purchasedUSD = purchasedUSD
         self.percentLimits = percentLimits
+        self.currencyCode = currencyCode.uppercased()
     }
 
-    /// 可用总额（美元）：内含剩余 + 已购买；两者都缺省时为 nil
+    /// 可用总额（currencyCode 计价）：内含剩余 + 已购买；两者都缺省时为 nil
     public var totalAvailableUSD: Double? {
         guard included != nil || purchasedUSD != nil else { return nil }
         return (included?.remainingUSD ?? 0) + (purchasedUSD ?? 0)

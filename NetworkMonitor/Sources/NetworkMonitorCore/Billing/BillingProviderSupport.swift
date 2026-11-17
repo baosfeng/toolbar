@@ -58,3 +58,38 @@ public enum BillingPercentMath {
         return min(max(1 - used / limit, 0), 1)
     }
 }
+
+// MARK: - HTTP 状态码 → 错误语义
+
+/// HTTP 状态码收敛 —— 新的官方端点型 provider（DeepSeek / OpenRouter / Moonshot）共用
+///
+/// 口径与订阅型 provider 一致，只把 403 的用户话术做成参数（各家的权限语义不同）：
+/// 401/403 = 凭据无效 / 无权限、429 = 频率限制、5xx = 服务端错误、其余 = 解析错误。
+public enum BillingHTTPErrorMapper {
+
+    /// 状态码 → `BillingError`
+    /// - Parameters:
+    ///   - statusCode: HTTP 状态码
+    ///   - retryAfter: 响应头 `Retry-After` 秒数（429 用）
+    ///   - message: 服务端错误体里提取的可读文案
+    ///   - forbiddenMessage: 403 时的用户话术（nil 时用通用措辞）
+    public static func map(statusCode: Int,
+                           retryAfter: TimeInterval?,
+                           message: String?,
+                           forbiddenMessage: String? = nil) -> BillingError {
+        switch statusCode {
+        case 400:
+            return .invalidRequest(message)
+        case 401:
+            return .unauthorized
+        case 403:
+            return .forbidden(forbiddenMessage ?? message)
+        case 429:
+            return .rateLimited(retryAfter: retryAfter)
+        case 500...599:
+            return .serviceUnavailable(message)
+        default:
+            return .invalidResponse("HTTP " + String(statusCode))
+        }
+    }
+}
