@@ -33,16 +33,17 @@ func runClipboardRepositoryTests() {
         db.initializeInMemory()
         defer { db.close() }
 
-        // 建表与迁移：user_version 1 → 2
+        // 建表与迁移：阶梯式，版本停在当前最新（ClipboardSchema.latestVersion）
         var version = -1
         db.query(sql: "PRAGMA user_version") { version = Int(sqlite3_column_int($0, 0)) }
-        assertEqual(version, 2, "user_version 迁移到 2")
+        assertEqual(version, Int(ClipboardSchema.latestVersion), "user_version 迁移到当前最新")
         assertEqual(collectQuery(db, sql: "SELECT name FROM sqlite_master WHERE type='table' AND name='clipboard_items'").count, 1, "剪贴板表已创建")
         assertEqual(collectQuery(db, sql: "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_clipboard_content_hash'").count, 1, "内容哈希唯一索引已创建")
+        // 重复迁移：v1 / v2 段都不重跑，版本不变、也不会被写回低位
         db.migrateIfNeeded()
         db.migrateIfNeeded()
         db.query(sql: "PRAGMA user_version") { version = Int(sqlite3_column_int($0, 0)) }
-        assertEqual(version, 2, "重复迁移幂等（user_version 仍为 2）")
+        assertEqual(version, Int(ClipboardSchema.latestVersion), "重复迁移幂等（版本仍为当前最新）")
         assertEqual(collectQuery(db, sql: "SELECT COUNT(*) FROM clipboard_items").count, 1, "重复迁移不重复建表")
 
         // 插入
