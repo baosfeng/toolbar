@@ -91,6 +91,46 @@ public enum BillingInstanceID {
         return "BILLING_" + parts.joined(separator: "_")
     }
 
+    /// 通用规则的环境变量键（按实例标识推导；provider 未声明原生名时用它）
+    public static func environmentKey(forInstanceID instanceID: String) -> String {
+        environmentKey(kindID: kind(of: instanceID), slug: slug(of: instanceID))
+    }
+
+    /// 环境变量键的最终解析结果（见 BillingProviderInstance.environmentCredentialKey）
+    ///
+    /// 三个输入都是「已经算好的候选串」，因此本函数是纯函数、可被测试完全覆盖：
+    /// - `providerID`：provider 类型标识（协议默认键就是按它生成的）
+    /// - `providerKey`：provider 自己声明的键（等于默认键说明**没声明**）
+    /// - `instanceKey`：通用规则按实例 id 生成的键
+    ///
+    /// 顺序与理由见调用点注释；这里只保证「默认实例优先厂商原生名、命名实例追加后缀、
+    /// 都没有时回落通用键」这一条规则只写一次。
+    public static func resolvedEnvironmentKey(providerID: String,
+                                             providerKey: String,
+                                             instanceID: String,
+                                             instanceKey: String,
+                                             isDefaultInstance: Bool) -> String {
+        let protocolDefault = "BILLING_\(providerID.uppercased().replacingOccurrences(of: "-", with: "_"))_API_KEY"
+        guard providerKey != protocolDefault, !providerKey.isEmpty else { return instanceKey }
+        if isDefaultInstance { return providerKey }
+        // 命名实例：厂商键追加实例后缀（DEEPSEEK_API_KEY + work → DEEPSEEK_WORK_API_KEY）
+        guard let slug = slug(of: instanceID) else { return providerKey }
+        return suffixedEnvironmentKey(base: providerKey, slug: slug)
+    }
+
+    /// 给环境变量键追加实例后缀：在 `_API_KEY` 之前插入清洗过的后缀
+    ///
+    /// 非法后缀（空 / 全下划线）不追加，直接返回原键 —— 宁可退化成「多个实例共用一条
+    /// 环境变量」，也不要产出一个谁都猜不到的键名。
+    public static func suffixedEnvironmentKey(base: String, slug: String) -> String {
+        let cleaned = sanitized(slug)
+        let trimmed = cleaned.trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+        guard !trimmed.isEmpty else { return base }
+        let suffix = "_API_KEY"
+        guard base.hasSuffix(suffix) else { return base + "_" + trimmed }
+        return String(base.dropLast(suffix.count)) + "_" + trimmed + suffix
+    }
+
     /// 默认实例
     public static func defaultInstance(kindID: String, title: String) -> BillingInstance {
         BillingInstance(id: kindID, kindID: kindID, title: title)

@@ -118,6 +118,8 @@ public enum HarnessSourceFailureKind: String, Sendable, Equatable {
         switch self {
         case .directoryMissing: return "找不到 DSH 会话目录"
         case .directoryUnreadable: return "DSH 会话目录不可读"
+        // 包里已自带 zstd：走到这里说明「包内自带 + 绝对路径 + PATH + 登录 shell」全落空，
+        // 说得太绝对会让用户以为是自己的机器缺工具，实际更可能是包损坏或权限问题
         case .zstdMissing: return "缺少 zstd 解压工具"
         }
     }
@@ -190,10 +192,11 @@ public struct HarnessSourceDiagnostics: Sendable, Equatable {
         case .toolMissing(let searchedPaths):
             let preview = searchedPaths.prefix(4).joined(separator: ", ")
             let more = searchedPaths.count > 4 ? " 等 \(searchedPaths.count) 个位置" : ""
+            // 拼上「应用包内自带」这一环：用户按提示去装 zstd 之前，先要知道包里本该有一只
             return HarnessSourceDiagnostics(directoryPath: resolution.pathText,
                                             origin: resolution.origin,
                                             zstdPath: nil,
-                                            zstdNote: "未找到 zstd，已探测 " + preview + more,
+                                            zstdNote: "未找到 zstd（应用自带 + 已探测 " + preview + more + "）",
                                             failureKind: .zstdMissing)
         case .sessionsDirectoryMissing:
             return HarnessSourceDiagnostics(directoryPath: resolution.pathText,

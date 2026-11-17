@@ -100,6 +100,14 @@ final class SettingsTokenController {
         }
     }
 
+    /// 清理前的规模预览（选择范围时调用，让确认框能写出「将删除 N 条」）
+    ///
+    /// 走仓储而不是门面服务：预览是「按同一套范围判据查一次计数」的纯读，
+    /// 服务层没有必要再开一道口子（范围 → 起点毫秒的口径仍在 Core 的 purgeSinceMs）。
+    func purgePreview(scope: HarnessRebuildScope) -> Int {
+        store.harnessPurgePreview(scope: scope, now: Date())
+    }
+
     /// 目录是否指向一个真实存在的目录（选择时就地校验，避免选完才发现是文件）
     static func isValidDirectory(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false

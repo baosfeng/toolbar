@@ -37,9 +37,27 @@ public struct BillingProviderInstance: BillingProvider {
     public var credentialHint: String { base.credentialHint }
     public var credentialPageURL: URL? { base.credentialPageURL }
 
-    /// 环境变量键按实例区分：默认实例与旧版本完全一致，命名实例追加后缀
+    /// 环境变量键的解析顺序（instance → provider 原生名 → 通用规则）
+    ///
+    /// 为什么不能再「一律按实例 id 推导」：provider 自己声明的厂商原生变量名
+    /// （如 DeepSeek 的 `DEEPSEEK_API_KEY`、Ollama 的 `OLLAMA_API_KEY`）此前永远读不到——
+    /// 装饰器把键名整个改写成了 `BILLING_<ID>_API_KEY`，provider 的声明形同注释。
+    ///
+    /// 现行规则（严格向后兼容，默认实例的老键仍然命中）：
+    /// 1. 默认实例（id == kindID）且 provider 显式声明了键 → **用它**（回落到原实现声明的厂商名）；
+    /// 2. 命名实例 → provider 键追加实例后缀（`DEEPSEEK_API_KEY` → `DEEPSEEK_WORK_API_KEY`），
+    ///    保证同一 provider 的多个实例能各自 `export`；
+    /// 3. 上述键都没有时，按通用规则 `BILLING_<ID>_API_KEY`。
+    ///
+    /// 「provider 显式声明」的判据是「与协议默认值不同」：协议默认实现本身就是
+    /// `BILLING_<PROVIDER.ID>_API_KEY`，用它当哨兵即可，无需给协议加新成员。
     public var environmentCredentialKey: String {
-        BillingInstanceID.environmentKey(kindID: instance.kindID, slug: instance.slug)
+        BillingInstanceID.resolvedEnvironmentKey(
+            providerID: base.id,
+            providerKey: base.environmentCredentialKey,
+            instanceID: instance.id,
+            instanceKey: BillingInstanceID.environmentKey(kindID: instance.kindID, slug: instance.slug),
+            isDefaultInstance: instance.isDefault)
     }
 
     public func fetchBalance(credential: String) async throws -> BillingBalance {

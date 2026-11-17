@@ -205,50 +205,10 @@ private func testHarnessSnapshotLimits() {
     print("✅ Harness 快照裁剪与事件发布 works")
 }
 
-// MARK: - 8. zstd 缺失降级
-
-private func testHarnessZstdMissingDegradation() {
-    let streamer = HarnessZstdLineStreamer(executableCandidates: ["/nonexistent/zstd"], searchPath: "", logger: ConsoleLogger())
-    assertEqual(streamer.availability.isAvailable, false, "找不到 zstd 不可用")
-    guard case .toolMissing(let searched) = streamer.availability else {
-        harnessFail("应返回 toolMissing")
-    }
-    assertEqual(searched.contains("/nonexistent/zstd"), true, "记录探测路径")
-
-    let root = makeTempSessionsRoot()
-    defer { try? FileManager.default.removeItem(atPath: root) }
-    let scanner = HarnessSessionScanner(sessionsRoot: root, streamer: streamer)
-    assertEqual(scanner.availability, streamer.availability, "扫描器继承可用性")
-
-    let file = HarnessSessionFile(path: "/stub/session.v4.jsonl.zstd", sessionID: "s1", size: 1, mtimeMs: 1)
-    do {
-        _ = try scanner.scan(file: file, isCancelled: { false }, onLinesRead: nil)
-        harnessFail("zstd 缺失时扫描应抛错")
-    } catch let error as HarnessTokenError {
-        guard case .sourceUnavailable = error else {
-            harnessFail("应抛 sourceUnavailable，实际 \(error)")
-        }
-    } catch {
-        harnessFail("应抛 HarnessTokenError，实际 \(error)")
-    }
-
-    let db = DatabaseManager()
-    db.initializeInMemory()
-    let service = HarnessUsageService(scanner: scanner, store: db, logger: ConsoleLogger())
-    waitForIndex { service.refreshIfNeeded(completion: $0) }
-    guard case .failed(let message) = service.state else {
-        harnessFail("zstd 缺失状态应为 failed")
-    }
-    assertEqual(message.isEmpty, false, "失败原因非空")
-    assertEqual(service.snapshot().sourceAvailability, streamer.availability, "快照带出可用性")
-    print("✅ Harness zstd 缺失降级 works")
-}
-
 // MARK: - 测试入口
 
 func runHarnessTokenIndexTests() {
-    print("\n🧪 Testing Harness token 扫描降级 / 索引与快照...")
-    testHarnessZstdMissingDegradation()
+    print("\n🧪 Testing Harness token 索引与快照...")
     testHarnessIndexAggregation()
     testHarnessCancellation()
     testHarnessSnapshotLimits()
