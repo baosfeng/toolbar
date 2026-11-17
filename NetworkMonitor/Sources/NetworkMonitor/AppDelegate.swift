@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - App Delegate
 
@@ -61,6 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationSelfCheck.runIfRequested(coordinator: coordinator)
         // 仅 DEBUG：--measure-panel-open 时逐阶段计时并退出（性能回归取证）
         PanelOpenMeasure.runIfRequested(manager: menuBarManager)
+        // 仅 DEBUG：NM_CLIPBOARD_PREVIEW_PROBE=<目录> 时真开剪贴板面板 + 空格预览并抓屏取���
+        if ClipboardPreviewProbe.runIfRequested(coordinator: coordinator) { return }
         // 仅 DEBUG：NM_SHOW_PANEL=1 时走真实路径展开 popover 并保持打开（实机截图取证）
         MenuPanelEvidence.openIfRequested(manager: menuBarManager)
         // 仅 DEBUG：面板开着时抓一张屏，验证「对着面板截图抓到的是面板而非背景」
@@ -72,6 +75,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // 预览的临时 .txt 目录随进程退出一并清掉（幂等；失败只记日志，不阻断退出）
+        ClipboardPreviewBuilder.removeTemporaryDirectory(ClipboardPreviewBuilder.defaultTemporaryDirectory())
         coordinator?.stop()
         AppContext.shared.logger.info("应用退出")
     }

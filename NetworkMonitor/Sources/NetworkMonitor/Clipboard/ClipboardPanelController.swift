@@ -40,6 +40,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     private var pendingReload = false
     var singleDeleteConfirm = ClipboardDeleteConfirm()
     var clearAllConfirm = ClipboardDeleteConfirm()
+    var previewWindow: ClipboardPreviewWindow?   // 预览浮层（自绘，见 ClipboardPreviewLayer）
     nonisolated(unsafe) private var localKeyMonitor: Any?
     nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
     nonisolated(unsafe) var ocrObserver: NSObjectProtocol?   // 识别结果订阅与刷新在 ClipboardOCRPanel.swift
@@ -166,8 +167,8 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     /// 收起面板；animated=false 用于粘贴路径 —— 立即 orderOut 让出 key，合成的 ⌘V 才落得到目标 App
     func hide(animated: Bool) {
         guard panel.isVisible else { return }
-        // 帮助浮层不跨次留存：收起面板时一并关掉，下次打开是干净的面板
-        content.hideShortcutHelp()
+        // 帮助浮层与预览浮层都不跨次留存：收起面板时一并关掉
+        content.hideShortcutHelp(); closePreview()
         clearDeleteConfirmHint()
         // 收起后不再需要缩略图：丢弃在途回调（已入队任务允许跑完，缓存与磁盘文件不删）
         ClipboardThumbnailLoader.shared.cancelAll()
@@ -224,7 +225,6 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         content.updateStack(remaining: stack.remainingCount, total: stack.stackTotal)
         content.updatePermission(accessibilityGranted: stack.accessibilityGranted)
     }
-
 
     func pasteSelected(asPlainText: Bool) {
         guard let item = selectedItem else { return }

@@ -113,12 +113,13 @@ enum ClipboardShortcutHelp {
     /// 浮层标题（同时用作悬浮层的无障碍标签）
     static let title = "快捷键帮助"
 
-    /// 全部键位（18 条，浮层按两列 × 9 行排布）
+    /// 全部键位（19 条，浮层按两列 × 10 行排布）
     static let entries: [Entry] = [
         Entry(keys: "⌘1–9", action: "快速粘贴第 N 条"),
         Entry(keys: "⌘F", action: "聚焦搜索框"),
         Entry(keys: "↵", action: "粘贴并收起"),
         Entry(keys: "⌥↵", action: "粘贴为纯文本"),
+        Entry(keys: "空格", action: "预览选中条目"),
         Entry(keys: ClipboardEditSession.editKeyHint, action: "编辑选中条目"),
         Entry(keys: ClipboardEditSession.newKeyHint, action: "新建文本条目"),
         Entry(keys: ClipboardEditSession.saveKeyHint, action: "保存编辑"),
