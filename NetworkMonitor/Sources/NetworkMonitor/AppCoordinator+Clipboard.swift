@@ -55,6 +55,9 @@ extension AppCoordinator {
         clipboardStack = stack
         stack.start()
 
+        // 图片文字识别：全本地 Vision（不联网），采集落库后异步回写 ocr_text
+        setupClipboardOCR(database: database, preferences: preferences)
+
         // 音效与触觉成对注入：面板控制器与面板视图共用同一份实例（由 setupFeedback 装配）
         let feedback = ClipboardFeedback(sound: soundFeedback, haptics: hapticFeedback)
         clipboardPanel = ClipboardPanelController(repository: database,
@@ -74,34 +77,6 @@ extension AppCoordinator {
 
         globalHotKey = GlobalHotKeyCenter()
         registerClipboardHotKey(preferences.panelToggleHotKey, presentingAlert: true)
-    }
-
-    /// 采集回调：落库 + 广播 + 超限清理 + 图片回收
-    /// 死锁红线：仓储方法在串行队列 sync，须在主线程调用；禁止在 db.query(sql:handler:) 回调内调用。
-    private func persistClipboardDraft(_ draft: ClipboardDraft) {
-        guard let repository = database else { return }
-        guard repository.saveClipboardItem(draft) != nil else {
-            logger.warning("剪贴板条目落库失败（数据库未就绪或内容无效）")
-            return
-        }
-        AppEvents.postClipboardChanged()
-        // 超限清理后回收被删条目的落盘图片（文本条目零 IO，见 ClipboardImageGC）
-        ClipboardImageGC.prune(repository: repository, maxItems: clipboardPreferences.maxItems,
-                               retentionDays: clipboardPreferences.retentionDays, logger: logger)
-    }
-
-    /// 采集状态变化：权限被拒时明确告警（不静默）
-    private func handleCaptureState(_ state: ClipboardCaptureState) {
-        switch state {
-        case .running:
-            logger.info("剪贴板采集运行中")
-        case .stopped:
-            logger.info("剪贴板采集未运行（按需采集模式或已停止）")
-        case .paused:
-            logger.info("剪贴板采集已暂停（复制的内容不再入库）")
-        case .denied(let reason):
-            logger.warning("剪贴板访问被拒绝（\(reason.rawValue)）：请到「系统设置 → 隐私与安全性」允许本应用访问剪贴板")
-        }
     }
 
     /// 注册全局唤起热键；失败时不静默，引导用户去系统设置释放占用

@@ -7,9 +7,7 @@ import NetworkMonitorCore
 @MainActor
 final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanelViewDelegate {
 
-    /// 面板展开 / 收起动效口径（设计规格 §3 B2：0.18s、展开位移 14pt）
-    ///
-    /// 动效本体一律走 `MotionKit`（跟随「减弱动态效果」），本处只留时长与位移两个数值。
+    /// 面板展开 / 收起动效口径（设计规格 §3 B2：0.18s、展开位移 14pt；动效本体走 MotionKit）
     private enum Motion {
         static let duration: TimeInterval = 0.18
         static let offsetY: CGFloat = 14
@@ -23,13 +21,11 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     let paster: ClipboardPaster
     /// 放宽 internal：Paste Stack 动作在 ClipboardPanelController+Stack.swift，需访问 stack
     let stack: PasteStackController
-    /// 放宽 internal：首次引导与 Paste Stack 扩展文件要读写偏好
+    /// 放宽 internal：首次引导 / Paste Stack / 识别扩展文件要读写偏好与日志
     let preferences: ClipboardPreferences
-    /// 放宽 internal：贴图扩展文件要写日志
     let logger: LoggingService
-    /// 操作反馈（音效 + 触觉）— 组合根注入，面板视图与控制器共用同一份
+    /// 操作反馈（音效 + 触觉）与 ⌘, 设置入口 — 组合根注入；放宽 internal 供 +Keyboard / +Feedback 用
     let feedback: ClipboardFeedback
-    /// ⌘, 打开剪贴板设置（组合根注入；放宽 internal：按键拦截在 +Keyboard.swift）
     let onRequestSettings: (() -> Void)?
     /// 把某条历史贴到屏幕（组合根注入到截图链路）
     var onRequestPin: ((ClipboardItem) -> Void)?
@@ -45,6 +41,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     var clearAllConfirm = ClipboardDeleteConfirm()
     nonisolated(unsafe) private var localKeyMonitor: Any?
     nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
+    nonisolated(unsafe) var ocrObserver: NSObjectProtocol?   // 识别结果订阅与刷新在 ClipboardOCRPanel.swift
 
     init(repository: any ClipboardRepository, captureService: any ClipboardCaptureService,
          paster: ClipboardPaster, stack: PasteStackController, feedback: ClipboardFeedback,
@@ -57,11 +54,11 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         let rect = NSRect(x: 0, y: 0, width: 640, height: 260)
         self.panel = ClipboardPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel],
                                     backing: .buffered, defer: false)
-        // 反馈按构造器注入交给面板视图：选中切换的触觉由卡片流回调直接打，不经控制器转一圈
-        self.content = ClipboardPanelView(frame: rect, feedback: feedback)
+        self.content = ClipboardPanelView(frame: rect, feedback: feedback)   // 选中切换的触觉由卡片流回调直接打
         super.init()
         configurePanel()
         observeClipboardChanges()
+        observeOCRTextReady()
         stack.onStateChange = { [weak self] in self?.syncStackState() }
         // 栈推进（⌘V 贴出队首）单独反馈：onStateChange 还覆盖入栈 / 重载 / 清空，不能一律打触觉
         stack.onAdvance = { [weak self] in self?.reportStackAdvanced() }
@@ -70,6 +67,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     nonisolated deinit {
         if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }
         if let clipboardObserver { NotificationCenter.default.removeObserver(clipboardObserver) }
+        if let ocrObserver { NotificationCenter.default.removeObserver(ocrObserver) }
     }
 
     /// 唤起 / 收起

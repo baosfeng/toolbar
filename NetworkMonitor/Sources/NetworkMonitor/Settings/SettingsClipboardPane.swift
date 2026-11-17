@@ -2,28 +2,18 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorUI
 
-// MARK: - 剪贴板设置页
+// MARK: - 剪贴板设置页（识别开关见 SettingsClipboardOCRRow.swift）
 
 /// 剪贴板设置 — 面板唤起、采集范围、忽略列表与系统权限
 ///
-/// 迁移自 `ClipboardSettingsWindow`：字段一一对应，布局改为原型的分组卡片。
-/// 需要外部动作的项仍走 `ClipboardSettingsDelegate`（组合根实现）；
-/// 开机自启动已移到「通用」页，这里不重复。
-///
-/// 文件拆分：忽略应用列表在 `SettingsClipboardPane+IgnoredApps.swift`，
-/// 三页共用控件在 `SettingsSharedComponents.swift`。
-///
-/// 「剪贴板动作」的通知行也放本页（旧的「操作音效 / 触觉反馈」两个开关已由它取代：
-/// 那两个开关迁移后没有读取方，纯属死开关）。
+/// 需要外部动作的项走 `ClipboardSettingsDelegate`（组合根实现）；
+/// 文件拆分：忽略列表在 +IgnoredApps、存储卡在 +Storage、权限卡在 +Permission、
+/// 识别开关在 `SettingsClipboardOCRRow.swift`。
 final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHosting {
 
-    /// 跨文件访问：忽略应用列表扩展使用
+    /// 跨文件访问：忽略列表 / 存储 / 识别开关三处扩展共用
     let preferences: ClipboardPreferences
-
-    /// 跨文件访问：忽略应用列表扩展需要通知采集器忽略集合变化
     weak var settingsDelegate: ClipboardSettingsDelegate?
-
-    /// 跨文件访问：存储卡与权限扩展要写日志
     let logger: LoggingService
 
     /// 跨文件访问：权限扩展（SettingsClipboardPane+Permission.swift）按它渲染状态卡
@@ -40,6 +30,7 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
     private let captureModePopup = NSPopUpButton()
     /// 暂停采集开关（每行一行控件；标题文案随状态在 refresh 里更新）
     private let pauseSwitch = NSSwitch()
+    private lazy var ocrRow = SettingsClipboardOCRRow(preferences: preferences, logger: logger)
     private let maxItemsField = NSTextField()
     private let retentionField = NSTextField()
 
@@ -101,6 +92,7 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         pauseRow.trailingStack.addArrangedSubview(pauseSwitch)
         let captureModeRow = SettingsRowView(title: "采集模式")
         captureModeRow.trailingStack.addArrangedSubview(captureModePopup)
+        let imageOCRRow = ocrRow.row
         let maxItemsRow = SettingsRowView(title: "最大条数")
         maxItemsRow.trailingStack.addArrangedSubview(maxItemsField)
         let retentionRow = SettingsRowView(title: "保留天数")
@@ -109,7 +101,7 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         ignoredRow.trailingStack.addArrangedSubview(ignoredToggleButton)
 
         let captureCard = SettingsCardView()
-        [pauseRow, captureModeRow, maxItemsRow, retentionRow, ignoredRow].forEach(captureCard.addRow)
+        [pauseRow, captureModeRow, imageOCRRow, maxItemsRow, retentionRow, ignoredRow].forEach(captureCard.addRow)
         page.addCard(captureCard, sectionTitle: "采集")
 
         buildIgnoredCard()
@@ -161,6 +153,7 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         pauseSwitch.target = self
         pauseSwitch.action = #selector(pauseChanged)
         pauseSwitch.setAccessibilityLabel("暂停采集")
+
 
         configurePopup(captureModePopup,
                        items: [ClipboardCaptureMode.polling, .onDemand],
@@ -231,6 +224,7 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         heightValueLabel.stringValue = "\(Int(height)) pt"
         quickPasteSwitch.state = preferences.quickPasteEnabled ? .on : .off
         pauseSwitch.state = preferences.isPaused ? .on : .off
+        ocrRow.refresh()
         captureModePopup.selectItem(at: index(of: preferences.captureMode.rawValue, in: captureModePopup))
         maxItemsField.stringValue = "\(preferences.maxItems)"
         retentionField.stringValue = "\(preferences.retentionDays)"

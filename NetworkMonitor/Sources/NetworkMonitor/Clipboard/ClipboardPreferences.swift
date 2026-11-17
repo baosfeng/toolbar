@@ -65,6 +65,7 @@ final class ClipboardPreferences: Sendable {
         static let guidedAccess = "clipboard.hasGuidedAccess"
         static let soundEffects = "clipboard.soundEffectsEnabled"
         static let haptics = "clipboard.hapticsEnabled"
+        static let imageOCR = "clipboard.imageOCREnabled"
     }
 
     private let storage: any KeyValueStorage
@@ -145,6 +146,14 @@ final class ClipboardPreferences: Sendable {
             return ClipboardPanelLayout.clampedHeight(value)
         }
         set { storage.set(newValue, forKey: Key.panelHeight) }
+    }
+
+    // MARK: 图片文字识别
+
+    /// 识别图片中文字开关（默认开启；关掉后新采集的图片条目不再识别，已有结果保留）
+    var imageOCRRecognizeEnabled: Bool {
+        get { storage.object(forKey: Key.imageOCR) == nil ? true : storage.bool(forKey: Key.imageOCR) }
+        set { storage.set(newValue, forKey: Key.imageOCR) }
     }
 
     // MARK: 操作反馈

@@ -45,13 +45,14 @@ extension DatabaseManager {
         let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
         return withReadDB([]) { db -> [ClipboardItem] in
-            // COALESCE 归一 NULL：text / source_app_name 可为 NULL，
+            // COALESCE 归一 NULL：text / source_app_name / ocr_text 可为 NULL，
             // 直接比较会得到 NULL 参与三值逻辑，这里显式等价于「该列为空 → 不命中」
             let sql = """
             SELECT \(ClipboardSchema.columns) FROM clipboard_items
             WHERE (COALESCE(text, '') LIKE ? ESCAPE '\\'
                 OR preview LIKE ? ESCAPE '\\'
-                OR COALESCE(source_app_name, '') LIKE ? ESCAPE '\\')
+                OR COALESCE(source_app_name, '') LIKE ? ESCAPE '\\'
+                OR COALESCE(ocr_text, '') LIKE ? ESCAPE '\\')
             ORDER BY is_pinned DESC, created_at DESC LIMIT ?;
             """
             var stmt: OpaquePointer?
@@ -60,10 +61,10 @@ extension DatabaseManager {
                 logger.warning("剪贴板全文检索准备失败: \(String(cString: sqlite3_errmsg(db)))")
                 return []
             }
-            for index in Int32(1)...Int32(3) {
+            for index in Int32(1)...Int32(4) {
                 _ = pattern.withCString { sqlite3_bind_text(stmt, index, $0, -1, transient) }
             }
-            sqlite3_bind_int(stmt, 4, capped)
+            sqlite3_bind_int(stmt, 5, capped)
             return clipItems(from: stmt)
         }
     }

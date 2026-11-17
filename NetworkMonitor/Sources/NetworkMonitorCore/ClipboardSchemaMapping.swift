@@ -13,8 +13,9 @@ public enum ClipboardSchema {
 
     /// 已发布的最高版本；一次迁移完成后 `PRAGMA user_version` 必等于它
     ///
-    /// v3 目前只有占位段、还没有实际变更，因此仍是 2 —— 空段不推版本号。
-    public static let latestVersion: Int32 = 2
+    /// v3 = 图片文字识别列 `ocr_text`；v4 目前只有占位段、还没有实际变更，因此仍是 3 ——
+    /// 空段不推版本号。
+    public static let latestVersion: Int32 = 3
 
     /// 列：声明顺序 = SELECT 列顺序 = 行映射下标
     public enum Column: String, CaseIterable, Sendable {
@@ -30,6 +31,7 @@ public enum ClipboardSchema {
         case createdAt = "created_at"
         case pinnedAt = "pinned_at"
         case stackPosition = "stack_position"
+        case ocrText = "ocr_text"
 
         /// sqlite3_column_* 用的列下标（= 在 `allCases` 中的位置）
         ///
@@ -115,7 +117,8 @@ extension DatabaseManager {
             isPinned: sqlite3_column_int(stmt, ClipColumn.isPinned.index) != 0,
             createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, ClipColumn.createdAt.index)),
             pinnedAt: clipDateOrNil(stmt, ClipColumn.pinnedAt.index),
-            stackPosition: clipIntOrNil(stmt, ClipColumn.stackPosition.index)
+            stackPosition: clipIntOrNil(stmt, ClipColumn.stackPosition.index),
+            ocrText: clipText(stmt, ClipColumn.ocrText.index)
         )
     }
 

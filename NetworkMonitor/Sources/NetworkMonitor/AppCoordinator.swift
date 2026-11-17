@@ -50,6 +50,8 @@ public final class AppCoordinator {
     /// 面板控制器
     // 放宽为 internal：`AppCoordinator+Clipboard` 的装配与热键回调要读写
     var clipboardPanel: ClipboardPanelController!
+    /// 图片文字识别调度（采集回调里入队；放宽为 internal 供装配扩展写、停止时丢弃在途结果）
+    var clipboardOCR: ClipboardOCRCoordinator!
     /// 统一设置窗口（长期持有；六个功能页按需装配）
     var settingsWindow: SettingsWindow?
     /// 更新检查服务（关于页与启动自动检查共用同一实例）
@@ -250,6 +252,7 @@ public final class AppCoordinator {
         // 剪贴板链路
         clipboardWatcher?.stop()
         clipboardStack?.stop()
+        clipboardOCR?.cancelAll()
         globalHotKey?.unregister()
 
         database?.close()

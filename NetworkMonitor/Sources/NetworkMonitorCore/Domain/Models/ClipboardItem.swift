@@ -51,6 +51,11 @@ public struct ClipboardItem: Equatable, Sendable, Identifiable {
     public var pinnedAt: Date?
     /// Paste Stack 顺序（nil = 不在栈内，从 1 开始编号）
     public var stackPosition: Int?
+    /// 图片文字识别结果（仅 image 条目）
+    ///
+    /// 三态：`nil` = 未识别（唯一可调度态）；`""` = 已识别且无文字（终态）；
+    /// 其余 = 识别出的正文。文本条目恒为 nil。
+    public var ocrText: String?
 
     public init(
         id: UUID = UUID(),
@@ -67,7 +72,8 @@ public struct ClipboardItem: Equatable, Sendable, Identifiable {
         isPinned: Bool = false,
         createdAt: Date = Date(),
         pinnedAt: Date? = nil,
-        stackPosition: Int? = nil
+        stackPosition: Int? = nil,
+        ocrText: String? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -84,6 +90,13 @@ public struct ClipboardItem: Equatable, Sendable, Identifiable {
         self.createdAt = createdAt
         self.pinnedAt = pinnedAt
         self.stackPosition = stackPosition
+        self.ocrText = ocrText
+    }
+
+    /// 是否有可展示 / 可复制的识别文字（空串与 nil 都算没有）
+    public var hasOCRText: Bool {
+        guard let ocrText else { return false }
+        return !ocrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// 是否为图片条目（卡片视图按类型分支绘制）

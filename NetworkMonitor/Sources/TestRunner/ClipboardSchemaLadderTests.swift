@@ -75,6 +75,8 @@ func runClipboardSchemaLadderTests() {
         }
         _ = db.setClipboardItemPinned(id: saved.id, isPinned: true)
         db.updateClipboardStackPositions([saved.id])
+        // OCR 列：识别结果走独立协议回写（v3 新增列，列序错位会在这条断言上暴露）
+        _ = db.updateClipboardItemOCRText(id: saved.id, text: "识别出的文字")
 
         guard let back = db.fetchClipboardItem(id: saved.id) else {
             assertEqual(false, true, "全字段条目回读失败")
@@ -95,6 +97,7 @@ func runClipboardSchemaLadderTests() {
         assertEqual(back.createdAt.timeIntervalSince1970, createdAt.timeIntervalSince1970, "created_at 不错位")
         assertNotNil(back.pinnedAt, "pinned_at 不错位")
         assertEqual(back.stackPosition, 1, "stack_position 不错位")
+        assertEqual(back.ocrText, "识别出的文字", "ocr_text 不错位")
         assertEqual(back, db.fetchAllClipboardItems(kind: nil).first, "全量查询与按 id 回读同一行同一列序")
     }
 

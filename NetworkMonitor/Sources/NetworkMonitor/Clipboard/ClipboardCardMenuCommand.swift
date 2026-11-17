@@ -17,4 +17,6 @@ enum ClipboardCardMenuCommand: Int, CaseIterable {
     case pinToScreen = 4
     /// 删除该条（先进入二次确认）
     case delete = 5
+    /// 复制图片里识别出的文字（仅图片且已识别出文字时出现，见 ClipboardOCRMenu.swift）
+    case copyOCRText = 6
 }

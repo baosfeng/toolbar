@@ -27,7 +27,8 @@ public protocol DatabaseService: AnyObject, Sendable {
 
 // MARK: - 完整数据库能力组合
 
-/// 应用所需完整数据库能力 — 通用访问 + 剪贴板仓储
+/// 应用所需完整数据库能力 — 通用访问 + 剪贴板仓储 + OCR 结果回写
 ///
 /// 组合根与 UI 层传递数据库实例时使用此组合类型，避免依赖具体实现类。
-public typealias AppDatabase = DatabaseService & ClipboardRepository
+/// OCR 单列成独立协议（识别是后台异步写、生命周期与采集不同），这里只做能力合并。
+public typealias AppDatabase = DatabaseService & ClipboardRepository & ClipboardOCRRepository

@@ -2,17 +2,16 @@ import AppKit
 
 // MARK: - 卡片右键菜单
 
-/// `ClipboardCardView` 的右键菜单 — 5 项固定顺序，全部转交面板内容视图的指令通道
+/// `ClipboardCardView` 的右键菜单 — 顺序固定，除「贴到屏幕」走 onPin 外全部转交面板内容视图的指令通道
 ///
 /// 跨文件访问：`item` / `onPin` 由主文件放宽为 internal（无其他调用方）。
-/// 分发口径：除「贴到屏幕」沿用既有 onPin 贴图链路外，其余四项统一交给面板内容视图的
-/// 菜单指令通道（响应链 → 控制器既有动作），保证不存在第二套复制 / 粘贴实现。
 extension ClipboardCardView {
 
-    /// 右键菜单 5 项（顺序固定）：复制 / 粘贴为纯文本 / 收藏 / 贴到屏幕 / 删除…
+    /// 右键菜单（顺序固定）：复制 / 复制识别文字（仅图片且已识别）/ 粘贴为纯文本 / 收藏 / 贴到屏幕 / 删除…
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
         menu.addItem(menuEntry(.copy, title: "复制"))
+        addOCRMenuEntryIfNeeded(to: menu)
         menu.addItem(menuEntry(.pastePlainText, title: "粘贴为纯文本"))
         menu.addItem(menuEntry(.togglePin, title: isPinned ? "取消收藏" : "收藏", state: isPinned ? .on : .off))
         let screenEntry = NSMenuItem(title: "贴到屏幕", action: #selector(menuPinToScreen), keyEquivalent: "")
@@ -31,7 +30,8 @@ extension ClipboardCardView {
 
     /// 菜单项构造：target 置空 = 沿响应链找到面板内容视图；representedObject 带条目 ID，
     /// 由控制器按 ID 换算下标，避免依赖卡片池的视图位置
-    private func menuEntry(_ command: ClipboardCardMenuCommand, title: String,
+    // 放宽为 internal：识别文字菜单项在 `ClipboardOCRMenu.swift`
+    func menuEntry(_ command: ClipboardCardMenuCommand, title: String,
                            state: NSControl.StateValue = .off) -> NSMenuItem {
         let entry = NSMenuItem(title: title,
                                action: #selector(ClipboardPanelView.handleCardMenuCommand(_:)),

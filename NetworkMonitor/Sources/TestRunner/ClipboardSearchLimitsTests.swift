@@ -67,6 +67,19 @@ func runClipboardFullTextSearchTests() {
         assertEqual(db.searchClipboardItems(query: "preview.app", limit: 50).map(\.id), [picture.id], "NULL text 条目按来源 App 名命中")
         assertEqual(db.searchClipboardItems(query: "压根不存在的串", limit: 50).count, 0, "无命中返回 []")
 
+        // 5b) 图片内文字参与检索：ocr_text 列命中（识别结果落在独立列，不进 text / preview）
+        guard let shot = db.saveClipboardItem(ClipboardDraft(kind: .image, contentHash: "search-ocr",
+                                                             preview: "图片 800×600", imagePath: "/tmp/shot.png",
+                                                             imageWidth: 800, imageHeight: 600,
+                                                             createdAt: base.addingTimeInterval(6))) else { exit(1) }
+        assertEqual(db.searchClipboardItems(query: "识别专用词", limit: 50).count, 0, "未识别时搜索不命中")
+        _ = db.updateClipboardItemOCRText(id: shot.id, text: "会议纪要\n识别专用词在第 42 行")
+        assertEqual(db.searchClipboardItems(query: "识别专用词", limit: 50).map(\.id), [shot.id],
+                    "ocr_text 命中：图片条目被搜到")
+        assertEqual(db.searchClipboardItems(query: "会议纪要", limit: 50).map(\.id), [shot.id], "ocr_text 首行命中")
+        assertEqual(db.searchClipboardItems(query: "第 42 行", limit: 50).map(\.id), [shot.id], "ocr_text 中段命中")
+        assertEqual(db.fetchClipboardItem(id: shot.id)?.ocrText, "会议纪要\n识别专用词在第 42 行", "识别结果原样回读")
+
         // 6) 空串 / 全空白 / limit ≤ 0 → []
         assertEqual(db.searchClipboardItems(query: "", limit: 50).count, 0, "空查询返回 []")
         assertEqual(db.searchClipboardItems(query: "   \n\t ", limit: 50).count, 0, "全空白查询返回 []")

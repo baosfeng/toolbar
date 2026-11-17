@@ -71,7 +71,16 @@ public enum ClipboardDetailStrip {
     /// 正文：完整正文优先，缺失时退回摘要；图片条目给尺寸
     ///
     /// 不在这里截断字符串 —— 行数由视图按可见高度裁切并在内部滚动，提前截断会让用户再也看不到后半段。
+    /// 图片条目识别出文字时，在尺寸行之后另起一行接上识别结果：有才占位，
+    /// 没识别 / 没认出来时正文与改造前完全一致（详情区高度恒定，多出来的行在内部滚动）。
     public static func bodyText(for item: ClipboardItem) -> String {
+        let base = baseBodyText(for: item)
+        guard item.kind == .image, let recognized = ClipboardOCRPolicy.displayText(for: item) else { return base }
+        return base + "\n" + recognized
+    }
+
+    /// 类型自身的正文（不含识别文字）：图片给尺寸，其余给完整正文 / 摘要
+    private static func baseBodyText(for item: ClipboardItem) -> String {
         if item.kind == .image {
             if let width = item.imageWidth, let height = item.imageHeight, width > 0, height > 0 {
                 return "图片 \(width)×\(height)"

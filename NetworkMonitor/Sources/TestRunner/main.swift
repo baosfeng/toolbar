@@ -355,6 +355,9 @@ runClipboardThumbnailDecodeTests()
 // MARK: - 剪贴板删除二次确认（首次 / 窗口内二次 / 超窗 / 打断 / 互不串味）
 runClipboardDeleteConfirmTests()
 
+// MARK: - 图片文字识别（调度口径 / 三态收敛 / 失败冷却 / 闸门）
+runClipboardOCRTests()
+
 // MARK: - 外观（主题令牌 / 深浅对比度 / 渲染帧率档 / 外观偏好）
 runThemeTokenTests()
 runThemeContrastTests()

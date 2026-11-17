@@ -7,6 +7,7 @@ extension DatabaseManager {
 
     /// 按版本阶梯逐级迁移到 `ClipboardSchema.latestVersion`
     ///
+    /// v1 / v2 段在本文件（建表与历史补版本），v3 起在 `ClipboardSchemaLadder.swift`。
     /// 每一级是一个独立段：`if clipUserVersion(db) < N` 里只做第 N 级自己的变更，
     /// 段尾把 `PRAGMA user_version` 写成 N。**不要在一段里改别的版本号**——
     /// 旧的一次性写法（先无条件建表、再 `guard version < 2`、最后无条件写 2）会让
@@ -27,6 +28,9 @@ extension DatabaseManager {
         }
         if clipUserVersion(db) < 3 {
             migrateClipboardToV3(db)
+        }
+        if clipUserVersion(db) < 4 {
+            migrateClipboardToV4(db)
         }
     }
 
@@ -75,24 +79,11 @@ extension DatabaseManager {
         clipAdvanceVersion(db, to: 2, label: "剪贴板表结构 v2 就绪")
     }
 
-    // MARK: - v3：占位段（下一位加列 / 加表在这里）
-
-    /// v3 段：**下一位加列 / 加表在这里，勿在 v1 / v2 段里加**。
-    ///
-    /// 加一列的完整步骤：
-    /// 1. 在 `ClipboardSchema.Column` 按顺序追加 case（列串与行映射下标随之自动同步）
-    /// 2. 在本段追加一条 `ALTER TABLE clipboard_items ADD COLUMN <列名> <类型>;`
-    /// 3. 把 `ClipboardSchema.latestVersion` +1（本段改成 `to: 3` 后新开 v4 段）
-    /// 4. 在 TestRunner 的列序用例里补该字段的逐字段比对
-    private func migrateClipboardToV3(_ db: OpaquePointer) {
-        // 本段目前是空占位：空段不推版本号，否则老库会被标成 v3、真到 v3 时整段被跳过。
-        _ = db
-    }
-
     // MARK: - 版本阶梯共用
 
     /// 写完一级后把 user_version 推进到该级；失败只告警，不回写旧版本
-    private func clipAdvanceVersion(_ db: OpaquePointer, to version: Int32, label: String) {
+    /// 放宽为 internal：v3 之后的迁移段在 `ClipboardSchemaLadder.swift`（同模块另一文件）
+    func clipAdvanceVersion(_ db: OpaquePointer, to version: Int32, label: String) {
         if clipExec(db, "PRAGMA user_version = \(version)") {
             logger.info("数据迁移 v\(version) 完成：\(label)")
         } else {

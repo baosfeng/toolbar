@@ -87,4 +87,19 @@ public enum AppEvents {
         NotificationCenter.default.post(name: clipboardThumbnailReady, object: nil,
                                         userInfo: [clipboardThumbnailHashKey: hash])
     }
+
+    /// 某条图片条目的文字识别结果已回写（主线程发出）
+    ///
+    /// 与 `clipboardChanged` 分开：识别结果不改变排序与卡片内容，订阅方只需刷新命中的
+    /// 详情区，不该整片重建卡片流（那会连带重置选中态与滚动位置）。
+    public static let clipboardOCRTextReady = Notification.Name("AppEvents.clipboardOCRTextReady")
+
+    /// 识别就绪通知里条目 id 的 userInfo 键
+    public static let clipboardOCRItemIDKey = "itemID"
+
+    /// 发布识别就绪通知（主线程调用）
+    public static func postClipboardOCRTextReady(itemID: UUID) {
+        NotificationCenter.default.post(name: clipboardOCRTextReady, object: nil,
+                                        userInfo: [clipboardOCRItemIDKey: itemID])
+    }
 }
