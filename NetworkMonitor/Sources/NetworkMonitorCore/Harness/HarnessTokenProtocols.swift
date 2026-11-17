@@ -12,6 +12,11 @@ public enum HarnessSourceAvailability: Sendable, Equatable {
     case toolMissing(searchedPaths: [String])
     /// 会话目录不存在
     case sessionsDirectoryMissing(path: String)
+    /// 会话目录存在但不可读（权限不足 / 挂在失效的卷上）
+    ///
+    /// 与「不存在」分开：前者用户去设置页改路径就能救，后者要修权限或者重新挂载；
+    /// 旧实现把两者都并进「不存在」，界面只说「还没有可统计的会话」。
+    case sessionsDirectoryUnreadable(path: String)
 
     /// 是否可用
     public var isAvailable: Bool {
@@ -28,6 +33,8 @@ public enum HarnessSourceAvailability: Sendable, Equatable {
             return "未找到 zstd 解压工具，无法读取 DSH 会话；已探测: " + searchedPaths.joined(separator: ", ")
         case .sessionsDirectoryMissing(let path):
             return "未找到 DSH 会话目录: " + path
+        case .sessionsDirectoryUnreadable(let path):
+            return "DSH 会话目录不可读（权限不足或卷未挂载）: " + path
         }
     }
 }
@@ -40,12 +47,16 @@ public struct HarnessIndexProgress: Sendable, Equatable {
     public let totalFiles: Int
     public let currentFile: String
     public let parsedSessions: Int
+    /// 当前文件已读行数（来自 scanner 的 onLinesRead 回调；0 表示尚未回报）
+    public let linesRead: Int
 
-    public init(completedFiles: Int, totalFiles: Int, currentFile: String, parsedSessions: Int) {
+    public init(completedFiles: Int, totalFiles: Int, currentFile: String,
+                parsedSessions: Int, linesRead: Int = 0) {
         self.completedFiles = completedFiles
         self.totalFiles = totalFiles
         self.currentFile = currentFile
         self.parsedSessions = parsedSessions
+        self.linesRead = linesRead
     }
 
     /// 0...1 进度比例
@@ -156,6 +167,9 @@ public protocol HarnessSessionScanning: Sendable {
     /// 当前数据源可用性
     var availability: HarnessSourceAvailability { get }
 
+    /// 当前使用的会话目录与其来源（诊断 / 设置页展示）
+    var sourceResolution: HarnessSourceResolution { get }
+
     /// 发现全部会话文件
     func discoverSessions() throws -> [HarnessSessionFile]
 
@@ -169,6 +183,14 @@ public protocol HarnessSessionScanning: Sendable {
         isCancelled: @Sendable () -> Bool,
         onLinesRead: (@Sendable (Int) -> Void)?
     ) throws -> HarnessSessionScanResult
+}
+
+public extension HarnessSessionScanning {
+    /// 默认来源：测试桩只关心扫描行为，不关心目录来源
+    var sourceResolution: HarnessSourceResolution {
+        HarnessSourceResolution(path: HarnessSourceDirectory.defaultSessionsRoot(),
+                                origin: .homeDefault)
+    }
 }
 
 /// Token 索引仓储（SQLite 落库与聚合查询）
@@ -196,6 +218,13 @@ public protocol HarnessTokenRepository: AnyObject, Sendable {
 
     /// 清空索引（重建用）
     func harnessClearAll() -> Bool
+
+    /// 按范围清理索引，返回删除的事件行数
+    ///
+    /// **必须同时删除 `harness_session_scan` 对应行**：增量判据是 (size, mtime)，
+    /// 只删事件会让那些会话在下一轮被判成「未变更」而永久跳过（假清空）。
+    /// 返回 -1 表示清理失败（调用方据此不宣称「已清理」）。
+    func harnessPurge(scope: HarnessRebuildScope, now: Date) -> Int
 }
 
 /// 对外门面服务
@@ -204,6 +233,8 @@ public protocol HarnessUsageServicing: AnyObject, Sendable {
     var state: HarnessIndexingState { get }
     /// 数据源可用性
     var availability: HarnessSourceAvailability { get }
+    /// 数据源诊断（目录路径 + 来源 + zstd 实际路径 / 缺失原因）
+    var sourceDiagnostics: HarnessSourceDiagnostics { get }
 
     /// 读取快照（线程安全，可任意线程调用）
     func snapshot() -> HarnessUsageSnapshot
@@ -213,6 +244,17 @@ public protocol HarnessUsageServicing: AnyObject, Sendable {
 
     /// 全量重建索引（后台串行执行）
     func rebuildIndex(completion: (@Sendable () -> Void)?)
+
+    /// 按范围清理 + 重建索引（后台串行执行；索引进行中的请求排队而不是丢弃）
+    ///
+    /// - Parameters:
+    ///   - scope: 清理范围；nil 表示只做增量刷新
+    ///   - completion: 本轮回执（数据源不可用 / 清理失败时为 nil）
+    func rebuildIndex(scope: HarnessRebuildScope?,
+                      completion: (@Sendable (HarnessRebuildReceipt?) -> Void)?)
+
+    /// 热切换数据源扫描器（设置页改目录后调用；不自动开跑，由调用方跟着重建）
+    func updateScanner(_ scanner: any HarnessSessionScanning)
 
     /// 取消正在进行的索引
     func cancelIndexing()
@@ -226,4 +268,6 @@ public protocol HarnessUsageServicing: AnyObject, Sendable {
 public extension HarnessUsageServicing {
     func refreshIfNeeded() { refreshIfNeeded(completion: nil) }
     func rebuildIndex() { rebuildIndex(completion: nil) }
+    /// 全量清理 + 重建（无回执版，兼容旧调用点）
+    func rebuildIndex(scope: HarnessRebuildScope?) { rebuildIndex(scope: scope, completion: nil) }
 }

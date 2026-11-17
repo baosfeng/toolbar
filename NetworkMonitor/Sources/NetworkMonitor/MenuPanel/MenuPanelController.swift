@@ -256,7 +256,10 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
             }
         case .token:
             guard let token = pane as? TokenPaneView else { return }
-            token.onRefresh = { [weak self] in self?.rebuildTokenIndex() }
+            // 页头刷新＝一键重扫（清空索引 + 全量重建），由页面自己持有服务并回执
+            token.harness = harnessUsage
+            token.onRefresh = { [weak self] in self?.content.tokenPaneIfLoaded?.rebuildIndex() }
+            token.onOpenSettings = { [weak self] section in self?.requestSettings(section: section) }
             token.onContentChanged = { [weak self] in
                 guard let self else { return }
                 self.content.delegate?.menuPanelViewDidChangeContent(self.content)

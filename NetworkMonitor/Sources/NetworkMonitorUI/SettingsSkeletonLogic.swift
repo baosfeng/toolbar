@@ -86,6 +86,7 @@ public enum SettingsSectionID: String, CaseIterable, Sendable {
     case capture
     case transfer
     case notifications
+    case token
     case system
     case about
 }
@@ -114,7 +115,7 @@ public enum SettingsSidebarLayout {
     public static let groups: [SettingsSidebarGroup] = [
         SettingsSidebarGroup(segment: .general, items: [.general, .appearance]),
         SettingsSidebarGroup(segment: .feature,
-                             items: [.providers, .clipboard, .capture, .transfer, .notifications]),
+                             items: [.providers, .clipboard, .capture, .transfer, .notifications, .token]),
         SettingsSidebarGroup(segment: .system, items: [.system, .about]),
     ]
 

@@ -32,34 +32,56 @@ import Foundation
 ///
 /// 一句话结论：同一会话的多版本文件只算一次，重复的历史事件按内容去重，绝不双算。
 public final class HarnessSessionScanner: @unchecked Sendable, HarnessSessionScanning {
-    /// 默认会话根目录
+    /// 默认会话根目录（解析规则唯一出口在 HarnessSourceDirectory）
     public static func defaultSessionsRoot() -> String {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".dsh", isDirectory: true)
-            .appendingPathComponent("sessions", isDirectory: true)
-            .path
+        HarnessSourceDirectory.defaultSessionsRoot().path
     }
 
     public let availability: HarnessSourceAvailability
+
+    /// 会话目录解析结果（路径 + 来源），供诊断与设置页展示
+    public let resolution: HarnessSourceResolution
+
+    /// 协议要求：目录来源（与 resolution 同源）
+    public var sourceResolution: HarnessSourceResolution { resolution }
 
     private let sessionsRoot: String
     private let streamer: any HarnessLineStreaming
     private let fileManager: FileManager
 
-    public init(
+    /// 便捷构造：只给会话根目录（来源记为显式偏好；测试与历史调用点用）
+    public convenience init(
         sessionsRoot: String = HarnessSessionScanner.defaultSessionsRoot(),
         streamer: any HarnessLineStreaming,
         fileManager: FileManager = .default
     ) {
-        self.sessionsRoot = sessionsRoot
+        self.init(resolution: HarnessSourceResolution(path: URL(fileURLWithPath: sessionsRoot, isDirectory: true),
+                                                      origin: .explicitPreference),
+                  streamer: streamer,
+                  fileManager: fileManager)
+    }
+
+    /// 正式构造：目录来源由 HarnessSourceDirectory.resolve 解析后整体注入
+    public init(
+        resolution: HarnessSourceResolution,
+        streamer: any HarnessLineStreaming,
+        fileManager: FileManager = .default
+    ) {
+        self.resolution = resolution
+        self.sessionsRoot = resolution.pathText
         self.streamer = streamer
         self.fileManager = fileManager
 
         var isDirectory: ObjCBool = false
         let exists = fileManager.fileExists(atPath: sessionsRoot, isDirectory: &isDirectory)
-        self.availability = exists && isDirectory.boolValue
-            ? streamer.availability
-            : .sessionsDirectoryMissing(path: sessionsRoot)
+        if !exists || !isDirectory.boolValue {
+            self.availability = .sessionsDirectoryMissing(path: sessionsRoot)
+        } else if !fileManager.isReadableFile(atPath: sessionsRoot) {
+            // 目录在但读不了（权限 / 卷）：与「不存在」分开报，用户知道该改权限而不是改路径
+            self.availability = .sessionsDirectoryUnreadable(path: sessionsRoot)
+        } else {
+            self.availability = streamer.availability
+        }
     }
 
     // MARK: - 发现
@@ -69,9 +91,9 @@ public final class HarnessSessionScanner: @unchecked Sendable, HarnessSessionSca
             throw HarnessTokenError.sourceUnavailable(availability.displayMessage)
         }
         var discovered: [HarnessSessionFile] = []
-        for projectEntry in sessionEntries(atPath: sessionsRoot) {
+        for projectEntry in try sessionEntries(atPath: sessionsRoot, isRoot: true) {
             let projectPath = sessionsRoot + "/" + projectEntry
-            for sessionEntry in sessionEntries(atPath: projectPath) {
+            for sessionEntry in try sessionEntries(atPath: projectPath) {
                 let sessionPath = projectPath + "/" + sessionEntry
                 guard let file = sessionFile(inDirectory: sessionPath, sessionID: sessionEntry) else {
                     continue
@@ -83,9 +105,18 @@ public final class HarnessSessionScanner: @unchecked Sendable, HarnessSessionSca
     }
 
     /// 目录项（仅名字，忽略隐藏项与普通文件）
-    private func sessionEntries(atPath path: String) -> [String] {
-        guard let entries = try? fileManager.contentsOfDirectory(atPath: path) else { return [] }
-        return entries.filter { !$0.hasPrefix(".") }
+    ///
+    /// - Parameter isRoot: 顶层目录读取失败要抛出（目录权限 / 卷问题），
+    ///   子目录读取失败只跳过该子目录（半损坏的会话树不应该让整轮索引失败）。
+    private func sessionEntries(atPath path: String, isRoot: Bool = false) throws -> [String] {
+        do {
+            return try fileManager.contentsOfDirectory(atPath: path).filter { !$0.hasPrefix(".") }
+        } catch {
+            if isRoot {
+                throw HarnessTokenError.sessionsDirectoryUnreadable(path: path)
+            }
+            return []
+        }
     }
 
     /// 汇总一个会话目录下的全部版本文件（v4 / v3 / 旧版）
@@ -93,7 +124,7 @@ public final class HarnessSessionScanner: @unchecked Sendable, HarnessSessionSca
     /// 同一会话可能同时存在多版本文件（迁移中间态），彼此内容互有先后，
     /// 因此按整会话合并扫描（见 scan）；size 取合计、mtime 取最大值用于增量判定。
     private func sessionFile(inDirectory directory: String, sessionID: String) -> HarnessSessionFile? {
-        let names = sessionEntries(atPath: directory)
+        let names = ((try? sessionEntries(atPath: directory)) ?? [])
             .filter { $0.hasPrefix("session") && $0.hasSuffix(".jsonl.zstd") }
             .sorted { Self.versionRank($0) > Self.versionRank($1) }
         guard !names.isEmpty else { return nil }

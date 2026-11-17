@@ -21,14 +21,24 @@ final class TokenPaneView: MenuPanelPaneView {
 
     var onRefresh: (() -> Void)?
     var onContentChanged: (() -> Void)?
+    /// 打开统一设置窗口（不可用态的动作行用；参数即要落到的分类）
+    var onOpenSettings: ((SettingsSection?) -> Void)?
+    /// 索引服务（页头「一键重扫」用；由面板装配时注入，nil 时空转）
+    var harness: (any HarnessUsageServicing)?
+    /// 临时提示（重扫过程 / 回执）：状态机每次重渲都会把它贴回索引标签，8 秒后自动清掉
+    var durableNote: (text: String, isWarning: Bool)?
+    /// 临时提示的自动清除任务（新提示会取消旧任务，避免串台）
+    var noteExpiry: Task<Void, Never>?
 
     // MARK: - 交互状态
 
-    private(set) var range: TokenRange = .today
-    private(set) var hourScope: TokenHourScope = .today
-    private(set) var hourView: TokenHourView = .stack
-    private(set) var metric: TokenChartMetric = .total
-    private(set) var trendMode: TokenTrendMode = .stack
+    // 下面五个交互状态由 wireActions（TokenPaneView+Interaction.swift）写入：
+    // 跨文件访问故去掉 private(set)，写入路径只有那一个扩展与 DEBUG 取证入口。
+    var range: TokenRange = .today
+    var hourScope: TokenHourScope = .today
+    var hourView: TokenHourView = .stack
+    var metric: TokenChartMetric = .total
+    var trendMode: TokenTrendMode = .stack
     /// 当前屏 —— 区块归属见 TokenScreen 契约
     private(set) var screen: TokenScreen = .overview
     /// 当前打开的二级页（nil = 主面板）
@@ -195,6 +205,8 @@ final class TokenPaneView: MenuPanelPaneView {
             }
         }
         if !emptyView.isHidden { rows.append(emptyView.retryRow) }
+        // 不可用态的「去设置」也要能键盘到达，否则键盘用户看到失败原因却没有任何出口
+        if !unavailableView.isHidden { rows.append(unavailableView.actionRow) }
         return rows
     }
 
@@ -224,57 +236,6 @@ final class TokenPaneView: MenuPanelPaneView {
 
     // MARK: - 动作
 
-    private func wireActions() {
-        refreshRow.onClick = { [weak self] in self?.onRefresh?() }
-        rangeControl.onSelect = { [weak self] index in
-            guard let self, let value = TokenRange(rawValue: index) else { return }
-            self.range = value
-            self.render()
-        }
-        daySegment.onSelect = { [weak self] index in
-            guard let self, let value = TokenHourScope(rawValue: index) else { return }
-            self.hourScope = value
-            self.render()
-        }
-        viewAction.onClick = { [weak self] in
-            guard let self else { return }
-            self.hourView = self.hourView == .stack ? .compare : .stack
-            self.render()
-        }
-        hourAction.onClick = { [weak self] in
-            guard let self else { return }
-            self.metric = self.metric == .total ? .request : .total
-            self.render()
-        }
-        trendAction.onClick = { [weak self] in
-            guard let self else { return }
-            self.trendMode = self.trendMode == .stack ? .line : .stack
-            self.render()
-        }
-        for card in familyCards {
-            card.onClick = { [weak self] in self?.openDetail(.hourly) }
-        }
-        hourCard.onClick = { [weak self] in self?.openDetail(.hourly) }
-        hourBars.onSelect = { [weak self] index in
-            guard let self else { return }
-            self.openDetail(.bucket,
-                            selection: TokenBucketSelection(index: index,
-                                                           isHour: self.range == .today,
-                                                           scope: self.hourScope))
-        }
-        trendCard.onClick = { [weak self] in self?.openDetail(.trend) }
-        overviewTrendCard.onClick = { [weak self] in self?.openDetail(.trend) }
-        screenControl.onSelect = { [weak self] index in
-            guard let self, let value = TokenScreen(rawValue: index) else { return }
-            self.selectScreen(value)
-        }
-        // 排行屏的维度分段与屏切换走同一条 render 路径（不各走一套刷新）
-        rankScreen.onDimensionChange = { [weak self] in self?.render() }
-        detailPane.onBack = { [weak self] in self?.closeDetail() }
-        detailPane.onSelectBucket = { [weak self] selection in
-            self?.openDetail(.bucket, selection: selection)
-        }
-    }
 
 #if DEBUG
     /// 快照自证专用（仅 DEBUG）：切换范围 / 小时归属 / 趋势形态 / 主图形态（堆叠·对比）

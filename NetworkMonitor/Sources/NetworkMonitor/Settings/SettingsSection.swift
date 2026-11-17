@@ -5,7 +5,7 @@ import AppKit
 /// 设置窗口左侧栏的分类 — 顺序即展示顺序
 ///
 /// 新增分类：加 case + 在组合根提供对应 pane 工厂；侧栏与窗口宽度自适应，无需改视图代码。
-enum SettingsSection: CaseIterable {
+enum SettingsSection: String, CaseIterable {
     case general
     case appearance
     case providers
@@ -13,6 +13,7 @@ enum SettingsSection: CaseIterable {
     case capture
     case transfer
     case notifications
+    case token
     case system
     case about
 
@@ -26,6 +27,7 @@ enum SettingsSection: CaseIterable {
         case .capture:   return "截图与贴图"
         case .transfer:  return "局域网互传"
         case .notifications: return "通知与音效"
+        case .token:     return "Token 用量"
         case .system:    return "系统"
         case .about:     return "关于"
         }
@@ -41,6 +43,7 @@ enum SettingsSection: CaseIterable {
         case .capture:   return "camera.viewfinder"
         case .transfer:  return "arrow.left.arrow.right"
         case .notifications: return "bell.badge"
+        case .token:     return "chart.bar.doc.horizontal"
         case .system:    return "gauge.with.dots.needle.67percent"
         case .about:     return "info.circle"
         }
@@ -56,6 +59,7 @@ enum SettingsSection: CaseIterable {
         case .capture:   return "capture"
         case .transfer:  return "transfer"
         case .notifications: return "notifications"
+        case .token:     return "token"
         case .system:    return "system"
         case .about:     return "about"
         }
@@ -71,6 +75,7 @@ enum SettingsSection: CaseIterable {
         case .capture:   return "截图、标注、贴图与截图完成通知的默认参数。"
         case .transfer:  return "接收目录、免配对窗口与传输完成通知。"
         case .notifications: return "通知权限、应用内音量与音效库；事件行已跟随功能页。"
+        case .token:     return "DSH 会话数据目录、zstd 探测与索引维护（重新扫描 / 清理历史数据）。"
         case .system:    return "采样周期与面板显示项。"
         case .about:     return "版本信息与项目地址。"
         }

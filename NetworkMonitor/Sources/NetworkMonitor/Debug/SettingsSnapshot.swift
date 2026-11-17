@@ -49,6 +49,10 @@ enum SettingsSnapshot {
                let appearancePane = settings.currentPaneForSnapshot as? SettingsAppearancePane {
                 appearancePane.debugLogAppearanceControlStates("snapshot")
             }
+            // Token 页的「索引事件」平时异步查库：离屏渲染要同步补一次，否则图上永远是「…」
+            if section == .token, let tokenPane = settings.currentPaneForSnapshot as? SettingsTokenPane {
+                tokenPane.debugPrefillEventCount()
+            }
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let suffix = appearance == .aqua ? "light" : "dark"
                 let url = directory.appendingPathComponent(

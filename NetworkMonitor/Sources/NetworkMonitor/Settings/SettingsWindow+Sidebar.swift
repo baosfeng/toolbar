@@ -140,37 +140,17 @@ enum SettingsSidebarBuilder {
 
 extension SettingsSection {
 
-    /// 稳定 id → 分类（侧栏按 UI 层的分组表建视图时使用）
+    /// 稳定 id ↔ 分类：case 名与 SettingsSectionID 的 rawValue 同名，直接按原值互转
     ///
-    /// 反查走穷尽 switch：新增分类若忘了在 `SettingsSidebarLayout` 里出现，
-    /// 这里仍能编译，但侧栏不会显示它——单测「九项各出现一次」会直接红。
+    /// 以前这里是两张穷尽 switch，加一个分类要改三处（枚举、侧栏布局、两张表）。
+    /// 现在唯一真源是 case 名：新增分类若忘了进 SettingsSidebarLayout，侧栏不显示它，
+    /// 单测「每项各出现一次」会直接红——判据没丢，代码少一半。
     init?(sidebarID: SettingsSectionID) {
-        switch sidebarID {
-        case .general: self = .general
-        case .appearance: self = .appearance
-        case .providers: self = .providers
-        case .clipboard: self = .clipboard
-        case .capture: self = .capture
-        case .transfer: self = .transfer
-        case .notifications: self = .notifications
-        case .system: self = .system
-        case .about: self = .about
-        }
+        self.init(rawValue: sidebarID.rawValue)
     }
 
-    /// 分类 → 稳定 id
     var sidebarID: SettingsSectionID {
-        switch self {
-        case .general: return .general
-        case .appearance: return .appearance
-        case .providers: return .providers
-        case .clipboard: return .clipboard
-        case .capture: return .capture
-        case .transfer: return .transfer
-        case .notifications: return .notifications
-        case .system: return .system
-        case .about: return .about
-        }
+        SettingsSectionID(rawValue: rawValue) ?? .general
     }
 }
 
