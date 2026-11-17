@@ -17,6 +17,8 @@ public enum SnipToolBarPreferenceKey {
     public static let primaryTools = "snip.toolbar.primaryTools"
     /// 被隐藏的动作按钮（逗号分隔的动作名）
     public static let hiddenActions = "snip.toolbar.hiddenActions"
+    /// 输出动作的排列顺序（逗号分隔的动作名；缺键时按 SnipBarAction.defaultOrder 回落）
+    public static let actionOrder = "snip.toolbar.actionOrder"
     /// 工具条位置（auto / below / above）
     public static let placement = "snip.toolbar.placement"
 }
@@ -58,12 +60,14 @@ public enum SnipToolBarConfigurationResolver {
     ///   - hiddenGroupsRaw: 被隐藏组的原始串
     ///   - primaryToolsRaw: 常驻工具原始串（缺失 → SnipTool.primary）
     ///   - hiddenActionsRaw: 被隐藏动作的原始串
+    ///   - actionOrderRaw: 输出动作顺序原始串（缺失 → defaultOrder，老配置外观不变）
     public static func resolve(labelModeRaw: String?,
                                groupOrderRaw: String?,
                                hiddenGroupsRaw: String?,
                                primaryToolsRaw: String?,
                                hiddenActionsRaw: String?,
-                               placementRaw: String? = nil) -> SnipToolBarConfiguration {
+                               placementRaw: String? = nil,
+                               actionOrderRaw: String? = nil) -> SnipToolBarConfiguration {
         let mode = labelModeRaw.flatMap(SnipToolBarLabelMode.init(rawValue:)) ?? .hover
         let placement = placementRaw.flatMap(SnipToolBarPlacement.init(rawValue:)) ?? .auto
 
@@ -82,10 +86,16 @@ public enum SnipToolBarConfigurationResolver {
             ? SnipTool.primary
             : toolNames.compactMap { SnipTool(rawValue: $0) }
 
+        // 动作先按偏好顺序排（去未知 / 去重 / 缺项补尾），再按显隐过滤：
+        // 顺序键只决定先后，显隐仍由 hiddenActions 决定，两件事互不影响
         let hiddenActionNames = Set(SnipToolBarListCoding.decode(hiddenActionsRaw))
-        let actions = SnipBarAction.allCases.filter {
-            !hiddenActionNames.contains($0.rawValue)
-        }
+        let actionOrderNames = SettingsOrderCoding.normalize(
+            SnipToolBarListCoding.decode(actionOrderRaw),
+            known: SnipBarAction.defaultOrder.map(\.rawValue),
+            defaultOrder: SnipBarAction.defaultOrder.map(\.rawValue))
+        let actions = actionOrderNames
+            .compactMap { SnipBarAction(rawValue: $0) }
+            .filter { !hiddenActionNames.contains($0.rawValue) }
 
         return SnipToolBarConfiguration(labelMode: mode,
                                         groupOrder: order,
@@ -96,6 +106,10 @@ public enum SnipToolBarConfigurationResolver {
     }
 
     /// 把配置写回偏好（设置页与覆盖层回写共用）
+    ///
+    /// 顺序键 `actionOrder` 不在这里写：它归 `SettingsOrderStore` 独占（排序按钮 save / 恢复默认 reset）。
+    /// 显隐与顺序是两个独立维度——若在此按「可见动作」回写顺序，关掉的动作会丢席次、
+    /// 重新打开时排到末尾。顺序键缺省时 resolve 回落 defaultOrder，老配置外观不变。
     public static func persist(_ config: SnipToolBarConfiguration, storage: any KeyValueStorage) {
         storage.set(config.labelMode.rawValue, forKey: SnipToolBarPreferenceKey.labelMode)
         storage.set(SnipToolBarListCoding.encode(config.groupOrder.map(\.rawValue)),
@@ -122,6 +136,7 @@ public enum SnipToolBarConfigurationResolver {
                 hiddenGroupsRaw: storage.string(forKey: SnipToolBarPreferenceKey.hiddenGroups),
                 primaryToolsRaw: storage.string(forKey: SnipToolBarPreferenceKey.primaryTools),
                 hiddenActionsRaw: storage.string(forKey: SnipToolBarPreferenceKey.hiddenActions),
-                placementRaw: storage.string(forKey: SnipToolBarPreferenceKey.placement))
+                placementRaw: storage.string(forKey: SnipToolBarPreferenceKey.placement),
+                actionOrderRaw: storage.string(forKey: SnipToolBarPreferenceKey.actionOrder))
     }
 }
