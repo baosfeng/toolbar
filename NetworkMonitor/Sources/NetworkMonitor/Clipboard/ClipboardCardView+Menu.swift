@@ -2,18 +2,18 @@ import AppKit
 
 // MARK: - 卡片右键菜单
 
-/// `ClipboardCardView` 的右键菜单 — 5 项固定顺序，全部转交面板内容视图的指令通道
+/// `ClipboardCardView` 的右键菜单 — 6 项固定顺序，全部转交面板内容视图的指令通道
 ///
-/// 跨文件访问：`item` / `onPin` 由主文件放宽为 internal（无其他调用方）。
-/// 分发口径：除「贴到屏幕」沿用既有 onPin 贴图链路外，其余四项统一交给面板内容视图的
-/// 菜单指令通道（响应链 → 控制器既有动作），保证不存在第二套复制 / 粘贴实现。
+/// 跨文件访问：`item` / `onPin` 由主文件放宽为 internal（无其他调用方）。分发口径：除「贴到屏幕」
+/// 沿用既有 onPin 链路外，其余各项统一交给面板内容视图的菜单指令通道（响应链 → 控制器既有动作）。
 extension ClipboardCardView {
 
-    /// 右键菜单 5 项（顺序固定）：复制 / 粘贴为纯文本 / 收藏 / 贴到屏幕 / 删除…
+    /// 右键菜单 6 项（顺序固定）：复制 / 粘贴为纯文本 / 编辑 / 收藏 / 贴到屏幕 / 删除…
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
         menu.addItem(menuEntry(.copy, title: "复制"))
         menu.addItem(menuEntry(.pastePlainText, title: "粘贴为纯文本"))
+        menu.addItem(menuEntry(.edit, title: "编辑…"))
         menu.addItem(menuEntry(.togglePin, title: isPinned ? "取消收藏" : "收藏", state: isPinned ? .on : .off))
         let screenEntry = NSMenuItem(title: "贴到屏幕", action: #selector(menuPinToScreen), keyEquivalent: "")
         screenEntry.target = self

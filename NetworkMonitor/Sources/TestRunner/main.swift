@@ -89,6 +89,8 @@ runClipboardFullTextSearchTests()
 runClipboardLimitsTests()
 runClipboardUninitializedTests()
 runClipboardBindingLifetimeTests()
+// 编辑 / 手动新建（哈希重算、冲突合并、空内容拒绝、无来源）
+runClipboardEditingTests()
 
 // MARK: - 剪贴板：面板数据流与相对时间
 runClipboardPanelMockTests()

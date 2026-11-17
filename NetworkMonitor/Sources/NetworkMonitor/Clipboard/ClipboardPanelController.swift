@@ -268,6 +268,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
 
     func panelView(_ view: ClipboardPanelView, didSelect index: Int) {
         guard index >= 0, index < filteredItems.count else { return }
+        if index != selectedIndex { cancelEditingOnSelectionChange() }   // 编辑中换条目 = 放弃编辑
         selectedIndex = index
         content.updateSelection(index, item: selectedItem)
         clearDeleteConfirmHint()
