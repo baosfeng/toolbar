@@ -225,6 +225,17 @@ public protocol HarnessTokenRepository: AnyObject, Sendable {
     /// 只删事件会让那些会话在下一轮被判成「未变更」而永久跳过（假清空）。
     /// 返回 -1 表示清理失败（调用方据此不宣称「已清理」）。
     func harnessPurge(scope: HarnessRebuildScope, now: Date) -> Int
+
+    /// 按范围预览将删除的事件行数（-1 = 查询失败）
+    ///
+    /// 二次确认要在**删除之前**说清规模，判据必须与 harnessPurge 完全同源；
+    /// 设置页据此在范围选择器旁显示「将删除 N 条事件」。
+    func harnessPurgePreview(scope: HarnessRebuildScope, now: Date) -> Int
+}
+
+public extension HarnessTokenRepository {
+    /// 默认实现：不支持预览（-1 = 未知），调用方据此显示「规模未知」而不是假的 0
+    func harnessPurgePreview(scope: HarnessRebuildScope, now: Date) -> Int { -1 }
 }
 
 /// 对外门面服务

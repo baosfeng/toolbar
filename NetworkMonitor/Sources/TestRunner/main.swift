@@ -5,6 +5,21 @@ import Foundation
 // 本文件只保留可执行入口与各测试套件的调度顺序；具体用例位于各 *Tests.swift，
 // 断言辅助位于 AssertionHelpers.swift。顶层语句仅允许留在本文件（SPM 可执行入口约束）。
 
+// MARK: - 人工触发的「按天清理 → 重扫」自证（不参与默认测试流程）
+if let index = CommandLine.arguments.firstIndex(of: "--harness-purge-probe"),
+   index + 2 < CommandLine.arguments.count,
+   let days = Int(CommandLine.arguments[index + 2]) {
+    runHarnessPurgeProbe(resourcesDirectory: CommandLine.arguments[index + 1], days: days)
+    exit(0)
+}
+
+// MARK: - 人工触发的内置解码自证（不参与默认测试流程）
+if let index = CommandLine.arguments.firstIndex(of: "--harness-bundled-probe"),
+   index + 1 < CommandLine.arguments.count {
+    runHarnessBundledProbe(resourcesDirectory: CommandLine.arguments[index + 1])
+    exit(0)
+}
+
 // MARK: - 人工触发的真实索引基准（不参与默认测试流程）
 if CommandLine.arguments.contains("--harness-index") {
     runHarnessIndexBenchmark()
@@ -186,6 +201,8 @@ runHarnessStreamMemoryTests()
 runHarnessTokenIndexTests()
 runHarnessTokenHourlyTests()
 runHarnessStreamMemoryRegressionTests()
+runHarnessFollowupTests()
+runHarnessDegradationTests()
 
 // MARK: - Token tab 展示口径（范围窗口 / 缺省小时 / 环比 / 空态）
 runTokenPaneTests()

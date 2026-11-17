@@ -12,7 +12,7 @@ extension TokenPaneView {
 
     func wireActions() {
         refreshRow.onClick = { [weak self] in self?.onRefresh?() }
-        // 不可用态的动作行：三类失败都指向「Token 用量」设置页（那里能改目录 / 看 zstd 探测路径）
+        // 不可用态的动作行：三类失败都指向设置 →「Token 用量」（改目录 / 看 zstd 探测链）
         unavailableView.actionRow.onClick = { [weak self] in self?.onOpenSettings?(.token) }
         rangeControl.onSelect = { [weak self] index in
             guard let self, let value = TokenRange(rawValue: index) else { return }

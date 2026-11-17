@@ -25,9 +25,13 @@ public final class DeepSeekBillingProvider: BillingProvider {
     public let minimumRefreshInterval: TimeInterval = 300
     public let credentialHint = "DeepSeek API Key（platform.deepseek.com 创建）"
     public var credentialPageURL: URL? { URL(string: "https://platform.deepseek.com/api_keys") }
-    // 环境变量回退键用协议默认口径 BILLING_DEEPSEEK_API_KEY：
-    // 注册表里存的是 BillingProviderInstance，它统一按「实例 id」推导键，
-    // 这里若声明厂商自带变量名（DEEPSEEK_API_KEY）实际不会被读到。
+    /// 环境变量回退键：厂商原生变量名（`export DEEPSEEK_API_KEY=…` 直接可用）
+    ///
+    /// 装饰器（BillingProviderInstance）如今的解析规则是
+    /// 「实例显式配置 → provider 声明的原生名 → BILLING_<ID>_API_KEY」，
+    /// 所以这里声明原生名会真正生效；通用键 `BILLING_DEEPSEEK_API_KEY`
+    /// 仍排在候选表里，老脚本写法继续兼容。
+    public var environmentCredentialKey: String { "DEEPSEEK_API_KEY" }
 
     /// 站点地址（测试注入本地回环地址）
     public static let defaultBaseURL = URL(string: "https://api.deepseek.com")!

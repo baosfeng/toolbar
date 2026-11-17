@@ -67,7 +67,30 @@ enum SettingsSnapshot {
         captureScrolledClipboard(directory: directory, settings: settings)
         captureScrolledNotifications(directory: directory, settings: settings)
         captureNotificationCards(directory: directory, settings: settings)
+        captureTokenMaintenanceStates(directory: directory, settings: settings)
         captureFirstOpen(directory: directory, settings: settings)
+    }
+
+    /// Token 页「清理历史数据」的范围选择与二次确认（本轮新增交互的状态证据）
+    ///
+    /// 为什么用状态文本而不是只出图：这两个都是 NSAlert，离屏渲染通道拍不到模态窗口。
+    /// 因此按生产同一套规则（`HarnessPurgeRange` + `SettingsTokenPurgePrompt` 的文案函数）
+    /// 把「四个选项 / 各自条数 / 确认框正文」打成文本，读的人能和真机截图逐行对照。
+    static func captureTokenMaintenanceStates(directory: URL, settings: SettingsWindow?) {
+        guard let settings else { return }
+        // prepareForSnapshot 返回的是根视图，当前页实例要单独取
+        guard let view = settings.prepareForSnapshot(.token),
+              let pane = settings.currentPaneForSnapshot as? SettingsTokenPane else { return }
+        let lines = pane.debugPurgePromptStates()
+        try? lines.joined(separator: "\n").write(
+            to: directory.appendingPathComponent("settings-token-purge-states.txt"),
+            atomically: true, encoding: .utf8)
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let suffix = appearance == .aqua ? "light" : "dark"
+            let url = directory.appendingPathComponent("settings-token-maintenance-\(suffix).png")
+            MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
+                                     appearanceName: appearance, to: url)
+        }
     }
 
     /// 截图页滚动到底部（识别卡 / 保存卡在首屏之外，单独出一组作为可见性证据）

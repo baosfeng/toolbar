@@ -36,7 +36,9 @@ public final class MoonshotBillingProvider: BillingProvider {
         currencyCode == "USD" ? "https://platform.moonshot.ai/console/api-keys"
                               : "https://platform.moonshot.cn/console/api-keys"
     }
-    // 环境变量回退键走协议默认口径 BILLING_MOONSHOT_API_KEY（实例装饰器统一推导）
+    /// 环境变量回退键：厂商原生变量名（`export MOONSHOT_API_KEY=…`）；
+    /// 通用键 `BILLING_MOONSHOT_API_KEY` 仍在候选表里作兼容回退。
+    public var environmentCredentialKey: String { "MOONSHOT_API_KEY" }
 
     /// 国内站（默认；国际站用 api.moonshot.ai）
     public static let defaultBaseURL = URL(string: "https://api.moonshot.cn")!

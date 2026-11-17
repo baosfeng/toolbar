@@ -152,12 +152,10 @@ public final class AppCoordinator {
             billingRegistry.register(BillingProviderInstance(base: kind.make(), instance: instance),
                                      instance: instance)
         }
-        // 环境变量回退键按实例解析（默认实例沿用旧键，命名实例追加后缀）
+        // 环境变量回退键按实例解析（解析链唯一实现在 BillingProviderInstance.environmentCredentialKey）
         let billingCredentials = PreferencesBillingCredentialStore(
-            environmentKeyResolver: { providerID in
-                billingRegistry.provider(id: providerID)?.environmentCredentialKey
-                    ?? PreferencesBillingCredentialStore.defaultEnvironmentKey(for: providerID)
-            })
+            environmentKeyResolver: { billingRegistry.provider(id: $0)?.environmentCredentialKey
+                ?? BillingInstanceID.environmentKey(forInstanceID: $0) })
         // 旧明文迁移：按注册表全量走一遍，不等用户点开某个 provider（详见该方法的说明）
         billingCredentials.migrateLegacyPlaintext(for: billingRegistry.all.map(\.id))
         // 额度提醒（阈值 / 窗口重置 / 余额回升）：应用启动时请求通知权限。

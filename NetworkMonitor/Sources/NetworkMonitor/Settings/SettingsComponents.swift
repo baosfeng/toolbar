@@ -153,6 +153,11 @@ final class SettingsRowView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
+    #if DEBUG
+    /// 取证专用：读回当前副标题（离屏快照看不出文本内容，维护行的回执只能靠文本核对）
+    var debugSubtitleText: String { subtitleLabel.stringValue }
+    #endif
+
     /// 覆盖标题与副标题（状态变化时复用同一行）
     func update(title: String? = nil, subtitle: String?) {
         if let title { titleLabel.stringValue = title }

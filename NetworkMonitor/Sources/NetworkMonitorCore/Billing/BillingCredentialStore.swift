@@ -129,16 +129,17 @@ public final class PreferencesBillingCredentialStore: BillingCredentialStore {
         "BILLING_\(providerID.uppercased())_API_KEY"
     }
 
-    /// 依次尝试的键：自定义 → 默认 → 旧键（去重）
+    /// 依次尝试的键：自定义（含厂商原生名）→ 默认 → 旧连字符键（去重且保持优先级）
+    ///
+    /// 去重不能只看首项：provider 自定义键可能与默认键 / 旧键相同，
+    /// 也可能出现「自定义 == 旧键」的组合，因此按「首次出现顺序」整体去重。
+    /// 顺序敏感：环境变量存在多份时，排在前面的那个才是生效值。
     static func environmentKeys(for providerID: String,
                                 resolving resolver: (String) -> String) -> [String] {
-        var keys = [resolver(providerID), defaultEnvironmentKey(for: providerID),
-                    legacyEnvironmentKey(for: providerID)]
-        if let first = keys.first {
-            keys = keys.filter { $0 != first }
-            keys.insert(first, at: 0)
-        }
-        return keys
+        let ordered = [resolver(providerID), defaultEnvironmentKey(for: providerID),
+                       legacyEnvironmentKey(for: providerID)]
+        var seen = Set<String>()
+        return ordered.filter { key in !key.isEmpty && seen.insert(key).inserted }
     }
 
     /// 生效凭据与其来源 —— 同一 provider 只有一条：存储优先，环境变量仅作回退

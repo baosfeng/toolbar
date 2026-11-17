@@ -108,6 +108,92 @@ binary_path_for() {
 ' "$scratch" "$arch" "$config" "$APP_NAME"
 }
 
+# 2.0 随包携带 zstd 解压件（内置解码用的 libzstd + 可选的可执行文件兜底）
+#
+# 为什么需要：
+# - macOS 没有系统 libzstd，Compression framework 也不支持 zstd（本轮实测 SDK 12.1/26/27 均无）；
+# - LaunchServices 启动的 .app 继承的 PATH 不含 /opt/homebrew/bin，
+#   第三方机器即使装了 Homebrew 版 zstd 也照样探测不到。
+# 做法：把 zstd 依赖的 dylib 改写成 @loader_path 引用后一起放进 Contents/Resources，
+# 于是内置解码（dlopen libzstd）与备选可执行文件都不再依赖系统环境。
+# 找不到任何 zstd 时不失败（fail-open）：运行时降级并给出明确诊断，不让打包因此中断。
+bundle_zstd_assets() {
+    local app_dir="$1"
+    local resources="$app_dir/Contents/Resources"
+    local zstd_bin
+    zstd_bin=$(command -v zstd || true)
+    if [ -z "$zstd_bin" ] && [ -x /opt/homebrew/bin/zstd ]; then zstd_bin=/opt/homebrew/bin/zstd; fi
+    if [ -z "$zstd_bin" ] && [ -x /usr/local/bin/zstd ]; then zstd_bin=/usr/local/bin/zstd; fi
+    if [ -z "$zstd_bin" ]; then
+        echo "      ⚠️  未找到本机 zstd，跳过随包携带（第三方机器可能读不到 Token 数据）"
+        return 0
+    fi
+    zstd_bin=$(readlink -f "$zstd_bin" 2>/dev/null || printf '%s' "$zstd_bin")
+
+    # 1) libzstd.dylib（内置解码用）：优先取 zstd 同源安装前缀
+    local libzstd=""
+    local prefix_dir
+    prefix_dir=$(dirname "$(dirname "$zstd_bin")")
+    for candidate in "$prefix_dir/lib/libzstd.1.dylib" /opt/homebrew/lib/libzstd.1.dylib \
+                     /usr/local/lib/libzstd.1.dylib /opt/local/lib/libzstd.1.dylib; do
+        if [ -f "$candidate" ]; then libzstd="$candidate"; break; fi
+    done
+    if [ -z "$libzstd" ]; then
+        echo "      ⚠️  未找到 libzstd.dylib，内置解码不可用（将依赖 zstd 可执行文件）"
+        return 0
+    fi
+    libzstd=$(readlink -f "$libzstd" 2>/dev/null || printf '%s' "$libzstd")
+    cp "$libzstd" "$resources/libzstd.1.dylib"
+    chmod u+w "$resources/libzstd.1.dylib"
+    install_name_tool -id "@loader_path/libzstd.1.dylib" "$resources/libzstd.1.dylib" 2>/dev/null || true
+
+    # 2) zstd 可执行文件作为备选路径：连同它依赖的 dylib 一起搬进来，
+    #    并把非系统依赖改写成 @loader_path（否则目标机器没装 Homebrew 就起不来）
+    cp "$zstd_bin" "$resources/zstd"
+    chmod u+w "$resources/zstd"
+    local dep dest
+    for dep in $(otool -L "$resources/zstd" | awk 'NR>1 {print $1}'); do
+        # 系统库保持原样：目标机器一定有；其余（@rpath / @loader_path / Homebrew 绝对路径）
+        # 一律拷进包里并改写成 @loader_path —— 第三方机器没有 Homebrew 时路径引用必挂
+        case "$dep" in
+            /usr/lib/*|/System/*) continue ;;
+        esac
+        dest="$resources/$(basename "$dep")"
+        if [ -f "$dep" ]; then
+            cp "$dep" "$dest"
+        else
+            for candidate in "$prefix_dir/lib/$(basename "$dep")" \
+                             /opt/homebrew/lib/$(basename "$dep") \
+                             /usr/local/lib/$(basename "$dep") \
+                             /opt/homebrew/opt/*/lib/$(basename "$dep"); do
+                if [ -f "$candidate" ]; then cp "$candidate" "$dest"; break; fi
+            done
+        fi
+        if [ -f "$dest" ]; then
+            chmod u+w "$dest" 2>/dev/null || true
+            install_name_tool -id "@loader_path/$(basename "$dep")" "$dest" 2>/dev/null || true
+            install_name_tool -change "$dep" "@loader_path/$(basename "$dep")" "$resources/zstd" 2>/dev/null || true
+        fi
+    done
+    # 校验「随包携带的那份在没有任何 Homebrew 依赖时也能跑」：还有非系统绝对路径依赖就丢弃它
+    # （内置解码不受影响，libzstd 只依赖 libSystem）
+    if otool -L "$resources/zstd" | awk 'NR>1 {print $1}' | grep -qE '^/opt/|^/usr/local/'; then
+        echo "      ⚠️  随包携带的 zstd 仍依赖 Homebrew 绝对路径，已移除（内置解码不受影响）"
+        rm -f "$resources/zstd"
+        for extra in "$resources"/liblzma.*.dylib "$resources"/liblz4.*.dylib; do
+            [ -f "$extra" ] && rm -f "$extra"
+        done
+    elif "$resources/zstd" --version >/dev/null 2>&1; then
+        echo "      ✅ 已随包携带 zstd（内置解码：libzstd.1.dylib；备选：zstd）"
+    else
+        echo "      ⚠️  随包携带的 zstd 无法运行，已移除（内置解码不受影响）"
+        rm -f "$resources/zstd"
+        for extra in "$resources"/liblzma.*.dylib "$resources"/liblz4.*.dylib; do
+            [ -f "$extra" ] && rm -f "$extra"
+        done
+    fi
+}
+
 # 2. 创建 .app 包结构并写入内容（只动 dist 下的目标包，不碰编译缓存）
 package_app() {
     local app_dir="$1"
@@ -125,6 +211,15 @@ package_app() {
     if [ -f "Scripts/AppIcon.icns" ]; then
         cp "Scripts/AppIcon.icns" "$app_dir/Contents/Resources/"
     fi
+
+    # 2.3b 随包携带 zstd 解压件（第三方机器「看不到 Token 数据」的主因之一）
+    #
+    # 系统没有 libzstd（/usr/lib 下不存在、dyld 共享缓存里也 dlopen 不到），
+    # Compression framework 也没有 zstd 算法，libarchive 的 zstd 过滤器只是外部程序转发。
+    # 因此把 libzstd.dylib 一并放进 Contents/Resources：Core 用 dlopen 加载它做内置解码，
+    # 这样用户机器上没装 zstd 也能读到会话数据。找不到 libzstd 时不阻断打包 ——
+    # 运行时自动降级到 zstd 可执行文件，只是第三方机器可能又回到「缺工具」。
+    bundle_zstd_assets "$app_dir"
 
     # 2.4 写入 Info.plist
     # heredoc 刻意不加引号：显示名由 APP_DISPLAY_NAME 展开注入（模板本身不含 $ 与反引号，展开不会误伤）。
