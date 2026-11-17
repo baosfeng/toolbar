@@ -29,12 +29,18 @@ extension ClipboardCardView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     /// 单击选中、双击粘贴（与改造前一致：双击同时也会先走一次选中）
+    ///
+    /// 修饰键口径交给卡片流：⌘ 切换该条、⇧ 从焦点范围选，其余按替换处理。
     override func mouseDown(with event: NSEvent) {
         let region = hitRegion(at: convert(event.locationInWindow, from: nil))
         let action = ClipboardCardHitTest.action(for: region,
                                                  clickCount: event.clickCount,
                                                  isContextMenu: false)
-        if action == .select || action == .paste { onClick?(self) }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let click: ClipboardSelectionModel.Click = flags.contains(.shift)
+            ? .extend
+            : (flags.contains(.command) ? .toggle : .replace)
+        if action == .select || action == .paste { onClickWithModifiers?(self, click) }
         if event.clickCount >= 2 { onDoubleClick?(self) }
     }
 

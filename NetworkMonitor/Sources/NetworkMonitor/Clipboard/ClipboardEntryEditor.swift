@@ -23,6 +23,7 @@ extension ClipboardPanelController {
     /// ⌘E / 右键「编辑」：把选中条目的正文放进详情区编辑器
     func beginEditingSelected() {
         guard !content.isEditingBody else { return }
+        collapseMultiSelectionForEditing()   // 编辑只作用于一条：先把多选收回到焦点
         guard let item = selectedItem else {
             content.showHint("先选中一条再编辑")
             return
@@ -40,6 +41,7 @@ extension ClipboardPanelController {
     /// ⌘N：新建一条空文本并直接进入编辑态（保存后才落库，落库前列表里不出现空行）
     func beginDraftingNewItem() {
         guard !content.isEditingBody else { return }
+        collapseMultiSelectionForEditing()   // 新建同样只涉及一条，多选先收回
         editingOrigin = .draft
         content.beginEditingDetail(text: "", hint: ClipboardEditSession.draftingHint)
     }

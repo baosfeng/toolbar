@@ -10,9 +10,9 @@ import NetworkMonitorUI
 /// 拆出原因：主文件贴着单文件 15 KiB 上限，按键映射自成体系；方法由 private 放宽为 internal。
 extension ClipboardPanelController {
 
-    /// 面板级按键拦截（先于 responder chain）：搜索框非空时 ⌫ 交还字段编辑器
+    /// 面板级按键拦截（先于 responder chain）；搜索框非空时 ⌫ 交还字段编辑器
     func handleKeyDown(_ event: NSEvent) -> Bool {
-        // 帮助浮层 / 预览浮层打开时 Esc 优先收起浮层（不连带着把面板一起关掉）
+        // 浮层打开时 Esc 先收浮层（不连带关面板）
         if Int(event.keyCode) == kVK_Escape, dismissTopOverlay() { return true }
         // 编辑态：键盘属于编辑器，这里只留 Esc（取消）与 ⌘↩（保存），其余放行
         if content.isEditingBody { return handleEditingKeyDown(event) }
@@ -21,10 +21,13 @@ extension ClipboardPanelController {
         let isOption = flags.contains(.option), hasQuery = !content.query.isEmpty
         switch Int(event.keyCode) {
         case kVK_Escape:
-            hide(animated: true)
+            if !collapseMultiSelectionIfNeeded() { hide(animated: true) }   // 多选时 Esc 只收回多选
         case kVK_Delete, kVK_ForwardDelete:
             if hasQuery { return false }
-            if isCommand, isShift { requestClearAll() } else if !isCommand { requestDeleteSelected() } else { return false }
+            // ⌘⇧⌫ 清空历史；⌘⌫ 有多选删全部、无多选删单条
+            if isCommand, isShift { requestClearAll() } else if isCommand {
+                if !requestDeleteMultiSelectionIfNeeded() { requestDeleteSelected() }
+            } else { requestDeleteSelected() }
         case kVK_Tab:
             cycleFilter(reverse: isShift)   // ⇧Tab 反向循环过滤
         case kVK_ANSI_Comma:
@@ -42,6 +45,7 @@ extension ClipboardPanelController {
         default:
             guard isCommand, let characters = event.charactersIgnoringModifiers?.lowercased() else { return false }
             switch characters {
+            case "a": selectAllVisible()   // ⌘A 全选当前过滤后的可见条目
             case "f": content.focusSearchField()
             case "e": beginEditingSelected()
             case "n": beginDraftingNewItem()
@@ -55,16 +59,14 @@ extension ClipboardPanelController {
         return true
     }
 
-    /// 方向键移动：单行卡片流上连续前后移动；无选中时向前落第一条、向后落最后一条
+    /// 方向键移动：无选中时向前落第一条、向后落最后一条；移动即把多选收回单条
     func moveSelection(_ delta: Int) {
         guard !filteredItems.isEmpty else { return }
         let base = selectedIndex < 0 ? (delta > 0 ? -1 : 0) : selectedIndex
         var next = base + delta
         if next < 0 { next = filteredItems.count - 1 }
         if next >= filteredItems.count { next = 0 }
-        selectedIndex = next
-        content.updateSelection(next, item: selectedItem)
-        clearDeleteConfirmHint()
+        selectSingle(at: next)   // 方向键把多选收回单条：焦点移动即唯一落点
     }
 
     /// 类型芯片循环：Tab 正向 / ⇧Tab 反向（口径见 ClipboardFilterCycle，来源 / 日期芯片不动）
@@ -80,8 +82,7 @@ extension ClipboardPanelController {
         }
         let index = number - 1
         guard index >= 0, index < filteredItems.count else { return }
-        selectedIndex = index
-        content.updateSelection(index, item: selectedItem)
+        selectSingle(at: index)
         pasteSelected(asPlainText: false)
     }
 }

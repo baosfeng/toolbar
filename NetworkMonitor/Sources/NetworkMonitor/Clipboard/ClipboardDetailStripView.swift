@@ -67,6 +67,19 @@ final class ClipboardDetailStripView: NSView {
         needsDisplay = true
     }
 
+    /// 多选摘要：正文与元信息都换成批量操作提示（编辑态期间同样不覆盖，退出后由调用方重刷）
+    func update(summary content: ClipboardDetailStrip.Content) {
+        guard !isEditing else { return }
+        bodyField.stringValue = content.body
+        bodyField.textColor = .labelColor
+        metaField.stringValue = content.meta
+        metaField.isHidden = content.meta.isEmpty
+        setAccessibilityLabel("\(content.body)。\(content.meta)")
+        needsScrollReset = true
+        needsLayout = true
+        needsDisplay = true
+    }
+
     // MARK: 编辑态
 
     /// 进入编辑态：正文位置换成多行编辑器，焦点交出去

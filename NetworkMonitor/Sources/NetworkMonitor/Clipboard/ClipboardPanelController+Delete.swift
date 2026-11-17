@@ -55,9 +55,17 @@ extension ClipboardPanelController {
 
     /// 选中条目变化 / 面板收起时清掉确认提示，避免提示指向另一条
     func clearDeleteConfirmHint() {
-        guard singleDeleteConfirm.hasPending || clearAllConfirm.hasPending else { return }
+        guard singleDeleteConfirm.hasPending || clearAllConfirm.hasPending
+                || multiDeleteConfirm.hasPending else { return }
         discardDeleteConfirm()
+        multiDeleteConfirm.reset()
         content.showHint(ClipboardPanelView.keyHint)
+    }
+
+    /// 丢弃未完成的删除确认（含批量删除那一份）
+    func discardAllDeleteConfirm() {
+        discardDeleteConfirm()
+        multiDeleteConfirm.reset()
     }
 
     /// 单条删除确认：首次返回 true（需确认并已给出提示），窗口内二次请求返回 false（可执行）
@@ -75,10 +83,8 @@ extension ClipboardPanelController {
     /// 卡片右键菜单各项复用本控制器既有动作；「贴到屏幕」走卡片 onPin，不经此通道。
     func panelView(_ view: ClipboardPanelView, didRequestMenuCommand command: ClipboardCardMenuCommand, itemID: UUID) {
         guard let index = filteredItems.firstIndex(where: { $0.id == itemID }) else { return }
-        if index != selectedIndex {
-            selectedIndex = index
-            content.updateSelection(index, item: selectedItem)
-        }
+        // 右键某条即把它落成焦点单条：菜单动作永远只作用于一条
+        if selection.focusedID != itemID || selection.isMultiSelecting { selectSingle(at: index) }
         switch command {
         case .copy:
             copySelected()

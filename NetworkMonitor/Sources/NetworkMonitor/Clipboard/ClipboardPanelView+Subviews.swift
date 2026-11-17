@@ -186,9 +186,9 @@ extension ClipboardPanelView {
 
     /// 卡片流：点击 / 双击动作全部转交控制器，视图不持有业务依赖
     func buildCardFlow() {
-        cardFlow.onSelect = { [weak self] index in
+        cardFlow.onSelect = { [weak self] index, click in
             guard let self else { return }
-            self.delegate?.panelView(self, didSelect: index)
+            self.delegate?.panelView(self, didSelect: index, click: click)
         }
         cardFlow.onActivate = { [weak self] index in
             guard let self else { return }

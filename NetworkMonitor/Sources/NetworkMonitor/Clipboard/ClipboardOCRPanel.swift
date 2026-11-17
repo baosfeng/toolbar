@@ -55,6 +55,6 @@ extension ClipboardPanelController {
         if let index = items.firstIndex(where: { $0.id == itemID }) { items[index] = fresh }
         if let index = filteredItems.firstIndex(where: { $0.id == itemID }) { filteredItems[index] = fresh }
         guard selectedItem?.id == itemID else { return }
-        content.updateSelection(selectedIndex, item: selectedItem)
+        content.updateSelection(selectedIndex, item: selectedItem, selectedIDs: selection.ids)
     }
 }

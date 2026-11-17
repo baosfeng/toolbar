@@ -10,15 +10,8 @@ import NetworkMonitorUI
 /// 收藏星与 Paste Stack 角标全部在一次 `draw` 里画完，卡内没有任何子视图
 /// （改造前每张卡 8 个子视图 + NSImageView 内部视图 = 9 个，32 张卡片视图池合计 288 个）。
 ///
-/// 职责拆分：
-/// - 本文件：状态、配置、选中 / 收藏 / 栈角标的过渡驱动、无障碍、图层阴影；
-/// - `ClipboardCardView+Drawing.swift`：整卡绘制（层序与颜色口径与改造前逐项一致）；
-/// - `ClipboardCardView+Content.swift`：正文 / 图片占位 / 缩略图 / meta 行的绘制与实测宽；
-/// - `ClipboardCardView+Interaction.swift`：鼠标命中与 hover 提亮；
-/// - `ClipboardCardView+Menu.swift`：右键五项菜单；`+Resources.swift`：符号 / 缩略图 / 文案。
-///
-/// 几何口径统一在 `ClipboardCardGeometry`（纯逻辑、TestRunner 覆盖），
-/// 动效时长与曲线统一取自 `MotionKit`（系统「减弱动态效果」或渲染档关闭动效时直接落终态）。
+/// 职责拆分见同名 `+Drawing` / `+Content` / `+Interaction` / `+Menu` / `+Resources` 扩展；
+/// 几何口径统一在 `ClipboardCardGeometry`，动效口径统一取自 `MotionKit`。
 @MainActor
 final class ClipboardCardView: NSView {
 
@@ -76,11 +69,7 @@ final class ClipboardCardView: NSView {
 
     // MARK: 缓存
 
-    /// 缩略图缓存（卡片只持有缩略图，原图从不进缓存）
-    ///
-    /// cost 口径：解码后像素字节数（宽 × 高 × 4），预算见 ClipboardImagePolicy.thumbnailCacheCostLimit（64MB）；
-    /// 同时限制条数，避免大量小图把条数堆到无界。
-    /// internal：由 `ClipboardCardView+Resources.swift` 跨文件访问（Swift 扩展不能声明存储属性）。
+    /// 缩略图缓存（卡片只持有缩略图，原图从不进缓存；cost = 解码后像素字节，条数另有上限）
     static let thumbnailCache: NSCache<NSString, NSImage> = {
         let cache = NSCache<NSString, NSImage>()
         cache.totalCostLimit = ClipboardImagePolicy.thumbnailCacheCostLimit
@@ -92,8 +81,8 @@ final class ClipboardCardView: NSView {
 
     // MARK: 回调
 
-    /// 点击（选中）回调
-    var onClick: ((ClipboardCardView) -> Void)?
+    /// 点击（选中）回调 —— 带修饰键语义，⌘ / ⇧ 由卡片流换算成多选变换
+    var onClickWithModifiers: ((ClipboardCardView, ClipboardSelectionModel.Click) -> Void)?
     /// 双击（粘贴）回调
     var onDoubleClick: ((ClipboardCardView) -> Void)?
     /// 右键「贴到屏幕」回调
@@ -105,6 +94,8 @@ final class ClipboardCardView: NSView {
     private(set) var isSelected = false
     /// 卡片在匹配列表中的序号（1…9 显示 ⌘N，超出不显示）
     private(set) var shortcutNumber: Int?
+    /// 当前是否允许显示 ⌘N 角标（多选态一律不显示；卡片流据此判断要不要重设内容）
+    private(set) var showsShortcut = true
     /// 是否正在播放删除动效（卡片流据此跳过复用，避免动效中途换内容）
     private(set) var isRemoving = false
     /// 悬停目标推进（卡片是单元素：目标只有「0 = 卡内」与「nil = 卡外」，归零与变化判定在状态机里）
@@ -148,13 +139,15 @@ final class ClipboardCardView: NSView {
 
     // MARK: 配置
 
-    /// 配置内容与序号（视图池复用：内容变化必须无条件重绘）
-    func configure(with item: ClipboardItem, isSelected: Bool, number: Int) {
-        let contentChanged = self.item != item || self.shortcutNumber != number
+    /// 配置内容与序号（视图池复用：内容变化必须无条件重绘）；多选态传 showsShortcut = false
+    func configure(with item: ClipboardItem, isSelected: Bool, number: Int, showsShortcut: Bool = true) {
+        let resolved = showsShortcut ? number : nil
+        let contentChanged = self.item != item || self.shortcutNumber != resolved
         let selectionChanged = self.isSelected != isSelected
         let wasPinned = self.item?.isPinned ?? false
         self.item = item
-        self.shortcutNumber = number
+        self.shortcutNumber = resolved
+        self.showsShortcut = showsShortcut
         self.isSelected = isSelected
         isRemoving = false
         // 复用的卡片可能刚播完删除动效，先落回常态再上新内容
@@ -314,8 +307,8 @@ final class ClipboardCardView: NSView {
 
     /// 读屏激活 = 鼠标单击（选中该条），双击粘贴仍由键盘 ↵ 承担
     override func accessibilityPerformPress() -> Bool {
-        guard onClick != nil else { return false }
-        onClick?(self)
+        guard onClickWithModifiers != nil else { return false }
+        onClickWithModifiers?(self, .replace)   // 读屏激活等同不带修饰键的单击
         return true
     }
 }

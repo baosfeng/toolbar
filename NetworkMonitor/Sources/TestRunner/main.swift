@@ -103,6 +103,10 @@ runClipboardImagePolicyTests()
 runClipboardImageStoreTests()
 // 卡片流滑动窗口（内存削减口径）
 runClipboardCardWindowTests()
+// 卡片多选变换（单击 / ⌘ / ⇧ / ⌘A / 清空）
+runClipboardSelectionTests()
+// 多选批量删除的存储口径（命中 / 忽略缺失 / 空集合 / 幂等）
+runClipboardBatchDeleteTests()
 
 // MARK: - 剪贴板：图片磁盘回收（删除 / 清空 / 超限清理 / 孤儿清扫）
 runClipboardImageGCTests()

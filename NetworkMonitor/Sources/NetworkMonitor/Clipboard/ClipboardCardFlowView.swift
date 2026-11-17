@@ -26,8 +26,8 @@ final class ClipboardCardFlowView: NSView {
     /// 打开面板后预取的图片条目条数（增量规格 2.2 第 4 条）
     static let prefetchImageCount = 12
 
-    /// 卡片被点选（参数为条目在 items 中的下标）
-    var onSelect: ((Int) -> Void)?
+    /// 卡片被点选（参数为条目在 items 中的下标与点击语义：替换 / ⌘ 切换 / ⇧ 范围选）
+    var onSelect: ((Int, ClipboardSelectionModel.Click) -> Void)?
     /// 卡片右键「贴到屏幕」回调（索引为全量列表下标）
     var onPin: ((Int) -> Void)?
     /// 卡片被双击（参数同上）
@@ -52,11 +52,13 @@ final class ClipboardCardFlowView: NSView {
     var items: [ClipboardItem] = []
     /// 窗口起点（items 中的全局下标）
     private(set) var windowStart = 0
-    /// 当前选中下标（internal：动效扩展读当前选中）
-    private(set) var selectedIndex = -1
+    /// 当前选中下标（internal：多选渲染与动效扩展都要读写焦点）
+    var selectedIndex = -1
+    /// 当前选中条目集合（多选态可能有多个；空集合 = 没有任何卡片选中）
+    var selectedIDs: Set<UUID> = []
 
     /// 删除动效排队中的下一次渲染（动效结束后才真正重排）
-    private var pendingRender: (items: [ClipboardItem], selectedIndex: Int)?
+    private var pendingRender: (items: [ClipboardItem], selectedIndex: Int, selectedIDs: Set<UUID>)?
     /// 删除动效是否在播（期间到达的新渲染参数只排队，不并发）
     private(set) var isPlayingRemoval = false
 
@@ -78,45 +80,25 @@ final class ClipboardCardFlowView: NSView {
 
     // MARK: 对外接口
 
-    /// 重建卡片流（items 为全部匹配项；视图只覆盖窗口内的那一段）
-    ///
-    /// 只有「单条删除」才先播删除动效（0.15s 缩小 + 淡出）再重排；
-    /// 过滤切换 / 清空历史属于整屏重排，直接落地并播进场错峰淡入。
-    func render(items: [ClipboardItem], selectedIndex: Int) {
-        let removed = isPlayingRemoval ? [] : vanishedCards(newItems: items)
-        let vanished = (removed.count == 1 && items.count == self.items.count - 1) ? removed : []
-        guard vanished.isEmpty else {
-            pendingRender = (items, selectedIndex)
-            isPlayingRemoval = true
-            playRemoval(on: vanished) { [weak self] in
-                guard let self else { return }
-                self.isPlayingRemoval = false
-                guard let pending = self.pendingRender else { return }
-                self.pendingRender = nil
-                self.apply(items: pending.items, selectedIndex: pending.selectedIndex)
-            }
-            return
-        }
-        apply(items: items, selectedIndex: selectedIndex)
+    /// 暂存一次渲染：删除动效期间到达的渲染只排队，结束回调里一次性落地
+    func stageRender(items: [ClipboardItem], selectedIndex: Int, selectedIDs: Set<UUID>) {
+        pendingRender = (items, selectedIndex, selectedIDs)
+        isPlayingRemoval = true
     }
 
-    /// 仅切换选中态（方向键移动时复用卡片，不重建；必要时滑动窗口）
-    func updateSelection(_ index: Int) {
-        guard index >= 0, index < items.count else { return }
-        let previous = selectedIndex
-        selectedIndex = index
-        slideWindow(force: false)
-        syncCards()
-        layoutCards()
-        scrollToSelection()
-        if previous != selectedIndex { onSelectionChanged?() }
-        refreshShadows()
+    /// 动效结束后落地暂存的渲染（没有暂存就什么都不做）
+    func finishStagedRender() {
+        isPlayingRemoval = false
+        guard let pending = pendingRender else { return }
+        pendingRender = nil
+        apply(items: pending.items, selectedIndex: pending.selectedIndex, selectedIDs: pending.selectedIDs)
     }
 
-    /// 真正落地一次渲染（含错峰进场）
-    private func apply(items: [ClipboardItem], selectedIndex: Int) {
+    /// 真正落地一次渲染（含错峰进场；多选渲染入口见 ClipboardCardSelectionFlow.swift）
+    func apply(items: [ClipboardItem], selectedIndex: Int, selectedIDs: Set<UUID>) {
         self.items = items
         self.selectedIndex = selectedIndex
+        self.selectedIDs = selectedIDs
         self.windowStart = 0
         slideWindow(force: true)
         syncCards()
@@ -138,7 +120,7 @@ final class ClipboardCardFlowView: NSView {
     }
 
     /// 单行横向摆放：卡片 frame 由全局下标决定，容器宽度覆盖全部条目；卡片在可视高度内垂直居中
-    private func layoutCards() {
+    func layoutCards() {
         let contentSize = scrollView.contentSize
         let cardSize = ClipboardCardView.cardSize
         let count = visibleCount()
@@ -171,7 +153,7 @@ final class ClipboardCardFlowView: NSView {
     /// 窗口滑动：选中项接近窗口边缘时把窗口重新居中到选中项，保证任意下标都能走到
     ///
     /// 算术在 `ClipboardCardWindowPolicy`（纯函数，TestRunner 覆盖 0…N 全下标可达性）。
-    private func slideWindow(force: Bool) {
+    func slideWindow(force: Bool) {
         windowStart = ClipboardCardWindowPolicy.windowStart(itemCount: items.count,
                                                            selectedIndex: selectedIndex,
                                                            currentStart: windowStart,
@@ -186,7 +168,7 @@ final class ClipboardCardFlowView: NSView {
     // MARK: 视图池
 
     /// 同步视图池：不足补建、多余隐藏，已存在的仅重设内容与选中态（禁止全删全建）
-    private func syncCards() {
+    func syncCards() {
         let count = visibleCount()
         while cardViews.count < count { cardViews.append(makeCardView()) }
         for (slot, card) in cardViews.enumerated() {
@@ -194,17 +176,21 @@ final class ClipboardCardFlowView: NSView {
             let index = windowStart + slot
             card.isHidden = false
             let item = items[index]
-            let targetSelected = index == selectedIndex
+            // 多选态按集合判定：选中项可以有多张卡，但不能没有焦点（焦点由窗口保证可见）
+            let targetSelected = selectedIDs.contains(item.id)
             // 内容、收藏态、栈位置都没变、只有选中态变了：走轻量路径，只做描边与底色的交叉过渡，
             // 不重设正文与缩略图（方向键连按时这条路径承担绝大部分切换）
             let sameContent = card.item?.id == item.id
                 && card.item?.isPinned == item.isPinned
                 && card.item?.stackPosition == item.stackPosition
+                && card.showsShortcut == (selectedIDs.count <= 1)   // 进出多选要重设角标
             if sameContent {
                 if card.isSelected != targetSelected { card.setSelected(targetSelected) }
                 continue
             }
-            card.configure(with: item, isSelected: targetSelected, number: index + 1)
+            // ⌘1–9 角标只在单选态出现：多选时直选语义不适用，角标会误导
+            card.configure(with: item, isSelected: targetSelected, number: index + 1,
+                           showsShortcut: selectedIDs.count <= 1)
         }
         refreshShadows()
     }
@@ -216,9 +202,9 @@ final class ClipboardCardFlowView: NSView {
             guard let self, let index = self.cardViews.firstIndex(where: { $0 === card }) else { return }
             self.onPin?(self.windowStart + index)
         }
-        card.onClick = { [weak self] card in
+        card.onClickWithModifiers = { [weak self] card, click in
             guard let self, let index = self.cardViews.firstIndex(of: card) else { return }
-            self.onSelect?(self.windowStart + index)
+            self.onSelect?(self.windowStart + index, click)
         }
         card.onDoubleClick = { [weak self] card in
             guard let self, let index = self.cardViews.firstIndex(of: card) else { return }
@@ -230,7 +216,7 @@ final class ClipboardCardFlowView: NSView {
     }
 
     /// 把选中卡片滚进可视区（选中项必在窗口内，故按槽位直接取）
-    private func scrollToSelection() {
+    func scrollToSelection() {
         let slot = selectedIndex - windowStart
         guard slot >= 0, slot < visibleCount() else { return }
         let card = cardViews[slot]

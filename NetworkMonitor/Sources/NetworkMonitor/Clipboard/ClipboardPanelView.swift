@@ -13,8 +13,8 @@ protocol ClipboardPanelViewDelegate: AnyObject {
     func panelView(_ view: ClipboardPanelView, didChangeQuery query: String)
     /// 筛选芯片变化（增删一枚芯片或清空；纯逻辑口径见 ClipboardFilterToken）
     func panelView(_ view: ClipboardPanelView, didChangeFilterTokens tokens: [ClipboardFilterToken])
-    /// 卡片被点选
-    func panelView(_ view: ClipboardPanelView, didSelect index: Int)
+    /// 卡片被点选（click 带修饰键语义：无修饰 = 替换、⌘ = 切换、⇧ = 范围选）
+    func panelView(_ view: ClipboardPanelView, didSelect index: Int, click: ClipboardSelectionModel.Click)
     /// 卡片被双击（直接粘贴）
     func panelView(_ view: ClipboardPanelView, didActivate index: Int)
     /// 卡片右键「贴到屏幕」
@@ -146,18 +146,29 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     /// 重建卡片流：交给卡片流视图做「视图池复用 + 滑动窗口」，此处不建任何卡片
     ///
     /// 详情区在同一次渲染里跟着换内容：过滤 / 搜索 / 删除都会改变「当前选中的是谁」。
-    func render(items: [ClipboardItem], selectedIndex: Int) {
+    func render(items: [ClipboardItem], selectedIndex: Int, selectedIDs: Set<UUID>? = nil) {
         self.selectedIndex = selectedIndex
-        cardFlow.render(items: items, selectedIndex: selectedIndex)
-        let selected = selectedIndex >= 0 && selectedIndex < items.count ? items[selectedIndex] : nil
-        detailStrip.update(item: selected)
+        let ids = selectedIDs ?? ClipboardCardFlowView.singleSelection(items: items, index: selectedIndex)
+        cardFlow.render(items: items, selectedIndex: selectedIndex, selectedIDs: ids)
+        // 多选态详情区没有唯一落点：换成「已选 N 条」摘要，单条详情只在单选时显示
+        guard ids.count <= 1 else {
+            detailStrip.update(summary: ClipboardMultiSelectionDetail.content(count: ids.count))
+            return
+        }
+        detailStrip.update(item: selectedIndex >= 0 && selectedIndex < items.count ? items[selectedIndex] : nil)
     }
 
     /// 仅切换选中态（方向键移动时不重建卡片视图）
-    func updateSelection(_ index: Int, item: ClipboardItem?) {
+    func updateSelection(_ index: Int, item: ClipboardItem?, selectedIDs: Set<UUID>? = nil) {
         selectedIndex = index
-        cardFlow.updateSelection(index)
+        cardFlow.updateSelection(index, selectedIDs: selectedIDs
+                                 ?? ClipboardCardFlowView.singleSelection(items: cardFlow.items, index: index))
         detailStrip.update(item: item)
+    }
+
+    /// 多选态：详情区改成「已选 N 条」摘要（单条详情在多选下没有唯一落点）
+    func updateMultiSelection(count: Int) {
+        detailStrip.update(summary: ClipboardMultiSelectionDetail.content(count: count))
     }
 
     /// 更新栈进度（如「堆叠 2 条」；栈空时收起该标签，不占提示行）

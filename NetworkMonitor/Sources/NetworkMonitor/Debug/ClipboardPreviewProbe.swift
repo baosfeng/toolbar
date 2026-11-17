@@ -61,7 +61,7 @@ enum ClipboardPreviewProbe {
                 finish(panel: panel, directory: directory, lines: lines + ["image_item = 库中没有图片条目"])
                 return
             }
-            panel.panelView(panel.content, didSelect: index)
+            panel.panelView(panel.content, didSelect: index, click: .replace)
             _ = panel.togglePreview()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 let image = panel.selectedItem

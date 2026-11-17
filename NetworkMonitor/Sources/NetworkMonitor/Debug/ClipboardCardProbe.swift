@@ -170,7 +170,7 @@ enum ClipboardCardProbe {
                          + "isElement=\(card.isAccessibilityElement())")
         }
         // 探针夹具没有挂卡片流回调，先补一个与真实卡片流等价的单击回调再验证读屏激活
-        first.onClick = { _ in }
+        first.onClickWithModifiers = { _, _ in }
         let pressed = first.accessibilityPerformPress()
         lines.append("- accessibilityPerformPress 可用：\(pressed)（等同单击选中）")
 

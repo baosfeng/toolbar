@@ -28,12 +28,14 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     var onRequestPin: ((ClipboardItem) -> Void)?    // 贴到屏幕（组合根接到截图链路）
 
     var items: [ClipboardItem] = []    // 放宽 internal：首次引导判定要看历史是否为空
-    var filteredItems: [ClipboardItem] = []    // 贴图扩展文件按索引取条目
-    var selectedIndex = -1
+    var filteredItems: [ClipboardItem] = []    // 拼图扩展文件按索引取条目
+    /// 多选状态（集合 + 焦点）：下标由焦点派生，见 ClipboardSelectionActions
+    var selection = ClipboardSelectionModel()
     private var pendingHint: String?
     private var pendingReload = false
     var singleDeleteConfirm = ClipboardDeleteConfirm()
     var clearAllConfirm = ClipboardDeleteConfirm()
+    var multiDeleteConfirm = ClipboardDeleteConfirm()   // 批量删除独立确认，不与单条串味
     var previewWindow: ClipboardPreviewWindow?   // 预览浮层（自绘，见 ClipboardPreviewLayer）
     nonisolated(unsafe) private var localKeyMonitor: Any?
     nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
@@ -169,6 +171,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         // 帮助浮层与预览浮层都不跨次留存：收起面板时一并关掉
         content.hideShortcutHelp(); closePreview()
         clearDeleteConfirmHint()
+        collapseMultiSelectionIfNeeded()   // 多选不跨次留存：收回到焦点单条，下次打开仍停在上次那条
         // 收起后不再需要缩略图：丢弃在途回调（已入队任务允许跑完，缓存与磁盘文件不删）
         ClipboardThumbnailLoader.shared.cancelAll()
         // animated=false 不套动效：立即 orderOut 让出 key（粘贴路径依赖这一点）
@@ -204,14 +207,8 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         filteredItems = ClipboardPanelSearch.match(query: content.query, tokens: content.filterTokens,
                                                    repository: repository, items: boards.scoped(items),
                                                    limit: max(1, preferences.maxItems))
-        if let preferredID, let index = filteredItems.firstIndex(where: { $0.id == preferredID }) {
-            selectedIndex = index
-        } else if filteredItems.isEmpty {
-            selectedIndex = -1
-        } else {
-            selectedIndex = min(max(selectedIndex, 0), filteredItems.count - 1)
-        }
-        content.render(items: filteredItems, selectedIndex: selectedIndex)
+        restoreSelection(preferredID: preferredID)
+        content.render(items: filteredItems, selectedIndex: selectedIndex, selectedIDs: selection.ids)
         content.updateCounts(total: filteredItems.count, pinned: filteredItems.filter { $0.isPinned }.count)
         refreshGuideState()
     }
@@ -263,16 +260,13 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
 
     func panelView(_ view: ClipboardPanelView, didChangeFilterTokens tokens: [ClipboardFilterToken]) { applyFilter(preferredID: selectedItem?.id) }
 
-    func panelView(_ view: ClipboardPanelView, didSelect index: Int) {
-        guard index >= 0, index < filteredItems.count else { return }
-        if index != selectedIndex { cancelEditingOnSelectionChange() }   // 编辑中换条目 = 放弃编辑
-        selectedIndex = index
-        content.updateSelection(index, item: selectedItem)
-        clearDeleteConfirmHint()
+    func panelView(_ view: ClipboardPanelView, didSelect index: Int, click: ClipboardSelectionModel.Click) {
+        applySelectionClick(at: index, click: click)
     }
 
     func panelView(_ view: ClipboardPanelView, didActivate index: Int) {
-        panelView(view, didSelect: index)
+        // 双击 = 直接粘贴这一条：先把它落成焦点单条，粘贴永远只作用于一条
+        selectSingle(at: index)
         pasteSelected(asPlainText: false)
     }
 
