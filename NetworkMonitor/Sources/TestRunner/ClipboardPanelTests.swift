@@ -9,7 +9,7 @@ import NetworkMonitorCore
 @MainActor
 func runClipboardPanelMockTests() {
     do {
-        final class MockClipboardRepository: @unchecked Sendable, ClipboardRepository {
+        final class MockClipboardRepository: @unchecked Sendable, ClipboardRepository, ClipboardBoardRepository {
             private let lock = NSLock()
             private var storage: [ClipboardItem] = []
 
@@ -94,6 +94,44 @@ func runClipboardPanelMockTests() {
             }
             func pruneClipboardItems(maxItems: Int, retentionDays: Int) -> [ClipboardItem] { [] }
             func clipboardItemCount() -> Int { fetchAllClipboardItems(kind: nil).count }
+
+            // MARK: 板仓储（与 SQLite 实现同口径的最短闭环：建 / 查 / 改名 / 移货 / 删板连带删条目）
+            private var boards: [ClipboardBoard] = []
+
+            func fetchBoards() -> [ClipboardBoard] {
+                lock.lock(); defer { lock.unlock() }
+                return boards.sorted { ($0.sortOrder, $0.createdAt) < ($1.sortOrder, $1.createdAt) }
+            }
+            func createBoard(name: String) -> ClipboardBoard? {
+                lock.lock(); defer { lock.unlock() }
+                let board = ClipboardBoard(name: ClipboardBoard.normalizedName(name),
+                                           colorIndex: boards.count % ClipboardBoard.colorCount,
+                                           sortOrder: (boards.map(\.sortOrder).max() ?? 0) + 1)
+                boards.append(board)
+                return board
+            }
+            func renameBoard(id: UUID, name: String) -> Bool {
+                lock.lock(); defer { lock.unlock() }
+                guard let index = boards.firstIndex(where: { $0.id == id }) else { return false }
+                boards[index].name = ClipboardBoard.normalizedName(name)
+                return true
+            }
+            func deleteBoard(id: UUID) -> [ClipboardItem] {
+                lock.lock(); defer { lock.unlock() }
+                boards.removeAll { $0.id == id }
+                let doomed = storage.filter { $0.boardID == id }
+                storage.removeAll { $0.boardID == id }
+                return doomed
+            }
+            func moveItemToBoard(itemID: UUID, boardID: UUID?) -> Bool {
+                lock.lock(); defer { lock.unlock() }
+                guard let index = storage.firstIndex(where: { $0.id == itemID }) else { return false }
+                storage[index].boardID = boardID
+                return true
+            }
+            func fetchClipboardItems(boardID: UUID) -> [ClipboardItem] {
+                fetchAllClipboardItems(kind: nil).filter { $0.boardID == boardID }
+            }
         }
 
         @MainActor

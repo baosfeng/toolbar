@@ -85,6 +85,8 @@ runClipboardFuzzySearchTests()
 // schema 版本阶梯（迁移幂等 / 列序不错位）先行，后续仓储断言依赖表结构已就位
 runClipboardSchemaLadderTests()
 runClipboardRepositoryTests()
+// 板仓储（建 / 改名 / 移动 / 删板连带删条目 / 双重豁免）
+runClipboardBoardTests()
 runClipboardFullTextSearchTests()
 runClipboardLimitsTests()
 runClipboardUninitializedTests()

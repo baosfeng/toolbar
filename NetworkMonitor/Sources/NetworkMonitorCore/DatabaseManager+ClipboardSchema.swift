@@ -32,6 +32,9 @@ extension DatabaseManager {
         if clipUserVersion(db) < 4 {
             migrateClipboardToV4(db)
         }
+        if clipUserVersion(db) < 5 {
+            migrateClipboardToV5(db)
+        }
     }
 
     // MARK: - v1：剪贴板历史表与索引

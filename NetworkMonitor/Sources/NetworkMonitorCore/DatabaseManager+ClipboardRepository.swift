@@ -248,19 +248,19 @@ extension DatabaseManager: ClipboardRepository {
             guard let db else { return [] }
             var deleted: [ClipboardItem] = []
 
-            // 1) 保留天数：早于截止时间的非收藏项（收藏豁免）
+            // 1) 保留天数：早于截止时间的可清理条目（星标与板归属都豁免）
             let cutoff = Date().addingTimeInterval(-Double(days) * 86_400).timeIntervalSince1970
             if let expired = clipDeleteBatch(db,
-                                             selectSQL: "SELECT \(ClipboardSchema.columns) FROM clipboard_items WHERE is_pinned = 0 AND created_at < ?;",
-                                             deleteSQL: "DELETE FROM clipboard_items WHERE is_pinned = 0 AND created_at < ?;",
+                                             selectSQL: "SELECT \(ClipboardSchema.columns) FROM clipboard_items WHERE \(Self.pruneEligible) AND created_at < ?;",
+                                             deleteSQL: "DELETE FROM clipboard_items WHERE \(Self.pruneEligible) AND created_at < ?;",
                                              failureLabel: "剪贴板过期清理",
                                              bind: { sqlite3_bind_double($0, 1, cutoff) }) {
                 deleted.append(contentsOf: expired)
             }
 
-            // 2) 条数上限：非收藏项按创建时间倒序保留前 limit 条（收藏不占额度）
-            let overflowWhere = " WHERE is_pinned = 0 AND id NOT IN (SELECT id FROM clipboard_items"
-                + " WHERE is_pinned = 0 ORDER BY created_at DESC LIMIT ?)"
+            // 2) 条数上限：可清理条目按创建时间倒序留前 limit 条（豁免项不占额度）
+            let overflowWhere = " WHERE \(Self.pruneEligible) AND id NOT IN (SELECT id FROM clipboard_items"
+                + " WHERE \(Self.pruneEligible) ORDER BY created_at DESC LIMIT ?)"
             if let overflow = clipDeleteBatch(db,
                                               selectSQL: "SELECT \(ClipboardSchema.columns) FROM clipboard_items\(overflowWhere) ORDER BY created_at DESC;",
                                               deleteSQL: "DELETE FROM clipboard_items\(overflowWhere);",

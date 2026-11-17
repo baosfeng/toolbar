@@ -13,9 +13,9 @@ public enum ClipboardSchema {
 
     /// 已发布的最高版本；一次迁移完成后 `PRAGMA user_version` 必等于它
     ///
-    /// v3 = 图片文字识别列 `ocr_text`；v4 目前只有占位段、还没有实际变更，因此仍是 3 ——
-    /// 空段不推版本号。
-    public static let latestVersion: Int32 = 3
+    /// v3 = 图片文字识别列 `ocr_text`；v4 = 板表 `clipboard_boards` + 归属列 `board_id`；
+    /// v5 目前只有占位段、还没有实际变更，因此仍是 4 —— 空段不推版本号。
+    public static let latestVersion: Int32 = 4
 
     /// 列：声明顺序 = SELECT 列顺序 = 行映射下标
     public enum Column: String, CaseIterable, Sendable {
@@ -32,6 +32,7 @@ public enum ClipboardSchema {
         case pinnedAt = "pinned_at"
         case stackPosition = "stack_position"
         case ocrText = "ocr_text"
+        case boardID = "board_id"
 
         /// sqlite3_column_* 用的列下标（= 在 `allCases` 中的位置）
         ///
@@ -118,7 +119,8 @@ extension DatabaseManager {
             createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, ClipColumn.createdAt.index)),
             pinnedAt: clipDateOrNil(stmt, ClipColumn.pinnedAt.index),
             stackPosition: clipIntOrNil(stmt, ClipColumn.stackPosition.index),
-            ocrText: clipText(stmt, ClipColumn.ocrText.index)
+            ocrText: clipText(stmt, ClipColumn.ocrText.index),
+            boardID: clipText(stmt, ClipColumn.boardID.index).flatMap(UUID.init(uuidString:))
         )
     }
 

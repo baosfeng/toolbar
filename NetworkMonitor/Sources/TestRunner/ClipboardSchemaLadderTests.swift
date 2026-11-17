@@ -75,6 +75,11 @@ func runClipboardSchemaLadderTests() {
         }
         _ = db.setClipboardItemPinned(id: saved.id, isPinned: true)
         db.updateClipboardStackPositions([saved.id])
+        // board_id 列（v4 新增）：列序错位会在这条断言上暴露
+        guard let board = db.createBoard(name: "资料"), db.moveItemToBoard(itemID: saved.id, boardID: board.id) else {
+            assertEqual(false, true, "板归属写入失败")
+            return
+        }
         // OCR 列：识别结果走独立协议回写（v3 新增列，列序错位会在这条断言上暴露）
         _ = db.updateClipboardItemOCRText(id: saved.id, text: "识别出的文字")
 
@@ -98,6 +103,7 @@ func runClipboardSchemaLadderTests() {
         assertNotNil(back.pinnedAt, "pinned_at 不错位")
         assertEqual(back.stackPosition, 1, "stack_position 不错位")
         assertEqual(back.ocrText, "识别出的文字", "ocr_text 不错位")
+        assertEqual(back.boardID, board.id, "board_id 不错位")
         assertEqual(back, db.fetchAllClipboardItems(kind: nil).first, "全量查询与按 id 回读同一行同一列序")
     }
 

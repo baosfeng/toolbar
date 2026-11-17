@@ -56,6 +56,11 @@ public struct ClipboardItem: Equatable, Sendable, Identifiable {
     /// 三态：`nil` = 未识别（唯一可调度态）；`""` = 已识别且无文字（终态）；
     /// 其余 = 识别出的正文。文本条目恒为 nil。
     public var ocrText: String?
+    /// 所属板（nil = 未归类，只在「全部」里出现）
+    ///
+    /// 与 `isPinned` 语义分离：boardID 决定「永不过期 / 不参与超限清理」，
+    /// `isPinned` 回归纯星标；两者都豁免清理（见 pruneClipboardItems）。
+    public var boardID: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -73,7 +78,8 @@ public struct ClipboardItem: Equatable, Sendable, Identifiable {
         createdAt: Date = Date(),
         pinnedAt: Date? = nil,
         stackPosition: Int? = nil,
-        ocrText: String? = nil
+        ocrText: String? = nil,
+        boardID: UUID? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -91,6 +97,7 @@ public struct ClipboardItem: Equatable, Sendable, Identifiable {
         self.pinnedAt = pinnedAt
         self.stackPosition = stackPosition
         self.ocrText = ocrText
+        self.boardID = boardID
     }
 
     /// 是否有可展示 / 可复制的识别文字（空串与 nil 都算没有）
