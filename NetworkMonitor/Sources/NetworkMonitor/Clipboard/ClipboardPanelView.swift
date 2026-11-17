@@ -94,7 +94,10 @@ final class ClipboardPanel: NSPanel {
 final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
 
     /// 底部常驻按键提示（设计稿固定文案）
-    static let keyHint = "↑↓ 选择 / ⌘ 粘贴 / ⌘1–9 直选 / Esc 收起"
+    static let keyHint = "↑↓ 选择 / ⌘ 粘贴 / ⌘1–9 直选 / Esc 收起 / ⌘P 暂停采集"
+
+    /// 点击「采集已暂停」提示行要求切换暂停（由控制器挂到采集服务上）
+    var onRequestTogglePause: (() -> Void)?
 
     weak var delegate: ClipboardPanelViewDelegate?
 
@@ -111,6 +114,8 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     let countLabel = NSTextField(labelWithString: "")
     let stackLabel = NSTextField(labelWithString: "")
     let hintLabel = NSTextField(labelWithString: "")
+    /// 「采集已暂停」提示行上的透明恢复热区（构建见 +Subviews，显隐由 revealPauseState 控制）
+    let pauseResumeButton = NSButton()
     let accessibilityButton = NSButton()
     /// 卡片流（单行横向滚动 + 视图池 + 滑动窗口，见 ClipboardCardFlowView）
     let cardFlow = ClipboardCardFlowView()
@@ -200,6 +205,22 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         hintLabel.stringValue = text
     }
 
+    /// 透出暂停态：提示行常驻「采集已暂停（点此恢复）」，暂停时给一个覆盖提示行的恢复热区
+    ///
+    /// 与 `showHint` 的分工：那是临时提示（删除二次确认等），这是状态常驻；恢复按钮只在暂停时可点，
+    /// 未暂停时隐藏，不抢提示行的点击。
+    func revealPauseState(_ isPaused: Bool) {
+        let text = ClipboardPauseLogic.footerHint(isPaused: isPaused, idleHint: Self.keyHint)
+        hintLabel.stringValue = text
+        hintLabel.textColor = isPaused ? .systemOrange : .secondaryLabelColor
+        hintLabel.setAccessibilityLabel(isPaused ? "采集已暂停，点按或按 ⌘P 恢复采集" : text)
+        pauseResumeButton.isHidden = !isPaused
+        needsLayout = true
+    }
+
+    /// 暂停提示行的点击恢复
+    @objc func resumeFromPauseBanner() { onRequestTogglePause?() }
+
     /// 程序化切换过滤（Tab 循环）
     func selectFilter(_ filter: ClipboardFilter) {
         self.filter = filter
@@ -242,6 +263,7 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         countLabel.frame = footer.count
         stackLabel.frame = footer.stack
         hintLabel.frame = footer.hint
+        pauseResumeButton.frame = footer.hint
         accessibilityButton.frame = footer.permission
 
         cardFlow.frame = sections.cards

@@ -18,7 +18,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     private let panel: ClipboardPanel
     let content: ClipboardPanelView
     let repository: any ClipboardRepository
-    private let captureService: any ClipboardCaptureService
+    let captureService: any ClipboardCaptureService   // 放宽为 internal：暂停切换与状态同步在 ClipboardPauseControl
     /// 放宽 internal：复制 / 粘贴 / 收藏 / 栈推进的反馈在 ClipboardPanelController+Feedback.swift
     let paster: ClipboardPaster
     /// 放宽 internal：Paste Stack 动作在 ClipboardPanelController+Stack.swift，需访问 stack
@@ -29,8 +29,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     let logger: LoggingService
     /// 操作反馈（音效 + 触觉）— 组合根注入，面板视图与控制器共用同一份
     let feedback: ClipboardFeedback
-    /// ⌘, 打开剪贴板设置（组合根注入，复用既有设置窗打开路径）
-    /// 放宽 internal：按键拦截在 ClipboardPanelController+Keyboard.swift
+    /// ⌘, 打开剪贴板设置（组合根注入；放宽 internal：按键拦截在 +Keyboard.swift）
     let onRequestSettings: (() -> Void)?
     /// 把某条历史贴到屏幕（组合根注入到截图链路）
     var onRequestPin: ((ClipboardItem) -> Void)?
@@ -151,6 +150,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         // 分支 A / B 通用：打开瞬间读一次（changeCount 未变则静默返回，不重复读）
         captureService.captureNow()
         if let hint = pendingHint { content.showHint(hint); pendingHint = nil }
+        syncPauseState()   // 暂停态最后落定：不被上一次的临时提示盖掉
         positionPanel()
         let finalFrame = panel.frame
         // 起始态先进 MotionKit：允许动效是「透明 + 下移 14pt」，减弱动态效果时直接落终态
@@ -260,7 +260,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
 
     // 删除 / 清空的动作体见 ClipboardPanelController+Delete.swift（含二次确认状态机）
 
-    func panelViewDidRequestCapture(_ view: ClipboardPanelView) { captureService.captureNow() }
+    func panelViewDidRequestCapture(_ view: ClipboardPanelView) { captureNowUnlessPaused() }
 
     func panelView(_ view: ClipboardPanelView, didChangeQuery query: String) { applyFilter(preferredID: selectedItem?.id) }
 

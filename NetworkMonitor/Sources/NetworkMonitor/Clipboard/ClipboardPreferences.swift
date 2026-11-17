@@ -52,6 +52,7 @@ final class ClipboardPreferences: Sendable {
 
     private enum Key {
         static let captureMode = "clipboard.captureMode"
+        static let paused = "clipboard.paused"
         static let hotKeyCode = "clipboard.hotkey.keyCode"
         static let hotKeyModifiers = "clipboard.hotkey.modifiers"
         static let quickPaste = "clipboard.quickPasteEnabled"
@@ -78,6 +79,16 @@ final class ClipboardPreferences: Sendable {
     var captureMode: ClipboardCaptureMode {
         get { ClipboardCaptureMode(rawValue: storage.string(forKey: Key.captureMode) ?? "") ?? .polling }
         set { storage.set(newValue.rawValue, forKey: Key.captureMode) }
+    }
+
+    /// 是否暂停采集（默认 false）
+    ///
+    /// 与 `captureMode`（怎么采）是两个维度：这里决定「采不采」，暂停时采集器停轮询、
+    /// 面板打开也不读剪贴板。定时暂停（暂停到某个时刻自动恢复）留到下一批：
+    /// 届时在同一处加 `pausedUntil` 时间戳键，读取口径沿用本属性即可。
+    var isPaused: Bool {
+        get { ClipboardPauseLogic.isPaused(storedValue: storage.object(forKey: Key.paused) as? Bool) }
+        set { storage.set(newValue, forKey: Key.paused) }
     }
 
     /// 是否已完成剪贴板访问权限一次性引导（分支 B 的引导标记）
