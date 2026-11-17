@@ -75,6 +75,11 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     let searchField = NSSearchField()
     /// 筛选芯片行（类型 / 来源 App / 日期，可叠加可单个删除；视图定义见 ClipboardFilterChipRowView）
     let chipRowView = ClipboardFilterChipRowView()
+    /// 板标签行（全部 / 各板 / ＋新建；视图见 ClipboardBoardRowView，接线见 ClipboardPanelView+Board）
+    let boardRowView = ClipboardBoardRowView()
+    /// 板标签的两个出口（控制器在 ClipboardPanelController 里接）
+    var onSelectBoard: ((UUID?) -> Void)?
+    var onRequestCreateBoard: ((NSRect) -> Void)?
     let captureButton = NSButton()
     /// 工具条「?」快捷键帮助按钮
     let helpButton = NSButton()
@@ -90,9 +95,6 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     let accessibilityButton = NSButton()
     /// 卡片流（单行横向滚动 + 视图池 + 滑动窗口，见 ClipboardCardFlowView）
     let cardFlow = ClipboardCardFlowView()
-    /// 工具条右段（采集与「?」之间）给 pinboard 圆点组预留位置：本批不做分组，只留槽位，
-    /// 宽度由 ClipboardPanelLayout 统一分配，将来加板标签不必再动这层。
-    static let reservesPinboardSlot = true
     /// 底部常驻详情区（选中条目的完整内容与元信息，见 ClipboardDetailStripView）
     let detailStrip = ClipboardDetailStripView()
     /// 两级材质的里层内衬与发丝分隔线层（视图口径与布局接线见 ClipboardPanelChrome.swift）
@@ -127,6 +129,7 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         buildSeparatorLayer()
         buildSearchField()
         buildChipRow()
+        buildBoardRow()
         buildCaptureButton()
         buildHelpButton()
         buildFooter()
@@ -248,6 +251,8 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         hintLabel.frame = footer.hint
         pauseResumeButton.frame = footer.hint
         accessibilityButton.frame = footer.permission
+
+        layoutBoardRow(sections: sections, width: size.width)
 
         cardFlow.frame = sections.cards
         detailStrip.frame = sections.detail

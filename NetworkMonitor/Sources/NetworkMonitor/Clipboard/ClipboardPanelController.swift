@@ -18,23 +18,17 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     let content: ClipboardPanelView
     let repository: any ClipboardRepository
     let captureService: any ClipboardCaptureService   // 放宽为 internal：暂停切换与状态同步在 ClipboardPauseControl
-    /// 放宽 internal：复制 / 粘贴 / 收藏 / 栈推进的反馈在 ClipboardPanelController+Feedback.swift
-    let paster: ClipboardPaster
-    /// 放宽 internal：Paste Stack 动作在 ClipboardPanelController+Stack.swift，需访问 stack
-    let stack: PasteStackController
-    /// 放宽 internal：首次引导 / Paste Stack / 识别扩展文件要读写偏好与日志
-    let preferences: ClipboardPreferences
+    let paster: ClipboardPaster    // 反馈接线见 +Feedback
+    let stack: PasteStackController    // 栈动作见 +Stack
+    let boards: ClipboardBoardCoordinator    // 板标签状态机（见 ClipboardBoardCoordinator）
+    let preferences: ClipboardPreferences    // 首次引导 / 栈 / 识别扩展文件都要读写
     let logger: LoggingService
-    /// 操作反馈（音效 + 触觉）与 ⌘, 设置入口 — 组合根注入；放宽 internal 供 +Keyboard / +Feedback 用
-    let feedback: ClipboardFeedback
+    let feedback: ClipboardFeedback    // 组合根注入，+Keyboard / +Feedback 也用
     let onRequestSettings: (() -> Void)?
-    /// 把某条历史贴到屏幕（组合根注入到截图链路）
-    var onRequestPin: ((ClipboardItem) -> Void)?
+    var onRequestPin: ((ClipboardItem) -> Void)?    // 贴到屏幕（组合根接到截图链路）
 
-    /// 放宽 internal：首次引导判定要看「历史是否为空」
-    var items: [ClipboardItem] = []
-    /// 放宽为 internal：贴图扩展文件要按索引取条目
-    var filteredItems: [ClipboardItem] = []
+    var items: [ClipboardItem] = []    // 放宽 internal：首次引导判定要看历史是否为空
+    var filteredItems: [ClipboardItem] = []    // 贴图扩展文件按索引取条目
     var selectedIndex = -1
     private var pendingHint: String?
     private var pendingReload = false
@@ -45,11 +39,14 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     nonisolated(unsafe) private var clipboardObserver: NSObjectProtocol?
     nonisolated(unsafe) var ocrObserver: NSObjectProtocol?   // 识别结果订阅与刷新在 ClipboardOCRPanel.swift
 
-    init(repository: any ClipboardRepository, captureService: any ClipboardCaptureService,
+    init(repository: any ClipboardRepository,
+         boardRepository: (any ClipboardBoardRepository)?,
+         captureService: any ClipboardCaptureService,
          paster: ClipboardPaster, stack: PasteStackController, feedback: ClipboardFeedback,
          onRequestSettings: (() -> Void)? = nil,
          preferences: ClipboardPreferences, logger: LoggingService = AppContext.shared.logger) {
         self.repository = repository; self.captureService = captureService
+        self.boards = ClipboardBoardCoordinator(repository: boardRepository, logger: logger)
         self.paster = paster; self.stack = stack; self.feedback = feedback
         self.onRequestSettings = onRequestSettings
         self.preferences = preferences; self.logger = logger
@@ -64,6 +61,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         stack.onStateChange = { [weak self] in self?.syncStackState() }
         // 栈推进（⌘V 贴出队首）单独反馈：onStateChange 还覆盖入栈 / 重载 / 清空，不能一律打触觉
         stack.onAdvance = { [weak self] in self?.reportStackAdvanced() }
+        wireBoardRow()   // 板标签接线（动作体见 ClipboardBoardCoordinator）
     }
 
     nonisolated deinit {
@@ -146,6 +144,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         if pendingReload || items.isEmpty { items = repository.fetchAllClipboardItems(kind: nil) }
         pendingReload = false
         applyFilter()
+        boards.reload()
         stack.reloadStack()
         // 分支 A / B 通用：打开瞬间读一次（changeCount 未变则静默返回，不重复读）
         captureService.captureNow()
@@ -203,7 +202,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         // 检索/过滤纯逻辑见 ClipboardPanelSearch；此处不截断 —— filteredItems 持全部匹配项，屏幕卡片数由滑动窗口控制
         content.filterSourceItems = items
         filteredItems = ClipboardPanelSearch.match(query: content.query, tokens: content.filterTokens,
-                                                   repository: repository, items: items,
+                                                   repository: repository, items: boards.scoped(items),
                                                    limit: max(1, preferences.maxItems))
         if let preferredID, let index = filteredItems.firstIndex(where: { $0.id == preferredID }) {
             selectedIndex = index
@@ -257,8 +256,6 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         AppEvents.postClipboardChanged()
         reloadItems(preferredID: item.id)
     }
-
-    // 删除 / 清空的动作体见 ClipboardPanelController+Delete.swift（含二次确认状态机）
 
     func panelViewDidRequestCapture(_ view: ClipboardPanelView) { captureNowUnlessPaused() }
 

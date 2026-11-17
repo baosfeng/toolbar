@@ -11,6 +11,8 @@ public enum ClipboardPanelLayout {
 
     /// 工具条高度
     public static let toolbarHeight: CGFloat = 32
+    /// 板标签行高度（在工具条之下、卡片区之上；高度从卡片区弹性格借）
+    public static let boardRowHeight: CGFloat = 26
     /// 底部提示行高度
     public static let footerHeight: CGFloat = 24
     /// 左右内边距
@@ -33,7 +35,8 @@ public enum ClipboardPanelLayout {
 
     /// 面板高度下限：卡片区刚好容下整卡（再矮就把卡片裁掉）
     public static let minPanelHeight: Double =
-        Double(toolbarHeight + cardHeight + cardSlack + ClipboardDetailStrip.totalHeight + footerHeight)
+        Double(toolbarHeight + boardRowHeight + cardHeight + cardSlack
+               + ClipboardDetailStrip.totalHeight + footerHeight)
     /// 面板默认高度
     public static let defaultPanelHeight: Double = minPanelHeight
     /// 面板高度上限（设置页高度滑块同口径）
@@ -43,6 +46,8 @@ public enum ClipboardPanelLayout {
     public struct Sections: Equatable, Sendable {
         /// 工具条
         public let toolbar: CGRect
+        /// 板标签行（全部 / 各板 / ＋新建）
+        public let boardRow: CGRect
         /// 卡片区（弹性；卡片在此区内垂直居中）
         public let cards: CGRect
         /// 详情区（含顶部的 1pt 分隔线）
@@ -64,11 +69,14 @@ public enum ClipboardPanelLayout {
     public static func sections(in size: CGSize) -> Sections {
         let fullWidth = max(0, size.width)
         let detailHeight = ClipboardDetailStrip.totalHeight
-        let cardsHeight = max(0, size.height - toolbarHeight - detailHeight - footerHeight)
-        let detailY = max(toolbarHeight, size.height - footerHeight - detailHeight)
+        let boardY = toolbarHeight
+        let cardsY = boardY + boardRowHeight
+        let cardsHeight = max(0, size.height - cardsY - detailHeight - footerHeight)
+        let detailY = max(cardsY, size.height - footerHeight - detailHeight)
         return Sections(
             toolbar: CGRect(x: 0, y: 0, width: fullWidth, height: toolbarHeight),
-            cards: CGRect(x: paddingX, y: toolbarHeight,
+            boardRow: CGRect(x: 0, y: boardY, width: fullWidth, height: boardRowHeight),
+            cards: CGRect(x: paddingX, y: cardsY,
                           width: max(0, fullWidth - paddingX * 2), height: cardsHeight),
             detail: CGRect(x: 0, y: detailY, width: fullWidth, height: detailHeight),
             footer: CGRect(x: 0, y: max(detailY, size.height - footerHeight),

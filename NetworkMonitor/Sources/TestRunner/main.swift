@@ -345,6 +345,8 @@ runClipboardDetailStripTests()
 runClipboardFilterTokenTests()
 // 工具条横向分配（芯片行不溢出 / 搜索框不被压到下限以下）
 runClipboardToolbarLayoutTests()
+// 板标签行（不溢出 / ＋恒在）+ 切板过滤 + ⌘←/→ 环回
+runClipboardBoardRowTests()
 
 // MARK: - 自绘绘制层纯口径（层不透明度 / 阴影换算 / 焦点环路径 / 符号缓存键 / 读屏文案）
 runDrawnSurfaceMathTests()

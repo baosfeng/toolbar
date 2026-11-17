@@ -34,9 +34,9 @@ extension ClipboardPanelController {
         case kVK_Return, kVK_ANSI_KeypadEnter:
             isCommand ? copySelected() : pasteSelected(asPlainText: isOption)
         case kVK_Space where content.query.isEmpty: togglePreview()   // 搜索态让位：空格仍是输入字符
-        // 单行横向流：←/→ 连续前后移动，↑/↓ 等价映射为前后
-        case kVK_LeftArrow: moveSelection(-1)
-        case kVK_RightArrow: moveSelection(1)
+        // ⌘← / ⌘→ 在板之间切换；不带 ⌘ 的 ←/→ 仍是条目前后移动
+        case kVK_LeftArrow: isCommand ? boards.cycle(-1) : moveSelection(-1)
+        case kVK_RightArrow: isCommand ? boards.cycle(1) : moveSelection(1)
         case kVK_UpArrow: moveSelection(-1)
         case kVK_DownArrow: moveSelection(1)
         default:

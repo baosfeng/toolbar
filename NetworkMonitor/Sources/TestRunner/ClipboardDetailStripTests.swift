@@ -99,8 +99,8 @@ func runClipboardDetailStripTests() {
     // MARK: 面板分段
 
     assertEqual(ClipboardPanelLayout.minPanelHeight,
-                32 + 198 + 6 + ClipboardDetailStrip.totalHeight + 24,
-                "下限 = 工具条 + 整卡 + 留白 + 详情区 + 提示行")
+                32 + 26 + 198 + 6 + ClipboardDetailStrip.totalHeight + 24,
+                "下限 = 工具条 + 板标签行 + 整卡 + 留白 + 详情区 + 提示行")
     assertEqual(ClipboardPanelLayout.defaultPanelHeight, ClipboardPanelLayout.minPanelHeight,
                 "默认高度等于下限：卡片区刚好容下整卡")
 
@@ -112,15 +112,19 @@ func runClipboardDetailStripTests() {
     assertEqual(sections.detail.minY, 400 - 24 - ClipboardDetailStrip.totalHeight,
                 "详情区顶边 = 面板高 − 提示行 − 详情区")
     assertEqual(sections.footer.minY, 400 - 24, "提示行顶边贴面板底")
-    assertEqual(sections.cards.minY, sections.toolbar.maxY, "卡片区紧跟工具条")
+    assertEqual(sections.boardRow.minY, sections.toolbar.maxY, "板标签行紧跟工具条")
+    assertEqual(sections.boardRow.height, ClipboardPanelLayout.boardRowHeight, "板标签行高 26pt")
+    assertEqual(sections.cards.minY, sections.boardRow.maxY, "卡片区紧跟板标签行")
     assertEqual(sections.cards.maxY, sections.detail.minY, "卡片区底边贴详情区顶边（无缝隙）")
-    assertEqual(sections.cards.height, 400 - 32 - ClipboardDetailStrip.totalHeight - 24, "卡片区为弹性段")
+    assertEqual(sections.cards.height,
+                400 - 32 - ClipboardPanelLayout.boardRowHeight - ClipboardDetailStrip.totalHeight - 24,
+                "卡片区为弹性段（板标签行 26pt 从它身上借）")
     assertEqual(sections.cards.minX, ClipboardPanelLayout.paddingX, "卡片区左右内缩")
     assertEqual(sections.toolbar.minX, 0, "工具条整宽（自己管内边距）")
     assertEqual(sections.detail.minX, 0, "详情区整宽（分隔线横贯面板）")
 
     // 四段首尾相接、无重叠
-    assertEqual(sections.toolbar.maxY <= sections.cards.minY, true, "工具条与卡片区不重叠")
+    assertEqual(sections.toolbar.maxY <= sections.boardRow.minY, true, "工具条与板标签行不重叠")
     assertEqual(sections.cards.maxY <= sections.detail.minY, true, "卡片区与详情区不重叠")
     assertEqual(sections.detail.maxY <= sections.footer.minY, true, "详情区与提示行不重叠")
     assertEqual(sections.footer.maxY, 400, "最后一段贴住面板底")

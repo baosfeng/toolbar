@@ -61,6 +61,8 @@ extension AppCoordinator {
         // 音效与触觉成对注入：面板控制器与面板视图共用同一份实例（由 setupFeedback 装配）
         let feedback = ClipboardFeedback(sound: soundFeedback, haptics: hapticFeedback)
         clipboardPanel = ClipboardPanelController(repository: database,
+                                                  // DatabaseManager 已实现板仓储，但 AppDatabase 组合别名尚未并入该协议：动态降转，取不到时标签行只有「全部」
+                                                  boardRepository: database as? any ClipboardBoardRepository,
                                                   captureService: watcher,
                                                   paster: paster,
                                                   stack: stack,
