@@ -20,7 +20,7 @@ extension BillingProviderBlockView {
             return
         }
         if let total = balance?.totalAvailableUSD {
-            limitCells[0].update(amount: formatUSD(total), title: "可用")
+            limitCells[0].update(amount: formatCurrencyAmount(total, code: balance?.currencyCode ?? "USD"), title: "可用")
         } else {
             limitCells[0].clear()
         }

@@ -31,6 +31,18 @@ public func formatUSD(_ value: Double) -> String {
     "$" + formatExactNumber(value)
 }
 
+/// 按币种格式化余额金额（USD → "$12.5"、CNY → "¥110.00"、其它 → "110.00 CHF"）
+///
+/// 额度 provider 各报各的币种（DeepSeek 国内账户报 CNY、OpenRouter 报 USD），
+/// 统一入口在这里，UI 不再假定「余额都是美元」。
+public func formatCurrencyAmount(_ value: Double, code: String) -> String {
+    switch code.uppercased() {
+    case "USD": return formatUSD(value)
+    case "CNY", "RMB": return "¥" + formatExactNumber(value)
+    default: return formatExactNumber(value) + " " + code.uppercased()
+    }
+}
+
 /// 非货币额度数量格式化（如 credits：76412 → "76,412"、3.9 → "3.9"）
 ///
 /// 编码计划按 credits 计量而非美元，同样原值展示、不做四舍五入。
@@ -127,7 +139,7 @@ public func formatBalanceSummary(_ balance: BillingBalance) -> String {
         }.joined(separator: " · ")
     }
     if let total = balance.totalAvailableUSD {
-        return "可用 \(formatUSD(total))"
+        return "可用 \(formatCurrencyAmount(total, code: balance.currencyCode))"
     }
     return "无额度数据"
 }

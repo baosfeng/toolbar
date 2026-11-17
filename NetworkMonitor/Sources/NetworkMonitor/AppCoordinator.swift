@@ -141,6 +141,9 @@ public final class AppCoordinator {
             ("claude", "Claude", { ClaudeBillingProvider(logger: billingLogger) }),
             ("codex", "Codex", { CodexBillingProvider(logger: billingLogger) }),
             ("cursor", "Cursor", { CursorBillingProvider(logger: billingLogger) }),
+            ("deepseek", "DeepSeek", { DeepSeekBillingProvider(logger: billingLogger) }), // 官方文档化端点三家，只出余额卡
+            ("openrouter", "OpenRouter", { OpenRouterBillingProvider(logger: billingLogger) }),
+            ("moonshot", "Moonshot / Kimi", { MoonshotBillingProvider(logger: billingLogger) }),
         ]
         let billingInstanceStore = BillingInstanceStore()
         let billingInstances = billingInstanceStore.ensureDefaults(
