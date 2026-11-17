@@ -56,4 +56,5 @@ extension AppCoordinator: ClipboardSettingsDelegate {
         logger.info("图片存储已清空：删除 \(deletedItems) 条历史、\(removedFiles) 个残留文件（收藏图片保留）")
         return ClipboardStorageCleanupResult(deletedItems: deletedItems, removedFiles: removedFiles)
     }
+
 }

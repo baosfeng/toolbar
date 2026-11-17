@@ -42,6 +42,19 @@ final class LaunchAtStartupService {
     func reconcileAtLaunch() -> LaunchAtStartupReconcileOutcome {
         reconciler.reconcileAtLaunch()
     }
+
+    /// 系统侧当前登记状态（`SMAppService.mainApp.status` 的四档语义）
+    ///
+    /// 权限页与沿用它的设置页都读这一份：翻译逻辑在 Core（`LaunchAtStartupRegistration`），
+    /// 这里只转发，App 层不再出现第二个 switch。
+    var registration: LaunchAtStartupRegistration {
+        reconciler.registration
+    }
+
+    /// 最近一次登记 / 注销失败的原因（nil = 没发生过失败）
+    var lastFailureReason: String? {
+        reconciler.lastFailureReason
+    }
 }
 
 // MARK: - SMAppService 接线

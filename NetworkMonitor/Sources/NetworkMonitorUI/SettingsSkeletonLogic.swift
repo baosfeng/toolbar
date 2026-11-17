@@ -87,6 +87,7 @@ public enum SettingsSectionID: String, CaseIterable, Sendable {
     case transfer
     case notifications
     case token
+    case permissions
     case system
     case about
 }
@@ -116,7 +117,7 @@ public enum SettingsSidebarLayout {
         SettingsSidebarGroup(segment: .general, items: [.general, .appearance]),
         SettingsSidebarGroup(segment: .feature,
                              items: [.providers, .clipboard, .capture, .transfer, .notifications, .token]),
-        SettingsSidebarGroup(segment: .system, items: [.system, .about]),
+        SettingsSidebarGroup(segment: .system, items: [.permissions, .system, .about]),
     ]
 
     /// 全部分类项（按展示顺序展开）—— 建视图与单测共用

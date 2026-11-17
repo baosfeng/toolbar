@@ -21,7 +21,7 @@ final class SettingsNotificationPane: SettingsPaneView {
     let service: any NotificationServicing
     let logger: LoggingService
 
-    /// 授权状态行
+    /// 授权状态行（简版：状态点 + 一行说明 + 跳「系统权限」页）
     private let authDot = SettingsStatusDotView()
     private let authLabel = MenuPanelLabel.text("", font: SettingsTheme.rowSubtitleFont,
                                                 color: SettingsTheme.textSecondary)
@@ -67,8 +67,8 @@ final class SettingsNotificationPane: SettingsPaneView {
         stack.orientation = .horizontal
         stack.spacing = 6
         row.trailingStack.addArrangedSubview(stack)
-        let openSettings = SettingsLinkButton.make("打开系统设置", target: self,
-                                                   action: #selector(openSystemSettings))
+        let openSettings = SettingsLinkButton.make("查看系统权限", target: self,
+                                                   action: #selector(openPermissionsPane))
         row.trailingStack.addArrangedSubview(openSettings)
         let card = SettingsCardView()
         card.addRow(row)
@@ -104,22 +104,22 @@ final class SettingsNotificationPane: SettingsPaneView {
     /// - 未决定（还没问过）→ ghost（中性，不是错误）
     private func renderAuthorizationState() {
         let state = service.authorizationState
-        authLabel.stringValue = "\(state.label) · \(state.detail)"
-        let tone = Self.tone(for: state)
+        let entry = permissionSource?.snapshot.entry(for: .notification)
+        let tone = entry?.tone ?? Self.tone(for: state)
+        authLabel.stringValue = "\((entry?.label ?? state.label)) · \((entry?.detail ?? state.detail))"
         // 状态点与胶囊共用同一份语义映射（SettingsTheme.statusDotColor 就是 tone → 角色色）
         authDot.setColor(SettingsTheme.statusDotColor(tone))
-        refreshStatusChip()
+        refreshStatusChip(tone: tone)
     }
 
-    /// 页头胶囊：授权态 + 应用内音量
-    ///
-    /// 放宽为 internal：音效库扩展里拖动音量滑杆时也要同步胶囊（否则停在旧音量）。
-    func refreshStatusChip() {
+    /// 页头胶囊：授权态 + 应用内音量（放宽为 internal：音效库扩展拖音量时也要同步）
+    func refreshStatusChip(tone: SettingsStatusTone? = nil) {
         let state = service.authorizationState
+        let subject = permissionSource?.snapshot.entry(for: .notification).label ?? state.label
         let volume = "\(Int((preferences.inAppVolume * 100).rounded()))%"
-        page.setStatusChip(SettingsStatusChip(subject: state.label,
+        page.setStatusChip(SettingsStatusChip(subject: subject,
                                              detail: "音量 \(volume)",
-                                             tone: Self.tone(for: state)))
+                                             tone: tone ?? Self.tone(for: state)))
     }
 
     /// 授权态 → 胶囊 / 状态点语义（一处映射，两处显示不各判一遍）
@@ -140,8 +140,8 @@ final class SettingsNotificationPane: SettingsPaneView {
         logger.info("通知与音效已恢复默认")
     }
 
-    @objc private func openSystemSettings() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")
-        if let url { NSWorkspace.shared.open(url) }
+    /// 跳「系统权限」页（深链唯一出口在权限中心）
+    @objc func openPermissionsPane() {
+        onOpenPermissions?()
     }
 }

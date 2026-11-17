@@ -38,16 +38,17 @@ func runSettingsThemeTests() {
     assertEqual(groups.map { $0.segment.title }, ["常规", "功能", "系统"], "段头文案")
 
     let allItems = SettingsSidebarLayout.allItems
-    assertEqual(allItems.count, 10, "十个分类全部进侧栏")
-    assertEqual(Set(allItems).count, 10, "十个分类各出现一次（无重复、无遗漏）")
+    // 本轮新增「系统权限」页：分类数 10 → 11（原断言按旧分类表写死，随功能扩展更新）
+    assertEqual(allItems.count, 11, "十一个分类全部进侧栏")
+    assertEqual(Set(allItems).count, 11, "十一个分类各出现一次（无重复、无遗漏）")
     assertEqual(allItems, SettingsSectionID.allCases, "侧栏顺序与分类顺序一致")
     for id in SettingsSectionID.allCases {
         assertNotNil(SettingsSidebarLayout.segment(of: id), "分类 \(id.rawValue) 必须属于某一段")
     }
     assertEqual(groups.first { $0.segment == .general }?.items, [.general, .appearance],
                 "常规段 = 通用 + 外观")
-    assertEqual(groups.first { $0.segment == .system }?.items, [.system, .about],
-                "系统段 = 系统 + 关于")
+    assertEqual(groups.first { $0.segment == .system }?.items, [.permissions, .system, .about],
+                "系统段 = 系统权限 + 系统 + 关于")
 
     // MARK: 页头状态点三态
 

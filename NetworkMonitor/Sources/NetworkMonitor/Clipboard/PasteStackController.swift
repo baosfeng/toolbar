@@ -28,6 +28,8 @@ final class PasteStackController {
     private(set) var accessibilityGranted = false
     /// 状态变化回调（栈进度 / 权限状态变化）
     var onStateChange: (() -> Void)?
+    /// 请求辅助功能权限（组合根接到权限中心；本控制器不再自己拼系统设置深链）
+    var onRequestAccessibility: (() -> Void)?
     /// 栈推进回调（仅「⌘V 贴出队首」时触发；入栈 / 重载 / 清空不触发）
     ///
     /// 与 onStateChange 分开的原因：后者被入栈、重载、清空共用，
@@ -151,16 +153,11 @@ final class PasteStackController {
     }
 
     /// 请求权限并跳转系统设置（用户显式点击时调用）
+    ///
+    /// 具体动作（登记 + 深链）不在本控制器：面板只持有 `onRequestAccessibility`，
+    /// 由组合根接到 `SystemPermissionCenter.request(.accessibility)` —— 深链只在那里拼一次。
     func requestAccessibilityPermission() {
-        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
-        openAccessibilitySettings()
-    }
-
-    /// 跳转「系统设置 → 隐私与安全性 → 辅助功能」
-    func openAccessibilitySettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
-        NSWorkspace.shared.open(url)
+        onRequestAccessibility?()
     }
 
     // MARK: 内部实现

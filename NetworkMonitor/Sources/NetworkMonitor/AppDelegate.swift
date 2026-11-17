@@ -48,6 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MenuPanelSnapshot.runIfRequested(repository: coordinator.snapshotClipboardRepository,
                                           harness: coordinator.snapshotHarnessService,
                                           settings: coordinator.settingsWindow)
+        // 仅 DEBUG：NM_PERMISSION_STATE_SNAPSHOT=1 时导出权限页的「检测中 / 需重启」取证图
+        if let directory = SettingsPermissionStateSnapshot.requestedDirectory {
+            SettingsPermissionStateSnapshot.runIfRequested(directory: directory)
+        }
         // 仅 DEBUG：NM_UPDATE_PROBE=live|failure 时跑一次更新检查并打印状态 / 界面文案
         UpdateCheckProbe.runIfRequested(coordinator: coordinator)
         // 仅 DEBUG：NM_THEME_HOT_PROBE=<目录> 时验证「切主题 → 设置窗口重绘」链路并退出
