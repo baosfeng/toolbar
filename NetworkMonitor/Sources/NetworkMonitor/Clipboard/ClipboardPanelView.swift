@@ -19,8 +19,11 @@ protocol ClipboardPanelViewDelegate: AnyObject {
     func panelView(_ view: ClipboardPanelView, didActivate index: Int)
     /// 卡片右键「贴到屏幕」
     func panelView(_ view: ClipboardPanelView, didRequestPinAt index: Int)
-    /// 卡片右键菜单其余指令（复制 / 粘贴为纯文本 / 收藏 / 删除）；按条目 ID 定位，不依赖卡片视图位置
+    /// 卡片右键菜单其余指令（复制 / 粘贴为纯文本 / 收藏 / 删除）；按条目 ID 定位，不依赖卡片视图位置。
+    /// 「移到板…」另走下面的通道：子菜单项还要带目标板，不能只带条目 ID
     func panelView(_ view: ClipboardPanelView, didRequestMenuCommand command: ClipboardCardMenuCommand, itemID: UUID)
+    /// 卡片右键「移到板…」（boardID 为 nil = 移出板；多选时作用于全部选中条目）
+    func panelView(_ view: ClipboardPanelView, didRequestMoveToBoard boardID: UUID?, itemID: UUID)
     /// 首次引导态被关闭（控制器据此写 ClipboardPreferences.hasGuidedClipboardAccess）
     func panelViewDidDismissGuide(_ view: ClipboardPanelView)
     /// 请求跳转辅助功能权限设置

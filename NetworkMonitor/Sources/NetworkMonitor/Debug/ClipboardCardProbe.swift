@@ -10,7 +10,7 @@ import NetworkMonitorUI
 /// 触发：`NM_CLIPBOARD_CARD_PROBE=<输出目录>`
 /// 产出：
 /// - `clipboard-card-probe.png`：4 张卡（选中 / 收藏 + 栈角标 / 缩略图就绪 / 普通）真实绘制；
-/// - `clipboard-card-probe.txt`：命中区域 → 动作、右键五项菜单、无障碍上报、选中过渡值。
+/// - `clipboard-card-probe.txt`：命中区域 → 动作、右键菜单各项、无障碍上报、选中过渡值。
 ///
 /// 为什么不用合成鼠标事件：离屏窗口不接收事件，直接调用 mouseDown 覆盖不到 AppKit 的
 /// 命中与菜单分发；这里用「同一套纯函数 + 真实视图属性」自证，事件分发本身仍走
@@ -149,7 +149,7 @@ enum ClipboardCardProbe {
         }
 
         lines.append("")
-        lines.append("## 右键菜单（五项固定顺序）")
+        lines.append("## 右键菜单（按构造顺序）")
         if let event = NSEvent.mouseEvent(with: .rightMouseDown, location: .zero,
                                           modifierFlags: [], timestamp: 0, windowNumber: 0,
                                           context: nil, eventNumber: 0, clickCount: 1, pressure: 0),

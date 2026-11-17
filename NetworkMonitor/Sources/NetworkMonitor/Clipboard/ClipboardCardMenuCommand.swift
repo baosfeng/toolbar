@@ -21,4 +21,6 @@ enum ClipboardCardMenuCommand: Int, CaseIterable {
     case delete = 6
     /// 复制图片里识别出的文字（仅图片且已识别出文字时出现，见 ClipboardOCRMenu.swift）
     case copyOCRText = 7
+    /// 移到板…（子菜单列出「移出板」+ 各板，见 ClipboardCardMoveMenu.swift）
+    case moveToBoard = 8
 }

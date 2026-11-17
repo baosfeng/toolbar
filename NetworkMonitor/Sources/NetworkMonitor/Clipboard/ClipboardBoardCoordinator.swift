@@ -59,6 +59,25 @@ final class ClipboardBoardCoordinator {
         }
     }
 
+    // MARK: 移入 / 移出板
+
+    /// 把一批条目移到某块板（nil = 移出板）：逐条落库，返回真正命中的条数
+    ///
+    /// 不新开批量接口：仓储只有单条入口，而一次移动的条数受 maxItems 限制（最多几十条），
+    /// 逐条写命中率高且能如实回报「有几条已被别的路径删掉」。
+    @discardableResult
+    func move(itemIDs: [UUID], to boardID: UUID?) -> Int {
+        guard let repository else {
+            onHint?("移动失败（数据库未就绪）")
+            return 0
+        }
+        let moved = itemIDs.reduce(into: 0) { count, id in
+            if repository.moveItemToBoard(itemID: id, boardID: boardID) { count += 1 }
+        }
+        logger.info("剪贴板移板：\(moved)/\(itemIDs.count) 条")
+        return moved
+    }
+
     // MARK: 新建板
 
     /// 落库一块新板并切过去（弹窗已由控制器收走名称与颜色档）

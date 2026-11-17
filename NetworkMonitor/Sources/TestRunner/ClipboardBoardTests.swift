@@ -2,7 +2,7 @@ import Foundation
 import SQLite3
 import NetworkMonitorCore
 
-// MARK: - 剪贴板板仓储（建 / 改名 / 移动 / 删板连带删条目 / 双重豁免）
+// MARK: - 剪贴板板仓储（建 / 改名 / 移动 / 删板连带删条目 / 双重豁免 / 批量移入移出）
 
 /// 板领域的守恒测试 —— 从 ClipboardRepositoryTests 独立成文件（那边已贴着单文件体积上限）
 ///
@@ -104,4 +104,42 @@ func runClipboardBoardTests() {
 
         print("✅ 剪贴板双重豁免（收藏 + 板归属）works")
     }
+
+    // 批量移入 / 移出：多选路径逐条落库，板内查询与计数都跟着变（与右键「移到板…」同口径）
+    do {
+        let db = DatabaseManager()
+        db.initializeInMemory()
+        defer { db.close() }
+        guard let work = db.createBoard(name: "工作"),
+              let later = db.createBoard(name: "稍后"),
+              let a = db.saveClipboardItem(ClipboardDraft(kind: .text, contentHash: "bulk-a", text: "批量 A")),
+              let b = db.saveClipboardItem(ClipboardDraft(kind: .text, contentHash: "bulk-b", text: "批量 B")),
+              let c = db.saveClipboardItem(ClipboardDraft(kind: .text, contentHash: "bulk-c", text: "留在外面")) else { exit(1) }
+
+        // 批量移入一块板：两次调用都命中
+        let batchMoved = [a.id, b.id].reduce(into: 0) {
+            if db.moveItemToBoard(itemID: $1, boardID: work.id) { $0 += 1 }
+        }
+        assertEqual(batchMoved, 2, "批量移入两条都命中")
+        assertEqual(Set(db.fetchClipboardItems(boardID: work.id).map(\.id)), Set([a.id, b.id]), "板内查询含两条")
+        assertEqual(db.fetchClipboardItem(id: c.id)?.boardID == nil, true, "未选中的条目仍在板外")
+
+        // 只把其中一条转到另一块板：原板只剩一条，新板一条
+        assertEqual(db.moveItemToBoard(itemID: b.id, boardID: later.id), true, "改投另一块板命中")
+        assertEqual(db.fetchClipboardItems(boardID: work.id).map(\.id), [a.id], "原板只剩一条")
+        assertEqual(db.fetchClipboardItems(boardID: later.id).map(\.id), [b.id], "新板拿到这一条")
+
+        // 批量移出：两条都回未归类，两块板都空
+        let batchCleared = [a.id, b.id].reduce(into: 0) {
+            if db.moveItemToBoard(itemID: $1, boardID: nil) { $0 += 1 }
+        }
+        assertEqual(batchCleared, 2, "批量移出两条都命中")
+        assertEqual(db.fetchClipboardItems(boardID: work.id).isEmpty, true, "原板已空")
+        assertEqual(db.fetchClipboardItems(boardID: later.id).isEmpty, true, "改投过的板也空")
+        assertEqual(db.fetchClipboardItem(id: a.id)?.boardID == nil, true, "移出后 board_id 为 NULL")
+        assertEqual(db.clipboardItemCount(), 3, "移板不增删条目")
+
+        print("✅ 剪贴板批量移入板 / 改投 / 批量移出 works")
+    }
 }
+

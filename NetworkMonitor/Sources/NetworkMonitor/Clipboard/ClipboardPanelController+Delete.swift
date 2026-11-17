@@ -97,8 +97,8 @@ extension ClipboardPanelController {
             togglePin()
         case .delete:
             requestDeleteSelected()
-        case .pinToScreen:
-            break   // 贴到屏幕由卡片 onPin 直接分发到贴图链路
+        case .pinToScreen: break   // 贴到屏幕由卡片 onPin 分发
+        case .moveToBoard: break   // 子菜单自带目标板，走 didRequestMoveToBoard
         }
     }
 
