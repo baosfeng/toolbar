@@ -82,6 +82,8 @@ runClipboardHashTests()
 runClipboardFuzzySearchTests()
 
 // MARK: - 剪贴板：仓储 / 全文检索 / 超限清理 / 未初始化容错
+// schema 版本阶梯（迁移幂等 / 列序不错位）先行，后续仓储断言依赖表结构已就位
+runClipboardSchemaLadderTests()
 runClipboardRepositoryTests()
 runClipboardFullTextSearchTests()
 runClipboardLimitsTests()
