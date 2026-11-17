@@ -233,7 +233,18 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
 
     func controlTextDidChange(_ obj: Notification) {
         query = searchField.stringValue
+        // 高亮只跟搜索态走：查询清空后立即回落无高亮（不等下一次重排）
+        cardFlow.setHighlightQuery(query)
         delegate?.panelView(self, didChangeQuery: query)
+    }
+
+    /// 外部（控制器 / 快照）改写搜索串：同步搜索框、卡片高亮与查询态
+    func setQuery(_ text: String) {
+        guard searchField.stringValue != text else { return }
+        searchField.stringValue = text
+        query = text
+        cardFlow.setHighlightQuery(text)
+        delegate?.panelView(self, didChangeQuery: text)
     }
 
     // MARK: 布局

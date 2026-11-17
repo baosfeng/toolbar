@@ -4,11 +4,12 @@ import Foundation
 
 /// 卡片文本样式判定与断行预处理 — 纯字符串逻辑，不持有 UI 状态
 ///
-/// 从 `ClipboardCardView` 拆出（单文件体积上限治理），供卡片视图与后续列表类视图共用。
-enum ClipboardCardTextStyle {
+/// 从 `ClipboardCardView` 拆出（单文件体积上限治理），随搜索高亮一并下沉到 NetworkMonitorUI：
+/// 高亮区间要把命中映射回「断行预处理之后」的显示文本，两段必须共用同一份 breakable 口径。
+public enum ClipboardCardTextStyle {
 
     /// 零宽空格：提供断行机会，本身不绘制
-    static let zeroWidthSpace = "\u{200B}"
+    public static let zeroWidthSpace = "\u{200B}"
 
     /// 断行机会字符（等宽文本在它们之后允许换行，避免 URL / 命令整段溢出）
     private static let breakOpportunities: Set<Character> = ["/", ".", "-", "_", ":", "?", "&", "=", ",", "\\"]
@@ -23,7 +24,7 @@ enum ClipboardCardTextStyle {
     ]
 
     /// 是否按等宽展示（URL / 命令 / JSON → 12pt 等宽，其余 13pt 正文）
-    static func isMonospaced(_ text: String) -> Bool {
+    public static func isMonospaced(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")
@@ -39,7 +40,7 @@ enum ClipboardCardTextStyle {
     ///
     /// AppKit 的 `.byCharWrapping` 会在单词中间硬断，这里改用 `.byWordWrapping` 并预先埋好断点：
     /// 长 URL / 命令优先在 `/ . - _ :` 之后换行，哈希这类无断点长串才退化为定长切分。
-    static func breakable(_ text: String, monospaced: Bool) -> String {
+    public static func breakable(_ text: String, monospaced: Bool) -> String {
         let normalized = text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\n", with: " ")

@@ -56,6 +56,16 @@ final class ClipboardCardFlowView: NSView {
     var selectedIndex = -1
     /// 当前选中条目集合（多选态可能有多个；空集合 = 没有任何卡片选中）
     var selectedIDs: Set<UUID> = []
+    /// 当前搜索查询（空串 = 不高亮）——每次落地渲染时同步给窗口内每张卡
+    private(set) var highlightQuery: String = ""
+
+    /// 设置搜索高亮查询：只在变化时重绘（清空查询即回到无高亮）
+    func setHighlightQuery(_ query: String) {
+        guard query != highlightQuery else { return }
+        highlightQuery = query
+        for card in cardViews { card.highlightQuery = query }
+        needsDisplay = true
+    }
 
     /// 删除动效排队中的下一次渲染（动效结束后才真正重排）
     private var pendingRender: (items: [ClipboardItem], selectedIndex: Int, selectedIDs: Set<UUID>)?
@@ -191,6 +201,8 @@ final class ClipboardCardFlowView: NSView {
             // ⌘1–9 角标只在单选态出现：多选时直选语义不适用，角标会误导
             card.configure(with: item, isSelected: targetSelected, number: index + 1,
                            showsShortcut: selectedIDs.count <= 1)
+            // 复用卡可能是上一次查询的旧高亮：配置时无条件对齐当前查询
+            card.highlightQuery = highlightQuery
         }
         refreshShadows()
     }

@@ -32,6 +32,7 @@ enum SnapshotClipboardEvidence {
         await captureIfRequested(directory: directory)
         SnapshotClipboardGuide.captureIfRequested(directory: directory)
         SnapshotClipboardFilter.captureIfRequested(directory: directory)
+        SnapshotClipboardHighlight.captureIfRequested(directory: directory)
     }
 
     /// 取证入口：未开开关立即返回；开关打开时同步夹具 → 三张图依次落盘

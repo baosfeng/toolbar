@@ -63,11 +63,13 @@ extension ClipboardCardView {
     func drawTextBody(item: ClipboardItem, in body: CGRect) {
         let monospaced = ClipboardCardTextStyle.isMonospaced(item.preview)
         let text = item.preview.isEmpty ? "（空内容）" : item.preview
-        let block = DrawnTextBlock(string: ClipboardCardTextStyle.breakable(text, monospaced: monospaced),
+        let displayText = ClipboardCardTextStyle.breakable(text, monospaced: monospaced)
+        let block = DrawnTextBlock(string: displayText,
                                    font: monospaced ? Self.monospacedBodyFont : Self.bodyFont,
                                    color: .labelColor,
                                    lineSpacing: 2,
                                    maxLines: Self.maxTextLines)
+        drawBodyHighlight(displayText: displayText, query: highlightQuery, block: block, in: body)
         block.draw(centeredIn: body)
     }
 

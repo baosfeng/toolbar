@@ -349,6 +349,8 @@ runClipboardDetailStripTests()
 
 // MARK: - 剪贴板筛选芯片（类型 / 来源 App / 日期叠加与来源清单）
 runClipboardFilterTokenTests()
+// MARK: - 剪贴板搜索命中高亮（区间 / 多词 AND / 零宽空格映射 / 上限）
+runClipboardSearchHighlightTests()
 // 工具条横向分配（芯片行不溢出 / 搜索框不被压到下限以下）
 runClipboardToolbarLayoutTests()
 // 板标签行（不溢出 / ＋恒在）+ 切板过滤 + ⌘←/→ 环回

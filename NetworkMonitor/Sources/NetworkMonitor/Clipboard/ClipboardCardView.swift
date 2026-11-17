@@ -98,6 +98,8 @@ final class ClipboardCardView: NSView {
     private(set) var showsShortcut = true
     /// 是否正在播放删除动效（卡片流据此跳过复用，避免动效中途换内容）
     private(set) var isRemoving = false
+    /// 当前搜索查询（空串 = 不高亮；卡片流每次重排按同一份搜索态下发）
+    var highlightQuery: String = "" { didSet { if oldValue != highlightQuery { needsDisplay = true } } }
     /// 悬停目标推进（卡片是单元素：目标只有「0 = 卡内」与「nil = 卡外」，归零与变化判定在状态机里）
     private var hoverState = DrawnHoverState()
     /// 是否处于 hover 态（卡片流据此决定要不要画投影）
