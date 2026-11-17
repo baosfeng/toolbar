@@ -72,9 +72,7 @@ extension ClipboardPanelController {
 
     // MARK: 右键菜单指令
 
-    /// 卡片右键菜单：复制 / 复制识别文字 / 粘贴为纯文本 / 收藏 / 删除，全部复用本控制器既有动作
-    ///
-    /// 「贴到屏幕」不经此通道（卡片 onPin → 贴图链路），此处只处理其余项。
+    /// 卡片右键菜单各项复用本控制器既有动作；「贴到屏幕」走卡片 onPin，不经此通道。
     func panelView(_ view: ClipboardPanelView, didRequestMenuCommand command: ClipboardCardMenuCommand, itemID: UUID) {
         guard let index = filteredItems.firstIndex(where: { $0.id == itemID }) else { return }
         if index != selectedIndex {
@@ -88,21 +86,19 @@ extension ClipboardPanelController {
             copyRecognizedText()
         case .pastePlainText:
             pasteSelected(asPlainText: true)
+        case .edit: beginEditingSelected()   // 与 ⌘E 共用同一实现
         case .togglePin:
             togglePin()
         case .delete:
             requestDeleteSelected()
         case .pinToScreen:
-            // 贴到屏幕由卡片 onPin 直接分发到贴图链路，菜单通道不再重复实现
-            break
+            break   // 贴到屏幕由卡片 onPin 直接分发到贴图链路
         }
     }
 
     /// 「清空历史」确认用的固定标识（仅作状态机标识，与条目 ID 语义无关）
     static let clearAllConfirmKey = UUID(uuidString: "00000000-0000-0000-0000-0000000000AA")!
 }
-
-// MARK: - 删除确认提示文案
 
 /// 面板内删除确认文案（统一走提示行 showHint 通道，不弹独立窗口）
 enum ClipboardDeleteHint {

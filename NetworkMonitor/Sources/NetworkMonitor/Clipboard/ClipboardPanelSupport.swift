@@ -67,6 +67,30 @@ enum ClipboardPanelGeometry {
     }
 }
 
+// MARK: - 详情区编辑态接线
+
+/// 面板视图的编辑态转发 — 详情区自己管编辑器，面板只做三件事：
+/// 回答「是否在编辑」、取正文、按编辑态改写底部提示行（别的逻辑一概不在这里）
+extension ClipboardPanelView {
+
+    /// 详情区是否处于编辑态：面板按键拦截据此把键盘让给编辑器（只留 Esc / ⌘↩）
+    var isEditingBody: Bool { detailStrip.isEditing }
+
+    /// 编辑中的正文（保存时由控制器取走）
+    var editingText: String { detailStrip.editingText }
+
+    /// 进入编辑态：正文位置换成编辑器并交出焦点，提示行改成保存 / 取消键位
+    func beginEditingDetail(text: String, hint: String) {
+        detailStrip.beginEditing(text: text, hint: hint)
+        hintLabel.stringValue = hint
+    }
+
+    /// 退出编辑态：正文回到只读展示（提示行由调用方随后改写）
+    func endEditingDetail(item: ClipboardItem?) {
+        detailStrip.endEditing(item: item)
+    }
+}
+
 // MARK: - 快捷键帮助键位
 
 /// 快捷键帮助 — 面板「?」浮层展示的全部键位（纯数据，界面与读屏共用一份口径）
@@ -85,11 +109,14 @@ enum ClipboardShortcutHelp {
     /// 浮层标题（同时用作悬浮层的无障碍标签）
     static let title = "快捷键帮助"
 
-    /// 全部键位（13 条，浮层按两列 × 7 行排布）
+    /// 全部键位（16 条，浮层按两列 × 8 行排布）
     static let entries: [Entry] = [
         Entry(keys: "⌘1–9", action: "快速粘贴第 N 条"),
         Entry(keys: "↵", action: "粘贴并收起"),
         Entry(keys: "⌥↵", action: "粘贴为纯文本"),
+        Entry(keys: ClipboardEditSession.editKeyHint, action: "编辑选中条目"),
+        Entry(keys: ClipboardEditSession.newKeyHint, action: "新建文本条目"),
+        Entry(keys: ClipboardEditSession.saveKeyHint, action: "保存编辑"),
         Entry(keys: "⌘S", action: "加入 Paste Stack"),
         Entry(keys: "⌘⇧S", action: "清空 Paste Stack"),
         Entry(keys: "⇧Tab", action: "反向切换过滤"),

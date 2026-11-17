@@ -60,6 +60,27 @@ func runClipboardPanelMockTests() {
                 storage.removeAll { keepingPinned ? !$0.isPinned : true }
                 return doomed
             }
+            func updateClipboardItemText(id: UUID, text: String, preview: String) -> ClipboardItem? {
+                guard let hash = ClipboardContentHasher.hash(text: text) else { return nil }
+                lock.lock(); defer { lock.unlock() }
+                guard let index = storage.firstIndex(where: { $0.id == id }) else { return nil }
+                // 冲突口径与 SQLite 实现一致：别的条目已占这个哈希 → 删掉它，当前条目继续存活
+                if let conflict = storage.firstIndex(where: { $0.contentHash == hash && $0.id != id }) {
+                    storage[index].copyCount += storage[conflict].copyCount
+                    storage[index].isPinned = storage[index].isPinned || storage[conflict].isPinned
+                    storage.remove(at: conflict)
+                }
+                let target = storage.firstIndex(where: { $0.id == id }) ?? index
+                storage[target].kind = .text
+                storage[target].text = text
+                storage[target].preview = preview
+                storage[target].contentHash = hash
+                return storage[target]
+            }
+            func createClipboardItem(text: String) -> ClipboardItem? {
+                guard let hash = ClipboardContentHasher.hash(text: text) else { return nil }
+                return saveClipboardItem(ClipboardDraft(kind: .text, contentHash: hash, text: text))
+            }
             func updateClipboardStackPositions(_ orderedIDs: [UUID]) {
                 lock.lock(); defer { lock.unlock() }
                 for index in storage.indices { storage[index].stackPosition = nil }

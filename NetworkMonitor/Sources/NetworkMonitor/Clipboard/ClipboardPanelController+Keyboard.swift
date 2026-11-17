@@ -6,15 +6,16 @@ import NetworkMonitorCore
 
 /// 面板级按键：先于 responder chain 拿到事件，再映射到控制器既有方法
 ///
-/// 拆出原因：主文件贴着单文件 15 KiB 上限，按键映射自成体系；
-/// 跨文件访问：`handleKeyDown` / `moveSelection` / `cycleFilter` / `quickPaste`
-/// 由 private 放宽为 internal，仅供本扩展与主文件的回调闭包使用。
+/// 拆出原因：主文件贴着单文件 15 KiB 上限，按键映射自成体系；`handleKeyDown` / `moveSelection` /
+/// `cycleFilter` / `quickPaste` 由 private 放宽为 internal，仅供本扩展与主文件的回调闭包使用。
 extension ClipboardPanelController {
 
     /// 面板级按键拦截（先于 responder chain）：搜索框非空时 ⌫ 交还字段编辑器
     func handleKeyDown(_ event: NSEvent) -> Bool {
         // 帮助浮层打开时 Esc 优先收起浮层（不连带着把面板一起关掉）
         if Int(event.keyCode) == kVK_Escape, content.hideShortcutHelp() { return true }
+        // 编辑态：键盘属于编辑器，这里只留 Esc（取消）与 ⌘↩（保存），其余放行
+        if content.isEditingBody { return handleEditingKeyDown(event) }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let isCommand = flags.contains(.command), isShift = flags.contains(.shift)
         let isOption = flags.contains(.option), hasQuery = !content.query.isEmpty
@@ -41,6 +42,8 @@ extension ClipboardPanelController {
         default:
             guard isCommand, let characters = event.charactersIgnoringModifiers?.lowercased() else { return false }
             switch characters {
+            case "e": beginEditingSelected()
+            case "n": beginDraftingNewItem()
             case "d": togglePin()
             case "p": togglePause()   // 暂停 / 恢复采集（键位帮助浮层与提示行同口径）
             case "s": isShift ? clearStack() : pushSelectedToStack()
