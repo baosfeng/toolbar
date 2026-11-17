@@ -78,6 +78,7 @@ func runClipboardPanelMockTests() {
         @MainActor
         final class MockClipboardCaptureService: ClipboardCaptureService {
             var isRunning = false
+            var isPaused = false
             var onStateChange: ((ClipboardCaptureState) -> Void)?
             var onCapture: ((ClipboardDraft) -> Void)?
             private(set) var captureNowCount = 0
@@ -92,6 +93,12 @@ func runClipboardPanelMockTests() {
                 isRunning = false
                 lastState = .stopped
                 onStateChange?(.stopped)
+            }
+            func pause() { guard !isPaused else { return }; isPaused = true; stop(); lastState = .paused }
+            func resume() { guard isPaused else { return }; isPaused = false; start() }
+            @discardableResult func togglePause() -> Bool {
+                if isPaused { resume() } else { pause() }
+                return isPaused
             }
             func captureNow() {
                 captureNowCount += 1

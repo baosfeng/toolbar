@@ -81,6 +81,15 @@ extension ClipboardPanelView {
         hintLabel.stringValue = Self.keyHint
         addSubview(hintLabel)
 
+        // 暂停恢复热区：铺在提示行文字上（透明），只在暂停时显示，避免与临时提示抢点击
+        pauseResumeButton.isBordered = false
+        pauseResumeButton.title = ""
+        pauseResumeButton.isHidden = true
+        pauseResumeButton.target = self
+        pauseResumeButton.action = #selector(resumeFromPauseBanner)
+        pauseResumeButton.setAccessibilityLabel("恢复剪贴板采集")
+        addSubview(pauseResumeButton)
+
         accessibilityButton.isBordered = false
         accessibilityButton.target = self
         accessibilityButton.action = #selector(openAccessibilitySettings)

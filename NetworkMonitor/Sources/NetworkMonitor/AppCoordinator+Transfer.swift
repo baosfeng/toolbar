@@ -3,10 +3,7 @@ import NetworkMonitorCore
 
 // MARK: - 应用协调器（局域网互传装配）
 
-/// 互传链路装配 — 从 `AppCoordinator.swift` 拆出
-///
-/// 拆出原因：主文件因新增计费 provider 注册后超过单文件 15 KiB 规范上限；
-/// 互传装配与组合根主流程无关，独立文件后主流程更短。
+/// 互传链路装配 — 从 `AppCoordinator.swift` 拆出（装配与主流程分离，主流程更短）
 /// 跨文件访问的 `transferController` 由 private 放宽为 internal。
 extension AppCoordinator {
 

@@ -99,7 +99,7 @@ public final class AppCoordinator {
     /// 启动所有服务
     func start() -> MenuBarManager {
         // 1. 数据库（同一实例满足 DatabaseService 与 ClipboardRepository）
-        let databaseManager = DatabaseManager()
+        let databaseManager = DatabaseManager(path: Self.databasePathForLaunch())
         databaseManager.initialize()
         database = databaseManager
 
@@ -211,6 +211,7 @@ public final class AppCoordinator {
             processMonitor: processMonitor,
             trafficTracker: trafficTracker,
             clipboardRepository: databaseManager,
+            captureService: clipboardWatcher,
             paster: clipboardPaster,
             transferController: transfer,
             billingMonitor: billingMonitor,

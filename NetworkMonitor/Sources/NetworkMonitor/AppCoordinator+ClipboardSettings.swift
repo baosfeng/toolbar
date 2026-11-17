@@ -3,10 +3,8 @@ import NetworkMonitorCore
 
 // MARK: - 应用协调器（剪贴板设置页回调）
 
-/// 剪贴板设置页的动作实现 — 从 `AppCoordinator.swift` 拆出
+/// 剪贴板设置页的动作实现 — 从 `AppCoordinator.swift` 拆出（主文件曾撑满 15 KiB）
 ///
-/// 拆出原因：主文件已被启动装配撑满，而设置页回调是一组只与剪贴板偏好 / 采集器 / 栈 /
-/// 图片存储交互的动作，独立成文件后主文件回到单文件 15 KiB 上限内。
 /// 跨文件访问：`globalHotKey` / `clipboardWatcher` / `clipboardStack` / `clipboardPreferences` /
 /// `clipboardPanel` / `database` 在主文件中放宽为 internal，仅供本扩展与装配流程使用。
 extension AppCoordinator: ClipboardSettingsDelegate {
@@ -21,6 +19,12 @@ extension AppCoordinator: ClipboardSettingsDelegate {
         clipboardWatcher.stop()
         clipboardWatcher.start()
         logger.info("剪贴板采集模式已切换为：\(clipboardPreferences.captureMode.label)")
+    }
+
+    /// 暂停 / 恢复：偏好由采集器这一处写，设置页只回读（两处都写会让「点两次」变成一次暂停一次恢复）
+    func settingsDidChangePause(_ paused: Bool) {
+        if paused { clipboardWatcher.pause() } else { clipboardWatcher.resume() }
+        logger.info("剪贴板采集暂停更新：isPaused=\(clipboardWatcher.isPaused)")
     }
 
     func settingsDidChangeIgnoredApps() {

@@ -8,6 +8,8 @@ public enum ClipboardCaptureState: Equatable, Sendable {
     case stopped
     /// 轮询中
     case running
+    /// 用户主动暂停（与 stopped 的区别：暂停是「本来要采但现在不采」，面板要显示可恢复入口）
+    case paused
     /// 系统拒绝剪贴板访问（需引导用户去系统设置开启）
     case denied(ClipboardAccessDeniedReason)
 }
@@ -37,6 +39,9 @@ public protocol ClipboardCaptureService: AnyObject {
     /// 是否正在采集
     var isRunning: Bool { get }
 
+    /// 用户是否已主动暂停采集（与 `isRunning` 正交：按需模式下不运行时也可以未暂停）
+    var isPaused: Bool { get }
+
     /// 状态变化回调（启动 / 停止 / 权限被拒）
     var onStateChange: ((ClipboardCaptureState) -> Void)? { get set }
 
@@ -48,6 +53,18 @@ public protocol ClipboardCaptureService: AnyObject {
 
     /// 停止轮询（重复调用应幂等）
     func stop()
+
+    /// 暂停采集：停轮询 + 置暂停偏好（重复调用幂等，不重复打日志）
+    ///
+    /// 实现约定：暂停期间打开面板也不读剪贴板（暂停语义是「不采」而不是「不轮询」）。
+    func pause()
+
+    /// 恢复采集：按当前采集模式重启 + 复位暂停偏好（重复调用幂等）
+    func resume()
+
+    /// 在暂停 / 恢复之间切换，返回切换后的暂停态（供面板键位与菜单直接消费）
+    @discardableResult
+    func togglePause() -> Bool
 
     /// 立即采集一次（分支 A：面板打开或用户点击「采集当前剪贴板」时调用）
     ///

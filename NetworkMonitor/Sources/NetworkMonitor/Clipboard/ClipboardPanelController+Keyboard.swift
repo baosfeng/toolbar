@@ -4,10 +4,9 @@ import NetworkMonitorCore
 
 // MARK: - 面板按键拦截（从面板控制器拆出，给操作反馈接线腾出主文件空间）
 
-/// 面板级按键：先于 responder chain 拿到事件，再把动作映射到控制器既有方法
+/// 面板级按键：先于 responder chain 拿到事件，再映射到控制器既有方法
 ///
-/// 拆出原因：主文件已贴着单文件 15 KiB 上限，接入音效 / 触觉后还要再加参数与属性，
-/// 而按键映射本身是一段自成体系的纯分发逻辑，独立成文件更清晰。
+/// 拆出原因：主文件贴着单文件 15 KiB 上限，按键映射自成体系；
 /// 跨文件访问：`handleKeyDown` / `moveSelection` / `cycleFilter` / `quickPaste`
 /// 由 private 放宽为 internal，仅供本扩展与主文件的回调闭包使用。
 extension ClipboardPanelController {
@@ -43,6 +42,7 @@ extension ClipboardPanelController {
             guard isCommand, let characters = event.charactersIgnoringModifiers?.lowercased() else { return false }
             switch characters {
             case "d": togglePin()
+            case "p": togglePause()   // 暂停 / 恢复采集（键位帮助浮层与提示行同口径）
             case "s": isShift ? clearStack() : pushSelectedToStack()
             case "1", "2", "3", "4", "5", "6", "7", "8", "9": quickPaste(Int(characters) ?? 0)
             default: return false

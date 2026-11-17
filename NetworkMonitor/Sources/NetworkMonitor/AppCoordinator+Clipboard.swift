@@ -3,10 +3,9 @@ import NetworkMonitorCore
 
 // MARK: - 应用协调器（剪贴板与流量持久化装配）
 
-/// 剪贴板链路与累计流量落盘的装配 — 从 `AppCoordinator.swift` 拆出
+/// 剪贴板链路与累计流量落盘的装配 — 从 `AppCoordinator.swift` 拆出（主类 + 装配扩展范式）
 ///
-/// 拆出原因：组合根加入屏幕活动监听后已接近单文件 15 KiB 规范上限，
-/// 按「主类 + 装配扩展」范式分离。跨文件访问的成员由 private 放宽为 internal 并注明原因。
+/// 跨文件访问的成员由 private 放宽为 internal 并注明原因。
 extension AppCoordinator {
 
     // MARK: - 累计流量持久化
@@ -73,6 +72,7 @@ extension AppCoordinator {
             self?.snipController.pinClipboardItem(item)
         }
 
+        applyLaunchPauseIfRequested()   // 仅 DEBUG：按环境变量落到暂停态，供真机自证
         globalHotKey = GlobalHotKeyCenter()
         registerClipboardHotKey(preferences.panelToggleHotKey, presentingAlert: true)
     }
@@ -98,6 +98,8 @@ extension AppCoordinator {
             logger.info("剪贴板采集运行中")
         case .stopped:
             logger.info("剪贴板采集未运行（按需采集模式或已停止）")
+        case .paused:
+            logger.info("剪贴板采集已暂停（复制的内容不再入库）")
         case .denied(let reason):
             logger.warning("剪贴板访问被拒绝（\(reason.rawValue)）：请到「系统设置 → 隐私与安全性」允许本应用访问剪贴板")
         }
