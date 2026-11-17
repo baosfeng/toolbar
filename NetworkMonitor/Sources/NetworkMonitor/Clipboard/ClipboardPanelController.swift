@@ -151,6 +151,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         // 分支 A / B 通用：打开瞬间读一次（changeCount 未变则静默返回，不重复读）
         captureService.captureNow()
         if let hint = pendingHint { content.showHint(hint); pendingHint = nil }
+        expireTimedPauseIfNeeded()   // 定时暂停到点即恢复（宿主节拍之外的补位）
         syncPauseState()   // 暂停态最后落定：不被上一次的临时提示盖掉
         positionPanel()
         let finalFrame = panel.frame

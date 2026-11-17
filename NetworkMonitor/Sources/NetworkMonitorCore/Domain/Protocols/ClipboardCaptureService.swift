@@ -66,8 +66,22 @@ public protocol ClipboardCaptureService: AnyObject {
     @discardableResult
     func togglePause() -> Bool
 
+    /// 定时暂停到点自动恢复（由宿主的既有刷新节拍调用，不另起常驻 Timer）
+    ///
+    /// - Returns: 本次是否真的恢复（无定时暂停 / 未到点返回 false，调用方无需分支）
+    @discardableResult
+    func resumeTimedPauseIfExpired(now: Date) -> Bool
+
     /// 立即采集一次（分支 A：面板打开或用户点击「采集当前剪贴板」时调用）
     ///
     /// 与轮询走同一条流水线（含 changeCount 判定、忽略判定与哈希）；无新内容时静默返回。
     func captureNow()
+}
+// MARK: - 默认实现
+
+public extension ClipboardCaptureService {
+
+    /// 默认无定时暂停：实现方未支持时什么也不做，调用方不必区分
+    @discardableResult
+    func resumeTimedPauseIfExpired(now: Date) -> Bool { false }
 }

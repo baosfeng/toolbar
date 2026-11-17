@@ -5,8 +5,7 @@ import Foundation
 /// 状态栏 1 秒刷新链里的两路采样节流
 ///
 /// 拆出来两个理由：
-/// 1. 面板收起时系统指标与进程榜都没有观察者——系统采样从 1 秒降到 5 秒、
-///    nettop 进程采样从 3 秒降到 15 秒（nettop 每次 fork 实测 0.3–0.65% CPU）；
+/// 1. 面板收起时无人看：系统采样 1 秒→5 秒、nettop 进程采样 3 秒→15 秒；
 /// 2. MenuBarManager.swift 已到单文件字节上限，节流逻辑独立成扩展文件。
 ///
 /// 状态栏仍需的网速由 monitor.poll() 提供，不走这里，所以收起时状态栏照常每秒刷新。
@@ -21,6 +20,7 @@ extension MenuBarManager {
 
     /// 按面板可见性与各自节流周期触发一次采样
     func pollSamplingIfNeeded(now: Date) {
+        clipboardCapture?.resumeTimedPauseIfExpired(now: now)   // 定时暂停到点恢复（幂等，不另起 Timer）
         let panelVisible = panel.isShown
         let systemInterval = panelVisible
             ? systemSampleInterval

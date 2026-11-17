@@ -15,6 +15,8 @@ protocol ClipboardSettingsDelegate: AnyObject {
     func settingsDidChangeCaptureMode()
     /// 暂停 / 恢复采集（幂等；暂停时采集器停轮询，面板打开也不读剪贴板）
     func settingsDidChangePause(_ paused: Bool)
+    /// 按选定时长暂停到某时刻（哨兵值 = 到手动恢复；幂等，已暂停时只改截止时刻）
+    func settingsDidChangeTimedPause(until endDate: Date)
     /// 忽略应用清单变更（内部重载忽略集合）
     func settingsDidChangeIgnoredApps()
     /// 图片落盘目录的当前占用（设置页「存储」卡每次刷新现取）

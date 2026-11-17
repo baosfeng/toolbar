@@ -53,6 +53,7 @@ final class ClipboardPreferences: Sendable {
     private enum Key {
         static let captureMode = "clipboard.captureMode"
         static let paused = "clipboard.paused"
+        static let pausedUntil = "clipboard.pausedUntil"
         static let hotKeyCode = "clipboard.hotkey.keyCode"
         static let hotKeyModifiers = "clipboard.hotkey.modifiers"
         static let quickPaste = "clipboard.quickPasteEnabled"
@@ -82,14 +83,27 @@ final class ClipboardPreferences: Sendable {
         set { storage.set(newValue.rawValue, forKey: Key.captureMode) }
     }
 
-    /// 是否暂停采集（默认 false）
+    /// 暂停开关的原始记录（默认 false）；「现在到底采不采」读 `isPausedNow`
     ///
-    /// 与 `captureMode`（怎么采）是两个维度：这里决定「采不采」，暂停时采集器停轮询、
-    /// 面板打开也不读剪贴板。定时暂停（暂停到某个时刻自动恢复）留到下一批：
-    /// 届时在同一处加 `pausedUntil` 时间戳键，读取口径沿用本属性即可。
+    /// 与 `captureMode`（怎么采）是两个维度：这里决定「采不采」。开关与定时截止时刻分开存，
+    /// 定时到点只让 `isPausedNow` 变假，不改写开关，故「到手动恢复」的暂停不会被动过。
     var isPaused: Bool {
         get { ClipboardPauseLogic.isPaused(storedValue: storage.object(forKey: Key.paused) as? Bool) }
         set { storage.set(newValue, forKey: Key.paused) }
+    }
+
+    /// 定时暂停的截止时刻（时间戳 0 = 无定时，暂停到手动恢复）
+    var pausedUntil: Date {
+        get { Date(timeIntervalSince1970: storage.double(forKey: Key.pausedUntil)) }
+        set {
+            let timestamp = newValue.timeIntervalSince1970
+            storage.set(timestamp > 0 ? timestamp : 0, forKey: Key.pausedUntil)
+        }
+    }
+
+    /// 当前是否真的暂停 —— 定时暂停到点返回 false，调用方据此自动恢复
+    var isPausedNow: Bool {
+        ClipboardPauseLogic.isPausedNow(paused: isPaused, pausedUntil: pausedUntil, now: Date())
     }
 
     /// 是否已完成剪贴板访问权限一次性引导（分支 B 的引导标记）

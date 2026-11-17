@@ -47,6 +47,48 @@ func runClipboardPauseTests() {
     assertEqual(ClipboardPauseLogic.captureBlockedHint.contains(ClipboardPauseLogic.toggleKeyHint), true,
                 "暂停时手动采集提示给出恢复键位")
 
+    // 定时暂停：到点自动失效，手动暂停不过期
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let later = now.addingTimeInterval(15 * 60)
+    assertEqual(ClipboardPauseLogic.isPausedNow(paused: false, pausedUntil: later, now: now), false,
+                "未暂停时即便带定时也不算暂停")
+    assertEqual(ClipboardPauseLogic.isPausedNow(paused: true, pausedUntil: .distantPast, now: now), true,
+                "手动暂停（无定时）不会自己过期")
+    assertEqual(ClipboardPauseLogic.isPausedNow(paused: true, pausedUntil: Date(timeIntervalSince1970: 0), now: now), true,
+                "偏好缺失读出的时间戳 0 同样按手动暂停处理")
+    assertEqual(ClipboardPauseLogic.isPausedNow(paused: true, pausedUntil: later, now: now), true,
+                "定时未到的暂停态成立")
+    assertEqual(ClipboardPauseLogic.isPausedNow(paused: true, pausedUntil: later, now: later), false,
+                "定时到点即自动失效")
+    assertEqual(ClipboardPauseLogic.isPausedNow(paused: true, pausedUntil: later, now: later.addingTimeInterval(60)), false,
+                "定时已过仍判为未暂停（不因错过节拍而永久卡在暂停）")
+
+    // 剩余分钟：向上取整，到点与无定时都归零
+    assertEqual(ClipboardPauseLogic.remainingMinutes(pausedUntil: later, now: now), 15, "整 15 分钟")
+    assertEqual(ClipboardPauseLogic.remainingMinutes(pausedUntil: now.addingTimeInterval(30), now: now), 1,
+                "还剩 30 秒按 1 分钟计（不显示还剩 0 分钟）")
+    assertEqual(ClipboardPauseLogic.remainingMinutes(pausedUntil: now.addingTimeInterval(59 * 60 + 1), now: now), 60,
+                "59 分 1 秒向上取整为 60 分钟")
+    assertEqual(ClipboardPauseLogic.remainingMinutes(pausedUntil: later, now: later), 0, "到点剩余 0 分钟")
+    assertEqual(ClipboardPauseLogic.remainingMinutes(pausedUntil: .distantPast, now: now), 0, "无定时剩余 0 分钟")
+
+    // 档位：三个预设换算成分钟，手动档不写截止时刻
+    assertEqual(ClipboardPauseLogic.PauseDuration.fifteenMinutes.endDate(now: now), now.addingTimeInterval(900),
+                "15 分钟档 = 900 秒后")
+    assertEqual(ClipboardPauseLogic.PauseDuration.oneHour.endDate(now: now), now.addingTimeInterval(3600),
+                "1 小时档 = 3600 秒后")
+    assertEqual(ClipboardPauseLogic.PauseDuration.fourHours.endDate(now: now), now.addingTimeInterval(14400),
+                "4 小时档 = 14400 秒后")
+    assertEqual(ClipboardPauseLogic.PauseDuration.manual.endDate(now: now), .distantPast,
+                "手动档不写定时截止时刻")
+
+    // 提示行：定时暂停带出截止时刻（面板据此显示「暂停至 HH:mm」）
+    let timedHint = ClipboardPauseLogic.footerHint(isPaused: true, pausedUntil: later, now: now, idleHint: idleHint)
+    assertEqual(timedHint.contains("暂停至"), true, "定时暂停提示带出截止时刻")
+    assertEqual(timedHint.contains(ClipboardPauseLogic.clockText(later)), true, "截止时刻用 HH:mm 口径")
+    assertEqual(ClipboardPauseLogic.footerHint(isPaused: true, pausedUntil: .distantPast, now: now, idleHint: idleHint)
+                .contains("暂停至"), false, "手动暂停不带截止时刻")
+
     // 状态枚举：暂停与停止是两个态（面板据此决定是否显示可恢复入口）
     assertEqual(ClipboardCaptureState.paused == ClipboardCaptureState.stopped, false, "暂停态与停止态可区分")
     assertEqual(ClipboardCaptureState.paused, ClipboardCaptureState.paused, "暂停态自反相等")

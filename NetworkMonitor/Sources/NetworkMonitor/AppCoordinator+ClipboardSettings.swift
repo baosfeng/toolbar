@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 应用协调器（剪贴板设置页回调）
 
@@ -25,6 +26,13 @@ extension AppCoordinator: ClipboardSettingsDelegate {
     func settingsDidChangePause(_ paused: Bool) {
         if paused { clipboardWatcher.pause() } else { clipboardWatcher.resume() }
         logger.info("剪贴板采集暂停更新：isPaused=\(clipboardWatcher.isPaused)")
+    }
+
+    /// 定时暂停：写截止时刻并进入暂停；到点由状态栏节拍自动恢复
+    func settingsDidChangeTimedPause(until endDate: Date) {
+        clipboardWatcher.pause(until: endDate)
+        let minutes = ClipboardPauseLogic.remainingMinutes(pausedUntil: endDate, now: Date())
+        logger.info("剪贴板定时暂停已生效：剩余 \(minutes) 分钟")
     }
 
     func settingsDidChangeIgnoredApps() {

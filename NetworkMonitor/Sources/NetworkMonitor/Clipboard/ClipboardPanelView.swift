@@ -198,12 +198,11 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         hintLabel.stringValue = text
     }
 
-    /// 透出暂停态：提示行常驻「采集已暂停（点此恢复）」，暂停时给一个覆盖提示行的恢复热区
-    ///
-    /// 与 `showHint` 的分工：那是临时提示（删除二次确认等），这是状态常驻；恢复按钮只在暂停时可点，
-    /// 未暂停时隐藏，不抢提示行的点击。
-    func revealPauseState(_ isPaused: Bool) {
-        let text = ClipboardPauseLogic.footerHint(isPaused: isPaused, idleHint: Self.keyHint)
+    /// 透出暂停态：提示行常驻「采集已暂停（点此恢复）」，定时暂停带出截止时刻；
+    /// 暂停时给一个覆盖提示行的恢复热区（未暂停时隐藏，不抢提示行的点击）。
+    func revealPauseState(_ isPaused: Bool, until pausedUntil: Date = .distantPast, now: Date = Date()) {
+        let text = ClipboardPauseLogic.footerHint(isPaused: isPaused, pausedUntil: pausedUntil,
+                                                  now: now, idleHint: Self.keyHint)
         hintLabel.stringValue = text
         hintLabel.textColor = isPaused ? .systemOrange : .secondaryLabelColor
         hintLabel.setAccessibilityLabel(isPaused ? "采集已暂停，点按或按 ⌘P 恢复采集" : text)
