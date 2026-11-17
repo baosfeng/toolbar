@@ -6,14 +6,13 @@ import NetworkMonitorCore
 
 /// 面板级按键：先于 responder chain 拿到事件，再映射到控制器既有方法
 ///
-/// 拆出原因：主文件贴着单文件 15 KiB 上限，按键映射自成体系；`handleKeyDown` / `moveSelection` /
-/// `cycleFilter` / `quickPaste` 由 private 放宽为 internal，仅供本扩展与主文件的回调闭包使用。
+/// 拆出原因：主文件贴着单文件 15 KiB 上限，按键映射自成体系；方法由 private 放宽为 internal。
 extension ClipboardPanelController {
 
     /// 面板级按键拦截（先于 responder chain）：搜索框非空时 ⌫ 交还字段编辑器
     func handleKeyDown(_ event: NSEvent) -> Bool {
-        // 帮助浮层打开时 Esc 优先收起浮层（不连带着把面板一起关掉）
-        if Int(event.keyCode) == kVK_Escape, content.hideShortcutHelp() { return true }
+        // 帮助浮层 / 预览浮层打开时 Esc 优先收起浮层（不连带着把面板一起关掉）
+        if Int(event.keyCode) == kVK_Escape, dismissTopOverlay() { return true }
         // 编辑态：键盘属于编辑器，这里只留 Esc（取消）与 ⌘↩（保存），其余放行
         if content.isEditingBody { return handleEditingKeyDown(event) }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -34,6 +33,7 @@ extension ClipboardPanelController {
             onRequestSettings?()
         case kVK_Return, kVK_ANSI_KeypadEnter:
             isCommand ? copySelected() : pasteSelected(asPlainText: isOption)
+        case kVK_Space where content.query.isEmpty: togglePreview()   // 搜索态让位：空格仍是输入字符
         // 单行横向流：←/→ 连续前后移动，↑/↓ 等价映射为前后
         case kVK_LeftArrow: moveSelection(-1)
         case kVK_RightArrow: moveSelection(1)

@@ -359,6 +359,8 @@ runClipboardDeleteConfirmTests()
 
 // MARK: - 图片文字识别（调度口径 / 三态收敛 / 失败冷却 / 闸门）
 runClipboardOCRTests()
+// MARK: - 剪贴板空格预览（预览项构造三载体 + 临时目录清理）
+runClipboardPreviewTests()
 
 // MARK: - 外观（主题令牌 / 深浅对比度 / 渲染帧率档 / 外观偏好）
 runThemeTokenTests()

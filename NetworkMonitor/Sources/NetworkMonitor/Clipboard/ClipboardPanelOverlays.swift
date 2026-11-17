@@ -178,8 +178,8 @@ final class ClipboardShortcutHelpOverlay: NSView {
     private static let hudSecondary = NSColor.white.withAlphaComponent(0.68)
     /// 卡片最大宽度（两列各 184 + 列间距 16 + 左右留白）
     private static let maxCardWidth: CGFloat = 420
-    /// 卡片目标高度（标题 + 7 行键位）
-    private static let cardHeight: CGFloat = 220
+    /// 卡片目标高度（标题 + 9 行键位；17 条键位两列各 9 行）
+    private static let cardHeight: CGFloat = 246
     /// 卡片与遮罩边缘的最小留白（面板最窄 420pt 时两列仍不压字）
     private static let cardInset: CGFloat = 10
     /// 单列宽度：键帽 60 + 间距 8 + 文案 116
