@@ -140,7 +140,9 @@ extension HarnessUsageService {
             totalSessions: max(totalSessions, aggregate.indexedSessions),
             lastScanAt: lastScanAt,
             indexingState: state,
-            sourceAvailability: availability
+            sourceAvailability: availability,
+            sourceDiagnostics: HarnessSourceDiagnostics.make(resolution: scanner.sourceResolution,
+                                                             availability: availability)
         )
     }
 }

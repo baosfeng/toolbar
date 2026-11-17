@@ -26,14 +26,14 @@ public final class AppCoordinator {
     /// 累计流量定期落盘定时器（崩溃丢失窗口压到 1 分钟）
     // 放宽为 internal：`AppCoordinator+Clipboard` 的流量落盘扩展读写
     var trafficPersistenceTimer: Timer?
-    /// DSH Token 统计服务（会话扫描 + SQLite 索引 + 快照）
-    private var harnessUsageService: (any HarnessUsageServicing)?
+    /// DSH Token 统计服务（设置页「Token 用量」要读诊断 / 事件数并触发重扫）
+    var harnessUsageService: (any HarnessUsageServicing)?
     /// 系统指标监控服务（装配细节见 AppCoordinator+SystemMonitor）
     private(set) var systemMonitor: (any SystemMonitoringService)?
     /// 屏幕活动监听（锁屏 / 休眠暂停额度刷新）
     ///
-    /// 必须由组合根强持有：通知中心只持 observer 闭包，监听器被释放后
-    /// 闭包里的 [weak self] 恒为 nil，额度刷新会永久失去暂停 / 恢复能力且不报错。
+    /// 必须强持有：通知中心只持 observer 闭包，监听器被释放后闭包里的 [weak self] 恒为 nil，
+    /// 额度刷新会永久失去暂停 / 恢复能力且不报错。
     var screenActivity: ScreenActivityMonitor?
 
     // MARK: - 剪贴板历史
@@ -50,15 +50,15 @@ public final class AppCoordinator {
     /// 面板控制器
     // 放宽为 internal：`AppCoordinator+Clipboard` 的装配与热键回调要读写
     var clipboardPanel: ClipboardPanelController!
-    /// 统一设置窗口（长期持有）
+    /// 统一设置窗口（长期持有；六个功能页按需装配）
     var settingsWindow: SettingsWindow?
     /// 更新检查服务（关于页与启动自动检查共用同一实例）
     var updateCheck: UpdateCheckService?
-    /// 全局热键（放宽为 internal：设置页重新录制快捷键要重注册）
+    /// 全局热键（设置页重新录制快捷键要重注册）
     var globalHotKey: GlobalHotKeyCenter!
-    /// 截图 / 贴图链路（放宽为 internal：截图装配扩展文件要写）
+    /// 截图 / 贴图链路（截图装配扩展文件要写）
     var snipController: SnipController!
-    // 操作反馈实例（放宽为 internal：AppCoordinator+Feedback 装配扩展要写）
+    // 操作反馈实例（AppCoordinator+Feedback 装配扩展要写）
     var soundFeedback: SoundFeedback!
     var hapticFeedback: HapticFeedback!
     /// 通知与音效偏好（事件表六行的唯一读写入口）
@@ -98,8 +98,7 @@ public final class AppCoordinator {
 
     /// 启动所有服务
     func start() -> MenuBarManager {
-        // 1. 数据库（同一实例满足 DatabaseService 与 ClipboardRepository）
-        let databaseManager = DatabaseManager()
+        let databaseManager = DatabaseManager()  // 1. 数据库（同一实例满足 DatabaseService 与 ClipboardRepository）
         databaseManager.initialize()
         database = databaseManager
 
@@ -128,9 +127,8 @@ public final class AppCoordinator {
 
         // 6. 额度页链路（provider 类型工厂 + 实例列表 + 凭据存储 + 状态管理器）
         //
-        // 每个 provider 类型可以起多个实例：默认实例 id == kindID（沿用旧凭据键 / 启用键 /
-        // 提醒键，升级零迁移），命名实例（如 cursor::work）各自一份凭据与开关。
-        // 具体 provider 类只在这里 new，Core 与状态管理器都只认协议。
+        // 同一 provider 类型可起多个实例：默认实例 id == kindID（沿用旧凭据键，升级零迁移），
+        // 命名实例（如 cursor::work）各自一份凭据与开关。具体 provider 类只在这里 new。
         // 闭包内显式取局部 logger：逃逸闭包引用 self 属性需显式 self，这里避免噪音
         let billingLogger = logger
         let billingKinds: [(kindID: String, title: String, make: @MainActor () -> any BillingProvider)] = [
@@ -196,13 +194,9 @@ public final class AppCoordinator {
         screenActivity.start()
         self.screenActivity = screenActivity
 
-        // 6b. DSH Token 统计链路（会话扫描 → SQLite 索引 → 快照；索引在后台队列串行执行）
-        let harnessScanner = HarnessSessionScanner(streamer: HarnessZstdLineStreamer(logger: logger))
-        let harnessUsage = HarnessUsageService(scanner: harnessScanner, store: databaseManager, logger: logger)
-        harnessUsageService = harnessUsage
+        harnessUsageService = HarnessAssembly.makeService(database: databaseManager)  // DSH Token 统计链路
 
-        // 6e. 系统监控链路（CPU / GPU / 内存 / 磁盘 / 温度；采样由菜单栏 1 秒链驱动）
-        let systemContext = makeSystemMonitor()
+        let systemContext = makeSystemMonitor()  // 6e. 系统监控链路（采样驱动见 MenuBarManager+Sampling）
         systemMonitor = systemContext.monitor
 
         // 7. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
@@ -214,7 +208,7 @@ public final class AppCoordinator {
             paster: clipboardPaster,
             transferController: transfer,
             billingMonitor: billingMonitor,
-            harnessUsage: harnessUsage,
+            harnessUsage: harnessUsageService,
             systemMonitor: systemContext.monitor,
             systemPreferences: systemContext.preferences
         )

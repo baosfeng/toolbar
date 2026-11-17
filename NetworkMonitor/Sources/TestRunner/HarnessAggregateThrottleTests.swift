@@ -33,6 +33,9 @@ final class CountingHarnessStore: HarnessTokenRepository, @unchecked Sendable {
     }
     func harnessEventCount() -> Int { inner.harnessEventCount() }
     func harnessClearAll() -> Bool { inner.harnessClearAll() }
+    func harnessPurge(scope: HarnessRebuildScope, now: Date) -> Int {
+        inner.harnessPurge(scope: scope, now: now)
+    }
 }
 
 /// 可换文件的扫描器：模拟「先 N 个变更文件，下一轮无变更，再来 M 个变更文件」

@@ -65,6 +65,15 @@ extension AppCoordinator {
                                                service: self.notificationService,
                                                logger: self.logger)
             },
+            // Token 用量：数据源目录 / zstd 诊断 + 索引维护（重扫 / 清理）
+            .token: { [weak self] in
+                guard let self, let harness = self.harnessUsageService,
+                      let store = self.database as? any HarnessTokenRepository else {
+                    return Self.unavailable(.token, message: "Token 统计服务尚未就绪。")
+                }
+                return SettingsTokenPane(controller: SettingsTokenController(
+                    harness: harness, store: store, logger: self.logger))
+            },
             // 系统监控：偏好走 Core 的 SystemMonitorPreferences（与面板共用同一实现）
             .system: { SettingsSystemPane(preferences: SystemMonitorPreferences()) },
             .about: { [weak self] in

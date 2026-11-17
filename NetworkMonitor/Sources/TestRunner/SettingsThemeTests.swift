@@ -38,8 +38,8 @@ func runSettingsThemeTests() {
     assertEqual(groups.map { $0.segment.title }, ["常规", "功能", "系统"], "段头文案")
 
     let allItems = SettingsSidebarLayout.allItems
-    assertEqual(allItems.count, 9, "九个分类全部进侧栏")
-    assertEqual(Set(allItems).count, 9, "九个分类各出现一次（无重复、无遗漏）")
+    assertEqual(allItems.count, 10, "十个分类全部进侧栏")
+    assertEqual(Set(allItems).count, 10, "十个分类各出现一次（无重复、无遗漏）")
     assertEqual(allItems, SettingsSectionID.allCases, "侧栏顺序与分类顺序一致")
     for id in SettingsSectionID.allCases {
         assertNotNil(SettingsSidebarLayout.segment(of: id), "分类 \(id.rawValue) 必须属于某一段")

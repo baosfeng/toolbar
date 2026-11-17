@@ -118,9 +118,4 @@ extension MenuPanelController {
         }
         harnessUsage.refreshIfNeeded()
     }
-
-    /// 强制重建 Token 索引（点刷新按钮）
-    func rebuildTokenIndex() {
-        harnessUsage?.rebuildIndex()
-    }
 }

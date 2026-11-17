@@ -83,7 +83,8 @@ final class TokenEmptyView: NSView {
 
     /// 默认空态文案（索引正常但确实还没有会话）
     private static let defaultTitle = "还没有可统计的会话"
-    private static let defaultNote = "运行一次 DSH 会话后，这里会出现 token 消耗。\n数据来自 ~/.dsh/sessions 下的会话日志。"
+    private static let defaultNote = "运行一次 DSH 会话后，这里会出现 token 消耗。\n"
+        + "数据来自 DSH 会话日志；目录可在「设置 → Token 用量」里指定。"
 
     /// 「重新扫描」按钮行（键盘可达）
     let retryRow: MenuPanelRow
@@ -151,23 +152,40 @@ final class TokenEmptyView: NSView {
     }
 }
 
-/// 数据源不可用态（zstd 缺失 / 会话目录缺失）
+/// 数据源不可用态（zstd 缺失 / 会话目录缺失 / 目录不可读）
+///
+/// 三类问题的处置不同，所以除了原因文案还给一条动作行：
+/// - 找不到目录 → 去设置里指定会话目录
+/// - 目录不可读 → 去设置里修权限，或改到别的目录
+/// - 缺 zstd → 重扫没有意义，只能去设置看清探测过哪些位置
 final class TokenUnavailableView: NSView {
 
+    private let titleLabel = MenuPanelLabel.text("Token 统计不可用", font: TokenPaneStyle.stateBodyFont,
+                                                 color: TokenPaneStyle.secondaryText)
     private let messageLabel = NSTextField(labelWithString: "")
+    /// 动作行（跨文件访问：TokenPaneView 装配时挂 onClick）
+    let actionRow: MenuPanelRow
+    private let actionLabel: NSTextField
 
     init() {
+        actionRow = MenuPanelRow(height: 24, onClick: {})
+        actionLabel = MenuPanelLabel.text("去设置", font: TokenPaneStyle.stateNoteFont,
+                                          color: TokenPaneStyle.secondaryText)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        let title = MenuPanelLabel.text("Token 统计不可用", font: TokenPaneStyle.stateBodyFont,
-                                        color: TokenPaneStyle.secondaryText)
         messageLabel.font = TokenPaneStyle.stateNoteFont
         messageLabel.textColor = TokenPaneStyle.tertiaryText
         messageLabel.lineBreakMode = .byWordWrapping
         messageLabel.maximumNumberOfLines = 0
         messageLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let stack = NSStackView(views: [title, messageLabel])
+        actionRow.contentStack.spacing = 0
+        actionLabel.alignment = .center
+        actionRow.widthAnchor.constraint(equalToConstant: 96).isActive = true
+        actionRow.contentStack.addArrangedSubview(actionLabel)
+        actionRow.setAccessibilityLabel("打开 Token 用量设置")
+
+        let stack = NSStackView(views: [titleLabel, messageLabel, actionRow])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 6
@@ -184,8 +202,27 @@ final class TokenUnavailableView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    /// 更新降级原因
-    func update(message: String) {
+    /// 更新降级原因（带诊断时按「哪一类问题」给出标题与可执行动作）
+    func update(message: String, diagnostics: HarnessSourceDiagnostics? = nil) {
         messageLabel.stringValue = message
+        guard let kind = diagnostics?.failureKind else {
+            titleLabel.stringValue = "Token 统计不可用"
+            setAction("去设置", accessibility: "打开 Token 用量设置")
+            return
+        }
+        titleLabel.stringValue = kind.title
+        switch kind {
+        case .directoryMissing:
+            setAction("去设置", accessibility: "打开 Token 用量设置，指定会话目录")
+        case .directoryUnreadable:
+            setAction("去设置", accessibility: "打开 Token 用量设置，检查目录权限或改到别的目录")
+        case .zstdMissing:
+            setAction("查看探测路径", accessibility: "打开 Token 用量设置，查看 zstd 探测过的路径")
+        }
+    }
+
+    private func setAction(_ title: String, accessibility: String) {
+        actionLabel.stringValue = title
+        actionRow.setAccessibilityLabel(accessibility)
     }
 }

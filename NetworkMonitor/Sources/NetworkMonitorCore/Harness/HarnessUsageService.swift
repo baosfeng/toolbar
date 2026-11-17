@@ -6,11 +6,15 @@ import Foundation
 ///
 /// 线程模型：
 /// - 索引动作全部在私有串行队列上执行（后台，不阻塞主线程）；同一时刻只有一轮索引
+/// - 索引进行中收到的新请求**入队而不是丢弃**（`HarnessRebuildQueue`），当前轮结束后继续 drain
 /// - 状态与快照由内部锁保护，snapshot() / state 可任意线程读取
 /// - 数据变化后发 AppEvents.postHarnessUsageChanged()，UI 订阅刷新
 ///
 /// 冷启动策略：UI 打开面板时 snapshot() 立即返回内存缓存（上一次索引结果），
 /// 后台继续增量；索引完成后再发事件刷新，UI 不等索引。
+///
+/// 「一键重扫」= `rebuildIndex(scope:completion:)`：按范围清理（事件 + 扫描记录，同一事务）
+/// 后全量重扫，回执告诉用户清了多少 / 扫了多少 / 索引了多少 / 耗时多久。
 public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServicing {
     /// 趋势数据最多保留的天数
     public static let dailyLimit = 33
@@ -19,23 +23,30 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
     /// 模型 TopN
     public static let modelLimit = 8
 
-    // 以下几项由 private 放宽为 internal：快照构建已拆到 HarnessUsageService+Snapshot.swift，
+    // 以下几项由 private 放宽为 internal：索引主流程已拆到 HarnessIndexRunner.swift，
     // 同模块内无其他调用方。
-    let scanner: any HarnessSessionScanning
+    /// 会话扫描器（数据源目录可热切换：设置页改目录后由组合根换新扫描器）
+    private var scannerStorage: any HarnessSessionScanning
+    /// 扫描器只读视图（加锁取，外部不可直接改）
+    var scanner: any HarnessSessionScanning {
+        lock.lock()
+        defer { lock.unlock() }
+        return scannerStorage
+    }
     let store: any HarnessTokenRepository
     let logger: LoggingService
     let nowProvider: @Sendable () -> Date
     let queue: DispatchQueue
     let lock = NSLock()
+    /// 重建请求队列（索引进行中的请求在这里排队，按最广范围合并后继续跑）
+    let rebuildQueue = HarnessRebuildQueue()
 
     /// 当前索引状态
     private var currentState: HarnessIndexingState = .idle
     /// 最近一次聚合快照（内存缓存，跨轮次保留；快照扩展跨文件访问）
     var cachedSnapshot: HarnessUsageSnapshot?
-    /// 是否有索引在跑
-    private var running = false
-    /// 本轮取消令牌
-    private var cancelToken = HarnessCancellationToken()
+    /// 本轮取消令牌（索引主流程读取，故 internal）
+    var cancelToken = HarnessCancellationToken()
     /// 内存快照是否落后于已提交的写入（false = 复用它，不再全表聚合；快照扩展跨文件访问）
     var snapshotStale = true
     /// 是否已排入一次按需重算（重复调用合并成一次；快照扩展跨文件访问）
@@ -45,6 +56,12 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
 
     /// 数据源可用性
     public var availability: HarnessSourceAvailability { scanner.availability }
+
+    /// 数据源诊断（目录路径 + 来源 + zstd 实际路径 / 缺失原因）
+    public var sourceDiagnostics: HarnessSourceDiagnostics {
+        HarnessSourceDiagnostics.make(resolution: scanner.sourceResolution,
+                                      availability: scanner.availability)
+    }
 
     /// 当前索引状态
     public var state: HarnessIndexingState {
@@ -59,7 +76,7 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
         logger: LoggingService = AppContext.shared.logger,
         nowProvider: @escaping @Sendable () -> Date = { Date() }
     ) {
-        self.scanner = scanner
+        self.scannerStorage = scanner
         self.store = store
         self.logger = logger
         self.nowProvider = nowProvider
@@ -80,17 +97,35 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
         let cached = cachedSnapshot
         let state = currentState
         lock.unlock()
-        return cached ?? HarnessUsageSnapshot.empty(availability: scanner.availability, state: state)
+        return cached ?? HarnessUsageSnapshot.empty(availability: scanner.availability,
+                                                    state: state,
+                                                    diagnostics: sourceDiagnostics)
     }
 
     // MARK: - 索引入口
 
     public func refreshIfNeeded(completion: (@Sendable () -> Void)? = nil) {
-        enqueue(fullRebuild: false, completion: completion)
+        enqueue(scope: nil, completion: { _ in completion?() })
     }
 
     public func rebuildIndex(completion: (@Sendable () -> Void)? = nil) {
-        enqueue(fullRebuild: true, completion: completion)
+        enqueue(scope: .full, completion: { _ in completion?() })
+    }
+
+    public func rebuildIndex(scope: HarnessRebuildScope?,
+                             completion: (@Sendable (HarnessRebuildReceipt?) -> Void)? = nil) {
+        enqueue(scope: scope, completion: completion)
+    }
+
+    /// 热切换数据源（设置页改目录后调用）：换扫描器 + 标记快照过期，随后重建即可用新目录
+    ///
+    /// 不在这里自动开跑：调用方跟着调 `rebuildIndex(scope: .full)`，
+    /// 这样「换目录成功」与「重建成功 / 失败」的回执分得清，不会互相掩盖。
+    public func updateScanner(_ newScanner: any HarnessSessionScanning) {
+        lock.lock()
+        scannerStorage = newScanner
+        lock.unlock()
+        markSnapshotStale()
     }
 
     public func cancelIndexing() {
@@ -102,183 +137,46 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
 
     // MARK: - 调度
 
-    private func enqueue(fullRebuild: Bool, completion: (@Sendable () -> Void)?) {
+    /// 入队一次索引请求并确保队列上有一个 drain 循环
+    ///
+    /// 为什么不再用「抢占运行权、占不到就 return」：那样用户点「重新扫描」在索引进行中
+    /// 会毫无反应也不报错。现在请求进队列，本轮的 drain 循环或新排入的循环会把它跑掉；
+    /// 同一轮里攒下的多个请求按最广范围合并，只跑一次。
+    private func enqueue(scope: HarnessRebuildScope?,
+                         completion: (@Sendable (HarnessRebuildReceipt?) -> Void)?) {
+        rebuildQueue.enqueue(HarnessIndexRequest(scope: scope, completion: completion))
         queue.async { [weak self] in
-            guard let self else {
-                completion?()
-                return
+            guard let self else { return }
+            while let batch = self.rebuildQueue.drain() {
+                let receipt = self.runIndexing(batch: batch)
+                for completion in batch.completions { completion(receipt) }
             }
-            guard self.beginRun() else {
-                self.logger.debug("Harness token 索引已在运行，跳过本次刷新")
-                completion?()
-                return
-            }
-            defer {
-                self.endRun()
-                completion?()
-            }
-            self.runIndexing(fullRebuild: fullRebuild)
         }
     }
 
-    /// 抢占运行权：已在运行时返回 false
-    private func beginRun() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !running else { return false }
-        running = true
-        cancelToken = HarnessCancellationToken()
-        return true
-    }
-
-    private func endRun() {
-        lock.lock()
-        running = false
-        lock.unlock()
-    }
-
-    private func currentToken() -> HarnessCancellationToken {
+    /// 当前取消令牌（每轮开始时重置）
+    func currentToken() -> HarnessCancellationToken {
         lock.lock()
         defer { lock.unlock() }
         return cancelToken
     }
 
-    // MARK: - 索引主流程
-
-    private func runIndexing(fullRebuild: Bool) {
-        let startedAt = Date()
-        let availability = scanner.availability
-
-        guard availability.isAvailable else {
-            // 降级：明确状态 + 保留已有快照，不崩溃、不返回静默空数据
-            logger.warning(availability.displayMessage)
-            fail(with: availability.displayMessage, availability: availability)
-            return
-        }
-        guard store.migrateHarnessSchema() else {
-            fail(with: "Harness 索引表不可用（数据库可能未就绪）", availability: availability)
-            return
-        }
-
-        if fullRebuild {
-            logger.info("Harness token 索引：清空后全量重建")
-            _ = store.harnessClearAll()
-            markSnapshotStale()
-        }
-
-        // 冷启动先把上一轮落库结果读进内存缓存，UI 打开面板即可渲染，不必等本轮索引
-        seedSnapshotIfNeeded(availability: availability)
-
-        let files: [HarnessSessionFile]
-        do {
-            files = try scanner.discoverSessions()
-        } catch {
-            fail(with: "发现会话文件失败：" + String(describing: error), availability: availability)
-            return
-        }
-
-        let records = store.harnessScanRecords()
-        let changed = files.filter { file in
-            guard let record = records[file.path] else { return true }
-            return !record.matches(size: file.size, mtimeMs: file.mtimeMs)
-        }
-
-        // 正在写入的会话文件 size 会变，下次刷新按 (size, mtime) 重扫属预期行为
-        if changed.isEmpty {
-            logger.info("Harness token 增量刷新：无变更文件（共 " + String(files.count) + " 个）")
-            setState(.ready)
-            // 无变更：不重算聚合（缓存快照已覆盖全部已提交数据），只在还没有缓存时补算一次
-            publishSnapshot(availability: availability, totalSessions: files.count,
-                            now: nowProvider(), force: false)
-            return
-        }
-
-        let token = currentToken()
-        var completed = 0
-        var totalEvents = 0
-        var malformedLines = 0
-        var failedFiles = 0
-        setState(.indexing(HarnessIndexProgress(
-            completedFiles: 0,
-            totalFiles: changed.count,
-            currentFile: "",
-            parsedSessions: 0
-        )))
-
-        for file in changed {
-            if token.isCancelled {
-                logger.info("Harness token 索引已取消（完成 " + String(completed) + "/" + String(changed.count) + "）")
-                setState(.idle)
-                return
-            }
-            let result: HarnessSessionScanResult
-            do {
-                result = try scanner.scan(file: file, isCancelled: { token.isCancelled }, onLinesRead: nil)
-            } catch let error as HarnessTokenError where error == .cancellationRequested {
-                logger.info("Harness token 索引已取消（完成 " + String(completed) + "/" + String(changed.count) + "）")
-                setState(.idle)
-                return
-            } catch {
-                // 单文件失败只跳过该文件，不影响整体；不写扫描记录，下一轮会重试
-                failedFiles += 1
-                logger.warning("Harness 会话文件解析失败，已跳过: " + LogRedaction.path(file.path) + " — " + String(describing: error))
-                continue
-            }
-
-            let record = HarnessSessionScanRecord(file: file, scannedAt: nowProvider().timeIntervalSince1970)
-            if store.harnessReplaceSession(record: record, events: result.events, cwd: result.cwd) {
-                // 落库即脏：中途取消时也要让下一次按需重算把新数据算进去
-                markSnapshotStale()
-            } else {
-                failedFiles += 1
-                logger.warning("Harness 会话落库失败: " + LogRedaction.path(file.path))
-            }
-            completed += 1
-            totalEvents += result.events.count
-            malformedLines += result.malformedLines
-            setState(.indexing(HarnessIndexProgress(
-                completedFiles: completed,
-                totalFiles: changed.count,
-                currentFile: file.sessionID,
-                parsedSessions: completed
-            )))
-        }
-
-        setState(.ready)
-        // 索引结束算一次聚合 —— 本流程里唯一一次全表重算
-        publishSnapshot(availability: availability, totalSessions: files.count,
-                        now: nowProvider(), force: true)
-
-        let elapsed = Date().timeIntervalSince(startedAt)
-        logger.info(String(
-            format: "Harness token 索引完成：%d 个变更文件（失败 %d）/ %d 条事件 / %d 条坏行，耗时 %.2fs",
-            changed.count, failedFiles, totalEvents, malformedLines, elapsed
-        ))
+    /// 重置取消令牌并返回它（每轮索引开始时调用）
+    func resetCancellationToken() -> HarnessCancellationToken {
+        lock.lock()
+        defer { lock.unlock() }
+        cancelToken = HarnessCancellationToken()
+        return cancelToken
     }
 
     // MARK: - 状态
 
-    private func setState(_ newState: HarnessIndexingState) {
+    /// 更新状态并同步到缓存快照，再通知观察者
+    func setState(_ newState: HarnessIndexingState) {
         lock.lock()
         currentState = newState
         if let cached = cachedSnapshot {
-            cachedSnapshot = HarnessUsageSnapshot(
-                totals: cached.totals,
-                daily: cached.daily,
-                todayHourly: cached.todayHourly,
-                yesterdayHourly: cached.yesterdayHourly,
-                projects: cached.projects,
-                models: cached.models,
-                windowedProjects: cached.windowedProjects,
-                windowedModels: cached.windowedModels,
-                windowProjectTotals: cached.windowProjectTotals,
-                windowModelTotals: cached.windowModelTotals,
-                indexedSessions: cached.indexedSessions,
-                totalSessions: cached.totalSessions,
-                lastScanAt: cached.lastScanAt,
-                indexingState: newState,
-                sourceAvailability: cached.sourceAvailability
-            )
+            cachedSnapshot = cached.with(indexingState: newState)
         }
         let observer = stateObserver
         lock.unlock()
@@ -286,16 +184,19 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
     }
 
     /// 失败：保留已有快照内容，只更新状态与可用性
-    private func fail(with message: String, availability: HarnessSourceAvailability) {
+    ///
+    /// 诊断必须在加锁前取（scanner 与 diagnostics 各自加同一把非递归锁）
+    func fail(with message: String, availability: HarnessSourceAvailability) {
         setState(.failed(message: message))
+        let diagnostics = sourceDiagnostics
         lock.lock()
         let cached = cachedSnapshot
-        lock.unlock()
         if cached == nil {
-            lock.lock()
-            cachedSnapshot = HarnessUsageSnapshot.empty(availability: availability, state: .failed(message: message))
-            lock.unlock()
+            cachedSnapshot = HarnessUsageSnapshot.empty(availability: availability,
+                                                        state: .failed(message: message),
+                                                        diagnostics: diagnostics)
         }
+        lock.unlock()
         AppEvents.postHarnessUsageChanged()
     }
 }

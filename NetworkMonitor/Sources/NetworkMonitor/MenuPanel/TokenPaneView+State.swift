@@ -23,7 +23,9 @@ extension TokenPaneView {
 
         unavailableView.isHidden = available
         guard available else {
-            unavailableView.update(message: snapshot.sourceAvailability.displayMessage)
+            // 带上诊断：不可用态要区分「找不到目录 / 目录不可读 / 缺 zstd」，处置完全不同
+            unavailableView.update(message: snapshot.sourceAvailability.displayMessage,
+                                   diagnostics: snapshot.sourceDiagnostics)
             hideContentForState()
             onContentChanged?()
             return
@@ -35,7 +37,13 @@ extension TokenPaneView {
             loadingView.isHidden = false
             dataStack.isHidden = true
             emptyView.isHidden = true
-            indexLabel.isHidden = true
+            // 重扫时索引被清空 → 数据为空 → 落到这一支；临时提示（过程 / 回执）仍要显示，
+            // 否则用户点了刷新看不到任何反应（旧实现正是在这里把标签一律收起来）
+            if durableNote != nil {
+                applyDurableNote()
+            } else {
+                indexLabel.isHidden = true
+            }
             resetDetail()
             onContentChanged?()
             return
@@ -58,13 +66,21 @@ extension TokenPaneView {
             return
         }
         // 有数据但索引失败：保留数据，同时把失败原因挂到索引标签上，不让错误静默
+        // 每次快照刷新先把标签颜色复位：重扫回执可能把它染成了告警色
+        indexLabel.textColor = TokenPaneStyle.tertiaryText
         if case .failed(let message) = snapshot.indexingState {
             indexLabel.isHidden = false
             indexLabel.stringValue = "索引失败：\(message)"
         } else {
-            indexLabel.isHidden = !indexing
-            if indexing, let progress {
-                indexLabel.stringValue = "索引中 \(progress.completedFiles)/\(progress.totalFiles) · 完成后自动刷新"
+            // 常驻提示（重扫过程 / 回执）优先：它在下一轮索引开始时才被清掉
+            if durableNote != nil {
+                applyDurableNote()
+            } else {
+                indexLabel.isHidden = !indexing
+                if indexing, let progress {
+                    indexLabel.stringValue = "索引中 \(progress.completedFiles)/\(progress.totalFiles)"
+                        + " · " + String(progress.linesRead) + " 行"
+                }
             }
         }
         render()
