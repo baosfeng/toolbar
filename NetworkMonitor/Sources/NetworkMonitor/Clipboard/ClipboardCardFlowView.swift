@@ -211,6 +211,7 @@ final class ClipboardCardFlowView: NSView {
             self.onActivate?(self.windowStart + index)
         }
         card.onShadowStateChange = { [weak self] in self?.refreshShadows() }
+        attachDragProvider(to: card)
         cardsContainer.addSubview(card)
         return card
     }

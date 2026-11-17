@@ -105,6 +105,8 @@ runClipboardImageStoreTests()
 runClipboardCardWindowTests()
 // 卡片多选变换（单击 / ⌘ / ⇧ / ⌘A / 清空）
 runClipboardSelectionTests()
+// 卡片拖拽到其他 App 的载荷构造（阈值 / 文本 / 图片 / 文件 / 多选）
+runClipboardDragPayloadTests()
 // 多选批量删除的存储口径（命中 / 忽略缺失 / 空集合 / 幂等）
 runClipboardBatchDeleteTests()
 

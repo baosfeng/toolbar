@@ -32,7 +32,9 @@ extension ClipboardCardView {
     ///
     /// 修饰键口径交给卡片流：⌘ 切换该条、⇧ 从焦点范围选，其余按替换处理。
     override func mouseDown(with event: NSEvent) {
-        let region = hitRegion(at: convert(event.locationInWindow, from: nil))
+        // 记起点：拖动扩展据此判断位移是否够起拖（不足阈值时单击行为完全不变）
+        pressAnchor = convert(event.locationInWindow, from: nil)
+        let region = hitRegion(at: pressAnchor ?? .zero)
         let action = ClipboardCardHitTest.action(for: region,
                                                  clickCount: event.clickCount,
                                                  isContextMenu: false)

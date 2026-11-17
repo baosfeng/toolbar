@@ -116,9 +116,12 @@ final class ClipboardCardView: NSView {
     /// 栈角标弹入进度
     let badgePopBlend = DrawnBlend()
 
-    /// hover 追踪区（提亮与描边反馈用）
-    /// internal：追踪区在 `ClipboardCardView+Interaction.swift` 里建立与移除（Swift 扩展不能声明存储属性）
+    /// hover 追踪区（提亮与描边反馈用；交互扩展不能声明存储属性，故落在这里）
     var hoverTrackingArea: NSTrackingArea?
+    /// 本次按压的起点（拖拽判定用：mouseDown 记、mouseUp 与起拖后清）
+    var pressAnchor: CGPoint?
+    /// 一次拖拽要带的条目（卡片流注入：在选中集合里就带整组，否则只带本条）
+    var dragItemsProvider: ((ClipboardCardView) -> [ClipboardItem])?
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { false }
@@ -272,10 +275,8 @@ final class ClipboardCardView: NSView {
 
     /// 阴影可见性变化回调（hover / 选中切换、开始删除）
     ///
-    /// 阴影不画在卡片自己的 draw 里：视图绘制会被 bounds 裁切、画不到卡外；而卡片自身
-    /// backing layer 的阴影在离屏渲染路径里不参与合成。统一交给卡片流容器
-    /// （`ClipboardCardFlowContainer`）在卡片下方按圆角矩形绘制，阴影才能既溢出卡片、
-    /// 又在离屏快照与真实窗口里一致。
+    /// 阴影由卡片流容器在卡片下方按圆角矩形绘制：卡片自己的 draw 被 bounds 裁切，
+    /// backing layer 阴影又不参与离屏合成。
     var onShadowStateChange: (() -> Void)?
 
     /// 卡片图层：圆角与卡片一致；不裁切自身（内容不超出卡片，阴影由容器负责）
