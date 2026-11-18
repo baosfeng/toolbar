@@ -20,9 +20,15 @@ extension AppCoordinator {
         // 识别走后台、不阻塞采集主路径：不满足条件时调度器自己静默跳过
         enqueueClipboardOCR(for: saved)
         AppEvents.postClipboardChanged()
-        // 超限清理后回收被删条目的落盘图片（文本条目零 IO，见 ClipboardImageGC）
-        ClipboardImageGC.prune(repository: repository, maxItems: clipboardPreferences.maxItems,
-                               retentionDays: clipboardPreferences.retentionDays, logger: logger)
+        // 超限清理（先按条数、再按容量，同一条执行路径）后回收被删条目的落盘图片；
+        // 文本条目零 IO，见 ClipboardImageGC。真删了东西才补发事件：面板已经收过上面那条，
+        // 这条只负责让「被清理掉的条目」从面板上消失，别在没删时多刷一次。
+        let removed = ClipboardImageGC.prune(repository: repository,
+                                            maxItems: clipboardPreferences.maxItems,
+                                            retentionDays: clipboardPreferences.retentionDays,
+                                            maxBytes: clipboardPreferences.maxBytes,
+                                            logger: logger)
+        if removed > 0 { AppEvents.postClipboardChanged() }
     }
 
     /// 采集状态变化：权限被拒时明确告警（不静默）

@@ -21,8 +21,12 @@ protocol ClipboardSettingsDelegate: AnyObject {
     func settingsDidChangeIgnoredApps()
     /// 图片落盘目录的当前占用（设置页「存储」卡每次刷新现取）
     func settingsClipboardImageUsage() -> ClipboardStorageUsage.Summary
+    /// 剪贴板历史总占用字节（正文 UTF-8 + 图片原图；「占用 x / 上限 y」行现取）
+    func settingsClipboardTotalUsageBytes() -> UInt64
     /// 请求清空图片存储（内部复用既有清空 + 孤儿清扫，返回删了多少）
     func settingsDidRequestClearImageStorage() -> ClipboardStorageCleanupResult
+    /// 最大容量变更（上限调小后立即按新上限清一次，不等到下一次采集）
+    func settingsDidChangeMaxBytes()
 }
 
 // MARK: - 清空结果
