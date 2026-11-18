@@ -160,7 +160,7 @@ private func testBillingProviderPreferences() {
     let storage = InMemoryStorage()
     let preferences = BillingProviderPreferences(storage: storage)
 
-    assertEqual(preferences.isEnabled("ollama"), true, "未写过键时默认启用")
+    assertEqual(preferences.isEnabled("ollama"), false, "未写过键时默认关闭（用户要求「配置了之后才能打开」）")
     assertEqual(storage.object(forKey: BillingProviderPreferences.storageKey(for: "ollama")) == nil,
                 true, "默认值不落盘（避免默认值变更后被旧键钉死）")
 
@@ -174,6 +174,7 @@ private func testBillingProviderPreferences() {
     preferences.setEnabled(true, for: "opencode-go")
     assertEqual(preferences.isEnabled("opencode-go"), true, "重新启用生效")
 
+    preferences.setEnabled(true, for: "ollama")
     let ids = ["ollama", "open-design", "opencode-go"]
     preferences.setEnabled(false, for: "open-design")
     assertEqual(preferences.enabledIDs(from: ids), ["ollama", "opencode-go"],

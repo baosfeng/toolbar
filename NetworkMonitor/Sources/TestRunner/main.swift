@@ -2,8 +2,7 @@ import Foundation
 
 // MARK: - TestRunner 入口
 //
-// 本文件只保留可执行入口与各测试套件的调度顺序；具体用例位于各 *Tests.swift，
-// 断言辅助位于 AssertionHelpers.swift；顶层语句只允许留在本文件（SPM 入口约束）。
+// 本文件只保留调度顺序；用例在各 *Tests.swift，断言辅助在 AssertionHelpers.swift。
 
 // MARK: - 人工触发的探针入口（按天清理 / 内置解码 / 索引基准 / 网络）
 // 参数解析集中在 ManualProbes.swift，命中即执行并退出，不参与默认测试流程
@@ -150,8 +149,9 @@ runBillingTests()
 // MARK: - 额度页可见性（未配置 provider 不占位）+ 同一实例唯一配置
 runBillingVisibilityTests()
 
-// MARK: - 额度 Provider 多实例（实例标识 / 存储 / 装饰器 / 注册表 / 老配置零迁移）
+// MARK: - 额度 Provider 多实例与启用默认关闭（实例标识 / 存储 / 装饰器 / 老配置零迁移）
 runBillingInstanceTests()
+runBillingProviderPreferenceTests()
 
 // MARK: - 屏幕活动（锁屏 / 休眠暂停额度刷新）与快照暂停态
 runScreenActivityRelayTests()
