@@ -40,15 +40,31 @@ extension OpenDesignBillingProvider {
             let used = Double(window.usedCredits) ?? 0
             let limit = Double(window.limitCredits) ?? 0
             let remaining = Double(window.remainingCredits) ?? max(limit - used, 0)
+            // 重置时刻只解析一次：resetsAt 与 window.resetsAt 必须指向同一时刻
+            let resetsAt = window.resetsAt.flatMap(parseISO8601)
             return BillingPercentLimit(id: window.policyId,
                                        title: windowTitle(durationSeconds: window.durationSeconds),
                                        remainingFraction: limit > 0 ? remaining / limit : 0,
-                                       resetsAt: window.resetsAt.flatMap(parseISO8601),
+                                       resetsAt: resetsAt,
                                        usedAmount: used,
                                        limitAmount: limit,
-                                       unitLabel: "credits")
+                                       unitLabel: "credits",
+                                       window: quotaWindow(durationSeconds: window.durationSeconds,
+                                                           resetsAt: resetsAt))
         }
         return BillingBalance(included: nil, purchasedUSD: nil, percentLimits: limits)
+    }
+
+    /// 窗口时长 + 重置时刻 → 领域窗口（缺任一要素则为 nil）
+    ///
+    /// 种类按服务端给的 `durationSeconds` 推断（18000 → 会话、604800 → 每周、30 天 → 每月），
+    /// 与 `BillingQuotaWindow.kind(forDuration:)` 同一口径；恢复通知据此区分窗口周期。
+    /// 接口不保证下发时长，缺时长时退回「无窗口」（宁可不区分周期，也不编造时长）。
+    static func quotaWindow(durationSeconds: Double?, resetsAt: Date?) -> BillingQuotaWindow? {
+        guard let duration = durationSeconds, duration > 0, let resetsAt else { return nil }
+        return BillingQuotaWindow(kind: BillingQuotaWindow.kind(forDuration: duration),
+                                  duration: duration,
+                                  resetsAt: resetsAt)
     }
 
     /// 解析用量响应（只读顶层聚合，不碰 entries）

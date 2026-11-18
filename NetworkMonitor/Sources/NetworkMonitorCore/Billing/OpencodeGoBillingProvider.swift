@@ -94,6 +94,10 @@ public final class OpencodeGoBillingProvider: BillingProvider {
     }
 
     /// 单窗口映射：已用百分比 → 剩余比例（已限流强制归零并加角标）
+    ///
+    /// 同时补出 `window`：恢复通知靠它的 cycleID 区分「会话窗口重置」与「周 / 月额度重置」，
+    /// 否则只能退回用 resetAt 字符串当周期标识。窗口与 `resetsAt` 复用同一个 Date 实例，
+    /// 缺重置字段时窗口为 nil（构造不出「何时重置」的窗口）。
     private static func limit(for raw: OpencodeGoWindowDTO?, window: OpencodeGoWindow,
                               now: Date) -> BillingPercentLimit? {
         guard let raw, let used = raw.usedPercent else { return nil }
@@ -101,11 +105,13 @@ public final class OpencodeGoBillingProvider: BillingProvider {
         let rateLimited = status == rateLimitedStatus
         // 已用 → 剩余，并钳制到 0…1：接口偶发负值 / 超过 100 的脏数据
         let remaining = min(max(1 - used / 100, 0), 1)
+        let resetsAt = resetDate(raw: raw, now: now)
         return BillingPercentLimit(id: window.limitID,
                                    title: window.title,
                                    remainingFraction: rateLimited ? 0 : remaining,
-                                   resetsAt: resetDate(raw: raw, now: now),
-                                   badge: rateLimited ? rateLimitedBadge : nil)
+                                   resetsAt: resetsAt,
+                                   badge: rateLimited ? rateLimitedBadge : nil,
+                                   window: resetsAt.map { window.quotaWindow(resetsAt: $0) })
     }
 
     /// 重置时刻：新形态是 RFC3339 绝对时刻，旧形态是相对秒数（按基准时刻换算）

@@ -129,9 +129,18 @@ private func testOpenDesignBalanceDecoding() {
     assertEqual(fiveHour.hasAmountDetail, true, "有绝对值明细")
     assertEqual((fiveHour.remainingFraction * 100).rounded(), 100, "剩余 99.75% 四舍五入 100%")
     assertNotNil(fiveHour.resetsAt, "重置时间可解析")
+    // 窗口字段：恢复通知据此区分「会话窗口重置」与「周 / 月额度重置」
+    assertNotNil(fiveHour.window, "18000 秒窗口带 window")
+    assertEqual(fiveHour.window?.kind ?? .custom, .session, "18000 秒归为会话窗口")
+    assertEqual(fiveHour.window?.duration ?? 0, 18_000, "窗口时长取服务端 durationSeconds")
+    assertEqual(fiveHour.window?.resetsAt, fiveHour.resetsAt,
+                "window.resetsAt 与 resetsAt 同一时刻")
 
     let weekly = balance.percentLimits[1]
     assertEqual(weekly.title, "每周", "604800 秒 → 每周")
+    assertEqual(weekly.window?.kind ?? .custom, .weekly, "604800 秒归为周窗口")
+    assertEqual(weekly.window?.resetsAt, weekly.resetsAt,
+                "周窗口重置时刻与 resetsAt 同一时刻")
     assertEqual((weekly.remainingFraction * 1_000).rounded() / 1_000, 0.491, "每周剩余比例 73622/150000")
     assertEqual(formatLimitUsage(used: weekly.usedAmount, limit: weekly.limitAmount,
                                  unit: weekly.unitLabel) ?? "",
@@ -158,4 +167,18 @@ private func testOpenDesignBalanceDecoding() {
     assertEqual(zeroBalance?.percentLimits.first?.remainingFraction ?? -1, 0, "限额 0 比例归零")
     assertEqual(zeroBalance?.percentLimits.first?.title ?? "", "1 小时", "3600 秒 → 1 小时")
     assertEqual(zeroBalance?.percentLimits.first?.resetsAt == nil, true, "缺 resetsAt 为 nil")
+    // 缺重置时刻构造不出窗口：退回「无窗口」，不编造重置时刻
+    assertEqual(zeroBalance?.percentLimits.first?.window == nil, true, "缺 resetsAt 时 window 为 nil")
+
+    // 缺 durationSeconds 同样不给窗口（种类无从判定），但百分比限额照常产出
+    let noDuration = """
+    { "eligible": true, "windows": [ { "policyId": "p1",
+      "usedCredits": "10", "limitCredits": "100", "remainingCredits": "90",
+      "resetsAt": "2026-10-27T12:02:22.830Z" } ] }
+    """
+    let noDurationBalance = try? OpenDesignBillingProvider.decodeBalance(from: Data(noDuration.utf8))
+    let noDurationLimit = noDurationBalance?.percentLimits.first
+    assertEqual(noDurationLimit?.window == nil, true, "缺 durationSeconds 时 window 为 nil")
+    assertEqual(noDurationLimit?.resetsAt != nil, true, "缺时长不影响 resetsAt 解析")
+    assertEqual(noDurationLimit?.remainingFraction ?? -1, 0.9, "缺时长不影响剩余比例")
 }

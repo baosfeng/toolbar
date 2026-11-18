@@ -21,6 +21,35 @@ enum OpencodeGoWindow: String, CaseIterable, Sendable {
         case .monthly: return "每月"
         }
     }
+
+    /// 额度窗口种类（恢复通知据此区分「会话窗口重置」与「周 / 月额度重置」）
+    var windowKind: BillingWindowKind {
+        switch self {
+        case .rolling: return .session
+        case .weekly: return .weekly
+        case .monthly: return .monthly
+        }
+    }
+
+    /// 窗口真实时长（秒）：5 小时 / 7 天 / 30 天
+    ///
+    /// 接口不返回时长，按官方公布的三档窗口常量声明；与重置时刻一起构成
+    /// `BillingQuotaWindow`，让周期标识（cycleID）可跨刷新稳定比对。
+    var windowDuration: TimeInterval {
+        switch self {
+        case .rolling: return 18_000
+        case .weekly: return 604_800
+        case .monthly: return 2_592_000
+        }
+    }
+
+    /// 构造领域窗口：重置时刻由调用方按同一份响应解析后传入
+    ///
+    /// 与 `resetsAt` 用同一个 Date 实例，保证「有窗口时两者指向同一时刻」的契约；
+    /// 缺重置字段时调用方不构造窗口（nil），回落为仅百分比限额。
+    func quotaWindow(resetsAt: Date) -> BillingQuotaWindow {
+        BillingQuotaWindow(kind: windowKind, duration: windowDuration, resetsAt: resetsAt)
+    }
 }
 
 /// 单个额度窗口 — 新旧两套字段名并存

@@ -178,6 +178,9 @@ runOpenDesignUsageTests()
 // MARK: - OpenCode Go 额度（三窗口已用→剩余 / 限流角标 / 新旧字段兼容 / 错误映射）
 runOpencodeGoBillingTests()
 
+// MARK: - OpenCode Go 窗口字段（种类 / 时长 / resetsAt 同一时刻 / 缺重置为 nil）
+runOpencodeGoWindowFieldTests()
+
 // MARK: - 三家新 provider（Claude / Codex / Cursor）解码 + 401/403/解析失败姿态
 runBillingProviderDecodingTests()
 
@@ -351,7 +354,6 @@ runDrawnSurfaceMathTests()
 runUpdateVersionTests()
 runUpdateCheckStateTests()
 runUpdateCheckerTests()
-
 
 // MARK: - 剪贴板缩略图加载闸门（并发上限 / 在途去重 / 额度归还幂等 / reset）
 runClipboardThumbnailGateTests()

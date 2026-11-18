@@ -42,8 +42,8 @@ public enum BillingRecoveryRule {
 
     /// 是否发生重置 —— 兼容「有窗口信息」与「只有重置时刻」两类 provider
     ///
-    /// 订阅型 provider（Claude / Codex / Cursor）带窗口种类，按窗口判定；
-    /// 老 provider（Ollama / Open Code Go）只有 `resetsAt`，按重置时刻前进判定。
+    /// 带窗口种类的 provider（Claude / Codex / Cursor / Open Code Go / Open Design）
+    /// 按窗口判定；只有 `resetsAt` 的 provider（如 Ollama）按重置时刻前进判定。
     public static func isReset(previousState: BillingAlertState?,
                                window: BillingQuotaWindow?,
                                resetAt: Date?) -> Bool {
