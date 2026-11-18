@@ -138,8 +138,6 @@ extension MenuPanelController {
                              upHistory: upHistory)
         PanelOpenProbe.mark("B3 refreshMidFrequency")
         refreshMidFrequency()
-        PanelOpenProbe.mark("B4 refreshClipboard")
-        refreshClipboard()
         // 系统页：打开面板立即采一帧再渲染（首帧 CPU/磁盘速率为 nil，显示「—」）
         PanelOpenProbe.mark("B5 systemMonitor.poll")
         systemMonitor?.poll()

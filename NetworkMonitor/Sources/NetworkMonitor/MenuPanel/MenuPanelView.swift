@@ -23,11 +23,15 @@ protocol MenuPanelViewDelegate: AnyObject {
     ///
     /// - Parameter section: 要直接落到的分类（nil = 上次/默认页）
     func menuPanelViewDidRequestSettings(_ view: MenuPanelView, section: SettingsSection?)
+    /// 请求打开屏幕底部的剪贴板历史浮层（标题栏齿轮菜单「剪贴板历史…」）
+    ///
+    /// 菜单面板不再有剪贴板分页：历史只在独立浮层里展示，这个菜单项是唯一入口。
+    func menuPanelViewDidRequestClipboardHistory(_ view: MenuPanelView)
 }
 
 // MARK: - 面板根视图
 
-/// 菜单栏面板根视图 — 顶部细分段六 tab + 互斥内容区
+/// 菜单栏面板根视图 — 顶部细分段多 tab + 互斥内容区
 ///
 /// 背景分三层（自下而上）：**玻璃**（macOS 26+ `NSGlassEffectView`，可被档位或开关关掉）
 /// → **不透明基色层**（`theme.surface`，alpha 0.82）→ 内容。
@@ -229,11 +233,6 @@ final class MenuPanelView: NSView {
     /// 清除键盘焦点（面板收起时调用）
     func resetKeyboardFocus() {
         setFocus(index: nil)
-    }
-
-    /// 剪贴板页行内提示（该页未装配时直接丢弃：提示只在该页可见时才有意义）
-    func showClipboardHint(_ message: String) {
-        clipboardPaneIfLoaded?.showHint(message)
     }
 
     /// 内容滚动回顶部（进出系统页详情时都从顶部开始读）

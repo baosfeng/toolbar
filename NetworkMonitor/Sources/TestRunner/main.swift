@@ -384,6 +384,8 @@ runClipboardOCRTests()
 // MARK: - 剪贴板空格预览（预览项构造三载体 + 临时目录清理）
 runClipboardPreviewTests()
 
+// 分页目录
+runPanelTabCatalogTests()
 // MARK: - 外观（主题令牌 / 深浅对比度 / 渲染帧率档 / 外观偏好）
 runThemeTokenTests()
 runThemeContrastTests()

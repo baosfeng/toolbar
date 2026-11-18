@@ -22,8 +22,6 @@ extension MenuPanelView {
 
     /// 已装配的网络页
     var networkPaneIfLoaded: NetworkPaneView? { assembledPanes[.network] as? NetworkPaneView }
-    /// 已装配的剪贴板页
-    var clipboardPaneIfLoaded: ClipboardPaneView? { assembledPanes[.clipboard] as? ClipboardPaneView }
     /// 已装配的额度页
     var billingPaneIfLoaded: BillingPaneView? { assembledPanes[.credits] as? BillingPaneView }
     /// 已装配的 Token 页
@@ -31,12 +29,10 @@ extension MenuPanelView {
     /// 已装配的系统页
     var systemPaneIfLoaded: SystemPaneView? { assembledPanes[.system] as? SystemPaneView }
 
-    // MARK: - 六个分页（首次读到才建）
+    // MARK: - 各分页（首次读到才建）
 
     /// 网络页
     var networkPane: NetworkPaneView { loadedPane(.network) { NetworkPaneView() } }
-    /// 剪贴板页
-    var clipboardPane: ClipboardPaneView { loadedPane(.clipboard) { ClipboardPaneView() } }
     /// 传送页
     var transferPane: TransferPaneView { loadedPane(.transfer) { TransferPaneView() } }
     /// 额度页
@@ -53,7 +49,6 @@ extension MenuPanelView {
     func ensurePaneLoaded(_ tab: MenuPanelTab) -> MenuPanelPaneView {
         switch tab {
         case .network: return networkPane
-        case .clipboard: return clipboardPane
         case .transfer: return transferPane
         case .credits: return billingPane
         case .token: return tokenPane

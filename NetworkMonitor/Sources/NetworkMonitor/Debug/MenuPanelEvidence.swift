@@ -62,7 +62,6 @@ enum MenuPanelEvidence {
     private static func tab(for value: String) -> MenuPanelTab? {
         switch value {
         case "network": return .network
-        case "clipboard": return .clipboard
         case "transfer": return .transfer
         // 额度页此前没有映射：取证时给 NM_EVIDENCE_TAB=credits 只会静默停在网络页，
         // 于是「面板上额度有没有数据」这类问题拿不到真实截图（已按分页枚举补齐）

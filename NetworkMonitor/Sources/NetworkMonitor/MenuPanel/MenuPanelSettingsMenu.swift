@@ -28,6 +28,10 @@ extension MenuPanelView: NSMenuDelegate {
                                                     accessibilityDescription: "设置")?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .medium))
 
+        // 剪贴板历史没有分页了：这里是它从菜单面板进入的唯一入口（独立浮层由全局快捷键唤起）
+        addSettingsMenuItem(title: "剪贴板历史…",
+                            action: #selector(handleOpenClipboardHistory))
+        settingsButton.menu?.addItem(.separator())
         addSettingsMenuItem(title: "设置…",
                             action: #selector(handleOpenSettings),
                             keyEquivalent: ",")
@@ -64,6 +68,10 @@ extension MenuPanelView: NSMenuDelegate {
     }
 
     // MARK: - 菜单动作
+
+    @objc private func handleOpenClipboardHistory() {
+        delegate?.menuPanelViewDidRequestClipboardHistory(self)
+    }
 
     @objc private func handleOpenSettings() {
         delegate?.menuPanelViewDidRequestSettings(self, section: nil)

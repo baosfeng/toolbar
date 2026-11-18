@@ -50,7 +50,7 @@ enum Scenario {
             return "状态项 \(statusFrame)；\(how)；面板 id=\(panel.id) \(Format.rect(panel.bounds))"
         }
 
-        // 2) 依次切 5 个 tab，各存一张
+        // 2) 依次切全部 tab，各存一张（段数由 `PanelGeometry.tabNames` 决定）
         for (index, name) in PanelGeometry.tabNames.enumerated() {
             try recorder.step("切到「\(name)」tab") {
                 guard let panel = PanelGeometry.panel(of: target) else {
@@ -74,7 +74,10 @@ enum Scenario {
 
         // 3) 进系统页某张卡的二级详情页再返回
         try recorder.step("系统页 → CPU 卡二级详情") {
-            guard PanelGeometry.selectTab(target, index: 3) else {
+            guard let systemIndex = PanelGeometry.tabIndex(of: "系统") else {
+                throw CLIError("tab 名表里没有「系统」")
+            }
+            guard PanelGeometry.selectTab(target, index: systemIndex) else {
                 throw CLIError("切不到系统页")
             }
             guard let panel = PanelGeometry.panel(of: target) else {
@@ -111,28 +114,22 @@ enum Scenario {
             return "返回按钮 \(back.desc)；面板 \(Format.rect(panel.bounds))；\(shot.describe)"
         }
 
-        // 4) 剪贴板页 hover 0.6s（自绘行高亮；该页的全文浮层属于独立剪贴板面板）
-        try recorder.step("剪贴板页 hover 0.6s（自绘行高亮）") {
-            guard PanelGeometry.selectTab(target, index: 0) else { throw CLIError("切不到剪贴板页") }
-            guard let panel = PanelGeometry.panel(of: target) else { throw CLIError("剪贴板页读不到面板") }
-            // 行坐标现查：取滚动区里宽度 > 100 的第一条正文文本，它所在行就是卡片行
-            let rows = AXRoots.collect(target, maxDepth: 16) { node in
-                node.role == "AXStaticText" && (node.size?.width ?? 0) > 100 && node.position != nil
+        // 4) 分页条只剩 5 段，且不再有「剪贴板」段（该分页已下线，历史只在独立浮层里看）
+        try recorder.step("分页条 5 段且无「剪贴板」") {
+            guard let panel = PanelGeometry.panel(of: target) else { throw CLIError("核对分页条时面板消失了") }
+            let segments = AXRoots.collect(target, maxDepth: 16) { node in
+                node.role == "AXButton" && PanelGeometry.tabNames.contains(node.title)
             }
-            guard let row = rows.first, let center = row.center else {
-                throw CLIError("剪贴板页没有可悬停的正文行")
+            let titles = Set(segments.map(\.title))
+            guard !titles.contains("剪贴板") else {
+                throw CLIError("分页条里仍有「剪贴板」段：菜单面板剪贴板分页没有下线")
             }
-            let baseline = try Capture.shot(.window(panel.id), to: recorder.path("clipboard-baseline.png"))
-            recorder.record(baseline)
-            Actions.hover(at: center, holdMilliseconds: 600)
-            guard let hovered = PanelGeometry.panel(of: target) else { throw CLIError("悬停后面板消失了") }
-            let shot = try Capture.shot(.window(hovered.id), to: recorder.path("clipboard-hover.png"))
+            guard titles == Set(PanelGeometry.tabNames) else {
+                throw CLIError("分页条读到 \(titles.sorted())，期望 \(PanelGeometry.tabNames.sorted())")
+            }
+            let shot = try Capture.shot(.window(panel.id), to: recorder.path("tabbar-5-segments.png"))
             recorder.record(shot)
-            let diff = try PixelDiff.ratio(baseline.path, shot.path)
-            guard diff > 0.002 else {
-                throw CLIError(String(format: "悬停后与基线差异仅 %.4f，自绘行没有出现悬停高亮", diff))
-            }
-            return "悬停点 \(Format.point(center))（行 \(row.frameDescription)）；与基线差异 \(String(format: "%.3f", diff))；\(shot.describe)"
+            return "读到 \(titles.sorted())；面板 \(Format.rect(panel.bounds))；\(shot.describe)"
         }
 
         // 5) 关面板

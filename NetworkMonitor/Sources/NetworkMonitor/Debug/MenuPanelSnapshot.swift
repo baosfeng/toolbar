@@ -138,7 +138,6 @@ enum MenuPanelSnapshot {
         }
 #endif
         panel.updateProcesses(SnapshotFixtures.processes(count: processCount))
-        panel.updateClipboardItems(items)
         // 快照与真实面板同一口径：读系统登记态（偏好键只是用户意图的本地记录）
         panel.launchAtStartupEnabled = LaunchAtStartupService().isEnabled
         // 额度页：快照用原型同款示意数据（余额 72.50/100、已购 25、24h 用量、2 个模型）
@@ -252,7 +251,6 @@ private extension MenuPanelTab {
     var fileNameSuffix: String {
         switch self {
         case .network: return "network"
-        case .clipboard: return "clipboard"
         case .transfer: return "transfer"
         case .credits: return "credits"
         case .token: return "token"

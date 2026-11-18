@@ -28,7 +28,6 @@ private final class MenuPanelContentViewController: NSViewController {
 /// 刷新分层（与状态栏共用同一个 1 秒定时器）：
 /// - 1 秒：实时速率（大数字 + 折线）
 /// - 5 秒：今日流量、近 6 日柱状图、活跃进程、IP / Wi-Fi / 开机自启动
-/// - 事件驱动：剪贴板条目（`AppEvents.clipboardChanged`）
 /// - 面板打开时：强制全量刷新一次
 @MainActor
 final class MenuPanelController: NSObject, NSPopoverDelegate {
@@ -137,7 +136,6 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     // 放宽为 internal：预热逻辑在 MenuPanelController+Open.swift
     var hasPrewarmed = false
     // 放宽为 internal：数据源绑定扩展（+DataSources）负责注册 / 读取
-    nonisolated(unsafe) var clipboardObserver: NSObjectProtocol?
     // 放宽为 internal：数据绑定扩展要注册 / 移除
     nonisolated(unsafe) var harnessObserver: NSObjectProtocol?
     // 放宽为 internal：数据绑定扩展要注册 / 移除
@@ -181,7 +179,6 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         watchdog.start()
         // 分页动作在「该页首次装配」时才挂：懒装配下这里直接读 pane 属性会把六页提前建出来
         wirePaneActions()
-        observeClipboardChanges()
         bindBilling()
         bindHarnessUsage()
         bindNumberUnitStyle()
@@ -190,9 +187,6 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     }
 
     nonisolated deinit {
-        if let clipboardObserver {
-            NotificationCenter.default.removeObserver(clipboardObserver)
-        }
         if let harnessObserver {
             NotificationCenter.default.removeObserver(harnessObserver)
         }
@@ -226,11 +220,6 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     /// 按分页挂动作回调（每页只调一次；回调设置时已装配的页会被补放一次）
     private func configure(pane: MenuPanelPaneView, for tab: MenuPanelTab) {
         switch tab {
-        case .clipboard:
-            guard let clipboard = pane as? ClipboardPaneView else { return }
-            clipboard.onSelectItem = { [weak self] item in self?.paste(item) }
-            clipboard.onRequestSettings = { [weak self] in self?.requestSettings(section: .clipboard) }
-            clipboard.onRequestHistory = { [weak self] in self?.requestClipboardHistory() }
         case .transfer:
             guard let transfer = pane as? TransferPaneView else { return }
             // 传送页的「是否可见」由这里注入：收起时它只更新模型、不推视图

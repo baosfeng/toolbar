@@ -55,46 +55,6 @@ extension MenuPanelController {
         }
     }
 
-    // MARK: - 剪贴板
-
-    /// 注册剪贴板变更通知（从主文件搬来：主文件贴近 15 KiB 上限）
-    func observeClipboardChanges() {
-        clipboardObserver = NotificationCenter.default.addObserver(
-            forName: AppEvents.clipboardChanged, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                // 面板收起时不做渲染，下次打开会强制全量刷新
-                guard self.popover.isShown else { return }
-                self.refreshClipboard()
-            }
-        }
-    }
-
-    /// 剪贴板刷新：仓储按时间倒序取最近 5 条
-    ///
-    /// 读库走后台队列：旧实现主线程同步 fetch，数据库队列一忙（后台索引写库 / 收尾聚合）
-    /// 主线程就排在后面 → 面板「未响应」。回主线程只在「本次仍是最新一次请求」时渲染，
-    /// 慢的旧结果不会覆盖新结果，也不会重开后一直停在上一帧。
-    func refreshClipboard() {
-#if DEBUG
-        if forceEmptyDataForEvidence {
-            // 作废在途请求，避免它们晚一步把真数据盖回空态取证画面
-            clipboardRequests.invalidate()
-            content.updateClipboardItems([])
-            return
-        }
-#endif
-        let sequence = clipboardRequests.next()
-        dataReadQueue.async { [repository] in
-            let items = repository.fetchClipboardItems(kind: nil, limit: 5)
-            Task { @MainActor in
-                guard self.clipboardRequests.accepts(sequence) else { return }
-                self.content.updateClipboardItems(items)
-            }
-        }
-    }
-
     // MARK: - Token
 
     /// Token 页刷新：先渲染已有快照，再后台按需索引（首轮索引不阻塞面板）
