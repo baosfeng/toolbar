@@ -2,8 +2,8 @@ import Foundation
 
 // MARK: - TestRunner 入口
 //
-// 只保留入口与套件调度：用例在各 *Tests.swift，断言辅助在 AssertionHelpers.swift；
-// 顶层语句只允许在本文件（SPM 约束）。贴着 15 KiB 上限，新增请复用已有注释行。
+// 只保留入口与套件调度：用例在各 *Tests.swift，断言辅助在 AssertionHelpers.swift。
+// 顶层语句只允许在本文件（SPM 约束）；贴 15 KiB 上限，新增优先挪逻辑到独立文件。
 
 // MARK: - 人工触发的探针入口（按天清理 / 内置解码 / 索引基准 / 网络）
 // 参数解析集中在 ManualProbes.swift，命中即执行并退出，不参与默认测试流程
@@ -37,11 +37,11 @@ runBillingTimeFormatTests()
 // MARK: - 开机自启动登记自愈（判定矩阵 / 隔离 suite 上的重新登记与回滚）
 runLaunchAtStartupTests()
 
-// MARK: - 通知与音效（事件表 / 声音解析 / 偏好合并 / 音效文件校验 / 额度恢复）
+// MARK: - 通知与音效
 runNotificationTests()
 runBillingNotificationMappingTests()
 
-// MARK: - 内建音（合成器确定性 / 时长与峰值 / AIFF 容器 / 存储值契约 / 落盘幂等）
+// MARK: - 内建音
 runCueSoundSynthTests()
 runCueSoundStoreTests()
 runCueSoundMigrationTests()
@@ -60,7 +60,7 @@ runCredentialMigrationTests()
 // MARK: - 剪贴板访问权限状态（文案 / 色调 / 跳转）
 runClipboardAccessTests()
 
-// MARK: - 系统权限状态机（三类 × 三态 → 灯色 / 文案 / 重启提示 / 手动添加引导）
+// MARK: - 系统权限状态机（三类 × 三态 → 灯色 / 文案 / 重启提示 / 引导）
 runSystemPermissionTests()
 
 // MARK: - 权限判据守卫（直呼系统权限 API 的文件必须在白名单内）
@@ -110,10 +110,10 @@ runClipboardTextClassifierTests()
 // MARK: - 剪贴板：文件条目类型细分（卡片图标 / 无障碍标签）
 runClipboardFileClassifierTests()
 
-// MARK: - 剪贴板：文件条目分类聚合摘要（单文件 / 跨族顺序 / 同族合并 / 边界截断）
+// MARK: - 剪贴板：文件条目分类聚合（单文件 / 跨族顺序 / 同族合并 / 边界截断）
 runClipboardFileSummaryTests()
 
-// MARK: - 剪贴板：图片存储占用统计（缺目录 / 空目录 / 计数与字节 / 子目录不计入）
+// MARK: - 剪贴板：图片存储占用（缺目录 / 空目录 / 计数与字节 / 子目录不计）
 runClipboardStorageUsageTests()
 
 // MARK: - 剪贴板：图片格式兼容（白名单 / 归一化 / 兜底 / 三表示编码）
@@ -152,8 +152,9 @@ runBillingTests()
 // MARK: - 额度页可见性（未配置 provider 不占位）+ 同一实例唯一配置
 runBillingVisibilityTests()
 
-// MARK: - 额度 Provider 多实例（实例标识 / 存储 / 装饰器 / 注册表 / 老配置零迁移）
+// MARK: - 额度 Provider 多实例与启用默认关闭
 runBillingInstanceTests()
+runBillingProviderPreferenceTests()
 
 // MARK: - 屏幕活动（锁屏 / 休眠暂停额度刷新）与快照暂停态
 runScreenActivityRelayTests()
@@ -164,8 +165,14 @@ runNumberUnitTests()
 // MARK: - 菜单栏显示口径（布局 / 单位 / 刷新周期 / 分页可见性重算）
 runMenuBarDisplayTests()
 
-// MARK: - 设置项自定义排序（顺序编解码 / 菜单栏默认上屏顺序 / 旧 Int 键迁移）
+// MARK: - 设置项自定义排序
 runSettingsOrderTests()
+
+// MARK: - 设置页行状态与窗口清单
+runProviderRowStatusAndWindowInventoryTests()
+
+// MARK: - 恢复通知按窗口勾选
+runBillingRecoveredWindowTests()
 
 // MARK: - 额度阈值提醒（5%/4%/3%/2%/1%）
 runBillingAlertTests()
@@ -180,7 +187,7 @@ runBillingRecoveryTests()
 runOpenDesignBillingTests()
 runOpenDesignUsageTests()
 
-// MARK: - OpenCode Go 额度（三窗口已用→剩余 / 限流角标 / 新旧字段兼容 / 错误映射）
+// MARK: - OpenCode Go 额度（三窗口已用→剩余 / 限流角标 / 新旧字段 / 错误映射）
 runOpencodeGoBillingTests()
 
 // MARK: - OpenCode Go 窗口字段（种类 / 时长 / resetsAt 同一时刻 / 缺重置为 nil）
@@ -229,7 +236,7 @@ runSnipSelectionStateTests()
 // MARK: - 窗口检测命中判定
 runSnipWindowTests()
 
-// MARK: - 窗口层级白名单（菜单栏 / 程序坞 / 状态栏项，自家面板留、覆盖层排除）
+// MARK: - 窗口层级白名单（菜单栏 / 程序坞 / 状态栏项，自家面板留 / 覆盖层排除）
 runSnipWindowLayerTests()
 
 // MARK: - 截图文件命名与上次选区编码
@@ -283,7 +290,7 @@ runSnipHotKeyPreferencesTests()
 // MARK: - 截图工具条布局（左右内边距恒等 / 组间带）
 runSnipToolBarLayoutTests()
 
-// MARK: - 截图工具条配置（文字提示档 / 组顺序与显隐 / 常驻工具 / 偏好往返）
+// MARK: - 截图工具条配置
 runSnipToolBarConfigurationTests()
 
 // MARK: - 工具条顺序偏好（动作顺序 / 常驻工具顺序与显隐解耦）
@@ -324,7 +331,7 @@ runPinMenuOrderTests()
 // MARK: - 面板高度预算（五页补齐页头 / 状态带后仍不触发外框滚动）
 runPaneHeightBudgetTests()
 
-// MARK: - 面板分页懒装配（冷启动只装配首屏 / 首次切到才建 / 重复切页不重建）
+// MARK: - 面板分页懒装配
 runPaneAssemblyTests()
 runBillingRefreshGateTests()
 runDrawnRowLayoutTests()
@@ -343,7 +350,7 @@ runClipboardCardGeometryTests()
 // MARK: - 来源 App 主题色（色表命中与回落 / 头带几何 / 头带黑白墨色对比度）
 runSourceAppPaletteTests()
 
-// MARK: - 自绘交互层纯口径（等步行带命中 / 区域优先级 / 悬停目标推进与归零）
+// MARK: - 自绘交互层纯口径
 runDrawnInteractionTests()
 
 // MARK: - 自绘位图翻正（flipped 上下文里的镜像变换 / 离屏取样验证上下缘）
@@ -361,10 +368,10 @@ runClipboardToolbarLayoutTests()
 // 板标签行（不溢出 / ＋恒在）+ 切板过滤 + ⌘←/→ 环回
 runClipboardBoardRowTests()
 
-// MARK: - 自绘绘制层纯口径（不透明度 / 阴影换算 / 焦点环 / 符号缓存 / 读屏文案）
+// MARK: - 自绘绘制层纯口径（不透明度 / 阴影 / 焦点环 / 符号缓存 / 读屏文案）
 runDrawnSurfaceMathTests()
 
-// MARK: - 版本检测（语义化比较 / 状态文案 / 24 小时限频 / Releases 解码与偏好）
+// MARK: - 版本检测
 runUpdateVersionTests()
 runUpdateCheckStateTests()
 runUpdateCheckerTests()
@@ -372,7 +379,7 @@ runUpdateCheckerTests()
 // MARK: - 剪贴板缩略图加载闸门（并发上限 / 在途去重 / 额度归还幂等 / reset）
 runClipboardThumbnailGateTests()
 
-// MARK: - 剪贴板缩略图失败重试策略（冷却 / 次数上限终态 / markSucceeded / reset）
+// MARK: - 剪贴板缩略图失败重试策略
 runClipboardThumbnailRetryPolicyTests()
 
 // MARK: - 剪贴板缩略图兜底降采样出口（比例 / 不放大 / 上限归一化）
@@ -394,7 +401,7 @@ runRenderTierGlassTests()
 runRenderTierGateTests()
 runAppearancePreferencesTests()
 
-// MARK: - 进程显示名映射（本应用那行显示「一览」/ 近似名不误伤 / 截断不变形）
+// MARK: - 进程显示名映射
 runProcessDisplayNameTests()
 
 // MARK: - 设置窗口骨架（定稿度量 / 侧栏三段分组 / 页头胶囊三态与文案）
@@ -413,10 +420,10 @@ runMainThreadWatchdogPolicyTests()
 // MARK: - 最新请求闸门（异步读只渲染最新一次结果）
 runLatestRequestGateTests()
 
-// MARK: - 快照冻结时钟（缺省回落 / now 对齐整分钟 / epoch 固定 / 日期键不漂移）
+// MARK: - 快照冻结时钟
 runSnapshotClockTests()
 
-// MARK: - 偏好域迁移（bundle id 变更时的设置搬迁：全量 / 幂等 / 跳过已有 / 空域）
+// MARK: - 偏好域迁移（bundle id 变更：全量 / 幂等 / 跳过已有 / 空域）
 runPreferenceDomainMigrationTests()
 
 // MARK: - Done

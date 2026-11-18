@@ -25,8 +25,14 @@ private func testLegacyCredentialZeroMigration() {
     assertEqual(BillingInstanceID.environmentKey(kindID: legacyID, slug: nil),
                 PreferencesBillingCredentialStore.defaultEnvironmentKey(for: legacyID),
                 "默认实例环境变量键与旧版本一致")
-    assertEqual(BillingProviderPreferences(storage: InMemoryStorage()).isEnabled(defaultInstance.id), true,
-                "未写过启用键时默认启用（与旧版本一致）")
+    // 默认值翻转（现为默认关闭）不影响老用户：老版本装过并启用过，键就存在且为 true。
+    // 这里同时钉住「键名没变」与「键存在时按用户选择读」，两条都在，升级才不会把实例下线。
+    let legacyEnabledStorage = InMemoryStorage()
+    legacyEnabledStorage.set(true, forKey: BillingProviderPreferences.storageKey(for: defaultInstance.id))
+    assertEqual(BillingProviderPreferences(storage: legacyEnabledStorage).isEnabled(defaultInstance.id), true,
+                "老用户显式启用的实例升级后仍启用（键名与旧版本一致，未被默认值翻转下线）")
+    assertEqual(BillingProviderPreferences(storage: InMemoryStorage()).isEnabled(defaultInstance.id), false,
+                "从未写过启用键的实例按新默认关闭")
 
     let secrets = InMemorySecretStorage()
     let store = PreferencesBillingCredentialStore(storage: InMemoryStorage(), secrets: secrets,

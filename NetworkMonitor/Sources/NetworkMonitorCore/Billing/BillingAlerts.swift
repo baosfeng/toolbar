@@ -50,19 +50,26 @@ public struct BillingAlertOptions: Sendable, Equatable {
     public var recoveryMinimumPercent: Double
     /// 回升通知冷却（秒）
     public var recoveryCooldown: TimeInterval
+    /// 恢复通知的窗口白名单（nil = 不限窗口，所有窗口都通知）
+    ///
+    /// 用户要能选「周额度恢复才通知 / 5 小时额度恢复才通知」；缺省 nil 保持既有行为，
+    /// 老配置零迁移。组装点在 `BillingAlertPreferences.options(for:)`。
+    public var recoveredWindows: BillingRecoveredWindowPolicy?
 
     public init(notifyExhausted: Bool = true,
                 notifyThresholds: Bool = true,
                 notifyRecovered: Bool = true,
                 notifyRecovery: Bool = true,
                 recoveryMinimumPercent: Double = 10,
-                recoveryCooldown: TimeInterval = 3_600) {
+                recoveryCooldown: TimeInterval = 3_600,
+                recoveredWindows: BillingRecoveredWindowPolicy? = nil) {
         self.notifyExhausted = notifyExhausted
         self.notifyThresholds = notifyThresholds
         self.notifyRecovered = notifyRecovered
         self.notifyRecovery = notifyRecovery
         self.recoveryMinimumPercent = recoveryMinimumPercent
         self.recoveryCooldown = recoveryCooldown
+        self.recoveredWindows = recoveredWindows
     }
 }
 
@@ -169,7 +176,9 @@ public enum BillingAlertEvaluator {
                 if didReset { current.lastResetNotifiedCycleID = cycleID }
                 // 本轮不再叠加回升：从用尽里回来的这一轮，回暖由恢复这一类表达
                 recoveredThisRound = true
-                if options.notifyRecovered {
+                // 按窗口勾选：无窗口信息（window == nil）一律放行，纯余额型 provider 不受影响
+                let windowAllowed = options.recoveredWindows?.allows(window?.kind) ?? true
+                if options.notifyRecovered, windowAllowed {
                     alerts.append(BillingAlert(key: key, providerID: providerID, resourceTitle: title,
                                                kind: .recovered, remainingPercent: fraction * 100,
                                                recoveredPercent: nil, windowTitle: windowLabel,

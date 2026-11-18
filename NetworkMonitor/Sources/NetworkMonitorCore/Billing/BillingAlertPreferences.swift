@@ -25,7 +25,8 @@ public struct BillingAlertPreferences {
     /// 回升通知冷却（秒）：同一次回升不重复提醒
     public static let recoveryCooldown: TimeInterval = 3_600
 
-    private let storage: any KeyValueStorage
+    // 放宽为 internal：BillingRecoveredWindowPolicy.swift 的扩展要读写窗口键（同模块，仅本目录使用）
+    let storage: any KeyValueStorage
 
     public init(storage: any KeyValueStorage = AppContext.shared.storage) {
         self.storage = storage

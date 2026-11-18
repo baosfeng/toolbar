@@ -36,6 +36,17 @@ final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHo
 
     // MARK: - 子视图
 
+    /// 恢复提醒卡（窗口行随实例 / 余额变化重建）
+    let alertCard = SettingsCardView()
+    /// 额度恢复通知总开关
+    let recoveredSwitch = NSSwitch()
+    /// 额度回升通知开关
+    let recoverySwitch = NSSwitch()
+    /// 窗口勾选框（键 = 实例标识 → 窗口种类 → 勾选框）
+    var windowChecks: [String: [BillingWindowKind: NSButton]] = [:]
+    /// 上次构建窗口行时的指纹（实例集合 + 各自观测到的窗口种类）
+    private var lastAlertCardFingerprint: [String] = []
+
     /// 每 provider 类型一张卡（键 = kindID）
     private var kindCards: [String: SettingsCardView] = [:]
     /// 类型出现顺序（注册表顺序；「新增实例」按钮用 tag 传有界索引）
@@ -47,7 +58,8 @@ final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHo
     let toastView = NSView()
     let toastLabel = MenuPanelLabel.text("", font: SettingsTheme.rowTitleFont,
                                          color: .white)
-    private var toastTask: Task<Void, Never>?
+    // 放宽为 internal：SettingsProvidersPane+Toast 扩展要取消上一次的自动收起任务
+    var toastTask: Task<Void, Never>?
 
     // MARK: - 初始化
 
@@ -72,7 +84,9 @@ final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHo
             page.addNote("暂无已注册的额度 Provider。")
         } else {
             buildProviderCards(registrations)
-            buildAlertCard()
+            // 恢复提醒卡以实例为单位装行（窗口勾选跟着实例走），卡本体在这里挂上
+            page.addCard(alertCard, sectionTitle: "额度恢复提醒")
+            rebuildAlertCardRows()
         }
         buildNotificationCard()
         buildToast()
@@ -189,6 +203,14 @@ final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHo
                        lastAttempt: monitor.lastAttempts[instanceID],
                        now: now)
         }
+        // 实例集合或观测到的窗口种类变了才整卡重建（tick 不打断操作）
+        let fingerprint = alertCardFingerprint()
+        if fingerprint != lastAlertCardFingerprint {
+            lastAlertCardFingerprint = fingerprint
+            rebuildAlertCardRows()
+        } else {
+            refreshWindowCheckStates()
+        }
         notificationCard.refresh()
         page.setStatusChip(Self.statusChip(enabledConfigured: enabledConfigured,
                                            configuredTotal: configuredTotal,
@@ -264,35 +286,4 @@ final class SettingsProvidersPane: SettingsPaneView, SettingsNotificationEventHo
         return "\(trimmed.prefix(3))…\(trimmed.suffix(4))"
     }
 
-    // MARK: - toast
-
-    private func buildToast() {
-        toastView.translatesAutoresizingMaskIntoConstraints = false
-        toastView.wantsLayer = true
-        toastView.layer?.cornerRadius = 12
-        toastView.layer?.backgroundColor = NSColor(white: 0.16, alpha: 0.94).cgColor
-        toastView.isHidden = true
-        toastLabel.translatesAutoresizingMaskIntoConstraints = false
-        toastView.addSubview(toastLabel)
-        addSubview(toastView)
-        NSLayoutConstraint.activate([
-            toastLabel.leadingAnchor.constraint(equalTo: toastView.leadingAnchor, constant: 12),
-            toastLabel.trailingAnchor.constraint(equalTo: toastView.trailingAnchor, constant: -12),
-            toastLabel.topAnchor.constraint(equalTo: toastView.topAnchor, constant: 6),
-            toastLabel.bottomAnchor.constraint(equalTo: toastView.bottomAnchor, constant: -6),
-            toastView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            toastView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-        ])
-    }
-
-    func showToast(_ text: String) {
-        toastLabel.stringValue = text
-        toastView.isHidden = false
-        toastTask?.cancel()
-        toastTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
-            guard !Task.isCancelled else { return }
-            self?.toastView.isHidden = true
-        }
-    }
 }

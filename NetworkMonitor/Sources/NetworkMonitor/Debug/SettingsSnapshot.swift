@@ -43,6 +43,11 @@ enum SettingsSnapshot {
             if let host = settings.currentPaneForSnapshot as? SettingsNotificationEventHosting {
                 host.notificationCard.debugLogStates(section.fileSuffix)
             }
+            // 额度页的窗口勾选同样是 NSControl：勾选态与偏好真值并排落盘
+            if section == .providers, let providers = settings.currentPaneForSnapshot
+                as? SettingsProvidersPane {
+                providers.debugLogWindowStates()
+            }
             // 外观页的玻璃开关同样是 NSSwitch：图上只看版式，三项状态判定以
             // settings-appearance-states.txt 为准（偏好真值 / 控件勾选态并排 + 一致判定）
             if section == .appearance,

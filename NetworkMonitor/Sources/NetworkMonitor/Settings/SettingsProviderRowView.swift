@@ -70,6 +70,10 @@ final class ProviderRowView: NSView {
     var errorMessage: String?
     var isEditorExpanded = false
     var isConfirmExpanded = false
+    /// 开关当前是否可打开（无凭据时恒 false；由 applyControls 刷新）
+    var canEnable = false
+    /// 是否未被其他行的编辑态锁定
+    var isInteractionEnabled = true
 
     // MARK: - 初始化
 
@@ -218,10 +222,11 @@ final class ProviderRowView: NSView {
         let sourceNote = credentialSource == .environment ? "（环境变量）" : ""
         if !isEnabled {
             dotView.kind = .idle
-            statusLabel.stringValue = isConfigured ? "已配置 · 已停用" : "未配置 · 已停用"
+            statusLabel.stringValue = isConfigured ? "已配置 · 已停用" : "未配置 · 先填凭据才能打开"
         } else if !isConfigured {
+            // 默认关闭后，未配置的实例正常态就是「关着」；这条只在凭据被清掉但仍启用时出现
             dotView.kind = .warn
-            statusLabel.stringValue = "未配置 · 尚未填写 Key"
+            statusLabel.stringValue = "已启用 · 凭据已清除，先填凭据"
         } else if let errorMessage, !errorMessage.isEmpty {
             dotView.kind = .warn
             statusLabel.stringValue = "已配置\(sourceNote) · \(refreshText())"
@@ -238,6 +243,12 @@ final class ProviderRowView: NSView {
 
     func applyControls() {
         toggle.state = isEnabled ? .on : .off
+        // 「配置了之后才能打开」：无凭据时开关置灰，行内给一行「先填凭据」的说明
+        canEnable = BillingProviderAvailability.canEnable(hasCredential: isConfigured,
+                                                          isEnabled: isEnabled)
+        toggle.isEnabled = canEnable && isInteractionEnabled
+        toggle.toolTip = BillingProviderAvailability.disabledHint(hasCredential: isConfigured,
+                                                                 isEnabled: isEnabled)
         // 同一 provider 只允许一份配置：已配置时只给「替换 / 清除」，未配置才给「配置凭据…」。
         // 环境变量回退不可从界面清除（那是 shell 里的东西），只给「替换」把存储中的凭据补上。
         let showsCredentialActions = isConfigured
@@ -276,8 +287,12 @@ final class ProviderRowView: NSView {
     }
 
     /// 编辑其他行时锁定本行交互（视觉降透明，按钮与开关禁用）
+    ///
+    /// 解锁时必须重新过一次可用性判据：否则无凭据的行会在别人收起编辑态后被「顺手解锁」，
+    /// 把刚置灰的开关又能点开（用户要求「配置了之后才能打开」）。
     func setInteractionEnabled(_ enabled: Bool) {
-        toggle.isEnabled = enabled
+        isInteractionEnabled = enabled
+        toggle.isEnabled = enabled && canEnable
         editButton.isEnabled = enabled
         clearButton.isEnabled = enabled
         configButton.isEnabled = enabled

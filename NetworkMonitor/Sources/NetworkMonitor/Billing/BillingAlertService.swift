@@ -75,7 +75,7 @@ final class BillingAlertService: BillingAlerting {
                                                     providerID: providerID,
                                                     state: oldState,
                                                     now: Date(),
-                                                    options: preferences.options)
+                                                    options: preferences.options(for: providerID))
         // 状态有变化（含周期重置 / 回升清空 / 基线刷新）时落盘，即使本次没发提醒
         if result.state != oldState {
             saveState(result.state)
@@ -90,7 +90,11 @@ final class BillingAlertService: BillingAlerting {
     }
 
     /// 清除实例的提醒状态（删除实例时调用；同名新实例不会继承旧阈值记录）
+    ///
+    /// 连带清掉该实例的窗口恢复勾选：同名新实例回到「所有窗口都通知」的默认，
+    /// 否则旧的 weekly=false 会被新实例静默继承。
     func clearAlerts(for providerID: String) {
+        preferences.removeRecoveredWindowSelection(providerID: providerID)
         var state = loadState()
         let prefix = providerID + "."
         let keys = state.keys.filter { $0.hasPrefix(prefix) }

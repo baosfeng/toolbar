@@ -217,28 +217,4 @@ extension ProviderRowView {
     @objc func cancelConfirmTapped() {
         endConfirm()
     }
-
-    // MARK: - 控件工厂
-
-    static func textButton(_ title: String,
-                           color: NSColor = SettingsTheme.accent) -> NSButton {
-        let button = NSButton(title: title, target: nil, action: nil)
-        button.isBordered = false
-        button.controlSize = .small
-        button.font = SettingsTheme.rowTitleFont
-        button.contentTintColor = color
-        // 文字按钮与右侧开关同在一行：给同一档 22pt 高，横线才对得齐（不改字号与行为）
-        SettingsControlChrome.applyStandardHeight(to: button)
-        return button
-    }
-
-    static func primaryButton(_ title: String) -> NSButton {
-        let button = NSButton(title: title, target: nil, action: nil)
-        button.bezelStyle = .rounded
-        button.controlSize = .small
-        button.bezelColor = SettingsTheme.accent
-        button.contentTintColor = .white
-        SettingsControlChrome.applyStandardHeight(to: button)
-        return button
-    }
 }
