@@ -59,7 +59,10 @@ func runPinKeyCommandTests() {
                 "中键单击重置 100% 大小与不透明")
     assertEqual(Click.outcome(buttonNumber: 2, clickCount: 2), .resetSizeAndAlpha,
                 "中键连击仍只重置")
-    assertEqual(Click.outcome(buttonNumber: 1, clickCount: 1), .dragWindow, "右键不归点击判定（走右键菜单）")
+    assertEqual(Click.outcome(buttonNumber: 1, clickCount: 1), .passThrough,
+                "右键不归点击判定：原样交给 AppKit 弹菜单，不会被当成拖动把手")
+    assertEqual(Click.outcome(buttonNumber: 3, clickCount: 1), .passThrough,
+                "侧键同样放行，不抢事件")
 
     print("✅ 贴图窗键位与点击语义测试通过")
 }

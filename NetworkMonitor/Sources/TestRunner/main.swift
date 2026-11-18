@@ -316,8 +316,9 @@ runSnipAnnotationSelectionTests()
 // MARK: - 贴图来源纯文本（⌘⇧C 复制纯文本；无来源时明确反馈）
 runSnipPinSourceTextTests()
 
-// MARK: - 贴图右键菜单顺序（组内换序 / 危险项恒在末尾）
+// MARK: - 贴图右键菜单顺序（九项自由换序）
 runPinMenuOrderTests()
+runPinDragSessionTests()
 
 // MARK: - 面板高度预算（五页补齐页头 / 状态带后仍不触发外框滚动）
 runPaneHeightBudgetTests()
