@@ -74,7 +74,10 @@ func runClipboardTextClassifierTests() {
     assertEqual(ClipboardTextClassifier.classify(longPlain).kind, .plain, "超长正文 → plain")
     assertEqual(ClipboardTextClassifier.classify(longJSONLike).kind, .plain, "超长伪 JSON → plain（不白跑解析）")
     let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-    assertEqual(elapsedMs < 200, true, "两段超长文本判定合计 < 200ms（实测 \(String(format: "%.1f", elapsedMs))ms）")
+    // 阈值按「最慢的 CI 机器」给，不按本机：这是防退化粗判据（判「有没有对 100 万字符白跑一遍
+    // JSON 解析」，那种退化是秒级而不是百毫秒级），不是性能基准。
+    // 实测本机 arm64 约 40ms、CI 的 x86_64 runner 243ms——200ms 卡在机器差异上，与代码无关。
+    assertEqual(elapsedMs < 1000, true, "两段超长文本判定合计 < 1s（实测 \(String(format: "%.1f", elapsedMs))ms）")
 
     // 6) 展示口径收敛：两处调用点共用同一判定（www. 开头此前详情区显示「文本」）
     let wwwItem = ClipboardItem(kind: .text, text: "www.apple.com", contentHash: "classify-www")
