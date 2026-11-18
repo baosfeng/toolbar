@@ -15,7 +15,7 @@ extension MenuPanelController: MenuPanelViewDelegate {
     // MARK: - 动作
     //
     // 以下成员（`paste` / `requestSettings` / `requestClipboardHistory` /
-    // `toggleLaunchAtStartup` / `isLaunchAtStartupSaved`）由主文件 `wireActions()` 装配
+    // `toggleLaunchAtStartup` / `isLaunchAtStartupSaved`）由主文件 `wireActions()` 与中频刷新读取
     // 与中频刷新读取，故由 private 放宽为 internal。
 
     /// 点击条目：收起面板后走与剪贴板面板一致的粘贴路径
@@ -45,20 +45,19 @@ extension MenuPanelController: MenuPanelViewDelegate {
         onOpenClipboardHistory?()
     }
 
+    /// 开机自启动当前开关态 —— 读系统登记态，与通用页 / 系统权限页同一份判据
+    ///
+    /// 旧实现读偏好键：注册失败回滚之前，菜单勾选与权限页会显示相反状态。
     var isLaunchAtStartupSaved: Bool {
-        storage.bool(forKey: ClipboardPreferences.launchAtStartupKey)
+        launchAtStartupService.isEnabled
     }
 
     /// 开机自启动切换 — 与设置页共用 `LaunchAtStartupService`，避免两套注册 / 回滚逻辑
     func toggleLaunchAtStartup() {
         let target = !isLaunchAtStartupSaved
-        guard launchAtStartupService.setEnabled(target) else {
-            // 失败时服务已回滚偏好，这里只需把界面拨回真实状态
-            content.launchAtStartupEnabled = isLaunchAtStartupSaved
-            updateContentSize()
-            return
-        }
-        content.launchAtStartupEnabled = target
+        launchAtStartupService.setEnabled(target)
+        // 成功失败都按系统登记态重画：失败时服务已回滚偏好，界面不再自己推一套结论
+        content.launchAtStartupEnabled = isLaunchAtStartupSaved
         updateContentSize()
     }
 

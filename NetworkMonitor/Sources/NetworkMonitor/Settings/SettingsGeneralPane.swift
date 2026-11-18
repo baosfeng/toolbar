@@ -7,7 +7,8 @@ import NetworkMonitorCore
 /// 「菜单栏指标 / 面板分页 / 菜单栏显示方式」三块（排序构建与刷新拆在 +Ordering.swift）
 ///
 /// 开关类写进既有偏好实现（`LaunchAtStartupService` / `BillingAlertPreferences`），
-/// 与菜单栏齿轮菜单读同一份状态，避免两处勾选态不一致。
+/// 开机自启动的显示态读**系统登记态**（`LaunchAtStartupService.registration`），
+/// 偏好键只是「用户意图」的本地记录 —— 与系统权限页、面板菜单同一份判据。
 /// 「数值单位」写 `NumberUnitPreferences`（Core），切档后发 `AppEvents.numberUnitStyleChanged`，
 /// 菜单面板据此立即重渲染，不用重启。
 ///
@@ -109,34 +110,31 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
                      + "标题右侧可一键恢复默认。开机自启动依赖应用签名，未签名构建可能被系统拒绝。")
     }
 
+    /// 按系统登记态刷开关与副标题（显示口径在 UI 库 LaunchItemPresentation，本页只落控件）
+    private func applyLaunchState() {
+        let presentation = launchAtStartup.presentation
+        launchSwitch.state = presentation.isOn ? .on : .off
+        launchRow.update(subtitle: presentation.subtitle)
+    }
+
     override func refresh() {
-        launchSwitch.state = launchAtStartup.isEnabled ? .on : .off
+        applyLaunchState()
         alertSwitch.state = alertPreferences.isEnabled ? .on : .off
         let style = unitPreferences.style
         let styleIndex = NumberUnitStyle.allCases.firstIndex(of: style) ?? 0
         unitControl.selectItem(at: styleIndex)
         unitRow.update(subtitle: style.detailText)
-        launchRow.update(subtitle: launchAtStartup.isEnabled
-                         ? "登录后自动启动 \(AppIdentity.displayName)"
-                         : "当前未登记开机自启动")
         notificationCard.refresh()
         refreshOrderableControls()
     }
 
     // MARK: - 动作
 
+    /// 开机自启动切换：失败时服务已回滚偏好并把原因记进 lastFailureReason，
+    /// 界面一律按系统登记态重画（显示口径在 UI 库 LaunchItemPresentation）
     @objc private func launchChanged() {
-        let target = launchSwitch.state == .on
-        let ok = launchAtStartup.setEnabled(target)
-        if !ok {
-            // 系统拒绝时回滚界面状态，避免显示已开启但实际没启动
-            launchSwitch.state = target ? .off : .on
-            launchRow.update(subtitle: "系统未允许开机自启动（需在系统设置中检查登录项）")
-        } else {
-            launchRow.update(subtitle: target
-                             ? "登录后自动启动 \(AppIdentity.displayName)"
-                             : "当前未登记开机自启动")
-        }
+        launchAtStartup.setEnabled(launchSwitch.state == .on)
+        applyLaunchState()
     }
 
     @objc private func alertChanged() {
