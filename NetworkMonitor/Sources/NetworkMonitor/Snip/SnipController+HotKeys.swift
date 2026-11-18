@@ -27,6 +27,10 @@ extension SnipController {
             SnipCropProbe.run(controller: self)
         }
         SnipParityProbe.runIfRequested()
+        // NM_SNIP_DOCK_PROBE=1：走完一次真实截图并断言全程没有 Dock 图标（见 SnipDockProbe）
+        if SnipDockProbe.isRequested {
+            SnipDockProbe.run(controller: self)
+        }
 #endif
     }
 
