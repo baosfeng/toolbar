@@ -1,6 +1,7 @@
 import Foundation
 import ServiceManagement
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 开机自启动
 
@@ -22,9 +23,26 @@ final class LaunchAtStartupService {
                                                     logger: logger)
     }
 
-    /// 当前是否已登记开机自启动（偏好记录的用户意图，不代表系统侧真的已登记）
+    /// 开关该显示什么 —— 读系统登记态，偏好键只作为「用户意图」的本地记录
+    ///
+    /// 三个入口（通用页 / 系统权限页 / 面板菜单）都读这一个值，
+    /// 判定在 Core 的 LaunchAtStartupReconciler.switchState（可单测，不碰真实 SMAppService）。
     var isEnabled: Bool {
         reconciler.isEnabled
+    }
+
+    /// 偏好键里的用户意图（只给「开关动作该拨向哪边」与回滚语义用，不作界面显示）
+    var isPreferenceEnabled: Bool {
+        reconciler.isPreferenceEnabled
+    }
+
+    /// 三个入口共用的显示口径：开关开/关 + 行副标题（口径在 UI 库，测试可直接断言）
+    ///
+    /// 通用页、面板菜单、DEBUG 快照都读它，避免各自拼一套「什么算开」的判断。
+    var presentation: LaunchItemPresentation {
+        LaunchItemPresentation(registration: registration,
+                               preferenceEnabled: isPreferenceEnabled,
+                               failureReason: lastFailureReason)
     }
 
     /// 切换登记状态

@@ -75,6 +75,43 @@ public final class LaunchAtStartupReconciler {
         }
     }
 
+    /// 界面开关该显示什么 —— 以系统登记态为唯一真相，偏好键只补充「待批准」这一档
+    ///
+    /// 为什么不能直接读偏好键：偏好是「用户意图」的本地记录，系统拒绝登记 / 旧包残留
+    /// 注册都会让两者分叉。同一个开关在通用页读偏好、系统权限页读登记态时，用户就会
+    /// 看到两个相反的结论 —— 这正是「开机自启动很多地方都不统一」。
+    ///
+    /// 三档语义：
+    /// - enabled / notRegistered / notFound：系统侧说了算，偏好键不参与；
+    /// - requiresApproval + 偏好开：用户刚打开、等系统批准，开关保持「开」并标注待批准；
+    /// - requiresApproval + 偏好关：用户已关掉，登记项只是残留，开关保持「关」。
+    /// 最后一条同时兜住了「注册失败回滚」：回滚只把偏好置回关，系统侧残留仍是待批准，
+    /// 若这里无条件按登记态显示为开，开关会自己弹回去，与副标题的「已回滚为关」自相矛盾。
+    public static func switchState(preferenceEnabled: Bool,
+                                   registration: LaunchAtStartupRegistration) -> Bool {
+        switch registration {
+        case .enabled: return true
+        case .notRegistered, .notFound: return false
+        case .requiresApproval: return preferenceEnabled
+        }
+    }
+
+    /// 用户此刻「想不想开机自启动」—— 以系统登记态为准，偏好键只作为本地记录
+    ///
+    /// 与 switchState 同一份判定：开关显示与动作语义必须是同一个口径，
+    /// 分开写两套判据就是下一个「点一下没反应 / 点两下才生效」的来源。
+    public var isEnabled: Bool {
+        Self.switchState(preferenceEnabled: isPreferenceEnabled,
+                         registration: registrar.registration)
+    }
+
+    /// 偏好键里记录的用户意图（不代表系统侧真的已登记）
+    ///
+    /// 只给「启动自愈」与回滚语义用：界面开关一律读 isEnabled（系统登记态）。
+    public var isPreferenceEnabled: Bool {
+        storage.bool(forKey: key)
+    }
+
     private let storage: any KeyValueStorage
     private let key: String
     private let registrar: any LaunchAtStartupRegistering
@@ -93,11 +130,6 @@ public final class LaunchAtStartupReconciler {
         self.key = key
         self.registrar = registrar
         self.logger = logger
-    }
-
-    /// 用户意图（偏好键记录，不代表系统侧真的已登记）
-    public var isEnabled: Bool {
-        storage.bool(forKey: key)
     }
 
     /// 最近一次登记 / 注销失败的原因（成功时清空）
@@ -140,7 +172,8 @@ public final class LaunchAtStartupReconciler {
     /// 启动阶段不替用户注销任何登记）。
     @discardableResult
     public func reconcileAtLaunch() -> LaunchAtStartupReconcileOutcome {
-        let preferenceEnabled = isEnabled
+        // 对账读的是「用户意图」而不是开关显示态（开关已按系统登记态显示）
+        let preferenceEnabled = isPreferenceEnabled
         let registration = registrar.registration
         switch Self.decision(preferenceEnabled: preferenceEnabled, registration: registration) {
         case .skip:
