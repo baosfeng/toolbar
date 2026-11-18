@@ -132,7 +132,9 @@ func runSnipToolBarConfigurationTests() {
     assertEqual(resolved.labelMode, .hover, "未知档位回落悬停提示")
     assertEqual(resolved.groupOrder, [.width, .color, .tools, .actions], "组顺序补齐缺失项")
     assertEqual(resolved.visibleGroups, [.color, .width, .actions], "隐藏组按串生效")
-    assertEqual(resolved.primaryTools, [.text, .rectangle], "常驻工具丢弃非法名并保持存储顺序")
+    // 缺顺序键时常驻工具按默认全序排列（text 在 rectangle 之后），不是存储顺序
+    assertEqual(resolved.primaryTools, [.rectangle, .text],
+                "常驻工具丢弃非法名，缺顺序键时按默认全序排列")
     assertEqual(resolved.visibleActions, [.cancel, .copy], "隐藏动作按串生效")
 
     // 存储往返：persist 写五个键，load 读回来与原配置一致

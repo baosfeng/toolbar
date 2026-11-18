@@ -52,7 +52,8 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
     var toolBarGroupToggles: [SnipToolBarGroup: NSSwitch] = [:]
     /// 组顺序卡片的装配器（行内上移 / 下移由 SettingsOrderedCardView 负责）
     var toolBarOrderCard: SettingsOrderedCardView?
-    var toolBarToolChips: [SnipTool: NSButton] = [:]
+    /// 常驻工具卡片（同一行里先摆显示开关、再摆行尾上移 / 下移；顺序与显隐解耦）
+    var toolBarPrimaryToolCard: SettingsOrderedPrimaryToolCard?
     /// 输出动作卡片（同一行里先摆显示开关、再摆行尾上移 / 下移；顺序与显隐解耦）
     var toolBarActionCard: SettingsOrderedActionCard?
 

@@ -281,6 +281,9 @@ runSnipToolBarLayoutTests()
 // MARK: - 截图工具条配置（文字提示档 / 组顺序与显隐 / 常驻工具 / 偏好往返）
 runSnipToolBarConfigurationTests()
 
+// MARK: - 工具条顺序偏好（动作顺序 / 常驻工具顺序与显隐解耦）
+runSnipToolBarOrderTests()
+
 // MARK: - 截图覆盖层键位解析（⌘S / ⌘A 优先级）
 runSnipKeyCommandTests()
 

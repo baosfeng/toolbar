@@ -19,6 +19,8 @@ public enum SnipToolBarPreferenceKey {
     public static let hiddenActions = "snip.toolbar.hiddenActions"
     /// 输出动作的排列顺序（逗号分隔的动作名；缺键时按 SnipBarAction.defaultOrder 回落）
     public static let actionOrder = "snip.toolbar.actionOrder"
+    /// 常驻工具的排列顺序（逗号分隔的工具名；缺键时按 SnipTool.defaultOrder 回落）
+    public static let primaryToolOrder = "snip.toolbar.primaryToolOrder"
     /// 工具条位置（auto / below / above）
     public static let placement = "snip.toolbar.placement"
 }
@@ -61,13 +63,15 @@ public enum SnipToolBarConfigurationResolver {
     ///   - primaryToolsRaw: 常驻工具原始串（缺失 → SnipTool.primary）
     ///   - hiddenActionsRaw: 被隐藏动作的原始串
     ///   - actionOrderRaw: 输出动作顺序原始串（缺失 → defaultOrder，老配置外观不变）
+    ///   - primaryToolOrderRaw: 常驻工具顺序原始串（缺失 → SnipTool.defaultOrder，老配置外观不变）
     public static func resolve(labelModeRaw: String?,
                                groupOrderRaw: String?,
                                hiddenGroupsRaw: String?,
                                primaryToolsRaw: String?,
                                hiddenActionsRaw: String?,
                                placementRaw: String? = nil,
-                               actionOrderRaw: String? = nil) -> SnipToolBarConfiguration {
+                               actionOrderRaw: String? = nil,
+                               primaryToolOrderRaw: String? = nil) -> SnipToolBarConfiguration {
         let mode = labelModeRaw.flatMap(SnipToolBarLabelMode.init(rawValue:)) ?? .hover
         let placement = placementRaw.flatMap(SnipToolBarPlacement.init(rawValue:)) ?? .auto
 
@@ -80,11 +84,24 @@ public enum SnipToolBarConfigurationResolver {
             !hiddenGroupNames.contains($0.rawValue)
         })
 
-        // 常驻工具按存储里的顺序映射（未知名字丢弃），顺序即工具条上的排列顺序
-        let toolNames = SnipToolBarListCoding.decode(primaryToolsRaw)
-        let tools = toolNames.isEmpty
+        // 常驻工具与动作同一套口径：顺序键只决定先后，显隐仍由 primaryTools 决定，两件事互不影响。
+        //
+        // 全序缺键时回落 SnipTool.primary 打头的默认全序（其余项按声明顺序补尾）；
+        // 顺序键含未知项时只丢该项，缺项同样按默认顺序补到末尾。
+        // 先按顺序归一、再按「是否常驻」过滤，于是关掉的工具仍留在全序里占着席次——
+        // 重新打开时回到原位，不会排到末尾。
+        let residentNames = SnipToolBarListCoding.decode(primaryToolsRaw)
+        // 常驻集合为空（老配置没这个键）时回落 SnipTool.primary，与改动前语义一致
+        let residentTools = Set(residentNames.isEmpty
             ? SnipTool.primary
-            : toolNames.compactMap { SnipTool(rawValue: $0) }
+            : residentNames.compactMap(SnipTool.init(rawValue:)))
+        let toolOrder = SettingsOrderCoding.normalize(
+            SnipToolBarListCoding.decode(primaryToolOrderRaw),
+            known: SnipTool.allCases.map(\.rawValue),
+            defaultOrder: SnipTool.primary.map(\.rawValue))
+        let tools = toolOrder
+            .compactMap(SnipTool.init(rawValue:))
+            .filter { residentTools.contains($0) }
 
         // 动作先按偏好顺序排（去未知 / 去重 / 缺项补尾），再按显隐过滤：
         // 顺序键只决定先后，显隐仍由 hiddenActions 决定，两件事互不影响
@@ -107,8 +124,9 @@ public enum SnipToolBarConfigurationResolver {
 
     /// 把配置写回偏好（设置页与覆盖层回写共用）
     ///
-    /// 顺序键 `actionOrder` 不在这里写：它归 `SettingsOrderStore` 独占（排序按钮 save / 恢复默认 reset）。
-    /// 显隐与顺序是两个独立维度——若在此按「可见动作」回写顺序，关掉的动作会丢席次、
+    /// 两个顺序键（`actionOrder` / `primaryToolOrder`）都不在这里写：
+    /// 它们归 `SettingsOrderStore` 独占（排序按钮 save / 恢复默认 reset）。
+    /// 显隐与顺序是两个独立维度——若在此按「可见动作 / 常驻工具」回写顺序，关掉的那项会丢席次、
     /// 重新打开时排到末尾。顺序键缺省时 resolve 回落 defaultOrder，老配置外观不变。
     public static func persist(_ config: SnipToolBarConfiguration, storage: any KeyValueStorage) {
         storage.set(config.labelMode.rawValue, forKey: SnipToolBarPreferenceKey.labelMode)
@@ -137,6 +155,7 @@ public enum SnipToolBarConfigurationResolver {
                 primaryToolsRaw: storage.string(forKey: SnipToolBarPreferenceKey.primaryTools),
                 hiddenActionsRaw: storage.string(forKey: SnipToolBarPreferenceKey.hiddenActions),
                 placementRaw: storage.string(forKey: SnipToolBarPreferenceKey.placement),
-                actionOrderRaw: storage.string(forKey: SnipToolBarPreferenceKey.actionOrder))
+                actionOrderRaw: storage.string(forKey: SnipToolBarPreferenceKey.actionOrder),
+                primaryToolOrderRaw: storage.string(forKey: SnipToolBarPreferenceKey.primaryToolOrder))
     }
 }
