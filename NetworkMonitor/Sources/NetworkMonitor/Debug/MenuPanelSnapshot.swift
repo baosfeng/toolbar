@@ -36,6 +36,10 @@ enum MenuPanelSnapshot {
             try? await Task.sleep(nanoseconds: delayNanoseconds)
             // 只跑剪贴板取证（改卡片视觉时反复对账用；全套快照约 2 分钟）
             if ProcessInfo.processInfo.environment["NM_SNAPSHOT_CLIPBOARD_ONLY"]?.isEmpty == false {
+                // 主题 / 字数单位必须在这里也应用一次：这条捷径原先跳过它们，
+                // 结果「只跑剪贴板取证」出来的图恒为默认主题，三主题对照时会被误读成「三套一样」
+                prepareUnitStyleForSnapshot()
+                prepareAppearanceForSnapshot()
                 await SnapshotClipboardEvidence.captureAllClipboardEvidence(directory: directory)
                 NSApp.terminate(nil)
                 return
@@ -138,7 +142,6 @@ enum MenuPanelSnapshot {
         }
 #endif
         panel.updateProcesses(SnapshotFixtures.processes(count: processCount))
-        panel.updateClipboardItems(items)
         // 快照与真实面板同一口径：读系统登记态（偏好键只是用户意图的本地记录）
         panel.launchAtStartupEnabled = LaunchAtStartupService().isEnabled
         // 额度页：快照用原型同款示意数据（余额 72.50/100、已购 25、24h 用量、2 个模型）
@@ -252,7 +255,6 @@ private extension MenuPanelTab {
     var fileNameSuffix: String {
         switch self {
         case .network: return "network"
-        case .clipboard: return "clipboard"
         case .transfer: return "transfer"
         case .credits: return "credits"
         case .token: return "token"

@@ -4,12 +4,15 @@ import NetworkMonitorUI
 
 // MARK: - 整卡绘制
 
-/// ClipboardCardView 的整卡绘制 —— 一次 draw 画完卡底、描边、卡头带、正文、meta、缩略图、星标与角标
+/// ClipboardCardView 的整卡绘制 —— 一次 draw 画完卡底、描边、卡头带、卡身、卡脚、缩略图与角标
 ///
-/// 层序（自下而上）：卡底 → 常态描边 → hover 提亮 → 选中叠色 → 正文 → meta →
-/// 缩略图 → 收藏星 → 栈角标；卡头带（来源染色）在 `ClipboardHeadBand.swift`。
-/// 绘制发生在 DrawnCanvasLayer 上：卡底与阴影同层，阴影只在卡外可见，
-/// 离屏快照（cacheDisplay）与真实窗口两条渲染路径都能拍到阴影。
+/// 层序（自下而上）：卡底 → 常态描边 → hover 提亮 → 选中叠色 → 卡头带 → 卡身 → 卡脚 →
+/// 缩略图 → 收藏星 → 栈角标。
+/// 版式对标 Paste 的「彩色卡头 + 白卡身 + 卡脚」三段式：
+/// 卡头 26pt（来源色 + 类型 + 相对时间 + App 图标）、卡身（正文 / 缩略图）、
+/// 卡脚（标题 + 来源，上方一条发丝线）。
+/// 绘制发生在 DrawnCanvasLayer 上：卡底与阴影同层，离屏快照（cacheDisplay）与真实窗口
+/// 两条渲染路径都能拍到阴影。
 extension ClipboardCardView {
 
     /// 整卡绘制入口（由 DrawnCanvasLayer 在翻转上下文里回调）
@@ -17,12 +20,12 @@ extension ClipboardCardView {
         // 卡底层（DrawnCardSurface：圆角 / 填充 / 叠色 / 描边三处卡片共用）
         DrawnCardSurface(rect: bounds,
                          radius: Self.cornerRadius,
-                         fill: NSColor.controlBackgroundColor.withAlphaComponent(Self.backgroundAlpha)).draw()
-        layer(inset: Self.borderWidth / 2, width: Self.borderWidth,
-              stroke: NSColor.separatorColor, fill: nil, alpha: 1).draw()
-        layer(inset: Self.activeBorderWidth / 2, width: Self.activeBorderWidth,
-              stroke: NSColor.labelColor.withAlphaComponent(Self.hoverStrokeAlpha),
-              fill: NSColor.white.withAlphaComponent(Self.hoverFillAlpha),
+                         fill: PaneCardStyle.cardFill,
+                         stroke: PaneCardStyle.hairline,
+                         lineWidth: Self.borderWidth).draw()
+        layer(inset: Self.hoverBorderWidth / 2, width: Self.hoverBorderWidth,
+              stroke: PaneCardStyle.primaryText.withAlphaComponent(Self.hoverStrokeAlpha),
+              fill: PaneCardStyle.primaryText.withAlphaComponent(Self.hoverFillAlpha),
               alpha: hoverBlend.value).draw()
         layer(inset: Self.activeBorderWidth / 2, width: Self.activeBorderWidth,
               stroke: .controlAccentColor,
@@ -36,8 +39,7 @@ extension ClipboardCardView {
         } else {
             drawTextBody(item: item, in: body)
         }
-        // meta 在正文之后画：改造成本最低的等价做法（缩略图只覆盖正文区，不会压到 meta）
-        drawMeta(item: item, in: bounds)
+        drawFooter(item: item, in: bounds)
         if item.kind == .image { drawThumbnailImage(in: body) }
         drawStar(item: item, in: bounds)
         drawStackBadge(item: item, in: bounds)

@@ -20,7 +20,6 @@ extension ClipboardCardView {
     func hitRegion(at point: CGPoint) -> ClipboardCardHitRegion {
         ClipboardCardHitTest.region(at: point,
                                     in: bounds,
-                                    shortcutWidth: shortcutWidth,
                                     badgeSize: badgeSize,
                                     isImage: item?.kind == .image)
     }

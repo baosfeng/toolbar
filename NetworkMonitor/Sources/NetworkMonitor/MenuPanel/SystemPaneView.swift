@@ -73,7 +73,7 @@ final class SystemPaneView: MenuPanelPaneView {
 
     // MARK: 顶部页头（五页统一样式：页名 + 口径 + 动作槽）
 
-    /// 页头行 — 与网络 / 剪贴板 / 传送 / 额度 / Token 同一件（22pt）
+    /// 页头行 — 与网络 / 传送 / 额度 / Token 同一件（22pt）
     let headerView = PaneHeaderRowView(title: "系统")
 
     // MARK: 底部状态带（原温度卡下线后的形态）

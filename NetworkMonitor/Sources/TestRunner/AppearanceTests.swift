@@ -1,5 +1,6 @@
 import Foundation
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 外观层测试（主题令牌 / 渲染档映射）
 
@@ -76,6 +77,42 @@ func runThemeContrastTests() {
                         "\(id) \(isDark ? "深" : "浅")色主题：底与正文对比度 \(onSurface) 应 ≥ 4.5")
             assertEqual(onCard >= 4.5, true,
                         "\(id) \(isDark ? "深" : "浅")色主题：卡片底与正文对比度 \(onCard) 应 ≥ 4.5")
+        }
+    }
+}
+
+// MARK: - 卡片卡头带（三主题 × 浅深：来源色上的墨色与卡面底色）
+
+/// 卡头带的两条对比度不变量 —— 三段式卡片把「来源色」变成了卡面主色块，必须逐色守
+///
+/// 1. **卡头内的文字**：每个内置来源色上取黑 / 白里对比度高的那档，必须 ≥ 4.5:1
+///    （`SourceAppPalette.ink` 的取色规则，这里守的是「取到的结果」）；
+/// 2. **未知来源的回落带底**：它取主题 `bandFill`，落在卡片面 `cardFill` 上，
+///    两者在三套主题 × 浅深里都不能糊成一片（≥ 1.2:1，装饰性分界而非文字）。
+///
+/// 这两条对应「深色下卡头彩色要保持对比度 ≥4.5:1」的验收口径：内置来源色不随主题漂移，
+/// 因此守住来源色即守住了深色档；随主题变化的是未知来源的回落带底，需单独算。
+func runClipboardHeadBandContrastTests() {
+    print("🧪 Testing clipboard card header band contrast...")
+    // 1. 内置来源色：每个色上的墨色都 ≥ 4.5:1
+    for source in SourceAppPalette.sources {
+        let ink = SourceAppPalette.ink(on: source.color)
+        assertEqual(ink.ratio >= 4.5, true,
+                    "\(source.bundleID) 卡头墨色对比度 \(ink.ratio) 应 ≥ 4.5")
+    }
+    // 2. 未知来源回落带底 vs 卡片面：三主题 × 浅深都要能看出「这是一条带」
+    for id in ThemeID.allCases {
+        let theme = ThemeCatalog.theme(for: id)
+        for isDark in [false, true] {
+            let band = SourceAppPalette.fallbackColor(isDark: isDark)
+            guard let cardHex = theme.color(.cardFill, dark: isDark).hexValue else {
+                assertEqual(true, false, "\(id) 卡片面必须是显式 hex 才能算对比度")
+                continue
+            }
+            let card = SystemPaletteRGB(hex: cardHex)
+            let ratio = band.contrastRatio(with: card)
+            assertEqual(ratio >= 1.2, true,
+                        "\(id) \(isDark ? "深" : "浅")色：未知来源带底与卡面对比度 \(ratio) 应 ≥ 1.2")
         }
     }
 }

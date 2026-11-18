@@ -32,15 +32,6 @@ extension MenuPanelView {
         delegate?.menuPanelViewDidChangeContent(self)
     }
 
-    /// 剪贴板最近条目（事件驱动 + 打开面板时强制刷新）
-    func updateClipboardItems(_ items: [ClipboardItem]) {
-        // 焦点清零与该页是否装配无关：条目变了，旧焦点下标可能已失效
-        resetKeyboardFocus()
-        guard let pane = clipboardPaneIfLoaded else { return }
-        pane.update(items: items)
-        delegate?.menuPanelViewDidChangeContent(self)
-    }
-
     /// 额度页快照（状态管理器回调）
     func updateBilling(_ snapshot: BillingMonitor.Snapshot, notifySize: Bool = true) {
         guard let pane = billingPaneIfLoaded else { return }

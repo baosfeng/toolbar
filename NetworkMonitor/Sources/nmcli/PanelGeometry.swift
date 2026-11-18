@@ -13,15 +13,18 @@ import Foundation
 /// 3. 面板高度随当前 tab 内容变化（331 / 475 / 506 / 537 都见过），坐标换算必须每次重取。
 enum PanelGeometry {
 
-    /// 面板内 tab 条几何：左右各留 25pt、5 个 tab 等分剩余宽度、中心线距面板顶端 35pt
+    /// 面板内 tab 条几何：左右各留 25pt、按 `tabNames.count` 等分剩余宽度、中心线距面板顶端 35pt
     ///
     /// 数值来自实测：面板宽 346pt 时高亮块宽 59.2pt、左右边距 25pt；
     /// 纵向 35pt 是「点得中」的实测值（20pt 落在色带边缘外，点了不切页）。
     static let horizontalInset: CGFloat = 25
     static let tabCenterOffsetY: CGFloat = 35
 
-    /// 面板内的 tab 名称（顺序即面板展示顺序）
-    static let tabNames = ["剪贴板", "额度", "Token", "系统", "网络"]
+    /// 面板内的 tab 名称（顺序即面板展示顺序，必须与 `MenuPanelTab` 声明顺序一一对应）
+    ///
+    /// 剪贴板分页已下线（历史上这里还写着它，且只有 5 项而枚举有 6 case，坐标本来就偏了一档）。
+    /// 现在枚举剩 5 个 case，这张表与之严格对齐：数量变了要同步改，`selectTab` 的越界判据也读它。
+    static let tabNames = ["网络", "传送", "额度", "Token", "系统"]
 
     /// 现查面板：layer 25 + 可见 + 宽度像面板（> 200）
     static func panel(of target: AppTarget) -> WindowInfo? {
@@ -30,7 +33,7 @@ enum PanelGeometry {
     }
 
     /// 第 index 个 tab 的中心点（屏幕全局坐标，左上原点）
-    static func tabCenter(panel: CGRect, index: Int, count: Int = 5) -> CGPoint {
+    static func tabCenter(panel: CGRect, index: Int, count: Int = tabNames.count) -> CGPoint {
         let usable = panel.width - horizontalInset * 2
         let step = usable / CGFloat(max(count, 1))
         return CGPoint(x: panel.minX + horizontalInset + step * (CGFloat(index) + 0.5),

@@ -3,19 +3,25 @@ import AppKit
 // MARK: - 面板分页枚举
 
 /// 面板分页（顺序即数字键 1...N 与 ←/→ 循环顺序）
+///
+/// **rawValue 是显式写死的**（不是声明位置）：它进过旧偏好的 Int 顺序键
+/// （`panel.tabs.order` / `panel.tabs.visible`），删 / 插一个 case 就会让后面的编号
+/// 整体前移、老用户的顺序静默错位。新增分页一律取当前未占用的最大编号 +1；
+/// 下线分页时保留它的编号空着（见 `PanelTabCatalog.legacyRawValueToStableID`）。
+///
+/// 剪贴板分页已下线（编号 1 空置）：历史剪贴板只在屏幕底部的独立浮层面板展示，
+/// 菜单面板不再重复一份；入口改为标题栏齿轮菜单的「剪贴板历史…」。
 enum MenuPanelTab: Int, CaseIterable {
-    case network
-    case clipboard
-    case transfer
-    case credits
-    case token
-    case system
+    case network = 0
+    case transfer = 2
+    case credits = 3
+    case token = 4
+    case system = 5
 
     /// 分段标签标题
     var title: String {
         switch self {
         case .network: return "网络"
-        case .clipboard: return "剪贴板"
         case .transfer: return "传送"
         case .credits: return "额度"
         case .token: return "Token"
@@ -25,12 +31,11 @@ enum MenuPanelTab: Int, CaseIterable {
 
     /// 稳定 id —— 顺序偏好里存的就是它
     ///
-    /// 不用 `rawValue`：那是 Int（按声明位置编号），将来在枚举中间插入一个分页，
-    /// 旧偏好里的数字会指向另一页，用户保存的顺序整体错位。
+    /// 不用 `rawValue`：那是 Int（编号），将来再下线一个分页时编号仍会变；
+    /// 稳定 id 与 `PanelTabCatalog.stableIDs` 同源，改一处必须改两处。
     var stableID: String {
         switch self {
         case .network: return "network"
-        case .clipboard: return "clipboard"
         case .transfer: return "transfer"
         case .credits: return "credits"
         case .token: return "token"
@@ -42,7 +47,6 @@ enum MenuPanelTab: Int, CaseIterable {
     var symbolName: String {
         switch self {
         case .network: return "network"
-        case .clipboard: return "doc.on.clipboard"
         case .transfer: return "paperplane"
         case .credits: return "creditcard"
         case .token: return "chart.bar.xaxis"

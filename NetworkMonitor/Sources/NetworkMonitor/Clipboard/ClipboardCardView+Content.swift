@@ -2,7 +2,7 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorUI
 
-// MARK: - 卡片内容绘制（正文 / 图片占位 / 缩略图 / meta / 星标 / 角标）
+// MARK: - 卡片内容绘制（卡身 / 图片占位 / 缩略图 / 卡脚 / 星标 / 角标）
 
 /// ClipboardCardView 的内容绘制 —— 与改造前 ClipboardCardContentView / ClipboardCardThumbnailView
 /// / NSImageView / ClipboardCardStackBadgeView 各自 draw 的那几段逐字同源，
@@ -14,17 +14,22 @@ extension ClipboardCardView {
 
     // MARK: 字体
 
-    /// meta 行字体（等宽数字 11pt）
+    /// 卡脚来源行字体（等宽数字 9.5pt，与卡头的相对时间同档）
     static var metaFont: NSFont {
-        NSFont.monospacedDigitSystemFont(ofSize: metaFontSize, weight: .regular)
+        NSFont.monospacedDigitSystemFont(ofSize: footerSourceFontSize, weight: .regular)
     }
 
-    /// 正文字体（13pt 系统字）
+    /// 卡脚标题字体（11pt semibold：卡身正文之上、卡头类型名之下）
+    static var footerTitleFont: NSFont {
+        NSFont.systemFont(ofSize: footerTitleFontSize, weight: .semibold)
+    }
+
+    /// 正文字体（12pt 系统字：卡身变矮后 13pt 只能排 5 行，12pt 保住 6 行的信息密度）
     static var bodyFont: NSFont {
         NSFont.systemFont(ofSize: bodyFontSize)
     }
 
-    /// 正文等宽字体（URL / 命令 / JSON，12pt）
+    /// 正文等宽字体（URL / 命令 / JSON，11pt）
     static var monospacedBodyFont: NSFont {
         NSFont.monospacedSystemFont(ofSize: monospacedFontSize, weight: .regular)
     }
@@ -34,21 +39,21 @@ extension ClipboardCardView {
         NSFont.systemFont(ofSize: 11, weight: .semibold)
     }
 
-    /// 角标文字横向内边距（改造前 ClipboardCardStackBadgeView.horizontalInset）
+    /// 角标文字横向内边距
     static let badgeHorizontalInset: CGFloat = 4
-    /// 角标纵向补高（改造前 intrinsicContentSize 的 +2）
+    /// 角标纵向补高
     static let badgeVerticalInset: CGFloat = 2
 
     // MARK: 实测尺寸（几何与命中共用）
 
-    /// ⌘N 提示的实测宽度（不显示时 0）
+    /// ⌘N 提示的实测宽度（不显示时 0）—— 贴在卡脚来源行右侧
     var shortcutWidth: CGFloat {
         guard let text = ClipboardCardGeometry.shortcutText(number: shortcutNumber) else { return 0 }
-        return DrawnTextRun(string: text, font: Self.metaFont, color: .secondaryLabelColor)
+        return DrawnTextRun(string: text, font: Self.metaFont, color: PaneCardStyle.tertiaryText)
             .exactSize.width
     }
 
-    /// 栈角标实测尺寸（不在栈内为 .zero）—— 与改造前 intrinsicContentSize 同口径
+    /// 栈角标实测尺寸（不在栈内为 .zero）
     var badgeSize: CGSize {
         let position = item?.stackPosition ?? 0
         guard position > 0 else { return .zero }
@@ -57,20 +62,23 @@ extension ClipboardCardView {
                       height: run.exactSize.height + Self.badgeVerticalInset)
     }
 
-    // MARK: 正文
+    // MARK: 卡身正文
 
-    /// 文本卡正文：可断行、垂直居中、最多 7 行（超出尾部省略）
+    /// 文本卡正文：可断行、从卡身顶部开始排（对齐 Paste 的「白卡身」阅读方向），最多 6 行
+    ///
+    /// 从「垂直居中」改成「顶部对齐」：三段式卡片里卡身是一块固定高度的纸面，
+    /// 居中会让短文本浮在卡片中间、与卡头卡脚脱节；顶部对齐才像「一页内容」。
     func drawTextBody(item: ClipboardItem, in body: CGRect) {
         let monospaced = ClipboardCardTextStyle.isMonospaced(item.preview)
         let text = item.preview.isEmpty ? "（空内容）" : item.preview
         let displayText = ClipboardCardTextStyle.breakable(text, monospaced: monospaced)
         let block = DrawnTextBlock(string: displayText,
                                    font: monospaced ? Self.monospacedBodyFont : Self.bodyFont,
-                                   color: .labelColor,
+                                   color: PaneCardStyle.primaryText,
                                    lineSpacing: 2,
                                    maxLines: Self.maxTextLines)
         drawBodyHighlight(displayText: displayText, query: highlightQuery, block: block, in: body)
-        block.draw(centeredIn: body)
+        block.draw(topIn: body)
     }
 
     /// 图片卡：缩略图未就绪时画占位符号（真图随后覆盖），原图缺失补一行原因
@@ -81,14 +89,14 @@ extension ClipboardCardView {
                                 yRadius: Self.thumbnailCornerRadius)
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
-        NSColor.underPageBackgroundColor.setFill()
+        PaneCardStyle.bandFill.setFill()
         body.fill()
-        let symbolSize: CGFloat = 24
-        DrawnSymbolRun.symbol(named: "photo", color: .secondaryLabelColor, pointSize: symbolSize)?
+        let symbolSize: CGFloat = 22
+        DrawnSymbolRun.symbol(named: "photo", color: PaneCardStyle.tertiaryText, pointSize: symbolSize)?
             .draw(in: CGRect(x: body.midX - symbolSize / 2, y: body.midY - symbolSize / 2,
                              width: symbolSize, height: symbolSize))
         // 原图拒绝落盘（像素超限 / 解码失败）时补一行原因，避免用户以为图片丢了；
-        // 缩略图已就绪时不再画（会被真图覆盖，与改造前 thumbnailReady 的判据一致）
+        // 缩略图已就绪时不再画（会被真图覆盖）
         if item.imagePath == nil, thumbnail == nil {
             drawPlaceholderCaption(item.preview, in: body)
         }
@@ -101,12 +109,12 @@ extension ClipboardCardView {
         guard !text.isEmpty, body.height > 60 else { return }
         let block = DrawnTextBlock(string: text,
                                    font: NSFont.systemFont(ofSize: 10),
-                                   color: .secondaryLabelColor,
+                                   color: PaneCardStyle.secondaryText,
                                    lineSpacing: 0,
                                    maxLines: 1,
                                    lineBreakMode: .byTruncatingMiddle,
                                    alignment: .center)
-        block.draw(topIn: CGRect(x: body.minX + 6, y: body.midY + 18,
+        block.draw(topIn: CGRect(x: body.minX + 6, y: body.midY + 16,
                                  width: body.width - 12, height: 14))
     }
 
@@ -119,71 +127,19 @@ extension ClipboardCardView {
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
         NSGraphicsContext.current?.cgContext.setAlpha(thumbnailBlend.value)
-        NSColor.underPageBackgroundColor.setFill()
+        PaneCardStyle.bandFill.setFill()
         body.fill()
         Self.drawAspectFill(image: thumbnail, in: body)
         NSGraphicsContext.restoreGraphicsState()
-    }
-
-    // MARK: meta
-
-    /// 底部单行 meta：左「类型图标 + ⌘N + 收藏星」，右「相对时间 + 来源 App 图标」
-    ///
-    /// 改造前收藏星是独立子视图（可单独弹入），现在改成一次绘制 + 缩放进度，
-    /// 位置与层序不变：星标压在 meta 文字之上（原 starView 在 contentView 之后加入）。
-    ///
-    /// 位图（来源 App 图标）要局部翻正：卡片是 flipped 视图，绘制位图不会自动翻。
-    /// 色块与文字不需要——文字由 CoreText 在 flipped 上下文里自行翻正。
-    func drawMeta(item: ClipboardItem, in bounds: CGRect) {
-        let content = ClipboardCardGeometry.contentRect(in: bounds)
-        let rowY = ClipboardCardGeometry.metaRowY(in: bounds)
-        let font = Self.metaFont
-        let color = NSColor.secondaryLabelColor
-
-        // 左：类型图标
-        var leftX = content.minX
-        let typeIcon = Self.typeIconSize
-        DrawnSymbolRun.symbol(named: Self.symbolName(for: item),
-                              color: .secondaryLabelColor,
-                              pointSize: typeIcon)?
-            .draw(in: CGRect(x: leftX,
-                             y: rowY + (Self.metaHeight - typeIcon) / 2,
-                             width: typeIcon, height: typeIcon))
-        leftX += typeIcon + Self.metaGap
-
-        // 左：⌘N 直选提示（只有 1…9 有位）
-        if let text = ClipboardCardGeometry.shortcutText(number: shortcutNumber) {
-            let run = DrawnTextRun(string: text, font: font, color: color)
-            run.draw(at: CGPoint(x: leftX,
-                                 y: rowY + (Self.metaHeight - run.exactSize.height) / 2))
-        }
-
-        // 右：来源 App 图标（12pt、75% 不透明度）+ 相对时间
-        var rightX = content.maxX
-        let appIcon = Self.appIconSize
-        if let icon = Self.applicationIcon(bundleID: item.sourceBundleID) {
-            // 与缩略图同一条翻正路径：卡片是 flipped 视图，位图绘制不翻正会上下颠倒
-            let iconRect = CGRect(x: rightX - appIcon,
-                                  y: rowY + (Self.metaHeight - appIcon) / 2,
-                                  width: appIcon, height: appIcon)
-            DrawnInk.withUnflippedIfNeeded(around: iconRect) {
-                icon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 0.75)
-            }
-            rightX -= appIcon + Self.metaGap
-        }
-        let time = DrawnTextRun(string: ClipboardRelativeTime.string(from: item.createdAt, now: SnapshotClock.now),
-                                font: font, color: color)
-        time.draw(at: CGPoint(x: rightX - time.exactSize.width,
-                              y: rowY + (Self.metaHeight - time.exactSize.height) / 2))
     }
 
     // MARK: 收藏星 / 栈角标
 
     /// 收藏星：始终绘制（star / star.fill），切换收藏态时按弹入曲线缩放
     func drawStar(item: ClipboardItem, in bounds: CGRect) {
-        let rect = ClipboardCardGeometry.starRect(in: bounds, shortcutWidth: shortcutWidth)
+        let rect = ClipboardCardGeometry.starRect(in: bounds)
         let image = DrawnSymbolRun.symbol(named: item.isPinned ? "star.fill" : "star",
-                                          color: item.isPinned ? .systemYellow : .secondaryLabelColor,
+                                          color: item.isPinned ? .systemYellow : PaneCardStyle.tertiaryText,
                                           pointSize: Self.starSize)
         drawPop(image, in: rect, progress: starPopBlend.value)
     }

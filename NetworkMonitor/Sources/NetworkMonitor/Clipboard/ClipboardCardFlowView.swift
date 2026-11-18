@@ -19,8 +19,8 @@ import NetworkMonitorUI
 @MainActor
 final class ClipboardCardFlowView: NSView {
 
-    /// 卡片间距（设计规格 10pt）
-    private static let spacing: CGFloat = 10
+    /// 卡片间距（12pt：三段式卡片之间要更多呼吸，10pt 时卡头色带几乎连成一条）
+    private static let spacing: CGFloat = 12
     /// 卡片流左右内边距
     private static let insetX: CGFloat = 10
     /// 打开面板后预取的图片条目条数（增量规格 2.2 第 4 条）

@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 面板分页偏好
 
@@ -33,10 +34,12 @@ final class PanelTabPreferences {
 
     private static var knownIDs: [String] { MenuPanelTab.allCases.map(\.stableID) }
     private static var defaultOrderIDs: [String] { defaultOrder.map(\.stableID) }
-    /// 旧 Int rawValue → 稳定 id（迁移判据；Core 侧可单测）
-    private static var legacyIDMap: [Int: String] {
-        Dictionary(uniqueKeysWithValues: MenuPanelTab.allCases.map { ($0.rawValue, $0.stableID) })
-    }
+    /// 旧 Int rawValue → 稳定 id（迁移判据）
+    ///
+    /// 取 `PanelTabCatalog` 里**冻结**的那张表，而不是按当前枚举现推：rawValue 是编号，
+    /// 剪贴板分页下线后 1 号空置、transfer 从 2 开始，现推会把旧数据里的「2 = transfer」读成别的页。
+    /// 已下线分页的 id 仍留在这张表里，迁移完成后由 normalize 丢弃（不影响其余分页顺序）。
+    private static var legacyIDMap: [Int: String] { PanelTabCatalog.legacyRawValueToStableID }
 
     /// 已保存的顺序；缺键回退 allCases
     var tabOrder: [MenuPanelTab] {

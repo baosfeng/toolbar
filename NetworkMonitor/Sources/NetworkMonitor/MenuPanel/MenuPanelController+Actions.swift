@@ -114,8 +114,6 @@ extension MenuPanelController: MenuPanelViewDelegate {
                                  downHistory: downHistory,
                                  upHistory: upHistory)
             content.updateWiFiLink(systemMonitor?.snapshot?.wifi)
-        case .clipboard:
-            refreshClipboard()
         case .transfer:
             // attach 时已渲染一次，这里强制补推一次（收起期间的数据变化不能漏）
             transferController?.refreshNow()
@@ -153,6 +151,10 @@ extension MenuPanelController: MenuPanelViewDelegate {
 
     func menuPanelViewDidRequestSettings(_ view: MenuPanelView, section: SettingsSection?) {
         requestSettings(section: section)
+    }
+
+    func menuPanelViewDidRequestClipboardHistory(_ view: MenuPanelView) {
+        requestClipboardHistory()
     }
 
     func menuPanelViewDidRequestToggleLaunchAtStartup(_ view: MenuPanelView) {
