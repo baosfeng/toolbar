@@ -50,8 +50,10 @@ enum Scenario {
             return "状态项 \(statusFrame)；\(how)；面板 id=\(panel.id) \(Format.rect(panel.bounds))"
         }
 
-        // 2) 依次切全部 tab，各存一张（段数由 `PanelGeometry.tabNames` 决定）
-        for (index, name) in PanelGeometry.tabNames.enumerated() {
+        // 2) 依次切面板**当前实际显示**的全部分页，各存一张
+        // 段数取 AX 现读（用户可隐藏 / 重排分页），不是写死的全集
+        let visibleTabs = PanelGeometry.visibleTabNames(of: target)
+        for (index, name) in visibleTabs.enumerated() {
             try recorder.step("切到「\(name)」tab") {
                 guard let panel = PanelGeometry.panel(of: target) else {
                     throw CLIError("切页前面板消失了")
@@ -63,7 +65,7 @@ enum Scenario {
                     throw CLIError("切页后面板消失了")
                 }
                 let selected = PanelGeometry.selectedTab(of: target) ?? "?"
-                guard PanelGeometry.tabIndex(of: selected) == index else {
+                guard selected == name else {
                     throw CLIError("切页后选中态是「\(selected)」，不是「\(name)」")
                 }
                 let shot = try Capture.shot(.window(after.id), to: recorder.path("tab-\(index + 1)-\(name).png"))
@@ -74,8 +76,8 @@ enum Scenario {
 
         // 3) 进系统页某张卡的二级详情页再返回
         try recorder.step("系统页 → CPU 卡二级详情") {
-            guard let systemIndex = PanelGeometry.tabIndex(of: "系统") else {
-                throw CLIError("tab 名表里没有「系统」")
+            guard let systemIndex = PanelGeometry.visibleTabIndex(of: "系统", in: target) else {
+                throw CLIError("当前显示的分页里没有「系统」")
             }
             guard PanelGeometry.selectTab(target, index: systemIndex) else {
                 throw CLIError("切不到系统页")
@@ -114,22 +116,16 @@ enum Scenario {
             return "返回按钮 \(back.desc)；面板 \(Format.rect(panel.bounds))；\(shot.describe)"
         }
 
-        // 4) 分页条只剩 5 段，且不再有「剪贴板」段（该分页已下线，历史只在独立浮层里看）
-        try recorder.step("分页条 5 段且无「剪贴板」") {
+        // 4) 分页条不该再有「剪贴板」段（该分页已下线，历史只在独立浮层里看）
+        try recorder.step("分页条无「剪贴板」段") {
             guard let panel = PanelGeometry.panel(of: target) else { throw CLIError("核对分页条时面板消失了") }
-            let segments = AXRoots.collect(target, maxDepth: 16) { node in
-                node.role == "AXButton" && PanelGeometry.tabNames.contains(node.title)
-            }
-            let titles = Set(segments.map(\.title))
+            let titles = Set(PanelGeometry.visibleTabNames(of: target))
             guard !titles.contains("剪贴板") else {
                 throw CLIError("分页条里仍有「剪贴板」段：菜单面板剪贴板分页没有下线")
             }
-            guard titles == Set(PanelGeometry.tabNames) else {
-                throw CLIError("分页条读到 \(titles.sorted())，期望 \(PanelGeometry.tabNames.sorted())")
-            }
-            let shot = try Capture.shot(.window(panel.id), to: recorder.path("tabbar-5-segments.png"))
+            let shot = try Capture.shot(.window(panel.id), to: recorder.path("tabbar-segments.png"))
             recorder.record(shot)
-            return "读到 \(titles.sorted())；面板 \(Format.rect(panel.bounds))；\(shot.describe)"
+            return "读到 \(titles.sorted())（\(titles.count) 段）；面板 \(Format.rect(panel.bounds))；\(shot.describe)"
         }
 
         // 5) 关面板

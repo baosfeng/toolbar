@@ -20,11 +20,29 @@ enum PanelGeometry {
     static let horizontalInset: CGFloat = 25
     static let tabCenterOffsetY: CGFloat = 35
 
-    /// 面板内的 tab 名称（顺序即面板展示顺序，必须与 `MenuPanelTab` 声明顺序一一对应）
+    /// 兜底 tab 名表（枚举里还有、用户可能打开的全集）
     ///
-    /// 剪贴板分页已下线（历史上这里还写着它，且只有 5 项而枚举有 6 case，坐标本来就偏了一档）。
-    /// 现在枚举剩 5 个 case，这张表与之严格对齐：数量变了要同步改，`selectTab` 的越界判据也读它。
+    /// **不要用它算坐标**：面板实际显示几段由用户的「分页可见性 + 排序」决定
+    /// （实测就有只留 4 段的配置），写死数量会让等分坐标整体偏移、点到隔壁段。
+    /// 真正的判据是 `visibleTabNames(of:)` —— 现读 AX 一级按钮的顺序，只有 AX 读不到时才回落到本表。
     static let tabNames = ["网络", "传送", "额度", "Token", "系统"]
+
+    /// 面板当前**实际显示**的分页（顺序即屏幕上的左右顺序）
+    ///
+    /// AX 里分页按钮的 bounds 是脏值（恒为 0,954），所以只取顺序不取坐标：
+    /// 坐标仍按「面板宽 − 左右内边距，按实际段数等分」现算。
+    static func visibleTabNames(of target: AppTarget) -> [String] {
+        guard let popover = popover(of: target) else { return tabNames }
+        let titles = AXReader.children(popover.element).compactMap { child -> String? in
+            let node = AXReader.node(child)
+            guard node.role == "AXButton", !node.title.isEmpty else { return nil }
+            return node.title
+        }
+        // 分页按钮是 popover 一级子里的按钮，但同一层还可能有其它按钮（如「设置」）：
+        // 只认停在已知分页名表里的那些，顺序按 AX 给出的先后
+        let filtered = titles.filter { name in tabNames.contains { $0 == name || $0.contains(name) || name.contains($0) } }
+        return filtered.count >= 2 ? filtered : tabNames
+    }
 
     /// 现查面板：layer 25 + 可见 + 宽度像面板（> 200）
     static func panel(of target: AppTarget) -> WindowInfo? {
@@ -42,6 +60,11 @@ enum PanelGeometry {
 
     static func tabIndex(of name: String) -> Int? {
         tabNames.firstIndex { name.contains($0) || $0.contains(name) }
+    }
+
+    /// 某分页在**当前显示**的段序里排第几（切页用这个，别用全集下标）
+    static func visibleTabIndex(of name: String, in target: AppTarget) -> Int? {
+        visibleTabNames(of: target).firstIndex { $0 == name || $0.contains(name) || name.contains($0) }
     }
 
     /// 面板的 AX 容器（AXPopover）
@@ -151,11 +174,13 @@ enum PanelGeometry {
     /// 校验优先读 AX 的选中态（`value=已选中`）；AX 取不到时回退到「面板高度变了」。
     @discardableResult
     static func selectTab(_ target: AppTarget, index: Int, settleMilliseconds: Int = 800) -> Bool {
-        guard index >= 0, index < tabNames.count else { return false }
+        // 段数与顺序都按面板**当前实际显示**的算（用户可隐藏 / 重排分页）
+        let names = visibleTabNames(of: target)
+        guard index >= 0, index < names.count else { return false }
         guard let before = panel(of: target) else { return false }
-        let expected = tabNames[index]
+        let expected = names[index]
         if selectedTab(of: target) == expected { return true }
-        let point = tabCenter(panel: before.bounds, index: index)
+        let point = tabCenter(panel: before.bounds, index: index, count: names.count)
         Actions.click(at: point)
         usleep(UInt32(settleMilliseconds) * 1000)
         guard let after = panel(of: target) != nil ? panel(of: target) : nil else { return false }
