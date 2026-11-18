@@ -240,9 +240,9 @@ package_app() {
     <key>CFBundleDisplayName</key>
     <string>${APP_DISPLAY_NAME}</string>
     <key>CFBundleVersion</key>
-    <string>21</string>
+    <string>22</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.28.0</string>
+    <string>1.29.0</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSUIElement</key>

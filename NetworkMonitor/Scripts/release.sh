@@ -116,7 +116,9 @@ open(agents, "w").write(a)
 print("   plist 与 AGENTS.md 已更新")
 PYEOF
     git add "$PLIST_SOURCE" "$AGENTS_FILE"
-    git commit -q -m "chore: 版本号升到 $VERSION（构建号 $new_build）"
+    # 变量紧跟全角标点必须写 ${var}：多字节首字节会被当成变量名一部分，
+    # macOS 自带 bash 下静默、CI / set -u 环境直接 unbound（本条实测踩过一次，发版中断在提交前）
+    git commit -q -m "chore: 版本号升到 ${VERSION}（构建号 ${new_build}）"
     git push "$REMOTE" "$BRANCH"
     git tag "$TAG"
     git push "$REMOTE" "$TAG"
