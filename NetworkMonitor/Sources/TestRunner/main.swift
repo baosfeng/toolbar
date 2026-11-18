@@ -63,6 +63,9 @@ runClipboardAccessTests()
 // MARK: - 系统权限状态机（三类 × 三态 → 灯色 / 文案 / 重启提示 / 手动添加引导）
 runSystemPermissionTests()
 
+// MARK: - 权限判据守卫（直呼系统权限 API 的文件必须在白名单内）
+runPermissionSourceGuardTests()
+
 // MARK: - 剪贴板：哈希 / 忽略判定 / 模糊搜索
 runClipboardHashTests()
 runClipboardFuzzySearchTests()
