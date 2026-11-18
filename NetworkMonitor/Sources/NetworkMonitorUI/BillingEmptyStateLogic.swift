@@ -41,8 +41,10 @@ public enum BillingEmptyStateLogic {
                                     hint: "已注册的 Provider 尚未配置凭据。\n在「设置 › 额度 Provider」里填入凭据后，这里会显示剩余额度。",
                                     action: "去设置配置")
         case .allDisabled:
-            return BillingEmptyCopy(title: "额度 Provider 已全部停用",
-                                    hint: "在「设置 › 额度 Provider」里重新启用需要的 Provider。",
+            // 默认关闭后，这不再只是「用户主动关掉」：新装 / 没配过凭据的实例也落在这里，
+            // 因此文案要同时说清两件事 —— 先填凭据、再打开开关（用户口径「配置了之后才能打开」）
+            return BillingEmptyCopy(title: "还没有启用的额度 Provider",
+                                    hint: "额度 Provider 默认关闭。\n在「设置 › 额度 Provider」里填入凭据后，打开需要的开关即可。",
                                     action: "去设置启用")
         case .unknown:
             return BillingEmptyCopy(title: "还没有可查询的额度 Provider",

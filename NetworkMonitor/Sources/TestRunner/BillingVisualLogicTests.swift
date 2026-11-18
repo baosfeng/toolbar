@@ -142,8 +142,9 @@ func runBillingEmptyStateLogicTests() {
     assertEqual(unconfigured.action, "去设置配置", "全部未配置：按钮文案")
 
     let disabled = BillingEmptyStateLogic.copy(for: .allDisabled)
-    assertEqual(disabled.title, "额度 Provider 已全部停用", "全部停用：标题")
+    assertEqual(disabled.title, "还没有启用的额度 Provider", "全部停用：标题（默认关闭后也是新装首屏）")
     assertEqual(disabled.action, "去设置启用", "全部停用：按钮文案")
+    assertEqual(disabled.hint.contains("默认关闭"), true, "全部停用：说明默认关闭 + 先填凭据")
 
     let unknown = BillingEmptyStateLogic.copy(for: .unknown)
     assertEqual(unknown.title, "还没有可查询的额度 Provider", "未知原因：标题与未配置同档")
