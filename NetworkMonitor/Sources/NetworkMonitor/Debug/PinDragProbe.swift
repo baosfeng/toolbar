@@ -62,6 +62,14 @@ enum PinDragProbe {
 
     // MARK: - 探针主流程
 
+    /// 贴图落点：默认 (360, 320)，可用 NM_PIN_DRAG_ORIGIN="x,y" 覆盖
+    private static func probeRect(size: CGSize) -> CGRect {
+        let raw = ProcessInfo.processInfo.environment["NM_PIN_DRAG_ORIGIN"] ?? ""
+        let parts = raw.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        let origin = parts.count == 2 ? CGPoint(x: parts[0], y: parts[1]) : CGPoint(x: 360, y: 320)
+        return CGRect(origin: origin, size: size)
+    }
+
     /// 环境变量就绪时启动探针（入口在 AppDelegate 的 DEBUG 段）
     static func runIfRequested(pin: PinWindowController) {
         guard isRequested else { return }
@@ -72,7 +80,9 @@ enum PinDragProbe {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 800_000_000)
             let size = CGSize(width: 240, height: 180)
-            let cgRect = CGRect(x: 360, y: 320, width: size.width, height: size.height)
+            // 贴图落点可用 NM_PIN_DRAG_ORIGIN="x,y" 覆盖：同机若有其它 layer=1000 的浮窗压在上面，
+            // 合成鼠标事件会被那个窗口吃掉（实测被另一进程的 600×400 浮窗挡住，位移变 0）
+            let cgRect = probeRect(size: size)
             let window = pin.pin(image: sampleImage(size), cgRect: cgRect)
             // hold 模式：先停 3 秒并标 pinned，供外部工具拍「拖动前」这一张
             // NM_PIN_DRAG_DELAY 用来扫「贴图后等多久再拖」这个变量：
