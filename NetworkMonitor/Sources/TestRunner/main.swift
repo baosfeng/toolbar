@@ -165,6 +165,9 @@ runMenuBarDisplayTests()
 // MARK: - 设置项自定义排序（顺序编解码 / 菜单栏默认上屏顺序 / 旧 Int 键迁移）
 runSettingsOrderTests()
 
+// MARK: - 恢复通知按窗口勾选（周额度 / 5 小时额度各自可选）
+runBillingRecoveredWindowTests()
+
 // MARK: - 额度阈值提醒（5%/4%/3%/2%/1%）
 runBillingAlertTests()
 
