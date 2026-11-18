@@ -36,6 +36,10 @@ enum MenuPanelSnapshot {
             try? await Task.sleep(nanoseconds: delayNanoseconds)
             // 只跑剪贴板取证（改卡片视觉时反复对账用；全套快照约 2 分钟）
             if ProcessInfo.processInfo.environment["NM_SNAPSHOT_CLIPBOARD_ONLY"]?.isEmpty == false {
+                // 主题 / 字数单位必须在这里也应用一次：这条捷径原先跳过它们，
+                // 结果「只跑剪贴板取证」出来的图恒为默认主题，三主题对照时会被误读成「三套一样」
+                prepareUnitStyleForSnapshot()
+                prepareAppearanceForSnapshot()
                 await SnapshotClipboardEvidence.captureAllClipboardEvidence(directory: directory)
                 NSApp.terminate(nil)
                 return
