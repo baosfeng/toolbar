@@ -56,6 +56,8 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
     var toolBarPrimaryToolCard: SettingsOrderedPrimaryToolCard?
     /// 输出动作卡片（同一行里先摆显示开关、再摆行尾上移 / 下移；顺序与显隐解耦）
     var toolBarActionCard: SettingsOrderedActionCard?
+    /// 贴图右键菜单顺序卡片（在 SettingsCapturePane+Pin.swift 里组装）
+    var pinMenuOrderCard: SettingsOrderedCardView?
 
     /// 标注调色板 — hex 与 `SnipAnnotationColor` 一一对应（偏好里存 hex）
     private static let palette: [(hex: String, color: SnipAnnotationColor, name: String)] = [
@@ -150,6 +152,10 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         // 内容源与恢复池两行在扩展文件里组装（守住单文件体积门禁）
         addPinContentSourceRows(to: card)
         page.addCard(card, sectionTitle: "贴图")
+        // 右键菜单顺序：可排序卡片（组内换序，危险项恒在末尾）
+        buildPinMenuOrderCard()
+        page.addNote("贴图右键菜单的分组不参与排序：只能在各自组内换位；"
+                     + "「关闭（可恢复）」与「销毁」恒在菜单最后，也不会因排序互换位置。")
     }
 
     /// 识别卡片：OCR 的出口偏好（识别本身是工具条 / ⌘O 的一次性动作）
