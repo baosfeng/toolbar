@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 导出与落盘（从编排主类拆出，守住单文件门禁）
 
@@ -95,12 +96,11 @@ extension SnipController {
     }
 
     func presentSavePanel(for image: CGImage) {
-        // 覆盖层已收掉、激活策略也退回了菜单栏态：不自报家门时面板会开在别的 App 后面，
-        // 用户只看到「按了保存什么都没发生」。这里显式切回可激活态并激活，面板关掉再退回。
-        if NSApp.activationPolicy() != .regular {
-            NSApp.setActivationPolicy(.regular)
-        }
-        NSApp.activate(ignoringOtherApps: true)
+        // 覆盖层已收掉：不自报家门时面板会开在别的 App 后面，用户只看到「按了保存什么都没发生」。
+        // 这里只 activate（不切 .regular）——实测 `.accessory` 下 NSSavePanel 照样成为 key window、
+        // 能正常接收键盘；切 `.regular` 会在 Dock 里闪出本应用图标，是用户报的「截图时 Dock 出现软件」的另一处。
+        SnipForegroundPolicy.claimForeground()
+        SnipForegroundPolicy.record(.savePanel)
         defer { restoreMenuBarPolicy() }
         let panel = NSSavePanel()
         // 只允许当前格式：早期这里写死 .png，用户选了 JPEG 也存不出 jpg

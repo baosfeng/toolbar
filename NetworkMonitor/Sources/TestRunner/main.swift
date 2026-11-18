@@ -287,6 +287,8 @@ runSnipHotKeyMigrationTests()
 // MARK: - 截图快捷键偏好读写（keyCode 0 是合法值，不得回落到默认）
 runSnipHotKeyPreferencesTests()
 
+runSnipDockIconPolicyTests()
+
 // MARK: - 截图工具条布局（左右内边距恒等 / 组间带）
 runSnipToolBarLayoutTests()
 
