@@ -46,6 +46,23 @@ extension AppCoordinator: ClipboardSettingsDelegate {
         ClipboardImageStore.usage
     }
 
+    /// 最大容量变更：立即按新上限清一次，删了东西就发事件让面板刷新
+    func settingsDidChangeMaxBytes() {
+        guard let repository = database else { return }
+        let removed = ClipboardImageGC.pruneOverCapacity(repository: repository,
+                                                         maxBytes: clipboardPreferences.maxBytes,
+                                                         logger: logger)
+        guard removed > 0 else { return }
+        AppEvents.postClipboardChanged()
+        logger.info("剪贴板最大容量调整为 \(clipboardPreferences.maxBytes) 字节，已清理 \(removed) 条历史")
+    }
+
+    /// 剪贴板历史总占用（正文 + 图片原图，缩略图不计；与自动清理同一份口径）
+    func settingsClipboardTotalUsageBytes() -> UInt64 {
+        guard let repository = database else { return 0 }
+        return ClipboardImageGC.capacityBytes(repository: repository)
+    }
+
     /// 清空图片存储：复用既有「清空历史（保留收藏）」+ 孤儿清扫，不新写删除逻辑
     ///
     /// 先清历史让引用失效，再按存活记录做一次孤儿清扫——两步都是既有实现，

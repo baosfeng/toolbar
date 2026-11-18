@@ -18,7 +18,10 @@ extension SettingsClipboardPane {
     /// 管理行的默认副标题（清空后临时改成结果文案，下次刷新复位）
     static let storageActionSubtitle = "清空会删除历史条目与残留图片文件，收藏项及其图片保留"
 
-    /// 构建「存储」卡（占用 + 目录 + 两个动作）
+    /// 「占用」行副标题：说明这个数字统计了什么（缩略图不计入，口径见 ClipboardCapacityUsage）
+    static let usageSubtitle = "历史条目正文 + 图片原图；超过上限后自动删除最旧条目"
+
+    /// 构建「存储」卡（占用 + 最大容量 + 目录 + 两个动作）
     func buildStorageCard() {
         usageLabel.font = SettingsTheme.rowValueFont
         usageLabel.textColor = SettingsTheme.textPrimary
@@ -35,8 +38,10 @@ extension SettingsClipboardPane {
         usageDetailLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         usageDetailLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
 
-        let usageRow = SettingsRowView(title: "图片占用")
+        let usageRow = SettingsRowView(title: "占用", subtitle: Self.usageSubtitle)
         usageRow.trailingStack.addArrangedSubview(usageLabel)
+        // 最大容量紧跟在「占用」下面：一眼看到「现在多少 / 上限多少 / 去哪里改」
+        let maxBytesRow = capacityRow.row
         let detailRow = SettingsRowView(title: "目录")
         detailRow.trailingStack.addArrangedSubview(usageDetailLabel)
 
@@ -54,7 +59,7 @@ extension SettingsClipboardPane {
         storageActionRow = actionRow
 
         let card = SettingsCardView()
-        [usageRow, detailRow, actionRow].forEach(card.addRow)
+        [usageRow, maxBytesRow, detailRow, actionRow].forEach(card.addRow)
         page.addCard(card, sectionTitle: "存储")
     }
 
@@ -64,12 +69,14 @@ extension SettingsClipboardPane {
     ///   同一次页刷新内存储卡与页头胶囊共用这一份读数；传 nil 时自己现取。
     func refreshStorageCard(usage provided: ClipboardStorageUsage.Summary? = nil) {
         let usage = provided ?? settingsDelegate?.settingsClipboardImageUsage() ?? ClipboardStorageUsage.empty
-        let sizeText = SystemDetailFormatting.byteCountText(usage.byteCount)
+        let totalBytes = settingsDelegate?.settingsClipboardTotalUsageBytes() ?? 0
+        let sizeText = ClipboardCapacityUsage.displayText(usedBytes: totalBytes,
+                                                          limitBytes: preferences.maxBytes)
         usageLabel.stringValue = sizeText
         let countText = "\(usage.fileCount) 个文件"
         if usage.exists {
             usageDetailLabel.stringValue = countText + " · " + ClipboardImageStore.directory.path
-            usageDetailLabel.setAccessibilityLabel("图片目录，共 \(countText)，占用 \(sizeText)")
+            usageDetailLabel.setAccessibilityLabel("图片目录，共 \(countText)；历史总占用 \(sizeText)")
         } else {
             // 目录还没建（从未采集过图片）：不报错，说明现状并给出路径
             usageDetailLabel.stringValue = "尚未创建 · " + ClipboardImageStore.directory.path
@@ -78,6 +85,8 @@ extension SettingsClipboardPane {
         usageDetailLabel.toolTip = ClipboardImageStore.directory.path
         // 没有文件时「清空」没有意义：置灰保留（不是消失），说明仍可见
         clearStorageButton.isEnabled = usage.fileCount > 0
+        // 上限回读真源（外部改过偏好时这里跟着变）
+        capacityRow.refresh()
         // 上次清理的结果文案复位，避免停留在旧状态
         storageActionRow?.update(title: nil, subtitle: Self.storageActionSubtitle)
         // 页头胶囊吃同一个文件数：清空后胶囊也跟着归零，不用等下次切页
@@ -138,3 +147,4 @@ extension SettingsClipboardPane {
         logger.info("设置页清空图片存储：条目 \(result.deletedItems)，文件 \(result.removedFiles)")
     }
 }
+

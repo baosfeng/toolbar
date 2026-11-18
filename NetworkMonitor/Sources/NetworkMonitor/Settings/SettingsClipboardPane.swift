@@ -46,6 +46,14 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
                                          color: SettingsTheme.textPrimary)
     let usageDetailLabel = MenuPanelLabel.text("", font: SettingsTheme.rowSubtitleFont,
                                                color: SettingsTheme.textSecondary)
+    /// 「最大容量」行（跨文件访问：SettingsClipboardPane+Storage.swift 构建与刷新）
+    lazy var capacityRow = SettingsClipboardCapacityRow(
+        preferences: preferences, logger: logger,
+        onCommit: { [weak self] in
+            // 上限调小后先按新上限清一次，再刷新「占用」：用户改完立刻看到结果，不用等下一次采集
+            self?.settingsDelegate?.settingsDidChangeMaxBytes()
+            self?.refreshStorageCard()
+        })
     var openDirectoryButton = NSButton()
     var clearStorageButton = NSButton()
     var storageActionRow: SettingsRowView?
