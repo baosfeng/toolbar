@@ -17,20 +17,12 @@ extension AppCoordinator {
             self?.soundFeedback.play(.snipCapture)
         }
         snipController.start()
-        // 启动预热：完整走一遍「切前台 → 退回菜单栏态」
-        //
-        // LSUIElement 的菜单栏 App 从「不可激活」切到前台时，系统要做一次策略迁移，
-        // 这时段的键盘事件会丢——实测第一次截图按 Esc 必定无效，第二次起才正常。
-        // 启动阶段先把这次迁移付掉（切 .regular → 激活 → 等迁移完成 → 切回 .accessory），
-        // 正式截图时的切换就是「第二次」，不再有过渡期丢键。
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            NSApp.setActivationPolicy(.accessory)
-            logger.info("菜单栏激活预热完成")
-        }
+        // 启动预热已下线：它原来做的是「切 .regular → 激活 → 1.2 秒后切回 .accessory」，
+        // 目的是把「菜单栏 App 变成可激活应用」的那次策略迁移提前付掉，避免首次截图丢键。
+        // 代价是启动 1.5 秒后 Dock 里凭空出现本应用图标 1.2 秒——用户很可能看到的就是这一下
+        // （口径：「每次我们截图的时候，都会出现我们的软件出现在 dock 栏」）。
+        // 现在截图全程不切激活策略（见 SnipForegroundPolicy），没有迁移要付，
+        // 首次按键由覆盖层的有限重试 + CGEventTap 兜底接住，预热自然不再需要。
     }
 }
 

@@ -77,46 +77,30 @@ extension SnipController {
         restoreMenuBarPolicy()
     }
 
-    /// 截图开始前就把前台拿到手，并等到真的拿到（详见 beginSnip 里的说明）
+    /// 截图开始前把前台拿到手（详见 beginSnip 里的说明）
     ///
-    /// 关键点：在抓屏之前就完成「切策略 → 激活 → 确认 frontmost 是自己」。
-    /// 抓屏本身要几百毫秒，这段时间前台已经稳稳落在本 App，
-    /// 覆盖层一上屏按键就直接派给视图，不必再依赖上屏后的异步激活（那是竞态来源）。
+    /// 关键点：抢前台只做 activate + 让覆盖层成为 key window，**不切激活策略**。
+    /// 早期这里切 .regular 是为了让系统把键盘归属交过来，代价是每次截图
+    /// Dock 里都会闪出一个本应用图标（用户口径：「每次截图 dock 栏都会出现我们的软件」）。
+    /// 覆盖层本身是 .nonactivatingPanel + canBecomeKey，不需要 App 变成可激活应用。
     func claimForegroundForCapture() async {
-        if NSApp.activationPolicy() != .regular {
-            NSApp.setActivationPolicy(.regular)
-        }
-        NSApp.activate(ignoringOtherApps: true)
+        SnipForegroundPolicy.claimForeground()
+        SnipForegroundPolicy.record(.captureBegin)
+        // 抓屏本身要几百毫秒，这段空档里前台自然落稳；没落稳也不阻塞，
+        // 覆盖层上屏后还有一轮有限重试（SnipOverlayWindow.scheduleActivationRetry）
         let deadline = Date().addingTimeInterval(0.6)
         let selfPID = ProcessInfo.processInfo.processIdentifier
         while Date() < deadline {
             if NSWorkspace.shared.frontmostApplication?.processIdentifier == selfPID { return }
-            NSApp.activate(ignoringOtherApps: true)
+            SnipForegroundPolicy.claimForeground()
             try? await Task.sleep(nanoseconds: 30_000_000)
         }
-        logger.warning("截图前未能在 0.6 秒内取得前台，首下按键可能需按第二次")
+        logger.warning("截图前未能立刻取得前台，首下按键可能需按第二次")
     }
 
-    /// 等到本 App 真的成为系统前台（最多 1.2 秒，超时也继续，不阻塞截图）
-    ///
-    /// 菜单栏 App 从「不是可激活应用」切到前台，系统要先做一次策略迁移，
-    /// 首轮往往要几百毫秒；这段延迟正好覆盖「按热键后立刻按 Esc」的时机，
-    /// 于是第一下按键会投给原前台 App 而丢失。等待期间反复重试激活，
-    /// 拿到前台才上屏。超时仍然上屏（宁可第一下按键不灵，也不能卡住截图）。
-    func waitForForeground() async {
-        let deadline = Date().addingTimeInterval(1.2)
-        let selfPID = ProcessInfo.processInfo.processIdentifier
-        while Date() < deadline {
-            if NSWorkspace.shared.frontmostApplication?.processIdentifier == selfPID { return }
-            NSApp.activate(ignoringOtherApps: true)
-            try? await Task.sleep(nanoseconds: 40_000_000)
-        }
-        logger.warning("截图前未能在 1.2 秒内取得前台，按键可能需按第二次才生效")
-    }
-
-    /// 退出截图态：把激活策略切回 .accessory（菜单栏 App 不该长期占着前台与 Dock 图标）
+    /// 退出截图态：兜底确保 App 回到菜单栏态（正常路径下全程没有借出过 .regular）
     func restoreMenuBarPolicy() {
-        guard NSApp.activationPolicy() == .regular else { return }
-        NSApp.setActivationPolicy(.accessory)
+        SnipForegroundPolicy.restoreMenuBar()
+        SnipForegroundPolicy.record(.captureEnded)
     }
 }

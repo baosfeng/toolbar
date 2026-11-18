@@ -106,17 +106,15 @@ final class SnipOverlayWindow: NSPanel {
         }
     }
 
-    /// 截图期间临时变成「可被激活的应用」，截图结束再由调用方切回 .accessory
+    /// 进入交互态：只激活 + 让自己成为 key window，**不切激活策略**
     ///
-    /// LSUIElement 的菜单栏 App 不是可被激活的应用：`activate` 返回成功、
-    /// isActive 也变 true，但系统 frontmost 仍是原 App，键盘事件继续投给原前台，
-    /// 于是 Esc / 回车时灵时不灵（实测 5 轮里 1~2 轮失效）。
-    /// 临时切到 .regular 后系统才真正把前台交过来，截图结束立刻切回，
-    /// 不会在 Dock 里留下图标——这正是「打开输入框前也要能打字」的通行做法。
+    /// 早期这里切 .regular，理由是「.accessory 下系统不肯把前台交过来」。
+    /// 代价是每次截图 Dock 都闪一个图标（用户口径：「每次截图 dock 栏都会出现我们的软件」）。
+    /// 实测（macOS 27）：`.nonactivatingPanel` + `canBecomeKey` 的窗口
+    /// makeKey 之后照样收到 keyDown（Esc / 方向键都投递到视图），
+    /// 与 App 是否 `.regular` 无关；不切策略就没有 Dock 图标，因此这里只留 activate。
     func enterInteractiveMode() {
-        guard NSApp.activationPolicy() != .regular else { return }
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        SnipForegroundPolicy.claimForeground()
     }
 
     /// 有限次抢占前台（每次拿到就停，失败也最多等约 1 秒）
