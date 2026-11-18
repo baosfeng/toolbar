@@ -36,6 +36,13 @@ func runManualProbesIfRequested() {
         exit(0)
     }
 
+    // 剪贴板容量上限真实链路自证：--clipboard-capacity-probe <目录>
+    if let index = arguments.firstIndex(of: "--clipboard-capacity-probe"),
+       index + 1 < arguments.count {
+        runClipboardCapacityProbe(directory: arguments[index + 1])
+        exit(0)
+    }
+
     // 单位对照表（改前 → 改后）
     if arguments.contains("--number-unit-table") {
         runNumberUnitTable()
