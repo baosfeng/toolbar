@@ -15,11 +15,12 @@ public enum PinMenuPreferenceKey {
 
 /// 偏好顺序 → 菜单真实顺序
 ///
-/// 三条判据（与 SnipToolBarConfigurationResolver 同风格）：
+/// 四条判据（与 SnipToolBarConfigurationResolver 同风格）：
 /// 1. 缺键 / 空串 / 全非法项 → 回落 PinMenuAction.defaultOrder，老配置外观不变；
-/// 2. 未知项只丢该项、重复项只留第一次出现，不整份丢弃；
-/// 3. 组顺序是常量：即便偏好被手工改成跨组乱序，解析结果仍按 PinMenuAction.groupOrder
-///    重新落位 —— 「销毁」永远不会跑到菜单上半部分。
+/// 2. 已知项严格按偏好顺序落位，跨组换序也生效（用户要求「全部放开可调」）；
+/// 3. 未知项只丢该项、重复项只留第一次出现，缺失项按默认顺序补尾；
+/// 4. 旧偏好（组内换序时代的顺序串）无需迁移：它本来就是一个合法的九项全序，
+///    直接按同一套规则读出来即可，只是从此允许跨组。
 ///
 /// 读路径不写回：默认值将来变了，没设置过的用户跟着变。
 public enum PinMenuOrderResolver {
@@ -33,26 +34,18 @@ public enum PinMenuOrderResolver {
     /// 把原始顺序整理成合法菜单顺序
     ///
     /// - Parameter raw: 偏好里的原始 id 顺序
-    /// - Returns: 组顺序固定、组内按 raw 相对顺序、缺项按默认顺序补尾的完整九项
+    /// - Returns: 完整九项，顺序即最终菜单顺序
     public static func normalize(_ raw: [String]) -> [PinMenuAction] {
-        // 先按出现顺序收集已知项：未知项丢弃、重复项只留第一次
+        // 按出现顺序收集已知项：未知项丢弃、重复项只留第一次
         var seen = Set<PinMenuAction>()
-        var picks: [PinMenuAction] = []
+        var result: [PinMenuAction] = []
         for id in raw {
             guard let action = PinMenuAction(rawValue: id), seen.insert(action).inserted else { continue }
-            picks.append(action)
+            result.append(action)
         }
-        // 再逐组落位：组顺序固定，组内按 picks 的相对顺序。
-        // 危险组恒按默认顺序（关闭在前、销毁在后），不采纳偏好里的任何换序。
-        var result: [PinMenuAction] = []
-        for group in PinMenuAction.groupOrder {
-            let picked = group.isSortable ? picks.filter { $0.group == group } : []
-            var groupSeen = Set(picked)
-            var ordered = picked
-            for action in PinMenuAction.defaultOrder(in: group) where groupSeen.insert(action).inserted {
-                ordered.append(action)
-            }
-            result.append(contentsOf: ordered)
+        // 缺失项（老偏好里没有的新增项）按默认顺序补到末尾，既不丢也不打乱已有排序
+        for action in PinMenuAction.defaultOrder where seen.insert(action).inserted {
+            result.append(action)
         }
         return result
     }
@@ -79,16 +72,15 @@ public enum PinMenuOrderResolver {
         SettingsOrderStore.reset(forKey: PinMenuPreferenceKey.contextMenuOrder, storage: storage)
     }
 
-    /// 移动一项（-1 上移 / +1 下移）：跨组与危险组一律拒绝，原样返回
+    /// 移动一项（-1 上移 / +1 下移）：跨组同样允许，只拒越界
     ///
-    /// 供通用可排序卡片复用：拒绝时返回同一份顺序，界面不会发生任何位移，
-    /// 「排序只能在组内做」这条语义因此不依赖调用方自觉。
+    /// 供通用可排序卡片复用：拒绝时返回同一份顺序，界面不会发生任何位移。
     public static func moved(_ ids: [String], id: String, offset: Int) -> [String] {
-        guard let action = PinMenuAction(rawValue: id), action.group.isSortable else { return ids }
+        guard let action = PinMenuAction(rawValue: id) else { return ids }
         let order = resolve(orderRaw: SettingsOrderCoding.encode(ids))
         guard let index = order.firstIndex(of: action) else { return ids }
         let target = index + offset
-        guard order.indices.contains(target), order[target].group == action.group else { return ids }
+        guard order.indices.contains(target) else { return ids }
         var next = order
         next.swapAt(index, target)
         return next.map(\.rawValue)
@@ -96,20 +88,17 @@ public enum PinMenuOrderResolver {
 
     /// 该位置能否朝 offset 方向移动（行尾按钮的启用判据）
     ///
-    /// 判据与 moved 同源：跨组、越界、危险组一律返回 false。
-    /// 「销毁」永远拿不到上移按钮，「另存为」也不会被挪到输出组之外。
+    /// 判据与 moved 同源：只看越界，不看分组 —— 九项任意排列都是合法菜单。
     public static func canMove(_ ids: [String], index: Int, offset: Int) -> Bool {
         let order = resolve(orderRaw: SettingsOrderCoding.encode(ids))
         guard order.indices.contains(index) else { return false }
-        let target = index + offset
-        guard order.indices.contains(target) else { return false }
-        return order[index].group.isSortable && order[target].group == order[index].group
+        return order.indices.contains(index + offset)
     }
 
-    /// 可排序卡片用的分组口径（只能组内换序，危险组整体不可动）
+    /// 可排序卡片用的口径（整列自由换序）
     ///
-    /// 与通用组件默认的 free 口径唯一的区别是：normalize 走菜单口径（组顺序固定），
-    /// 移动与按钮启用都走同源的组内判据。
+    /// 与通用组件默认的 free 口径唯一区别：normalize 走菜单口径（未知项丢弃、缺项按
+    /// defaultOrder 补尾），移动与按钮启用则与 free 一致地只判越界。
     public static let movePolicy = SettingsOrderMovePolicy(
         normalize: { ids, _, _ in normalize(ids).map(\.rawValue) },
         move: { ids, id, offset in moved(ids, id: id, offset: offset) },
