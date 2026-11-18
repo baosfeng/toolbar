@@ -49,6 +49,13 @@ public enum SnipTool: String, Equatable, Sendable, CaseIterable {
     /// 收进二级面板的工具（保持 allCases 里的相对顺序）
     public static let overflow: [SnipTool] = SnipTool.allCases.filter { !primary.contains($0) }
 
+    /// 默认排列顺序 —— `SnipTool.primary` 打头，其余按声明顺序跟随
+    ///
+    /// 设置页的「常驻工具」可排序卡片按它摆默认行序；顺序偏好键
+    /// （`snip.toolbar.primaryToolOrder`）缺省时也按它回落（`SnipTool.primary` 打头，
+    /// 其余项按声明顺序补尾，与 `SettingsOrderCoding.normalize` 的补尾规则一致）。
+    public static let defaultOrder: [SnipTool] = primary + overflow
+
     /// 工具条使用 SF Symbols 名称
     public var symbolName: String {
         switch self {

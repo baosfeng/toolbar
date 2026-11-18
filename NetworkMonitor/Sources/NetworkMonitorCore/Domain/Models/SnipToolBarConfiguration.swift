@@ -171,7 +171,10 @@ public struct SnipToolBarConfiguration: Equatable, Sendable {
     public var groupOrder: [SnipToolBarGroup]
     /// 显示的组（至少保留一组）
     public var visibleGroups: Set<SnipToolBarGroup>
-    /// 一级工具条常驻的工具（按 SnipTool.allCases 顺序，至少保留一个）
+    /// 一级工具条常驻的工具（顺序即工具条上的排列，至少保留一个）
+    ///
+    /// 顺序由 `snip.toolbar.primaryToolOrder` 的全序决定，本数组只承载「哪些常驻」；
+    /// 关掉的工具仍留在全序里占席次，重新打开时回到原位。
     public var primaryTools: [SnipTool]
     /// 显示的动作按钮（顺序即工具条上的排列，至少保留一个）
     public var visibleActions: [SnipBarAction]
@@ -225,7 +228,7 @@ public struct SnipToolBarConfiguration: Equatable, Sendable {
         if result.visibleGroups.isEmpty {
             result.visibleGroups = Set(SnipToolBarGroup.allCases)
         }
-        // 常驻工具去重并保持配置里的顺序（用户新选的工具追加到最右，不让按钮跳位）；
+        // 常驻工具去重并保持配置里的顺序（顺序来自顺序偏好，见 SnipToolBarConfigurationResolver）；
         // 空集回落到默认四个，否则工具条上一个画标注的入口都没有
         var seenTools = Set<SnipTool>()
         let selectedTools = config.primaryTools.filter { seenTools.insert($0).inserted }

@@ -79,40 +79,16 @@ extension SettingsCapturePane {
         toolBarOrderCard = ordered
         page.addCard(ordered.card, sectionTitle: "排列顺序", trailingAccessory: ordered.resetButton)
 
-        // 常驻工具：10 个 chip 分两行，点一下切换；未选的收进「更多」面板
-        let toolsCard = SettingsCardView()
-        let chipsRow = NSStackView()
-        chipsRow.orientation = .vertical
-        chipsRow.alignment = .leading
-        chipsRow.spacing = 6
-        for line in toolChipLines() {
-            let lineStack = NSStackView()
-            lineStack.orientation = .horizontal
-            lineStack.alignment = .centerY
-            lineStack.spacing = 6
-            for tool in line {
-                let chip = NSButton(title: tool.displayName, target: self,
-                                    action: #selector(toolBarPrimaryToolToggled(_:)))
-                chip.setButtonType(.pushOnPushOff)
-                chip.bezelStyle = .inline
-                chip.controlSize = .small
-                chip.tag = SnipTool.allCases.firstIndex(of: tool) ?? 0
-                chip.font = SettingsTheme.rowTitleFont
-                chip.setAccessibilityLabel("常驻工具：\(tool.displayName)")
-                SettingsControlChrome.applyStandardHeight(to: chip)
-                toolBarToolChips[tool] = chip
-                lineStack.addArrangedSubview(chip)
-            }
-            chipsRow.addArrangedSubview(lineStack)
-        }
-        let chipNote = MenuPanelLabel.text("未选的工具收进「更多」面板；至少保留 1 个",
-                                          font: SettingsTheme.rowSubtitleFont,
-                                          color: SettingsTheme.textSecondary)
-        chipsRow.addArrangedSubview(chipNote)
-        let toolsRow = SettingsRowView(title: "常驻工具")
-        toolsRow.trailingStack.addArrangedSubview(chipsRow)
-        toolsCard.addRow(toolsRow)
-        page.addCard(toolsCard, sectionTitle: "常驻工具")
+        // 常驻工具：一行 = 显示开关 + 行尾上移 / 下移，与「输出动作」卡同构
+        // 顺序单独存 snip.toolbar.primaryToolOrder（与显隐解耦），写偏好即下次截图生效
+        let toolCard = SettingsOrderedPrimaryToolCard(
+            storage: storage,
+            currentConfig: { [weak self] in self?.currentToolBarConfiguration() ?? .standard },
+            applyConfig: { [weak self] config in self?.applyToolBarConfiguration(config) })
+        toolCard.build()
+        toolBarPrimaryToolCard = toolCard
+        page.addCard(toolCard.card, sectionTitle: "常驻工具",
+                     trailingAccessory: toolCard.resetButton)
 
         // 输出动作：取消 / 复制 / 保存 / 贴图 —— 一行 = 显示开关 + 行尾上移 / 下移
         // 顺序单独存 snip.toolbar.actionOrder（与显隐解耦），写偏好即下次截图生效
@@ -146,9 +122,7 @@ extension SettingsCapturePane {
         for (group, toggle) in toolBarGroupToggles {
             toggle.state = config.isVisible(group) ? .on : .off
         }
-        for (tool, chip) in toolBarToolChips {
-            chip.state = config.primaryTools.contains(tool) ? .on : .off
-        }
+        toolBarPrimaryToolCard?.refresh(primaryTools: config.primaryTools)
         toolBarActionCard?.refresh(visible: config.visibleActions)
     }
 
@@ -201,22 +175,6 @@ extension SettingsCapturePane {
         applyToolBarConfiguration(config)
     }
 
-    @objc func toolBarPrimaryToolToggled(_ sender: NSButton) {
-        guard SnipTool.allCases.indices.contains(sender.tag) else { return }
-        let tool = SnipTool.allCases[sender.tag]
-        var config = currentToolBarConfiguration()
-        var tools = config.primaryTools
-        if tools.contains(tool) {
-            // 至少保留一个常驻工具，否则除「更多」以外没有任何画标注的入口
-            guard tools.count > 1 else { sender.state = .on; return }
-            tools.removeAll { $0 == tool }
-        } else {
-            tools.append(tool)
-        }
-        config.primaryTools = tools
-        applyToolBarConfiguration(config)
-    }
-
     #if DEBUG
     /// 仅 DEBUG：把工具条卡片的控件勾选态与偏好真值落盘，用于核对「界面显示 vs 实际配置」
     /// （离屏快照里 NSSwitch 的 on/off 只能靠这份文本确认，肉眼看不出状态是否灌对了）
@@ -231,7 +189,7 @@ extension SettingsCapturePane {
             return "\(action.rawValue)=\(config.visibleActions.contains(action))/\(state)"
         }.joined(separator: " ")
         let toolStates = SnipTool.allCases.map { tool in
-            let state = toolBarToolChips[tool]?.state == .on ? "on" : "off"
+            let state = toolBarPrimaryToolCard?.toggles[tool]?.state == .on ? "on" : "off"
             return "\(tool.rawValue)=\(config.primaryTools.contains(tool))/\(state)"
         }.joined(separator: " ")
         let line = "[\(tag)] mode=\(config.labelMode.rawValue) groups: \(groupStates) "
@@ -245,14 +203,5 @@ extension SettingsCapturePane {
     /// 文字提示档副标题（写出实际效果，避免「选了却看不出变化」）
     private func toolBarLabelSubtitle() -> String {
         currentToolBarConfiguration().labelMode.detailText
-    }
-
-    /// 常驻工具 chip 的两行分法（每行 5 个，10 个工具正好两行）
-    private func toolChipLines() -> [[SnipTool]] {
-        let tools = SnipTool.allCases
-        let perLine = 5
-        return stride(from: 0, to: tools.count, by: perLine).map { start in
-            Array(tools[start..<min(start + perLine, tools.count)])
-        }
     }
 }
