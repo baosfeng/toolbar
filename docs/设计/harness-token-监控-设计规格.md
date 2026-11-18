@@ -86,7 +86,7 @@
 
 ## 已知限制
 
-- 依赖外部 `zstd` 二进制（优先 `/opt/homebrew/bin/zstd`，再查 PATH）；缺失时降级为明确的「数据源不可用」状态，不崩溃、不静默空数据。
+- 解压走**随包 `libzstd.dylib` + dlopen 流式解码**（多帧自动续帧），包内 dylib 缺失时回落到外部 `zstd` 可执行文件（包内自带 → Homebrew / MacPorts / `/usr/bin` 绝对路径 → PATH → 登录 shell）；两条都不可用才降级为明确的「数据源不可用」状态，不崩溃、不静默空数据。macOS 没有系统级 zstd 解码路径，细节见 [踩坑：系统无 zstd 解码能力](../踩坑/运行时/系统无zstd解码能力.md)。
 - `cacheWrite` 在当前数据源恒为 0（DSH 未上报非零值）。
 - 图表为 NSView + CoreGraphics 手绘（项目未引入 Charts 依赖）：逐柱的数值不进 toolTip（24 列柱子面积太小），柱上信息走点击进入的二级页；分布行 / 占比条 / 图例有 tooltip。
 - 展开态高度用实测 `fittingSize`，后续往折叠区内加内容需回归高度。
