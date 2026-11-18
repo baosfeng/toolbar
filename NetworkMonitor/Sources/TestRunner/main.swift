@@ -149,7 +149,7 @@ runBillingTests()
 // MARK: - 额度页可见性（未配置 provider 不占位）+ 同一实例唯一配置
 runBillingVisibilityTests()
 
-// MARK: - 额度 Provider 多实例与启用默认关闭（实例标识 / 存储 / 装饰器 / 老配置零迁移）
+// MARK: - 额度 Provider 多实例与启用默认关闭
 runBillingInstanceTests()
 runBillingProviderPreferenceTests()
 
@@ -165,7 +165,10 @@ runMenuBarDisplayTests()
 // MARK: - 设置项自定义排序（顺序编解码 / 菜单栏默认上屏顺序 / 旧 Int 键迁移）
 runSettingsOrderTests()
 
-// MARK: - 恢复通知按窗口勾选（周额度 / 5 小时额度各自可选）
+// MARK: - 设置页行状态与窗口清单
+runProviderRowStatusAndWindowInventoryTests()
+
+// MARK: - 恢复通知按窗口勾选
 runBillingRecoveredWindowTests()
 
 // MARK: - 额度阈值提醒（5%/4%/3%/2%/1%）

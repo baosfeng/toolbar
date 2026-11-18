@@ -35,6 +35,8 @@ public protocol BillingProvider: Sendable {
     var credentialPageURL: URL? { get }
     /// 环境变量键名（只读回退凭据；默认 `BILLING_<ID>_API_KEY`）
     var environmentCredentialKey: String { get }
+    /// 该 provider 可能出现的额度窗口种类（设置页「恢复通知按窗口勾选」的回落清单）
+    var declaredQuotaWindowKinds: [BillingWindowKind] { get }
 
     /// 查询余额与套餐额度
     func fetchBalance(credential: String) async throws -> BillingBalance
@@ -194,6 +196,9 @@ extension BillingProvider {
 
     /// 默认无凭据获取页面
     public var credentialPageURL: URL? { nil }
+
+    /// 默认不声明窗口种类：设置页改按「实际观测 → 四档兜底」回落
+    public var declaredQuotaWindowKinds: [BillingWindowKind] { [] }
 
     /// 默认环境变量键名（连字符转下划线，保证可 export：opencode-go → BILLING_OPENCODE_GO_API_KEY）
     public var environmentCredentialKey: String {
