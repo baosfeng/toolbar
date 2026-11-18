@@ -53,6 +53,36 @@ extension SettingsCapturePane {
         recoverablePopup?.selectItem(withTitle: "\(recoverable) 张")
     }
 
+    // MARK: - 贴图菜单顺序卡
+
+    /// 「贴图菜单顺序」卡片 —— 与工具条「排列顺序」同构（行尾上移 / 下移 + 恢复默认）
+    ///
+    /// 顺序存 PinMenuPreferenceKey.contextMenuOrder，缺键回落 PinMenuAction.defaultOrder。
+    /// 排序口径注入 PinMenuOrderResolver.movePolicy：只能组内换序，危险组（关闭 / 销毁）整体不可动，
+    /// 因此菜单隔断线所在的分组边界不会被用户排序跨越，「销毁」永远在菜单最后。
+    func buildPinMenuOrderCard() {
+        let ordered = SettingsOrderedCardView(orderKey: PinMenuPreferenceKey.contextMenuOrder,
+                                              defaultOrder: PinMenuOrderResolver.defaultIDs,
+                                              storage: storage,
+                                              movePolicy: PinMenuOrderResolver.movePolicy)
+        for action in PinMenuAction.defaultOrder {
+            let row = SettingsRowView(title: action.title,
+                                      subtitle: "菜单「\(action.group.title)」组")
+            ordered.addRow(id: action.rawValue,
+                           row: row,
+                           accessibilityPrefix: action.title) { [weak row] position in
+                // 危险组的行不作「组内换序」提示：它的上移 / 下移恒为禁用，
+                // 副标题若跟着写「组内换序」会让人以为点得动
+                let hint = action.group.isSortable ? "组内换序" : "固定不可排序"
+                row?.update(subtitle: "第 \(position) 项 · \(action.group.title)\(hint)")
+            }
+        }
+        ordered.finish()
+        pinMenuOrderCard = ordered
+        page.addCard(ordered.card, sectionTitle: "贴图菜单顺序",
+                     trailingAccessory: ordered.resetButton)
+    }
+
     // MARK: - 动作
 
     @objc func displayImageFilesChanged() {

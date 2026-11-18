@@ -187,7 +187,7 @@ final class PinWindowController {
     // MARK: - 内部
 
     private func makeWindow(image: CGImage, appKitRect: CGRect) -> PinWindow {
-        let window = PinWindow(image: image, initialSize: appKitRect.size)
+        let window = PinWindow(image: image, initialSize: appKitRect.size, storage: storage)
         window.setFrame(appKitRect, display: true)
         window.onClosed = { [weak self] closedWindow, destroyed in
             self?.handleClosed(closedWindow, destroyed: destroyed)

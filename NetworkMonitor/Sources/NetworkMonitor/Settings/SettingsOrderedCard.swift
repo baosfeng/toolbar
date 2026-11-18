@@ -75,6 +75,8 @@ final class SettingsOrderedCardView {
     private let orderKey: String
     private let defaultOrder: [String]
     private let storage: any KeyValueStorage
+    /// 移动口径：默认整列自由换序；分组场景注入「只能组内换序」的策略
+    private let movePolicy: SettingsOrderMovePolicy
 
     /// 登记顺序（normalize 的兜底判据）
     private var registered: [String] = []
@@ -88,10 +90,12 @@ final class SettingsOrderedCardView {
     init(orderKey: String,
          defaultOrder: [String],
          storage: any KeyValueStorage,
+         movePolicy: SettingsOrderMovePolicy = .free,
          onChange: (([String]) -> Void)? = nil) {
         self.orderKey = orderKey
         self.defaultOrder = defaultOrder
         self.storage = storage
+        self.movePolicy = movePolicy
         self.onChange = onChange
     }
 
@@ -127,10 +131,7 @@ final class SettingsOrderedCardView {
     func finish() {
         guard !isBuilt else { return }
         isBuilt = true
-        order = SettingsOrderStore.order(forKey: orderKey,
-                                         known: registered,
-                                         defaultOrder: defaultOrder,
-                                         storage: storage)
+        order = currentOrder()
         layoutRows()
         resetButton = SettingsLinkButton.make("恢复默认", target: self, action: #selector(resetTapped),
                                              color: SettingsTheme.textSecondary)
@@ -140,7 +141,7 @@ final class SettingsOrderedCardView {
     // MARK: - 动作
 
     @objc private func moveTapped(_ sender: SettingsOrderButton) {
-        let moved = SettingsOrderStore.moved(order, id: sender.rowID, offset: sender.offset)
+        let moved = movePolicy.move(order, sender.rowID, sender.offset)
         guard moved != order else { return }
         order = moved
         SettingsOrderStore.save(moved, forKey: orderKey, storage: storage)
@@ -150,10 +151,7 @@ final class SettingsOrderedCardView {
 
     @objc private func resetTapped() {
         SettingsOrderStore.reset(forKey: orderKey, storage: storage)
-        order = SettingsOrderStore.order(forKey: orderKey,
-                                         known: registered,
-                                         defaultOrder: defaultOrder,
-                                         storage: storage)
+        order = currentOrder()
         layoutRows()
         onChange?(order)
     }
@@ -167,8 +165,18 @@ final class SettingsOrderedCardView {
             guard let row = rows[id] else { continue }
             card.addRow(row)
             positionSetters[id]?(index + 1)
-            moveButtons[id]?.up.applyAppearance(enabled: index > 0)
-            moveButtons[id]?.down.applyAppearance(enabled: index < order.count - 1)
+            moveButtons[id]?.up.applyAppearance(enabled: movePolicy.canMove(order, index, -1))
+            moveButtons[id]?.down.applyAppearance(enabled: movePolicy.canMove(order, index, 1))
         }
+    }
+
+    /// 读偏好并按注入的口径归一；空结果回落默认顺序
+    ///
+    /// 归一口径必须与消费方一致：贴图菜单的组顺序是常量，
+    /// 若这里仍用默认的「整列自由」归一，设置页会显示出菜单上根本不会出现的顺序。
+    private func currentOrder() -> [String] {
+        let stored = SettingsOrderCoding.decode(storage.string(forKey: orderKey))
+        let normalized = movePolicy.normalize(stored, registered, defaultOrder)
+        return normalized.isEmpty ? defaultOrder : normalized
     }
 }

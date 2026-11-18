@@ -26,6 +26,8 @@ final class PinWindow: NSPanel {
     /// 贴图窗只持有位图，来源文本必须由贴图时一并记下，否则这个出口无从实现。
     var sourceText: String?
 
+    /// 偏好存储：右键菜单顺序每次现读（改完不重启也生效），禁止直读 UserDefaults
+    private let storage: any KeyValueStorage
     private let imageView = NSImageView()
     /// 内容视图：双击 / 中键必须在这里判，否则会被窗口拖动吃掉（见 PinContentView）
     private let container = PinContentView(frame: .zero)
@@ -38,9 +40,12 @@ final class PinWindow: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    init(image: CGImage, initialSize: CGSize) {
+    init(image: CGImage,
+         initialSize: CGSize,
+         storage: any KeyValueStorage = AppContext.shared.storage) {
         currentImage = image
         baseSize = initialSize
+        self.storage = storage
         super.init(contentRect: NSRect(origin: .zero, size: initialSize),
                    styleMask: [.borderless, .nonactivatingPanel],
                    backing: .buffered,
@@ -199,20 +204,38 @@ final class PinWindow: NSPanel {
 
     // MARK: - 右键菜单
 
+    /// 右键菜单每次现读偏好再装配 —— 设置页改完顺序，下一张右键菜单就按新顺序出现
+    ///
+    /// 九项的顺序与标题都来自 PinMenuAction（Core），分段线由分组决定；
+    /// 解析器保证「关闭与销毁」恒在最后，装配这一侧不需要再判一次。
     override func rightMouseDown(with event: NSEvent) {
         let menu = NSMenu()
-        menu.addItem(withTitle: "复制图像", action: #selector(menuCopy), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "另存为…", action: #selector(menuSave), keyEquivalent: "").target = self
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "旋转 90°", action: #selector(menuRotate), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "水平镜像", action: #selector(menuMirrorH), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "垂直镜像", action: #selector(menuMirrorV), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "缩略图", action: #selector(menuThumbnail), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "重置大小与不透明度", action: #selector(menuResetAll), keyEquivalent: "").target = self
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "关闭（可恢复）", action: #selector(menuClose), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "销毁", action: #selector(menuDestroy), keyEquivalent: "").target = self
+        var lastGroup: PinMenuActionGroup?
+        for action in PinMenuOrderResolver.load(storage: storage) {
+            if let lastGroup, lastGroup != action.group {
+                menu.addItem(.separator())
+            }
+            lastGroup = action.group
+            menu.addItem(withTitle: action.title,
+                         action: Self.selector(for: action),
+                         keyEquivalent: "").target = self
+        }
         NSMenu.popUpContextMenu(menu, with: event, for: imageView)
+    }
+
+    /// 菜单项 → 响应选择器（枚举在 Core，不能带 Selector，映射只在这里维护一份）
+    private static func selector(for action: PinMenuAction) -> Selector {
+        switch action {
+        case .copy: return #selector(menuCopy)
+        case .save: return #selector(menuSave)
+        case .rotate: return #selector(menuRotate)
+        case .mirrorHorizontal: return #selector(menuMirrorH)
+        case .mirrorVertical: return #selector(menuMirrorV)
+        case .thumbnail: return #selector(menuThumbnail)
+        case .resetSizeAndAlpha: return #selector(menuResetAll)
+        case .close: return #selector(menuClose)
+        case .destroy: return #selector(menuDestroy)
+        }
     }
 
     @objc private func menuCopy() { onCopy?(self) }

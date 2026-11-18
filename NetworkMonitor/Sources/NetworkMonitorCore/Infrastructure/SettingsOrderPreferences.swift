@@ -102,6 +102,46 @@ public enum SettingsOrderStore {
     }
 }
 
+// MARK: - 排序移动口径
+
+/// 可排序卡片的「怎么动」口径 —— 默认整列自由换序，分组场景只允许组内换序
+///
+/// 通用组件（SettingsOrderedCardView）只负责画行与上移 / 下移按钮，
+/// 「能不能动、动了以后长什么样」交给这里：
+/// - 默认口径 free 与改造前完全一致（整列可换序、越界不动）；
+/// - 贴图右键菜单用分组口径（PinMenuOrderResolver.movePolicy）：跨组与危险组一律拒绝，
+///   于是「销毁」永远拿不到可用的上移按钮。
+///
+/// normalize 也放在这里：卡片读偏好的归一口径必须与消费方一致，
+/// 否则设置页看到的顺序和真正上屏的顺序会分叉。
+public struct SettingsOrderMovePolicy: Sendable {
+
+    /// 整理顺序：(原始 ids, 全部合法 id, 默认顺序) → 合法顺序
+    public typealias Normalizer = @Sendable ([String], [String], [String]) -> [String]
+    /// 移动一项：(当前顺序, 行 id, ±1) → 新顺序；拒绝时原样返回
+    public typealias Mover = @Sendable ([String], String, Int) -> [String]
+    /// 能否移动：(当前顺序, 行下标, ±1) → 是否启用按钮
+    public typealias CanMove = @Sendable ([String], Int, Int) -> Bool
+
+    public let normalize: Normalizer
+    public let move: Mover
+    public let canMove: CanMove
+
+    public init(normalize: @escaping Normalizer, move: @escaping Mover, canMove: @escaping CanMove) {
+        self.normalize = normalize
+        self.move = move
+        self.canMove = canMove
+    }
+
+    /// 默认口径：整列自由换序（指标 / 分页 / 工具条组与动作都用它）
+    public static let free = SettingsOrderMovePolicy(
+        normalize: { SettingsOrderCoding.normalize($0, known: $1, defaultOrder: $2) },
+        move: { SettingsOrderStore.moved($0, id: $1, offset: $2) },
+        canMove: { order, index, offset in
+            order.indices.contains(index) && order.indices.contains(index + offset)
+        })
+}
+
 // MARK: - 旧格式迁移
 
 /// 旧「Int rawValue 逗号串」格式的迁移判据
