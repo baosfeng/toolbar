@@ -55,6 +55,8 @@ final class PinWindow: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
+        // 保留窗口背景拖动能力作为兜底；正常路径是 PinContentView 自己算位移
+        // （nonactivatingPanel 上的默认拖动与非活跃时的 performDrag 都不可靠，见 PinContentView）
         isMovableByWindowBackground = true
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
@@ -206,19 +208,30 @@ final class PinWindow: NSPanel {
 
     /// 右键菜单每次现读偏好再装配 —— 设置页改完顺序，下一张右键菜单就按新顺序出现
     ///
-    /// 九项的顺序与标题都来自 PinMenuAction（Core），分段线由分组决定；
-    /// 解析器保证「关闭与销毁」恒在最后，装配这一侧不需要再判一次。
+    /// 九项的顺序与标题都来自 PinMenuAction（Core），九项已允许跨组换序，
+    /// 分隔线因此按**最终顺序**在语义分组变化处插入（PinMenuDivider），不看固定分组区间。
+    /// 危险项位置由顺序决定，误点风险由视觉兜：菜单里用红色文字标出「关闭 / 销毁」。
     override func rightMouseDown(with event: NSEvent) {
+#if DEBUG
+        PinDragProbe.recordContextMenu()
+#endif
         let menu = NSMenu()
-        var lastGroup: PinMenuActionGroup?
-        for action in PinMenuOrderResolver.load(storage: storage) {
-            if let lastGroup, lastGroup != action.group {
+        let order = PinMenuOrderResolver.load(storage: storage)
+        let separators = PinMenuDivider.leadingSeparators(for: order)
+        for (index, action) in order.enumerated() {
+            if separators[index] {
                 menu.addItem(.separator())
             }
-            lastGroup = action.group
-            menu.addItem(withTitle: action.title,
-                         action: Self.selector(for: action),
-                         keyEquivalent: "").target = self
+            let item = NSMenuItem(title: action.title,
+                                  action: Self.selector(for: action),
+                                  keyEquivalent: "")
+            item.target = self
+            if action.isDestructive {
+                item.attributedTitle = NSAttributedString(
+                    string: action.title,
+                    attributes: [.foregroundColor: NSColor.systemRed])
+            }
+            menu.addItem(item)
         }
         NSMenu.popUpContextMenu(menu, with: event, for: imageView)
     }

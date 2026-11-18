@@ -75,7 +75,7 @@ final class SettingsOrderedCardView {
     private let orderKey: String
     private let defaultOrder: [String]
     private let storage: any KeyValueStorage
-    /// 移动口径：默认整列自由换序；分组场景注入「只能组内换序」的策略
+    /// 移动口径：默认整列自由换序；贴图菜单注入菜单口径（移动同 free，归一口径不同）
     private let movePolicy: SettingsOrderMovePolicy
 
     /// 登记顺序（normalize 的兜底判据）

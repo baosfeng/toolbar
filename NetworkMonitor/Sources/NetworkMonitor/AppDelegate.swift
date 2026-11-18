@@ -62,6 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let manager = menuBarManager {
             AppearanceEvidence.runIfRequested(manager: manager)
         }
+        // 仅 DEBUG：NM_PIN_DRAG_PROBE=1|hold 时跑贴图窗鼠标手势矩阵并退出（拖动取证用）
+        PinDragProbe.runIfRequested(pin: coordinator.snipController.pinWindows)
+        // 仅 DEBUG：NM_PIN_MENU_PROBE=1 时按四份偏好装配菜单并打印，验证跨组换序生效
+        PinMenuProbe.run(storage: SnapshotKeyValueStorage())
         // 仅 DEBUG：NM_NOTIFY_SELFCHECK=<file> 时跑一遍通知与音效自检并退出（取证用）
         NotificationSelfCheck.runIfRequested(coordinator: coordinator)
         // 仅 DEBUG：--measure-panel-open 时逐阶段计时并退出（性能回归取证）

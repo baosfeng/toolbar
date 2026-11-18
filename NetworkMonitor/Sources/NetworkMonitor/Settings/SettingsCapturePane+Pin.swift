@@ -58,8 +58,9 @@ extension SettingsCapturePane {
     /// 「贴图菜单顺序」卡片 —— 与工具条「排列顺序」同构（行尾上移 / 下移 + 恢复默认）
     ///
     /// 顺序存 PinMenuPreferenceKey.contextMenuOrder，缺键回落 PinMenuAction.defaultOrder。
-    /// 排序口径注入 PinMenuOrderResolver.movePolicy：只能组内换序，危险组（关闭 / 销毁）整体不可动，
-    /// 因此菜单隔断线所在的分组边界不会被用户排序跨越，「销毁」永远在菜单最后。
+    /// 排序口径注入 PinMenuOrderResolver.movePolicy：九项整列自由换序，跨组也可以，
+    /// 因此每个有相邻项的行上移 / 下移都可用（只越界才灰）。
+    /// 分隔线不跟着分组固定，而是按最终顺序在语义分组变化处自动插入（PinMenuDivider）。
     func buildPinMenuOrderCard() {
         let ordered = SettingsOrderedCardView(orderKey: PinMenuPreferenceKey.contextMenuOrder,
                                               defaultOrder: PinMenuOrderResolver.defaultIDs,
@@ -71,9 +72,9 @@ extension SettingsCapturePane {
             ordered.addRow(id: action.rawValue,
                            row: row,
                            accessibilityPrefix: action.title) { [weak row] position in
-                // 危险组的行不作「组内换序」提示：它的上移 / 下移恒为禁用，
-                // 副标题若跟着写「组内换序」会让人以为点得动
-                let hint = action.group.isSortable ? "组内换序" : "固定不可排序"
+                // 全部可排序：副标题只说清它属于哪个语义组（决定分隔线落点），
+                // 危险项再多一句「红色标注」，免得用户以为被限制住了
+                let hint = action.isDestructive ? " · 菜单里红字标注" : ""
                 row?.update(subtitle: "第 \(position) 项 · \(action.group.title)\(hint)")
             }
         }

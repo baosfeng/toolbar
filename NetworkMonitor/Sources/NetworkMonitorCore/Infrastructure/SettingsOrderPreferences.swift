@@ -104,13 +104,13 @@ public enum SettingsOrderStore {
 
 // MARK: - 排序移动口径
 
-/// 可排序卡片的「怎么动」口径 —— 默认整列自由换序，分组场景只允许组内换序
+/// 可排序卡片的「怎么动」口径 —— 默认整列自由换序
 ///
 /// 通用组件（SettingsOrderedCardView）只负责画行与上移 / 下移按钮，
 /// 「能不能动、动了以后长什么样」交给这里：
-/// - 默认口径 free 与改造前完全一致（整列可换序、越界不动）；
-/// - 贴图右键菜单用分组口径（PinMenuOrderResolver.movePolicy）：跨组与危险组一律拒绝，
-///   于是「销毁」永远拿不到可用的上移按钮。
+/// - 默认口径 free 是整列可换序、越界不动；
+/// - 贴图右键菜单改用菜单口径（PinMenuOrderResolver.movePolicy）：移动语义与 free 一致，
+///   差别只在归一（未知项丢弃、缺项按 PinMenuAction.defaultOrder 补尾）。
 ///
 /// normalize 也放在这里：卡片读偏好的归一口径必须与消费方一致，
 /// 否则设置页看到的顺序和真正上屏的顺序会分叉。
