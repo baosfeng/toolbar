@@ -3,9 +3,9 @@ import Foundation
 // MARK: - TestRunner 入口
 //
 // 本文件只保留可执行入口与各测试套件的调度顺序；具体用例位于各 *Tests.swift，
-// 断言辅助位于 AssertionHelpers.swift。顶层语句仅允许留在本文件（SPM 可执行入口约束）。
+// 断言辅助位于 AssertionHelpers.swift；顶层语句只允许留在本文件（SPM 入口约束）。
 
-// MARK: - 人工触发的探针入口（按天清理 / 内置解码 / 索引基准 / 网络 / 单位对照）
+// MARK: - 人工触发的探针入口（按天清理 / 内置解码 / 索引基准 / 网络）
 // 参数解析集中在 ManualProbes.swift，命中即执行并退出，不参与默认测试流程
 runManualProbesIfRequested()
 
@@ -108,10 +108,10 @@ runClipboardTextClassifierTests()
 // MARK: - 剪贴板：文件条目类型细分（卡片图标 / 无障碍标签）
 runClipboardFileClassifierTests()
 
-// MARK: - 剪贴板：文件条目按分类聚合摘要（单文件 / 跨族顺序 / 同族合并 / 按条目边界截断）
+// MARK: - 剪贴板：文件条目分类聚合摘要（单文件 / 跨族顺序 / 同族合并 / 边界截断）
 runClipboardFileSummaryTests()
 
-// MARK: - 剪贴板：图片存储占用统计（目录不存在 / 空目录 / 计数与字节 / 子目录不计入）
+// MARK: - 剪贴板：图片存储占用统计（缺目录 / 空目录 / 计数与字节 / 子目录不计入）
 runClipboardStorageUsageTests()
 
 // MARK: - 剪贴板：图片格式兼容（白名单 / 归一化 / 兜底 / 三表示编码）
@@ -150,7 +150,7 @@ runBillingTests()
 // MARK: - 额度页可见性（未配置 provider 不占位）+ 同一实例唯一配置
 runBillingVisibilityTests()
 
-// MARK: - 额度 Provider 多实例（实例标识 / 实例存储 / 装饰器 / 注册表 / 老配置零迁移）
+// MARK: - 额度 Provider 多实例（实例标识 / 存储 / 装饰器 / 注册表 / 老配置零迁移）
 runBillingInstanceTests()
 
 // MARK: - 屏幕活动（锁屏 / 休眠暂停额度刷新）与快照暂停态
@@ -187,7 +187,7 @@ runOpencodeGoWindowFieldTests()
 // MARK: - 三家新 provider（Claude / Codex / Cursor）解码 + 401/403/解析失败姿态
 runBillingProviderDecodingTests()
 
-// MARK: - 三家余额型 provider（DeepSeek / Moonshot / OpenRouter）解码 + 余额 0 / 无上限 / 空 body
+// MARK: - 三家余额型 provider（DeepSeek / Moonshot / OpenRouter）解码 + 余额 0 / 无上限
 runBillingBalanceProviderDecodingTests()
 
 // MARK: - DSH token 数据层（会话扫描 / 增量索引 / 聚合快照）
@@ -227,7 +227,7 @@ runSnipSelectionStateTests()
 // MARK: - 窗口检测命中判定
 runSnipWindowTests()
 
-// MARK: - 窗口层级白名单（菜单栏 / 程序坞 / 状态栏项，自家面板保留而覆盖层排除）
+// MARK: - 窗口层级白名单（菜单栏 / 程序坞 / 状态栏项，自家面板留、覆盖层排除）
 runSnipWindowLayerTests()
 
 // MARK: - 截图文件命名与上次选区编码
@@ -316,6 +316,9 @@ runSnipAnnotationSelectionTests()
 // MARK: - 贴图来源纯文本（⌘⇧C 复制纯文本；无来源时明确反馈）
 runSnipPinSourceTextTests()
 
+// MARK: - 贴图右键菜单顺序（组内换序 / 危险项恒在末尾）
+runPinMenuOrderTests()
+
 // MARK: - 面板高度预算（五页补齐页头 / 状态带后仍不触发外框滚动）
 runPaneHeightBudgetTests()
 
@@ -325,14 +328,14 @@ runBillingRefreshGateTests()
 runDrawnRowLayoutTests()
 runBillingCellLayoutTests()
 
-// MARK: - 系统页首屏五卡排布（卡头让位 / 卡高与内容区 / 读数条 / 段宽 / 负载纵轴 / 取整合账）
+// MARK: - 系统页首屏五卡排布（卡头让位 / 卡高 / 读数条 / 段宽 / 负载纵轴）
 runSystemCardLayoutTests()
 
 // MARK: - 剪贴板动态轮询调度（三档边界 / 归一化 / 停止后不再重排）
 runClipboardPollScheduleTests()
 runClipboardPauseTests()
 
-// MARK: - 剪贴板卡片几何与命中（自绘卡片的区域位置 / 点哪算哪个区域 / 区域动作一致性）
+// MARK: - 剪贴板卡片几何与命中（区域位置 / 点哪算哪个区域 / 动作一致性）
 runClipboardCardGeometryTests()
 
 // MARK: - 来源 App 主题色（色表命中与回落 / 头带几何 / 头带黑白墨色对比度）
@@ -356,7 +359,7 @@ runClipboardToolbarLayoutTests()
 // 板标签行（不溢出 / ＋恒在）+ 切板过滤 + ⌘←/→ 环回
 runClipboardBoardRowTests()
 
-// MARK: - 自绘绘制层纯口径（层不透明度 / 阴影换算 / 焦点环路径 / 符号缓存键 / 读屏文案）
+// MARK: - 自绘绘制层纯口径（不透明度 / 阴影换算 / 焦点环 / 符号缓存 / 读屏文案）
 runDrawnSurfaceMathTests()
 
 // MARK: - 版本检测（语义化比较 / 状态文案 / 24 小时限频 / Releases 解码与偏好）
