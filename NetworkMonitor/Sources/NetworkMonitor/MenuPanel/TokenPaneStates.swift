@@ -157,7 +157,7 @@ final class TokenEmptyView: NSView {
 /// 三类问题的处置不同，所以除了原因文案还给一条动作行：
 /// - 找不到目录 → 去设置里指定会话目录
 /// - 目录不可读 → 去设置里修权限，或改到别的目录
-/// - 缺 zstd → 重扫没有意义，只能去设置看清探测过哪些位置
+/// - 缺 zstd → 重扫没有意义，只能去设置看清探测链（包内自带 / 绝对路径 / PATH / 登录 shell）
 final class TokenUnavailableView: NSView {
 
     private let titleLabel = MenuPanelLabel.text("Token 统计不可用", font: TokenPaneStyle.stateBodyFont,
@@ -217,7 +217,9 @@ final class TokenUnavailableView: NSView {
         case .directoryUnreadable:
             setAction("去设置", accessibility: "打开 Token 用量设置，检查目录权限或改到别的目录")
         case .zstdMissing:
-            setAction("查看探测路径", accessibility: "打开 Token 用量设置，查看 zstd 探测过的路径")
+            // 包里已自带 zstd，走到这里说明「包内自带 + 绝对路径 + PATH + 登录 shell」全落空，
+            // 能修的只有设置页：那里能看到探测链与当前目录。动作文案与其余两类对齐。
+            setAction("打开设置", accessibility: "打开 Token 用量设置，查看 zstd 探测链与数据目录")
         }
     }
 

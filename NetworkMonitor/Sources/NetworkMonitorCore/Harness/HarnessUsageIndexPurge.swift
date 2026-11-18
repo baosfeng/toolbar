@@ -3,6 +3,13 @@ import SQLite3
 
 // MARK: - 按范围清理索引
 
+// 设计约束（改动前必读）：
+// - 事件与扫描记录**同一事务、同一范围**删除。只删事件会让 harness_session_scan 残留
+//   (size, mtime)，下一轮增量把这些会话判成「未变更」直接跳过 —— 用户看到「清了却永远不回来」；
+// - 删除语句与 harnessClearAll 同源，避免两处判据漂移；
+// - 范围查询（harnessPurgePreview）与删除必须共用 purgeSinceMs，否则会出现
+//   「确认框说删 1200 条、实际删 3000 条」的错账。
+
 /// Harness token 索引的清理实现（从 HarnessUsageIndexAggregation.swift 拆出）
 ///
 /// 职责单一：按 `HarnessRebuildScope` 删事件与扫描记录，并保证两者**同事务、同范围**。
@@ -128,5 +135,32 @@ extension DatabaseManager {
         return startOfTodayMs - span * HarnessTokenTimeWindow.millisecondsPerDay
     }
 
+    // MARK: - 预览计数（二次确认里写清「将删除多少条」）
 
+    /// 按范围统计将会删除的事件行数（-1 = 失败），与 harnessPurge 用同一套判据
+    ///
+    /// 为什么单独有一条预览查询：确认弹窗要在**删除之前**告诉用户规模，
+    /// 让「近 30 天」这类看似温和的选项也能被看清代价。判据必须与清理完全同源，
+    /// 否则会出现「说删 1200 条、实际删 3000 条」的错账。
+    public func harnessPurgePreview(scope: HarnessRebuildScope, now: Date) -> Int {
+        withReadDB(0) { db -> Int in
+            guard harnessMigrateSchema(db) else { return -1 }
+            let sql: String
+            switch scope {
+            case .full:
+                sql = "SELECT COUNT(*) FROM harness_token_event;"
+            case .sinceDays(let days):
+                sql = "SELECT COUNT(*) FROM harness_token_event WHERE ts_ms >= "
+                    + String(Self.purgeSinceMs(now: now, days: days)) + ";"
+            }
+            var stmt: OpaquePointer?
+            defer { sqlite3_finalize(stmt) }
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK,
+                  sqlite3_step(stmt) == SQLITE_ROW else {
+                logger.warning("Harness 清理预览查询失败: " + String(cString: sqlite3_errmsg(db)))
+                return -1
+            }
+            return Int(sqlite3_column_int64(stmt, 0))
+        }
+    }
 }

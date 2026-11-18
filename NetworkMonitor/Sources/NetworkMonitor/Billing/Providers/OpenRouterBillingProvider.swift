@@ -26,7 +26,9 @@ public final class OpenRouterBillingProvider: BillingProvider {
     public let minimumRefreshInterval: TimeInterval = 300
     public let credentialHint = "OpenRouter API Key（openrouter.ai/keys 创建）"
     public var credentialPageURL: URL? { URL(string: "https://openrouter.ai/keys") }
-    // 环境变量回退键走协议默认口径 BILLING_OPENROUTER_API_KEY（实例装饰器统一推导）
+    /// 环境变量回退键：厂商原生变量名（`export OPENROUTER_API_KEY=…`）；
+    /// 通用键 `BILLING_OPENROUTER_API_KEY` 仍在候选表里作兼容回退。
+    public var environmentCredentialKey: String { "OPENROUTER_API_KEY" }
 
     /// 站点地址（测试注入本地回环地址）
     public static let defaultBaseURL = URL(string: "https://openrouter.ai")!

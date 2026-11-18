@@ -153,6 +153,20 @@ final class SettingsRowView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
+    /// 允许副标题折成两行（权限行的副标题要装「用途 + 处置办法」两句）
+    ///
+    /// 行高由内容撑开：默认单行在 760pt 窗口里会被截断成「重启 ...」，
+    /// 而权限行的关键信息正是后半句。
+    func subtitleAllowsTwoLines() {
+        subtitleLabel.maximumNumberOfLines = 2
+        subtitleLabel.lineBreakMode = .byWordWrapping
+    }
+
+    #if DEBUG
+    /// 取证专用：读回当前副标题（离屏快照看不出文本内容，维护行的回执只能靠文本核对）
+    var debugSubtitleText: String { subtitleLabel.stringValue }
+    #endif
+
     /// 覆盖标题与副标题（状态变化时复用同一行）
     func update(title: String? = nil, subtitle: String?) {
         if let title { titleLabel.stringValue = title }

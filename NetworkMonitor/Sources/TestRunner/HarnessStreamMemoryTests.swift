@@ -99,11 +99,15 @@ func harnessUsageLine(tsMs: Int64, input: Int, output: Int, padding: Int = 0) ->
     return head + mid + filler + tail
 }
 
-/// 实际可用的 zstd（不可用则返回 nil，相关用例跳过）
+/// 实际可用的 **zstd 可执行文件**（不可用则返回 nil，相关用例跳过）
+///
+/// 注意：不能直接读 streamer.availability —— 内置解码生效时那里给的是 libzstd 路径，
+/// 而本函数的结果用于「压缩夹具」（需要能跑 `zstd -q -f` 的可执行文件）。
 func harnessZstdPath() -> String? {
-    let streamer = HarnessZstdLineStreamer(logger: ConsoleLogger())
-    if case .available(let path) = streamer.availability { return path }
-    return nil
+    HarnessZstdLocator.locate(candidates: HarnessZstdLocator.defaultExecutableCandidates,
+                              searchPath: ProcessInfo.processInfo.environment["PATH"],
+                              bundledDirectory: HarnessZstdLocator.bundledDirectory(),
+                              loginShellLookup: true)
 }
 
 // MARK: - 1. 跨块长行（> 64KB 单次读取块）不被截断

@@ -100,6 +100,17 @@ public final class LaunchAtStartupReconciler {
         storage.bool(forKey: key)
     }
 
+    /// 最近一次登记 / 注销失败的原因（成功时清空）
+    ///
+    /// 权限页要把「已回滚为关」的原因显示出来（只显示「未登记」等于没说为什么），
+    /// 但失败原因只在这里产生，界面不自己拼错误文案。
+    public private(set) var lastFailureReason: String?
+
+    /// 系统侧当前登记状态（转发登记器；界面据此区分「已登记 / 待批准 / 未登记」）
+    public var registration: LaunchAtStartupRegistration {
+        registrar.registration
+    }
+
     /// 切换登记状态
     ///
     /// - Parameter enabled: 目标状态
@@ -113,10 +124,12 @@ public final class LaunchAtStartupReconciler {
             } else {
                 try registrar.unregister()
             }
+            lastFailureReason = nil
             return true
         } catch {
             logger.error("开机自启动切换失败：\(error.localizedDescription)")
             storage.set(!enabled, forKey: key)
+            lastFailureReason = error.localizedDescription
             return false
         }
     }
@@ -143,6 +156,7 @@ public final class LaunchAtStartupReconciler {
             } catch {
                 let reason = error.localizedDescription
                 storage.set(false, forKey: key)
+                lastFailureReason = reason
                 logger.error("开机自启动重新登记失败，偏好已回滚为关：\(reason)")
                 return .rolledBack(reason: reason)
             }

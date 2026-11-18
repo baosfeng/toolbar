@@ -34,4 +34,13 @@ extension SettingsClipboardPane {
         permissions.refresh()
         refreshHeaderChip()
     }
+
+    /// 就地简版：辅助功能 + 剪贴板访问两行（完整五行只在「系统权限」页）
+    func buildPermissionCard() {
+        let card = SystemPermissionInPlaceCard(permissions: permissions,
+                                              kinds: [.accessibility, .clipboard])
+        card.onOpenCenter = { [weak self] in self?.onOpenPermissions?() }
+        permissionCard = card
+        card.attach(to: page, sectionTitle: "系统权限（简版）")
+    }
 }

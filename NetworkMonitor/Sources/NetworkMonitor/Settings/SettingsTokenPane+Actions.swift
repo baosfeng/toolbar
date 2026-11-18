@@ -64,22 +64,19 @@ extension SettingsTokenPane {
         startRebuild(scope: .full, pendingText: "正在清空并重建索引…")
     }
 
-    /// 清理历史数据：只清不扫（下一次打开面板会按增量重新扫回来，且清的就是同一批会话）
+    /// 清理历史数据：先选范围（含实时条数）→ 按规模二次确认 → 清理并立即重扫
+    ///
+    /// 两步交互本身在 SettingsTokenPurgePrompt（选项与文案口径），这里只接线：
+    /// 只给「确认吗」的旧实现到了第三方机器上就是一次盲删。
     @objc func requestClearHistory() {
-        let scope = HarnessRebuildScope.full
-        let alert = NSAlert()
-        alert.messageText = "清理 Token 历史数据？"
-        alert.informativeText = "将删除本机索引中的" + scope.displayName
-            + "（事件与扫描记录）。会话文件不受影响，但清空后需要重新扫描才能再看到统计。"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "清理")
-        alert.addButton(withTitle: "取消")
-        alert.buttons.first?.keyEquivalent = ""
-        alert.buttons.last?.keyEquivalent = "\r"
-        alert.buttons.first?.setAccessibilityLabel("确认清理全部 Token 索引数据")
-        alert.buttons.last?.setAccessibilityLabel("取消，不清理")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        startRebuild(scope: scope, pendingText: "正在清理索引…")
+        let preview: (HarnessRebuildScope) -> Int = { [weak self] scope in
+            self?.controller.purgePreview(scope: scope) ?? -1
+        }
+        guard let plan = SettingsTokenPurgePrompt.plan(preview: preview,
+                                                       directoryPath: controller.diagnostics.directoryPath)
+        else { return }
+        startRebuild(scope: plan.scope, pendingText: "正在清理" + plan.title + "并重新扫描…")
+        logger.info("设置页 Token 清理历史数据：" + plan.title + "（预览 " + String(plan.eventCount) + " 条）")
     }
 
     /// 发起重建并在维护行上显示过程与回执
@@ -94,7 +91,10 @@ extension SettingsTokenPane {
             guard let self else { return }
             self.refresh()
             if let receipt {
-                self.maintenanceRow.update(title: nil, subtitle: receipt.summaryText)
+                // 维护行副标题只有一行宽（约 360pt）：完整 summaryText 会被截成「…跳过」，
+                // 而「删了多少 / 索引了多少」正是本轮要交代的两件事，因此只在这行写这两项 + 耗时，
+                // 完整回执进日志。
+                self.maintenanceRow.update(title: nil, subtitle: SettingsTokenReceiptText.compact(receipt))
                 self.logger.info("设置页 Token 重建完成：" + receipt.summaryText)
             } else {
                 let reason = self.controller.diagnostics.zstdNote ?? "数据源不可用，未能重建"

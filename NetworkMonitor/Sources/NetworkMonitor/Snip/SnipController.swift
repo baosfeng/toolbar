@@ -149,7 +149,7 @@ final class SnipController: SnipOverlayViewDelegate {
         isStarting = true
         defer { isStarting = false }
         guard captureService.isAuthorized() else {
-            SnipPermissionGuide.present(logger: logger)
+            SnipPermissionGuide.presentIfNeeded(logger: logger)
             return
         }
         // 抓屏本身要几百毫秒，这段空档正好用来把前台从原 App 抢过来。

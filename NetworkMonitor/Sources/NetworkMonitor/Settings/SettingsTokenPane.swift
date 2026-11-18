@@ -47,7 +47,7 @@ final class SettingsTokenPane: SettingsPaneView {
 
     /// 维护行（重新扫描 / 清理历史）
     let maintenanceRow = SettingsRowView(title: "维护",
-                                         subtitle: "重新扫描会先清空索引，再从会话文件全量重建")
+                                         subtitle: "重新扫描会先清空索引再全量重建；清理历史可选范围并自动重扫")
     var rescanButton = NSButton()
     var clearButton = NSButton()
 
@@ -125,7 +125,7 @@ final class SettingsTokenPane: SettingsPaneView {
         clearButton = SettingsLinkButton.make("清理历史数据…", target: self,
                                               action: #selector(requestClearHistory),
                                               color: SettingsTheme.destructive)
-        clearButton.setAccessibilityLabel("清理 Token 索引历史数据（需二次确认）")
+        clearButton.setAccessibilityLabel("清理 Token 索引历史数据（可选全部 / 近 90 / 30 / 7 天，需二次确认）")
         maintenanceRow.trailingStack.addArrangedSubview(rescanButton)
         maintenanceRow.trailingStack.addArrangedSubview(clearButton)
 

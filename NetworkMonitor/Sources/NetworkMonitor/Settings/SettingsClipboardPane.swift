@@ -50,9 +50,8 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
     var clearStorageButton = NSButton()
     var storageActionRow: SettingsRowView?
 
-    // 系统权限卡（三类权限 × 三态；构建与刷新在 SettingsPermissionCard.swift）
-    /// 放宽为 internal：页头胶囊扩展（SettingsClipboardPane+Permission）刷新时要用
-    var permissionCard: SystemPermissionCard?
+    /// 系统权限就地简版（放宽为 internal：页头胶囊扩展要刷新）
+    var permissionCard: SystemPermissionInPlaceCard?
     /// 最近一次图片存储读数（页头胶囊同时表达「权限合计 + 文件数」，两处共用这一份）
     var lastStorageUsage: ClipboardStorageUsage.Summary?
 
@@ -111,7 +110,7 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         buildStorageCard()
         buildPermissionCard()
 
-        page.addNote("开机自启动已移至「通用」页。")
+        page.addNote("系统权限已集中到「系统权限」页。")
     }
 
     private func heightStack() -> NSView {
@@ -180,14 +179,6 @@ final class SettingsClipboardPane: SettingsPaneView, SettingsNotificationEventHo
         updateIgnoredToggleTitle(count: 0)
 
     }
-
-    /// 系统权限卡：三类权限各一行 + 卡头「检测状态」+ 卡下说明（全部在 SystemPermissionCard 里）
-    private func buildPermissionCard() {
-        let card = SystemPermissionCard(permissions: permissions, logger: logger)
-        permissionCard = card
-        card.attach(to: page)
-    }
-
     /// 下拉框统一配置：选项标题 + representedObject 存 rawValue
     private func configurePopup<Item>(_ popup: NSPopUpButton,
                                       items: [Item],
