@@ -92,8 +92,9 @@ nmcli scenario panel-tour --out-dir /tmp/nmcli-verify/
 
 要点：
 
-- **切 tab 用坐标点击**，坐标按 CGWindowList 现查的面板 bounds 换算（左右各 25pt、按
-  `PanelGeometry.tabNames.count` 等分、纵向 35pt）；段数变了只改这张名表，等分自动跟随；
+- **切 tab 用坐标点击**，坐标按 CGWindowList 现查的面板 bounds 换算（左右各 25pt、纵向 35pt），
+  段数从 AX 一级按钮**现读实际显示的分页**（`visibleTabNames`）再等分——用户在设置里隐藏或重排分页后仍点得准，
+  不要退回写死段数（实测有用户只留 4 段，写死 5 等分必点偏）；
 - 切页成功后校验 AX 的 `value=已选中`，不是「看高度变了」——网络与 Token 页高度都是 331；
 - 面板打开有开合动画，中间态尺寸是 254×243 / 310×297，**必须等到连续两次采样一致**再算坐标。
 
