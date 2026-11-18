@@ -60,6 +60,7 @@ final class ClipboardPreferences: Sendable {
         static let panelPosition = "clipboard.panelPosition"
         static let panelHeight = "clipboard.panelHeight"
         static let maxItems = "clipboard.maxItems"
+        static let maxBytes = "clipboard.maxBytes"
         static let retentionDays = "clipboard.retentionDays"
         static let ignoredApps = "clipboard.ignoredBundleIDs"
         static let lastExternalApp = "clipboard.lastExternalBundleID"
@@ -193,6 +194,18 @@ final class ClipboardPreferences: Sendable {
             return value > 0 ? value : ClipboardLimit.defaultMaxItems
         }
         set { storage.set(newValue, forKey: Key.maxItems) }
+    }
+
+    /// 最大容量（字节，默认 100 MB；0 = 不限，收藏项与板内条目豁免清理但计入总量）
+    ///
+    /// 只在这里做「缺键 / 负值 → 默认值」的归一化；「0 = 不限」是合法值，必须原样透出，
+    /// 否则用户设成不限会被悄悄改回 100 MB。
+    var maxBytes: UInt64 {
+        get {
+            let stored = storage.object(forKey: Key.maxBytes) == nil ? nil : storage.integer(forKey: Key.maxBytes)
+            return ClipboardLimit.normalizedMaxBytes(stored: stored)
+        }
+        set { storage.set(Int(clamping: newValue), forKey: Key.maxBytes) }
     }
 
     /// 保留天数（默认 30，收藏豁免）

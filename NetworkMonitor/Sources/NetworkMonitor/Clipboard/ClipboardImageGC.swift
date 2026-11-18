@@ -55,25 +55,73 @@ enum ClipboardImageGC {
         return removed.count
     }
 
-    /// 超限清理并回收被删条目的图片
-    /// - Returns: 实际删除条数
+    /// 超限清理并回收被删条目的图片 —— **按条数与按容量走同一条执行路径**
+    ///
+    /// 顺序：先按条数（含保留天数）再按容量。理由：条数清理是既有的、语义最直接的一步，
+    /// 它先把「条数已经超了」的条目删掉；随后容量清理只需在**剩下的**条目上从最旧往新删，
+    /// 不会出现「容量先删一批、条数清理再删一批」两轮各自回收文件的重复 IO。
+    /// 两条路径都走仓储删除 → 统一 `reclaim`，不存在第二套删文件逻辑。
+    ///
+    /// - Returns: 实际删除条数（两轮合计）
     @discardableResult
     static func prune(repository: any ClipboardRepository, maxItems: Int, retentionDays: Int,
+                      maxBytes: UInt64 = ClipboardCapacityUsage.unlimited,
                       logger: LoggingService) -> Int {
-        let pruned = repository.pruneClipboardItems(maxItems: maxItems, retentionDays: retentionDays)
-        reclaim(items: pruned, logger: logger)
-        return pruned.count
+        let outcome = ClipboardLimitPruner.prune(repository: repository,
+                                                maxItems: maxItems, retentionDays: retentionDays,
+                                                maxBytes: maxBytes,
+                                                imageByteCount: ClipboardCapacityUsage.fileByteCount(atPath:))
+        guard !outcome.isEmpty else { return 0 }
+        // 两轮合并成一次回收：reclaim 内部要列举目录，分两次等于把目录扫两遍
+        reclaim(items: outcome.removed, logger: logger)
+        if !outcome.byCapacity.isEmpty {
+            logger.info("剪贴板容量超限清理：删除 \(outcome.byCapacity.count) 条（上限 \(maxBytes) 字节）")
+        }
+        return outcome.removedCount
     }
 
-    /// 启动后一次孤儿清扫（延迟执行，避开启动期 IO 高峰）
+    /// 只做容量超限清理（启动清理入口用它，避免在冷启动上重跑按条数 / 保留天数两项）
+    /// - Returns: 实际删除条数
+    @discardableResult
+    static func pruneOverCapacity(repository: any ClipboardRepository, maxBytes: UInt64,
+                                  logger: LoggingService) -> Int {
+        let byBytes = ClipboardLimitPruner.pruneOverCapacity(
+            repository: repository, maxBytes: maxBytes,
+            imageByteCount: ClipboardCapacityUsage.fileByteCount(atPath:))
+        guard !byBytes.isEmpty else { return 0 }
+        reclaim(items: byBytes, logger: logger)
+        logger.info("剪贴板容量超限清理：删除 \(byBytes.count) 条（上限 \(maxBytes) 字节）")
+        return byBytes.count
+    }
+
+    /// 当前剪贴板总占用字节（正文 + 图片原图；口径见 `ClipboardCapacityUsage`）
+    static func capacityBytes(repository: any ClipboardRepository) -> UInt64 {
+        guard let capacity = repository as? any ClipboardCapacityPruneRepository else { return 0 }
+        return capacity.clipboardCapacityBytes(imageByteCount: ClipboardCapacityUsage.fileByteCount(atPath:))
+    }
+
+    /// 启动后一次清理：先按容量超限清理，再做孤儿清扫（延迟执行，避开启动期 IO 高峰）
+    ///
+    /// 为什么启动只清容量、不重跑按条数 / 保留天数：那两项在每次写入后都已持续兜住，
+    /// 启动时再跑一遍只会在冷启动路径上多一次全表删除；容量则可能因为「上限刚被调小」
+    /// 或上次会话异常退出而没来得及清，属于启动时必须补一次的那一类。
+    ///
+    /// 清理后若真的删了条目，发一次 `AppEvents.clipboardChanged`，面板按既有约定立即重读。
+    ///
     /// - Parameters:
-    ///   - repository: 用于取全量存活记录
+    ///   - repository: 用于取全量存活记录并执行容量清理
+    ///   - maxBytes: 容量上限（0 = 不限）
     ///   - logger: 日志
     ///   - delay: 延迟秒数（≤ 0 立即执行）
     static func sweepOrphansAfterLaunch(repository: any ClipboardRepository,
+                                        maxBytes: UInt64 = ClipboardCapacityUsage.unlimited,
                                         logger: LoggingService,
                                         delay: TimeInterval = 5) {
         let sweep = { [logger] in
+            // 容量清理在前：被删条目的原图由 pruneOverCapacity 内部回收，随后的孤儿清扫兜底
+            if pruneOverCapacity(repository: repository, maxBytes: maxBytes, logger: logger) > 0 {
+                AppEvents.postClipboardChanged()
+            }
             let items = repository.fetchAllClipboardItems(kind: nil)
             let keptPaths = Set(items.compactMap(\.imagePath))
             let keptHashes = Set(items.map(\.contentHash))

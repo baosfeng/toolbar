@@ -228,7 +228,10 @@ public final class AppCoordinator {
 
         // 9. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
 
-        ClipboardImageGC.sweepOrphansAfterLaunch(repository: databaseManager, logger: logger)
+        // 启动清理：先按容量上限清一次（上限可能刚被调小、或上次退出没来得及清），再孤儿清扫
+        ClipboardImageGC.sweepOrphansAfterLaunch(repository: databaseManager,
+                                                 maxBytes: clipboardPreferences.maxBytes,
+                                                 logger: logger)
         logger.info("AppCoordinator 启动完成")
         return manager
     }

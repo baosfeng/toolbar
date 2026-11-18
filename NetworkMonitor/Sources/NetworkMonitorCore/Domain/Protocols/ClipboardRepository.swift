@@ -14,6 +14,18 @@ public enum ClipboardLimit {
     public static let defaultMaxItems = 500
     /// 默认保留天数（仅清理非收藏项）
     public static let defaultRetentionDays = 30
+    /// 默认最大容量（字节）：100 MB，仅统计非收藏项的正文与图片原图；0 = 不限
+    public static let defaultMaxBytes: UInt64 = 100 * 1024 * 1024
+
+    /// 容量上限偏好的归一化：缺键（nil）与负值回落到默认值，**0 是合法值（不限）必须原样透出**
+    ///
+    /// 抽成纯函数是为了让「0 = 不限不能被悄悄改成默认值」这条口径可被测试直接断言，
+    /// 而不是只能靠人肉点设置页确认。
+    /// - Parameter stored: 偏好里存的整数（nil = 键不存在）
+    public static func normalizedMaxBytes(stored: Int?) -> UInt64 {
+        guard let stored, stored >= 0 else { return defaultMaxBytes }
+        return UInt64(stored)
+    }
 }
 
 // MARK: - 剪贴板仓储
