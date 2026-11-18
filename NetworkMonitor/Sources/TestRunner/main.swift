@@ -184,6 +184,9 @@ runOpencodeGoWindowFieldTests()
 // MARK: - 三家新 provider（Claude / Codex / Cursor）解码 + 401/403/解析失败姿态
 runBillingProviderDecodingTests()
 
+// MARK: - 三家余额型 provider（DeepSeek / Moonshot / OpenRouter）解码 + 余额 0 / 无上限 / 空 body
+runBillingBalanceProviderDecodingTests()
+
 // MARK: - DSH token 数据层（会话扫描 / 增量索引 / 聚合快照）
 runHarnessTokenTests()
 runHarnessStreamMemoryTests()
