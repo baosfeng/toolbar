@@ -39,7 +39,11 @@ final class SnapshotClipboardPanel {
     }
 
     /// 每次渲染生成一份新视图，避免上一次渲染遗留的选中态/布局残留
-    func makeView() -> NSView {
+    ///
+    /// - Parameters:
+    ///   - selectedIDs: 选中集合（nil = 按 selectedIndex 单条选中；多选态显式给集合）
+    ///   - hoveredIndex: 要置成 hover 态的卡片下标（nil = 都不 hover）
+    func makeView(selectedIDs: Set<UUID>? = nil, hoveredIndex: Int? = nil) -> NSView {
         let effect = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
         effect.material = .windowBackground
         effect.blendingMode = .behindWindow
@@ -50,7 +54,14 @@ final class SnapshotClipboardPanel {
 
         let panelView = ClipboardPanelView(frame: NSRect(origin: .zero, size: size))
         panelView.autoresizingMask = [.width, .height]
-        panelView.render(items: items, selectedIndex: items.isEmpty ? -1 : 0)
+        panelView.render(items: items, selectedIndex: items.isEmpty ? -1 : 0, selectedIDs: selectedIDs)
+        if let hoveredIndex {
+            let cards = panelView.cardFlow.cardViews
+            if cards.indices.contains(hoveredIndex) {
+                cards[hoveredIndex].applyHover(true, animated: false)
+                cards[hoveredIndex].onShadowStateChange?()
+            }
+        }
         // 底部件数计数由控制器在 applyFilter 后灌入；快照直接按同口径补一次，保证截图与真机一致
         panelView.updateCounts(total: items.count, pinned: items.filter(\.isPinned).count)
         effect.addSubview(panelView)

@@ -7,7 +7,7 @@ import NetworkMonitorUI
 /// 菜单栏 UI 总控制器 — 状态栏网速显示 + 下拉面板生命周期
 ///
 /// 状态栏只显示 ↑↓ 网速（`StatusBarView`）；点击按钮展开 `MenuPanelController` 的
-/// NSPopover 自定义面板（网络 / 剪贴板 / 传送 / 额度 / Token / 系统六页），不再使用 NSMenu。
+/// NSPopover 自定义面板（网络 / 传送 / 额度 / Token / 系统五页），不再使用 NSMenu。
 @MainActor
 final class MenuBarManager: NSObject {
 

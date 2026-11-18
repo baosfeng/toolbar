@@ -347,10 +347,10 @@ runDrawnInteractionTests()
 // MARK: - 自绘位图翻正（flipped 上下文里的镜像变换 / 离屏取样验证上下缘）
 runDrawnUnflipTests()
 
-// MARK: - 剪贴板底部详情区（内容口径 / 面板四段几何 / 高度夹紧）
+// MARK: - 剪贴板详情区（内容口径 / 四段几何）
 runClipboardDetailStripTests()
 
-// MARK: - 剪贴板筛选芯片（类型 / 来源 App / 日期叠加与来源清单）
+// MARK: - 剪贴板筛选芯片（类型 / 来源 / 日期）
 runClipboardFilterTokenTests()
 // MARK: - 剪贴板搜索命中高亮（区间 / 多词 AND / 零宽空格映射 / 上限）
 runClipboardSearchHighlightTests()
@@ -384,8 +384,10 @@ runClipboardOCRTests()
 // MARK: - 剪贴板空格预览（预览项构造三载体 + 临时目录清理）
 runClipboardPreviewTests()
 
-// 分页目录
+// 分页
 runPanelTabCatalogTests()
+runClipboardHeadBandContrastTests()
+runClipboardFooterTextTests()
 // MARK: - 外观（主题令牌 / 深浅对比度 / 渲染帧率档 / 外观偏好）
 runThemeTokenTests()
 runThemeContrastTests()

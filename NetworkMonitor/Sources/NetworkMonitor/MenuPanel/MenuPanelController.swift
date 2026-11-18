@@ -177,7 +177,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
         configurePopover()
         // 主线程看门狗：启动即开始看护（心跳在 tick 与 sendEvent 路径打）
         watchdog.start()
-        // 分页动作在「该页首次装配」时才挂：懒装配下这里直接读 pane 属性会把六页提前建出来
+        // 分页动作在「该页首次装配」时才挂：懒装配下这里直接读 pane 属性会把全部分页提前建出来
         wirePaneActions()
         bindBilling()
         bindHarnessUsage()

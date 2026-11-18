@@ -35,7 +35,10 @@ func runSourceAppPaletteTests() {
     // 头带几何：贴卡片上沿、与内容区同宽
     let bounds = CGRect(x: 0, y: 0, width: 176, height: 198)
     let band = ClipboardCardGeometry.headBandRect(in: bounds)
-    assertEqual(band, CGRect(x: 0, y: 0, width: 176, height: 10), "头带贴顶与卡同宽，高度吃上内边距")
+    assertEqual(band, CGRect(x: 0, y: 0, width: 176, height: ClipboardCardGeometry.headBandHeight),
+                "头带贴顶与卡同宽，高度取卡头令牌")
+    assertEqual(ClipboardCardGeometry.headBandHeight, 26,
+                "卡头 26pt：20pt 认不出来源、32pt 放不下相对时间（见 paste-r2 定稿）")
 
     // 对比度：WCAG 公式的口径（黑白 21:1、同色 1:1、顺序无关）
     assertEqual(SourceAppPalette.contrastRatio(.init(hex: 0x000000), .init(hex: 0xFFFFFF)), 21,

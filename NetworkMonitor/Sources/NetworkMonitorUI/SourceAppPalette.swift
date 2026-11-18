@@ -65,9 +65,14 @@ public enum SourceAppPalette {
     /// 墨色候选（纯白）
     public static let inkWhite = SystemPaletteRGB(hex: 0xFFFFFF)
 
-    /// 未知来源回落色 = 主题带底色（按外观取浅 / 深档），与卡内其它带底同源
+    /// 未知来源的回落带底色 — 固定中性灰，不取主题 `bandFill`
+    ///
+    /// 为什么不用主题带底色：卡头带落在**卡片面**（`cardFill`）上，而主题的 `bandFill`
+    /// 与 `cardFill` 只差 5% 左右（Apple 浅色 `0xEEEFF2` on `0xF5F5F7` 只有 1.06:1），
+    /// 画上去看不出「这里有一条带」，卡片的头 / 身分界会消失。这里取一档与三套主题的卡面
+    /// 都拉开 ≥1.2:1 的中性灰（`ClipboardHeadBandContrastTests` 逐主题 × 浅深守住）。
     public static func fallbackColor(isDark: Bool) -> SystemPaletteRGB {
-        SystemPaletteRGB(hex: ThemeCatalog.apple.color(.bandFill, dark: isDark).hexValue ?? 0xEEEFF2)
+        SystemPaletteRGB(hex: isDark ? 0x3A3A40 : 0xD8D8DD)
     }
 
     // MARK: 取色

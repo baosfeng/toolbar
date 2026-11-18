@@ -6,6 +6,10 @@ import NetworkMonitorUI
 
 /// 剪贴板卡片 — 176 × 198，圆角 12，内边距 10
 ///
+/// 版式（对标 Paste，定稿见 `.open-design/drafts/paste-r2/00-pick.md`）：
+/// 卡头 26pt（来源 App 主题色 + 类型名 + 相对时间 + App 图标）→ 卡身（正文 / 缩略图）→
+/// 卡脚 34pt（标题 + 来源，顶部一条发丝线）。
+///
 /// **整卡一个视图**：卡底、常态描边、hover 提亮、选中叠色、正文、meta 行、缩略图、
 /// 收藏星与 Paste Stack 角标全部在一次 `draw` 里画完，卡内没有任何子视图
 /// （改造前每张卡 8 个子视图 + NSImageView 内部视图 = 9 个，32 张卡片视图池合计 288 个）。
@@ -29,20 +33,22 @@ final class ClipboardCardView: NSView {
     static let monospacedFontSize: CGFloat = 12
     /// meta 字号
     static let metaFontSize: CGFloat = 11
-    /// 类型图标尺寸
-    static let typeIconSize = ClipboardCardGeometry.Metrics.standard.typeIconSize
-    /// meta 行高
-    static let metaHeight = ClipboardCardGeometry.Metrics.standard.metaHeight
-    /// 内容区与 meta 行间距
+    /// 卡身与卡头 / 卡脚之间的留白
     static let bodyGap = ClipboardCardGeometry.Metrics.standard.bodyGap
-    /// 正文最大行数
-    static let maxTextLines = 7
-    /// meta 行内元素间距
-    static let metaGap = ClipboardCardGeometry.Metrics.standard.metaGap
-    /// 来源 App 图标尺寸
-    static let appIconSize: CGFloat = 12
+    /// 正文最大行数（24pt 行高下卡身约 120pt，6 行是既有观感的等价档）
+    static let maxTextLines = 6
+    /// 卡脚里元素之间的间距
+    static let metaGap: CGFloat = 5
+    /// 卡脚来源行的小图标尺寸（比卡头的 14 小一档）
+    static let appIconSize: CGFloat = 10
     /// 收藏星尺寸
     static let starSize = ClipboardCardGeometry.Metrics.standard.starSize
+    /// 卡脚标题字号
+    static let footerTitleFontSize: CGFloat = 11
+    /// 卡脚来源字号
+    static let footerSourceFontSize: CGFloat = 9.5
+    /// 卡脚顶部发丝线不透明度
+    static let footerHairlineAlpha: CGFloat = 0.55
     /// 缩略图圆角
     static let thumbnailCornerRadius: CGFloat = 6
     /// 缩略图就绪后的淡入时长（设计规格 §3.5 B5：0.2s）
@@ -58,8 +64,10 @@ final class ClipboardCardView: NSView {
     static let selectionFillAlpha: CGFloat = 0.05
     /// 常态描边线宽
     static let borderWidth: CGFloat = 1
-    /// hover / 选中描边线宽
-    static let activeBorderWidth: CGFloat = 1.5
+    /// hover 描边线宽
+    static let hoverBorderWidth: CGFloat = 1.5
+    /// 选中描边线宽（2pt：Paste 的选中是明确一整圈，1.5pt 在深色卡面上偏软）
+    static let activeBorderWidth: CGFloat = 2
     /// 阴影不透明度（只在 hover 与选中时出现）
     static let shadowOpacity: Float = 0.12
     /// 阴影半径

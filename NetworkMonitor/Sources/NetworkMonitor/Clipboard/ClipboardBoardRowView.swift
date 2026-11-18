@@ -28,14 +28,14 @@ final class ClipboardBoardRowView: NSView {
     /// 最近一次排版里「+N」徽标的矩形（nil = 没有省略）
     private var overflowFrame: CGRect?
 
-    /// 标签字号（11pt：与工具条控件同档）
-    private static let labelFont = NSFont.systemFont(ofSize: 11, weight: .medium)
-    /// 选中标签底色
-    private static let selectedFill = NSColor.labelColor.withAlphaComponent(0.16)
-    /// 未选中标签底色（比工具条再浅一档）
-    private static let idleFill = NSColor.labelColor.withAlphaComponent(0.06)
-    /// 标签文字色
-    private static let labelText = NSColor.labelColor.withAlphaComponent(0.88)
+    /// 标签字号（11pt：与工具条控件同档，走面板统一令牌）
+    private static var labelFont: NSFont { PaneCardStyle.sectionTitleFont }
+    /// 选中标签底色：实底胶囊（对标 Paste 的 Clipboard 选中胶囊）
+    private static var selectedFill: NSColor { PaneCardStyle.selectedFill }
+    /// 未选中标签底色：透明 —— 整行靠文字 + 彩色圆点说话，不再铺一层灰
+    private static var idleFill: NSColor { .clear }
+    /// 标签文字色：未选中也用主文字 —— 透明底上再淡就与面板底混了
+    private static var labelText: NSColor { PaneCardStyle.primaryText }
 
     override var isFlipped: Bool { true }
 

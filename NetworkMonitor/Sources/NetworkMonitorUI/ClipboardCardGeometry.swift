@@ -5,94 +5,137 @@ import Foundation
 
 /// 剪贴板卡片的几何口径 —— 纯函数，不含 AppKit，供自绘卡片与 TestRunner 共用
 ///
-/// 口径来源（设计与实现一致，改造前后不得漂移）：卡片 176×198、内边距 10、meta 行 16、
-/// 正文与 meta 间距 6、类型图标 14、meta 间距 6、收藏星 12。
-/// 全部坐标系为翻转视图坐标（y 向下，与卡片 `isFlipped = true` 一致）。
+/// 版式对标 Paste 的三段式（设计定稿见 `.open-design/drafts/paste-r2/00-pick.md`）：
+///
+/// ```
+/// ┌──────────────────────────┐  ← 卡头 26pt（来源 App 主题色）
+/// │ 类型名      3 分钟前 [icon]│
+/// ├──────────────────────────┤
+/// │                          │  ← 卡身（正文 / 缩略图）
+/// │                          │
+/// ├──────────────────────────┤  ← 1pt 发丝线
+/// │ 标题            ★ ⌘1     │  ← 卡脚 34pt（标题 + 来源 + 收藏 + 直选提示）
+/// │ 来源 · 68 字             │
+/// └──────────────────────────┘
+/// ```
+///
+/// 坐标系为翻转视图坐标（y 向下，与卡片 `isFlipped = true` 一致）。
 public enum ClipboardCardGeometry {
 
     /// 几何令牌（视图侧转发本结构，测试直接断言语义）
     public struct Metrics: Equatable, Sendable {
-        /// 卡片四边内边距
+        /// 卡片左右与底部内边距
         public var padding: CGFloat
-        /// 底部 meta 行高
-        public var metaHeight: CGFloat
-        /// 正文区与 meta 行间距
+        /// 卡脚高度（标题行 + 来源行）
+        public var footerHeight: CGFloat
+        /// 卡身与卡头 / 卡脚之间的留白
         public var bodyGap: CGFloat
-        /// 类型图标边长
-        public var typeIconSize: CGFloat
-        /// meta 行内元素间距
-        public var metaGap: CGFloat
-        /// 收藏星边长
+        /// 卡脚标题行里收藏星边长
         public var starSize: CGFloat
+        /// 卡脚两行之间的间距
+        public var footerRowGap: CGFloat
 
-        public init(padding: CGFloat, metaHeight: CGFloat, bodyGap: CGFloat,
-                    typeIconSize: CGFloat, metaGap: CGFloat, starSize: CGFloat) {
+        public init(padding: CGFloat, footerHeight: CGFloat, bodyGap: CGFloat,
+                    starSize: CGFloat, footerRowGap: CGFloat) {
             self.padding = padding
-            self.metaHeight = metaHeight
+            self.footerHeight = footerHeight
             self.bodyGap = bodyGap
-            self.typeIconSize = typeIconSize
-            self.metaGap = metaGap
             self.starSize = starSize
+            self.footerRowGap = footerRowGap
         }
 
         /// 与 `ClipboardCardView` 同名常量同源（设计规格冻结值）
-        public static let standard = Metrics(padding: 10, metaHeight: 16, bodyGap: 6,
-                                             typeIconSize: 14, metaGap: 6, starSize: 12)
+        public static let standard = Metrics(padding: 10, footerHeight: 34, bodyGap: 6,
+                                             starSize: 11, footerRowGap: 1)
     }
 
-    // MARK: 矩形
+    // MARK: 卡头带
 
-    /// 卡头带高度 —— 按来源 App 染色的那条横带（贴卡顶、与内容区同宽）
+    /// 卡头带高度 —— 按来源 App 染色的那条横带（贴卡顶、与卡同宽）
     ///
-    /// 取内边距同值（10）：头带正好占据卡内上边距，正文区与 meta 行的几何完全不变。
-    public static let headBandHeight: CGFloat = 10
+    /// 26pt 是「类型名 + 相对时间 + 来源 App 图标」三者单行放得下的最小档（对标 Paste 的彩色卡头）：
+    /// 20pt 时这条带退化成一根线、认不出来源；32pt 时 176pt 卡宽放不下时间、被折成两行。
+    public static let headBandHeight: CGFloat = 26
+    /// 卡头带内左右内边距
+    public static let bandPaddingX: CGFloat = 8
+    /// 卡头带与卡身之间的留白（头带是一块颜色面，正文不能贴上去）
+    public static let bandBodyGap: CGFloat = 6
+    /// 卡头带里的来源 App 图标边长（比卡脚的小图标大一档：它是色带上的视觉锚点）
+    public static let bandIconSize: CGFloat = 14
+    /// 卡头带内元素间距
+    public static let bandGap: CGFloat = 5
 
-    /// 卡头带矩形：贴卡片上沿、与卡同宽，高度吃掉上内边距（圆角由绘制侧按卡体裁切）
+    /// 卡头带矩形：贴卡片上沿、与卡同宽（圆角由绘制侧按卡体裁切）
     public static func headBandRect(in bounds: CGRect) -> CGRect {
         CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: headBandHeight)
     }
 
-    /// 内容区（四边内缩 padding）
+    // MARK: 三段矩形
+
+    /// 卡脚矩形（贴卡底、与卡同宽，顶部画一条发丝线）
+    public static func footerRect(in bounds: CGRect, metrics: Metrics = .standard) -> CGRect {
+        CGRect(x: bounds.minX,
+               y: bounds.maxY - metrics.footerHeight,
+               width: bounds.width,
+               height: metrics.footerHeight)
+    }
+
+    /// 卡身矩形 = 卡头之下、卡脚之上，左右内缩 padding
     public static func contentRect(in bounds: CGRect, metrics: Metrics = .standard) -> CGRect {
-        bounds.insetBy(dx: metrics.padding, dy: metrics.padding)
+        let top = headBandHeight + bandBodyGap
+        let bottom = footerRect(in: bounds, metrics: metrics).minY - metrics.bodyGap
+        return CGRect(x: bounds.minX + metrics.padding,
+                      y: bounds.minY + top,
+                      width: max(0, bounds.width - metrics.padding * 2),
+                      height: max(0, bottom - (bounds.minY + top)))
     }
 
-    /// 正文区（内容区去掉底部 meta 行）
+    /// 正文区 = 卡身（图片卡的缩略图铺满这一块）
     public static func bodyRect(in bounds: CGRect, metrics: Metrics = .standard) -> CGRect {
-        let content = contentRect(in: bounds, metrics: metrics)
-        return CGRect(x: content.minX, y: content.minY, width: content.width,
-                      height: max(0, content.height - metrics.metaHeight - metrics.bodyGap))
+        contentRect(in: bounds, metrics: metrics)
     }
 
-    /// meta 行的纵向起点（翻转坐标系下为 meta 行顶边）
-    public static func metaRowY(in bounds: CGRect, metrics: Metrics = .standard) -> CGFloat {
-        contentRect(in: bounds, metrics: metrics).maxY - metrics.metaHeight
-    }
-
-    /// meta 行左侧起点：类型图标之后（⌘N 与收藏星从这里开始排）
-    public static func metaLeftX(in bounds: CGRect, metrics: Metrics = .standard) -> CGFloat {
-        contentRect(in: bounds, metrics: metrics).minX + metrics.typeIconSize + metrics.metaGap
-    }
-
-    /// 收藏星位置：类型图标 +（⌘N 宽度 + 间距）之后，meta 行内垂直居中
-    ///
-    /// - Parameter shortcutWidth: ⌘N 提示的实测宽度（不显示时为 0）
-    public static func starRect(in bounds: CGRect, shortcutWidth: CGFloat,
-                                metrics: Metrics = .standard) -> CGRect {
-        let rowY = metaRowY(in: bounds, metrics: metrics)
-        var leftX = metaLeftX(in: bounds, metrics: metrics)
-        if shortcutWidth > 0 { leftX += shortcutWidth + metrics.metaGap }
-        return CGRect(x: leftX,
-                      y: rowY + (metrics.metaHeight - metrics.starSize) / 2,
-                      width: metrics.starSize, height: metrics.starSize)
-    }
-
-    /// 缩略图区域 = 正文区（等比填充裁剪在绘制侧决定）
+    /// 缩略图区域 = 卡身（等比填充裁剪在绘制侧决定）
     public static func thumbnailRect(in bounds: CGRect, metrics: Metrics = .standard) -> CGRect {
         bodyRect(in: bounds, metrics: metrics)
     }
 
-    /// Paste Stack 角标：贴内容区右上角（尺寸随编号宽度，不挤占正文布局）
+    /// 卡脚标题行矩形（左右内缩 padding，贴着卡脚顶部留一点呼吸）
+    public static func footerTitleRect(in bounds: CGRect, metrics: Metrics = .standard) -> CGRect {
+        let footer = footerRect(in: bounds, metrics: metrics)
+        let top = footer.minY + 6
+        return CGRect(x: footer.minX + metrics.padding,
+                      y: top,
+                      width: max(0, footer.width - metrics.padding * 2),
+                      height: 15)
+    }
+
+    /// 卡脚来源行矩形（标题行之下）
+    public static func footerSourceRect(in bounds: CGRect, metrics: Metrics = .standard) -> CGRect {
+        let title = footerTitleRect(in: bounds, metrics: metrics)
+        return CGRect(x: title.minX,
+                      y: title.maxY + metrics.footerRowGap,
+                      width: title.width,
+                      height: 11)
+    }
+
+    /// 卡脚顶部那条发丝线的纵坐标
+    public static func footerHairlineY(in bounds: CGRect, metrics: Metrics = .standard) -> CGFloat {
+        footerRect(in: bounds, metrics: metrics).minY
+    }
+
+    /// 收藏星位置：卡脚标题行最右，行内垂直居中
+    ///
+    /// 星标不再与 ⌘N 争同一条线：⌘N 是「快速粘贴」的键位提示，落在来源行右侧，
+    /// 星标是「收藏」的状态标记，落在标题行右侧 —— 两者语义不同，不该挤在一起。
+    public static func starRect(in bounds: CGRect, metrics: Metrics = .standard) -> CGRect {
+        let title = footerTitleRect(in: bounds, metrics: metrics)
+        return CGRect(x: title.maxX - metrics.starSize,
+                      y: title.midY - metrics.starSize / 2,
+                      width: metrics.starSize, height: metrics.starSize)
+    }
+
+    /// Paste Stack 角标：贴卡身右上角（尺寸随编号宽度，不挤占正文布局）
     public static func badgeRect(in bounds: CGRect, badgeSize: CGSize,
                                  metrics: Metrics = .standard) -> CGRect {
         let content = contentRect(in: bounds, metrics: metrics)
@@ -111,15 +154,17 @@ public enum ClipboardCardGeometry {
 
 /// 卡片内被点中的区域（自绘后没有子视图可分配事件，命中判定要自己重做）
 public enum ClipboardCardHitRegion: Equatable, Sendable {
-    /// 图片来源区（缩略图 / 图片占位）
+    /// 卡身（图片卡的缩略图 / 文本卡正文）
     case thumbnail
-    /// 收藏星
+    /// 卡脚标题行里的收藏星
     case star
     /// Paste Stack 角标
     case badge
-    /// 底部 meta 行
+    /// 卡脚（标题 + 来源）
     case meta
-    /// 正文区（文本卡）
+    /// 卡头带（类型 + 时间 + 来源图标）
+    case headBand
+    /// 卡身（文本卡）
     case body
 }
 
@@ -135,7 +180,7 @@ public enum ClipboardCardHitAction: Equatable, Sendable {
 
 /// 卡片命中测试 —— 纯函数，与绘制共用同一套几何口径
 ///
-/// 语义与改造前的视图树一致：星标 / 角标 / 正文 / meta 都是**整卡的一部分**，
+/// 语义与改造前的视图树一致：星标 / 角标 / 卡头 / 卡身 / 卡脚都是**整卡的一部分**，
 /// 所有区域的主键单击都选中、双击都粘贴、右键都弹菜单（没有各自的独立动作）。
 /// 区域本身仍要区分：读屏焦点框、缩略图占位、以及将来给这些区域单独挂动作时都靠它。
 public enum ClipboardCardHitTest {
@@ -144,24 +189,22 @@ public enum ClipboardCardHitTest {
     ///
     /// - Parameters:
     ///   - point: 卡片内坐标（flipped）
-    ///   - shortcutWidth: ⌘N 提示的实测宽度（不显示时 0）
     ///   - badgeSize: 角标实测尺寸（不显示时 .zero）
-    ///   - isImage: 是否为图片条目（决定正文区是 .thumbnail 还是 .body）
+    ///   - isImage: 是否为图片条目（决定卡身是 .thumbnail 还是 .body）
     public static func region(at point: CGPoint, in bounds: CGRect,
-                              shortcutWidth: CGFloat = 0, badgeSize: CGSize = .zero,
+                              badgeSize: CGSize = .zero,
                               isImage: Bool, metrics: ClipboardCardGeometry.Metrics = .standard)
     -> ClipboardCardHitRegion {
         guard bounds.contains(point) else { return .body }
-        // 星标 / 角标压在正文与 meta 之上：按优先级查表（顺序即优先级，空矩形不参与命中）
-        let star = ClipboardCardGeometry.starRect(in: bounds, shortcutWidth: shortcutWidth, metrics: metrics)
+        // 星标 / 角标压在卡上：按优先级查表（顺序即优先级，空矩形不参与命中）
+        let star = ClipboardCardGeometry.starRect(in: bounds, metrics: metrics)
         let badge = badgeSize.width > 0 && badgeSize.height > 0
             ? ClipboardCardGeometry.badgeRect(in: bounds, badgeSize: badgeSize, metrics: metrics) : .zero
         if let index = DrawnHitRegions.priorityIndex(at: point, in: [star, badge]) {
             return index == 0 ? .star : .badge
         }
-        if point.y >= ClipboardCardGeometry.metaRowY(in: bounds, metrics: metrics) {
-            return .meta
-        }
+        if point.y < ClipboardCardGeometry.headBandRect(in: bounds).maxY { return .headBand }
+        if point.y >= ClipboardCardGeometry.footerRect(in: bounds, metrics: metrics).minY { return .meta }
         return isImage ? .thumbnail : .body
     }
 

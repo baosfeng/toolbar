@@ -127,16 +127,15 @@ enum ClipboardCardProbe {
         // 星标与角标只在带对应状态的卡片上存在，采集点按该卡的真实几何算
         let starCard = cards.count > 2 ? cards[2] : first
         let badgeCard = cards.count > 1 ? cards[1] : first
-        let starPoint = CGPoint(x: ClipboardCardGeometry.starRect(in: first.bounds,
-                                                                  shortcutWidth: starCard.shortcutWidth).midX,
-                                y: ClipboardCardGeometry.starRect(in: first.bounds,
-                                                                  shortcutWidth: starCard.shortcutWidth).midY)
+        let starRect = ClipboardCardGeometry.starRect(in: first.bounds)
+        let starPoint = CGPoint(x: starRect.midX, y: starRect.midY)
         let badgeRect = ClipboardCardGeometry.badgeRect(in: badgeCard.bounds, badgeSize: badgeCard.badgeSize)
         lines.append("## 命中区域 → 动作（卡内坐标，176×198）")
         let points: [(String, ClipboardCardView, CGPoint)] = [
-            ("正文中心（图片卡）", first, CGPoint(x: 88, y: 88)),
-            ("正文中心（文本卡）", starCard, CGPoint(x: 88, y: 88)),
-            ("meta 行", first, CGPoint(x: 100, y: 180)),
+            ("卡身中心（图片卡）", first, CGPoint(x: 88, y: 88)),
+            ("卡身中心（文本卡）", starCard, CGPoint(x: 88, y: 88)),
+            ("卡头带", first, CGPoint(x: 60, y: 12)),
+            ("卡脚", first, CGPoint(x: 100, y: 180)),
             ("收藏星", starCard, starPoint),
             ("角标", badgeCard, CGPoint(x: badgeRect.midX, y: badgeRect.midY)),
         ]
