@@ -13,13 +13,10 @@ extension DatabaseManager {
     /// 旧的一次性写法（先无条件建表、再 `guard version < 2`、最后无条件写 2）会让
     /// v3 段每次启动把版本写回 2，v3 永远重跑。
     ///
-    /// - Important: 直接操作 db 指针、不调度队列，只能在串行队列上下文（migrateIfNeeded()）
+    /// - Important: 直接操作 db 指针、不调度队列，只能在串行队列上下文（迁移登记表）
     ///   或单线程测试上下文调用；重复执行无副作用。
-    func migrateClipboardSchema() {
-        guard let db else {
-            logger.debug("数据库未就绪，跳过剪贴板表迁移")
-            return
-        }
+    /// - Parameter db: 要迁移的连接（由 `MigrationRegistry` 传入，不看本类的写连接）
+    func migrateClipboardSchema(_ db: OpaquePointer) {
         if clipUserVersion(db) < 1 {
             migrateClipboardToV1(db)
         }
@@ -92,26 +89,5 @@ extension DatabaseManager {
         } else {
             logger.warning("数据迁移 v\(version) 失败: \(String(cString: sqlite3_errmsg(db)))")
         }
-    }
-}
-
-// MARK: - 共用辅助
-
-/// 以下方法放宽为 internal 的原因：被同模块的 ClipboardSchemaMapping.swift /
-/// DatabaseManager+ClipboardRepository.swift / Harness 建表复用，private 会限制在单个文件内。
-extension DatabaseManager {
-
-    /// 执行无返回值的 SQL，成功返回 true
-    func clipExec(_ db: OpaquePointer, _ sql: String) -> Bool {
-        sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK
-    }
-
-    /// 读取 PRAGMA user_version
-    func clipUserVersion(_ db: OpaquePointer) -> Int32 {
-        var stmt: OpaquePointer?
-        defer { sqlite3_finalize(stmt) }
-        guard sqlite3_prepare_v2(db, "PRAGMA user_version", -1, &stmt, nil) == SQLITE_OK,
-              sqlite3_step(stmt) == SQLITE_ROW else { return 0 }
-        return sqlite3_column_int(stmt, 0)
     }
 }

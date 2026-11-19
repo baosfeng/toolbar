@@ -127,32 +127,43 @@ extension DatabaseManager: ClipboardBoardRepository {
         }
     }
 
+    /// 删板：**删条目 + 删板行在同一个事务里**（一个业务动作 = 一个事务）
+    ///
+    /// 原子性是硬要求：过去两步各开一个事务，条目删掉后若进程崩溃 / 板行删除失败，
+    /// 留下来的就是「板在、条目全没」的半截态（T1）。现在任何一步失败都整体回滚，
+    /// 用户看到的仍是完整的一块板。
+    ///
+    /// 不变量保留：返回值是被删条目（含 imagePath），供上层 `ClipboardImageGC` 回收图片；
+    /// 失败返回空数组（板与条目都原样不动，没有图片需要回收）。
     public func deleteBoard(id: UUID) -> [ClipboardItem] {
         let key = id.uuidString.uppercased()
         return serialQueue.sync { () -> [ClipboardItem] in
             guard let db else { return [] }
-            // 先删条目（走 clipDeleteBatch，自带事务并返回被删行供上层回收图片），再删板本身。
-            // 两步不共享事务：条目删除失败时直接返回、板表原样不动，因此不会留下「板在、条目全没」的半截态。
-            let doomed = clipDeleteBatch(db,
-                                         selectSQL: "SELECT \(ClipboardSchema.columns) FROM clipboard_items WHERE board_id = ?;",
-                                         deleteSQL: "DELETE FROM clipboard_items WHERE board_id = ?;",
-                                         failureLabel: "剪贴板删板（条目）",
-                                         bind: { sqlite3_bind_text_copy($0, 1, key) })
-            guard let doomed else {
-                // clipDeleteBatch 内部已回滚；板表未动，状态一致
+            do {
+                return try NetworkMonitorCore.withTransaction(db) { conn in
+                    let doomed = try clipDeleteRows(conn,
+                                                    selectSQL: "SELECT \(ClipboardSchema.columns) FROM clipboard_items WHERE board_id = ?;",
+                                                    deleteSQL: "DELETE FROM clipboard_items WHERE board_id = ?;",
+                                                    bind: { sqlite3_bind_text_copy($0, 1, key) })
+                    // 故障注入：条目已经删掉了，此时抛错必须把条目一起回滚（T1 的复发点）
+                    if deleteBoardFaultProbe?() == true {
+                        throw DatabaseOperationError("删板故障注入：板行删除失败")
+                    }
+                    var stmt: OpaquePointer?
+                    defer { sqlite3_finalize(stmt) }
+                    guard sqlite3_prepare_v2(conn, "DELETE FROM clipboard_boards WHERE id = ?;", -1, &stmt, nil) == SQLITE_OK else {
+                        throw DatabaseOperationError("删板准备失败: \(String(cString: sqlite3_errmsg(conn)))")
+                    }
+                    sqlite3_bind_text_copy(stmt, 1, key)
+                    guard sqlite3_step(stmt) == SQLITE_DONE else {
+                        throw DatabaseOperationError("删板失败: \(String(cString: sqlite3_errmsg(conn)))")
+                    }
+                    return doomed
+                }
+            } catch {
+                logger.warning("剪贴板删板失败，已整体回滚（板与条目均未改动）: \(error)")
                 return []
             }
-            var stmt: OpaquePointer?
-            defer { sqlite3_finalize(stmt) }
-            guard sqlite3_prepare_v2(db, "DELETE FROM clipboard_boards WHERE id = ?;", -1, &stmt, nil) == SQLITE_OK else {
-                logger.warning("剪贴板删板准备失败: \(String(cString: sqlite3_errmsg(db)))")
-                return doomed
-            }
-            sqlite3_bind_text_copy(stmt, 1, key)
-            if sqlite3_step(stmt) != SQLITE_DONE {
-                logger.warning("剪贴板删板失败: \(String(cString: sqlite3_errmsg(db)))")
-            }
-            return doomed
         }
     }
 

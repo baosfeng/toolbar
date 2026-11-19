@@ -31,34 +31,28 @@ extension DatabaseManager {
     public func harnessPurge(scope: HarnessRebuildScope, now: Date) -> Int {
         serialQueue.sync { () -> Int in
             guard let db, harnessMigrateSchema(db) else { return -1 }
-            guard clipExec(db, "BEGIN IMMEDIATE") else {
-                logger.warning("Harness 索引清理事务开启失败: " + String(cString: sqlite3_errmsg(db)))
+            do {
+                return try NetworkMonitorCore.withTransaction(db, mode: .immediate) { conn in
+                    // 会话集合必须在删事件之前取：删完就再也查不到「最近 n 天有过事件」的会话了
+                    let sessionIDs: [String]?
+                    switch scope {
+                    case .full:
+                        sessionIDs = []
+                    case .sinceDays(let days):
+                        sessionIDs = harnessRecentSessionIDs(conn, sinceMs: Self.purgeSinceMs(now: now, days: days))
+                    }
+                    guard let sessionIDs else { throw DatabaseOperationError("会话集合查询失败") }
+                    let deleted = harnessPurgeEvents(conn, scope: scope, now: now)
+                    guard deleted >= 0,
+                          harnessPurgeScanRecords(conn, scope: scope, sessionIDs: sessionIDs) else {
+                        throw DatabaseOperationError("Harness 索引清理失败")
+                    }
+                    return deleted
+                }
+            } catch {
+                logger.warning("Harness 索引清理失败，已回滚: \(error)")
                 return -1
             }
-            // 会话集合必须在删事件之前取：删完就再也查不到「最近 n 天有过事件」的会话了
-            let sessionIDs: [String]?
-            switch scope {
-            case .full:
-                sessionIDs = []
-            case .sinceDays(let days):
-                sessionIDs = harnessRecentSessionIDs(db, sinceMs: Self.purgeSinceMs(now: now, days: days))
-            }
-            guard let sessionIDs else {
-                _ = clipExec(db, "ROLLBACK")
-                return -1
-            }
-            let deleted = harnessPurgeEvents(db, scope: scope, now: now)
-            guard deleted >= 0,
-                  harnessPurgeScanRecords(db, scope: scope, sessionIDs: sessionIDs) else {
-                _ = clipExec(db, "ROLLBACK")
-                logger.warning("Harness 索引清理失败，已回滚: " + String(cString: sqlite3_errmsg(db)))
-                return -1
-            }
-            guard clipExec(db, "COMMIT") else {
-                _ = clipExec(db, "ROLLBACK")
-                return -1
-            }
-            return deleted
         }
     }
 

@@ -43,15 +43,14 @@ extension DatabaseManager {
             }
             // 自撞（内容没改）不算冲突：只有「别的条目已占着这个哈希」才需要合并
             let conflict = clipItemByHash(db, payload.contentHash).flatMap { $0.id == current.id ? nil : $0 }
-            guard clipExec(db, "BEGIN") else {
-                logger.warning("剪贴板编辑事务开启失败: \(String(cString: sqlite3_errmsg(db)))")
-                return nil
-            }
-            let ok = conflict.map { clipMergeConflict(db, current: current, conflict: $0, payload: payload, folded: folded) }
-                ?? clipWriteItemText(db, id: key, payload: payload, folded: folded)
-            guard ok, clipExec(db, "COMMIT") else {
-                _ = clipExec(db, "ROLLBACK")
-                logger.warning("剪贴板编辑失败: \(String(cString: sqlite3_errmsg(db)))")
+            do {
+                try NetworkMonitorCore.withTransaction(db) { conn in
+                    let ok = conflict.map { clipMergeConflict(conn, current: current, conflict: $0, payload: payload, folded: folded) }
+                        ?? clipWriteItemText(conn, id: key, payload: payload, folded: folded)
+                    guard ok else { throw DatabaseOperationError("写入正文失败") }
+                }
+            } catch {
+                logger.warning("剪贴板编辑失败，已回滚: \(error)")
                 return nil
             }
             return clipItemByHash(db, payload.contentHash)

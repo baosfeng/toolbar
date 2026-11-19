@@ -265,15 +265,15 @@ extension DatabaseManager {
     public func harnessClearAll() -> Bool {
         serialQueue.sync { () -> Bool in
             guard let db, harnessMigrateSchema(db) else { return false }
-            guard clipExec(db, "BEGIN IMMEDIATE") else { return false }
-            guard clipExec(db, "DELETE FROM harness_token_event;"),
-                  clipExec(db, "DELETE FROM harness_session_scan;") else {
-                _ = clipExec(db, "ROLLBACK")
-                logger.warning("Harness 索引清空失败: " + String(cString: sqlite3_errmsg(db)))
-                return false
-            }
-            guard clipExec(db, "COMMIT") else {
-                _ = clipExec(db, "ROLLBACK")
+            do {
+                try NetworkMonitorCore.withTransaction(db, mode: .immediate) { conn in
+                    guard clipExec(conn, "DELETE FROM harness_token_event;"),
+                          clipExec(conn, "DELETE FROM harness_session_scan;") else {
+                        throw DatabaseOperationError("Harness 索引清空失败")
+                    }
+                }
+            } catch {
+                logger.warning("Harness 索引清空失败，已回滚: \(error)")
                 return false
             }
             return true
