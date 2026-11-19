@@ -11,6 +11,8 @@ import NetworkMonitorUI
 /// （默认网络页，或偏好里的首屏），其余页**首次切到时**才建实例、才进 `paneStack`、
 /// 才加宽度约束、才挂动作回调。对外仍暴露原来的具体类型属性，
 /// 既有调用点写法不变（第一次读到才触发创建）；只读判据走 `paneIfLoaded`。
+/// 造页闭包由 `PaneModuleRegistry` 的声明提供（见 `MenuPanel/PaneModule.swift`），
+/// 本文件只负责「装配进视图树」这套机械动作，不再有穷尽 switch。
 extension MenuPanelView {
 
     // MARK: - 只读入口
@@ -32,34 +34,41 @@ extension MenuPanelView {
     // MARK: - 各分页（首次读到才建）
 
     /// 网络页
-    var networkPane: NetworkPaneView { loadedPane(.network) { NetworkPaneView() } }
+    var networkPane: NetworkPaneView { typedPane(.network) }
     /// 传送页
-    var transferPane: TransferPaneView { loadedPane(.transfer) { TransferPaneView() } }
+    var transferPane: TransferPaneView { typedPane(.transfer) }
     /// 额度页
-    var billingPane: BillingPaneView { loadedPane(.credits) { BillingPaneView() } }
+    var billingPane: BillingPaneView { typedPane(.credits) }
     /// Token 页
-    var tokenPane: TokenPaneView { loadedPane(.token) { TokenPaneView() } }
+    var tokenPane: TokenPaneView { typedPane(.token) }
     /// 系统页
-    var systemPane: SystemPaneView { loadedPane(.system) { SystemPaneView() } }
+    var systemPane: SystemPaneView { typedPane(.system) }
+
+    /// 取指定具体类型的页（未装配先装配）—— id 与造页闭包成对登记，类型不符属装配错误
+    private func typedPane<T: MenuPanelPaneView>(_ tab: MenuPanelTab) -> T {
+        let pane = ensurePaneLoaded(tab)
+        guard let typed = pane as? T else {
+            assertionFailure("分页 \(tab.stableID) 的装配件类型与调用方预期不一致")
+            return pane as! T
+        }
+        return typed
+    }
 
     // MARK: - 装配
 
     /// 确保某分页已装配（切页与取证路径显式调用；已装配则原样返回，不重建）
     @discardableResult
     func ensurePaneLoaded(_ tab: MenuPanelTab) -> MenuPanelPaneView {
-        switch tab {
-        case .network: return networkPane
-        case .transfer: return transferPane
-        case .credits: return billingPane
-        case .token: return tokenPane
-        case .system: return systemPane
+        if let existing = assembledPanes[tab] { return existing }
+        guard let module = paneModules.module(for: tab) else {
+            // 分页枚举多了一个 case 却没在注册表登记：开发期立刻暴露，
+            // release 下装一个空页而不是崩（面板仍可用，只是这一页没有内容）
+            assertionFailure("分页 \(tab.stableID) 未在 PaneModuleRegistry 注册")
+            let placeholder = MenuPanelPaneView()
+            assemble(placeholder, for: tab)
+            return placeholder
         }
-    }
-
-    /// 取已装配实例；没有就建一个并装进 `paneStack`
-    private func loadedPane<T: MenuPanelPaneView>(_ tab: MenuPanelTab, make: () -> T) -> T {
-        if let existing = assembledPanes[tab] as? T { return existing }
-        let pane = make()
+        let pane = module.makePane()
         assemble(pane, for: tab)
         return pane
     }

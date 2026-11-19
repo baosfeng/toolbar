@@ -69,9 +69,11 @@ enum SettingsPermissionStateSnapshot {
         ]
         for (name, snapshot) in states {
             let provider = PermissionStateStubProvider(snapshot: snapshot)
-            let window = SettingsWindow(factories: [
-                .permissions: { SettingsPermissionPane(permissions: provider) },
-            ])
+            let modules = SettingsModuleRegistry()
+            modules.register(SettingsModule(section: .permissions) {
+                SettingsPermissionPane(permissions: provider)
+            })
+            let window = SettingsWindow(modules: modules)
             guard let view = window.prepareForSnapshot(.permissions) else { continue }
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let suffix = appearance == .aqua ? "light" : "dark"

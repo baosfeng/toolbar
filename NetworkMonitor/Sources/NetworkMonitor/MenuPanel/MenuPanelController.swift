@@ -211,51 +211,13 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     }
 
     /// 分页动作装配入口（懒装配：动作挂在「该页首次装配」这一刻，不提前建页）
+    ///
+    /// 具体挂什么由注册表里该分页的 `configure` 闭包声明（`MenuPanel/PaneModule.swift`）：
+    /// 加一个分页只加一份声明，这里不再有穷尽 switch。
     private func wirePaneActions() {
         content.onPaneAssembled = { [weak self] tab, pane in
-            self?.configure(pane: pane, for: tab)
-        }
-    }
-
-    /// 按分页挂动作回调（每页只调一次；回调设置时已装配的页会被补放一次）
-    private func configure(pane: MenuPanelPaneView, for tab: MenuPanelTab) {
-        switch tab {
-        case .transfer:
-            guard let transfer = pane as? TransferPaneView else { return }
-            // 传送页的「是否可见」由这里注入：收起时它只更新模型、不推视图
-            // （见 TransferController.render）；attach 内部会 render 一次，
-            // 把当前设备 / 会话状态推进这个刚装配出来的面板
-            transfer.isPanelVisible = { [weak self] in self?.popover.isShown ?? false }
-            transferController?.attach(panel: transfer)
-        case .credits:
-            guard let billing = pane as? BillingPaneView else { return }
-            billing.onRefresh = { [weak self] in self?.billingMonitor?.refresh(force: true) }
-            billing.onRetry = { [weak self] in self?.billingMonitor?.refresh(force: true) }
-            billing.onRangeChange = { [weak self] range, providerID in
-                self?.billingMonitor?.selectRange(range, providerID: providerID)
-            }
-            // 未配置块「去设置配置」：打开统一设置窗口并落到额度 Provider 页
-            billing.onOpenSettings = { [weak self] in
-                self?.requestSettings(section: .providers)
-            }
-            // 展开 / 收起改变内容高度：通知面板重算 popover 尺寸
-            billing.onContentChanged = { [weak self] in
-                guard let self else { return }
-                self.content.delegate?.menuPanelViewDidChangeContent(self.content)
-            }
-        case .token:
-            guard let token = pane as? TokenPaneView else { return }
-            // 页头刷新＝一键重扫（清空索引 + 全量重建），由页面自己持有服务并回执
-            token.harness = harnessUsage
-            token.onRefresh = { [weak self] in self?.content.tokenPaneIfLoaded?.rebuildIndex() }
-            token.onOpenSettings = { [weak self] section in self?.requestSettings(section: section) }
-            token.onContentChanged = { [weak self] in
-                guard let self else { return }
-                self.content.delegate?.menuPanelViewDidChangeContent(self.content)
-            }
-        case .network, .system:
-            // 网络页与系统页没有面板内动作回调（系统页回调由面板自己在装配时挂）
-            break
+            guard let self, let module = content.paneModules.module(for: tab) else { return }
+            module.configure(self, pane)
         }
     }
 }

@@ -250,16 +250,11 @@ enum MenuPanelSnapshot {
 
 // MARK: - 文件命名
 
-private extension MenuPanelTab {
-    /// 快照文件名后缀
-    var fileNameSuffix: String {
-        switch self {
-        case .network: return "network"
-        case .transfer: return "transfer"
-        case .credits: return "credits"
-        case .token: return "token"
-        case .system: return "system"
-        }
-    }
+extension MenuPanelTab {
+    /// 快照文件名后缀 —— 与分段条文案同源，一律取分页描述符（`PaneModuleCatalog`）
+    ///
+    /// 改造前这里是一份与 `MenuTabBarView` 平级的穷尽 switch：改文案时忘了改后缀，
+    /// 取证图就会被写到另一个文件名下，读图的人以为没生效。
+    var fileNameSuffix: String { descriptor.snapshotSuffix }
 }
 #endif

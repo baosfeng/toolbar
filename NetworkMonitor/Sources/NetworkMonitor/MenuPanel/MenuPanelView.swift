@@ -49,6 +49,9 @@ final class MenuPanelView: NSView {
     /// 面板分页可见性/顺序偏好（构造器注入存储，测试与取证可用隔离 suite，不污染真实偏好）
     let panelTabPreferences: PanelTabPreferences
 
+    /// 分页装配注册表 —— 造页 / 挂动作 / 首屏数据都从这里取（可注入隔离注册表做测试 / 取证）
+    let paneModules: PaneModuleRegistry
+
     /// 面板底（玻璃 + 基色层）；层级恒在所有内容之下，由 `installBackdrop()` 安装
     let backdrop = MenuPanelBackdropView()
 
@@ -93,8 +96,10 @@ final class MenuPanelView: NSView {
 
     // MARK: - 初始化
 
-    init(storage: any KeyValueStorage = AppContext.shared.storage) {
+    init(storage: any KeyValueStorage = AppContext.shared.storage,
+         paneModules: PaneModuleRegistry = .standard()) {
         self.panelTabPreferences = PanelTabPreferences(storage: storage)
+        self.paneModules = paneModules
         super.init(frame: .zero)
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false

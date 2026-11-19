@@ -38,10 +38,18 @@ func runSettingsThemeTests() {
     assertEqual(groups.map { $0.segment.title }, ["常规", "功能", "系统"], "段头文案")
 
     let allItems = SettingsSidebarLayout.allItems
-    // 本轮新增「系统权限」页：分类数 10 → 11（原断言按旧分类表写死，随功能扩展更新）
-    assertEqual(allItems.count, 11, "十一个分类全部进侧栏")
-    assertEqual(Set(allItems).count, 11, "十一个分类各出现一次（无重复、无遗漏）")
+    // 分类数量不写死：一律与分类描述符注册表对表（加一个分类不必改这里）
+    let registry = SettingsDescriptorRegistry.registeringCatalog()
+    assertEqual(registry.validate(), [], "标准装配的分类注册表自洽（无重复 / 无缺项 / 顺序一致）")
+    assertEqual(allItems.count, registry.all.count, "侧栏条目数 = 注册表条目数")
+    assertEqual(Set(allItems).count, allItems.count, "每个分类各出现一次（无重复、无遗漏）")
     assertEqual(allItems, SettingsSectionID.allCases, "侧栏顺序与分类顺序一致")
+    assertEqual(allItems.map { $0.rawValue }, registry.all.map { $0.id.rawValue },
+                "侧栏顺序 = 描述符注册表顺序")
+    for descriptor in registry.all {
+        assertEqual(SettingsSidebarLayout.segment(of: descriptor.id), descriptor.group,
+                    "分类 \(descriptor.id.rawValue) 的侧栏分组与描述符一致")
+    }
     for id in SettingsSectionID.allCases {
         assertNotNil(SettingsSidebarLayout.segment(of: id), "分类 \(id.rawValue) 必须属于某一段")
     }

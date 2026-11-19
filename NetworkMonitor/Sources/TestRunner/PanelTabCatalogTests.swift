@@ -17,13 +17,23 @@ import NetworkMonitorUI
 func runPanelTabCatalogTests() {
     print("🧪 Testing panel tab catalog (clipboard tab retirement)...")
 
-    // 当前在用的分页：5 个，且不含已下线的剪贴板
-    assertEqual(PanelTabCatalog.stableIDs.count, 5, "菜单面板剩 5 个分页")
+    // 当前在用的分页：不含已下线的剪贴板（数量 / 顺序一律与注册表对表，不再写死数字）
     assertEqual(PanelTabCatalog.stableIDs.contains("clipboard"), false,
                 "当前分页 id 里不再有 clipboard")
-    assertEqual(PanelTabCatalog.stableIDs,
-                ["network", "transfer", "credits", "token", "system"],
-                "分页默认顺序按声明顺序")
+    assertEqual(PaneModuleCatalog.orderedIDs, PanelTabCatalog.stableIDs,
+                "描述符目录的声明序与分页目录一致")
+
+    let registry = PaneDescriptorRegistry.registeringCatalog()
+    assertEqual(registry.validate(), [], "标准装配的注册表自洽（无重复 / 无缺项 / 顺序一致）")
+    assertEqual(registry.all.count, PanelTabCatalog.stableIDs.count,
+                "注册表条目数 = 分页目录条目数（加一个分页不必改这里）")
+    assertEqual(registry.all.map(\.id), PanelTabCatalog.stableIDs,
+                "注册表顺序 = 分页目录顺序（数字键 / ←→ 循环同源）")
+    // 稳定 id 的唯一真源仍是 PanelTabCatalog 的冻结映射：描述符不得与它分叉
+    for descriptor in registry.all {
+        assertEqual(PanelTabCatalog.legacyRawValueToStableID[descriptor.rawValue], descriptor.id,
+                    "分页 \(descriptor.id) 的编号 → id 与冻结映射一致")
+    }
 
     // 已下线 id 单独登记，且不与在用 id 撞车
     assertEqual(PanelTabCatalog.retiredIDs, ["clipboard"], "下线 id 登记为 clipboard")

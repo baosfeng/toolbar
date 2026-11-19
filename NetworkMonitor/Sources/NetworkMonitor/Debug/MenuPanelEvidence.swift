@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 真实窗口取证钩子（仅 DEBUG）
 
@@ -59,17 +60,14 @@ enum MenuPanelEvidence {
     }
 
     /// 环境变量 → 分页
+    ///
+    /// 取值走分页描述符的 `evidenceKey`（与分段条 / 快照后缀同源）：
+    /// 改造前这是一份手写映射，额度页曾漏登记——给 `NM_EVIDENCE_TAB=credits` 只会
+    /// 静默停在网络页，「面板上额度有没有数据」这类问题拿不到真实截图。
     private static func tab(for value: String) -> MenuPanelTab? {
-        switch value {
-        case "network": return .network
-        case "transfer": return .transfer
-        // 额度页此前没有映射：取证时给 NM_EVIDENCE_TAB=credits 只会静默停在网络页，
-        // 于是「面板上额度有没有数据」这类问题拿不到真实截图（已按分页枚举补齐）
-        case "credits": return .credits
-        case "token": return .token
-        case "system": return .system
-        default: return nil
-        }
+        guard let descriptor = PaneModuleCatalog.descriptor(forEvidenceKey: value),
+              let tab = MenuPanelTab(rawValue: descriptor.rawValue) else { return nil }
+        return tab
     }
 
     /// 写出窗口号与屏幕坐标（Cocoa 坐标，原点左下；截图坐标需翻转 y）

@@ -398,6 +398,9 @@ runClipboardPreviewTests()
 
 // 分页
 runPanelTabCatalogTests()
+// 分页 / 设置分类的组装式装配（Descriptor + Registry：正常 / 重复 / 缺项 / 顺序）
+runPaneModuleRegistryTests()
+runSettingsSectionRegistryTests()
 runClipboardHeadBandContrastTests()
 runClipboardFooterTextTests()
 // MARK: - 外观（主题令牌 / 深浅对比度 / 渲染帧率档 / 外观偏好）
