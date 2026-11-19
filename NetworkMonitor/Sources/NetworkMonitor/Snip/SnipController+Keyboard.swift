@@ -11,8 +11,11 @@ import NetworkMonitorUI
 final class SnipKeyboardTapBridge: @unchecked Sendable {
     private let lock = NSLock()
     private var target: (any SnipKeyboardReceiving)?
-    /// 输入框正在编辑时让按键透传给窗口（否则打不进字）
-    private var passThrough = false
+    /// 编辑态闸门：输入框装上 / 卸下时由主线程写入，tap 回调线程只读
+    ///
+    /// 这里不再自己存一个 `passThrough` 布尔：早先的写入点在 `receiveSystemKey` 里、
+    /// 被上面那行 guard 挡住，等于从未写过（见 SnipKeyboardGate 的说明）。
+    private let gate = SnipKeyboardGate()
 
     func attach(_ target: any SnipKeyboardReceiving) {
         lock.lock(); self.target = target; lock.unlock()
@@ -22,8 +25,9 @@ final class SnipKeyboardTapBridge: @unchecked Sendable {
         lock.lock(); target = nil; lock.unlock()
     }
 
-    func setPassThrough(_ value: Bool) {
-        lock.lock(); passThrough = value; lock.unlock()
+    /// 输入框开始 / 结束编辑（覆盖层的编辑态收口处驱动）
+    func setEditing(_ value: Bool) {
+        gate.setEditing(value)
     }
 
     /// 回调线程调用：这次按键该怎么处理
@@ -36,13 +40,11 @@ final class SnipKeyboardTapBridge: @unchecked Sendable {
                   modifiers: SnipKeyCommandResolver.Modifiers) -> SnipKeyboardRouting.Decision {
         lock.lock()
         let hasTarget = target != nil
-        let isEditing = passThrough
         lock.unlock()
-        return SnipKeyboardRouting.decision(hasTarget: hasTarget,
-                                            isTextEditing: isEditing,
-                                            keyCode: keyCode,
-                                            characters: characters,
-                                            modifiers: modifiers)
+        return gate.decision(hasTarget: hasTarget,
+                             keyCode: keyCode,
+                             characters: characters,
+                             modifiers: modifiers)
     }
 
     /// 回调线程调用：把按键转给主线程
@@ -197,8 +199,9 @@ extension SnipController: SnipKeyboardReceiving {
     /// 系统层按键转成 NSEvent 后走与窗口 keyDown 相同的处理路径
     func receiveSystemKey(keyCode: Int, characters: String?, flags: CGEventFlags) {
         guard let overlay = overlays.first?.overlayView ?? nil else { return }
+        // 兜住竞态：编辑态已开但同步还没到 tap 的那一瞬间，不要把输入框里的键当截图指令
+        // （编辑态的正常同步走 setKeyboardEditing，不在这里写）
         guard !overlay.hasActiveTextInput else { return }
-        keyboardBridge?.setPassThrough(overlay.hasActiveTextInput)
         var modifierFlags: NSEvent.ModifierFlags = []
         if flags.contains(.maskShift) { modifierFlags.insert(.shift) }
         if flags.contains(.maskControl) { modifierFlags.insert(.control) }

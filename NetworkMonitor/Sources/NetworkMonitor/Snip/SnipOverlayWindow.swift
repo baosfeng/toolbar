@@ -80,7 +80,7 @@ final class SnipOverlayWindow: NSPanel {
         }
         orderFrontRegardless()
         makeKey()
-        makeFirstResponder(overlayView)
+        claimFirstResponderIfNeeded()
         overlayView.needsDisplay = true
         scheduleActivationRetry()
         // 兜底：首帧真的画不出来（拿不到绘图上下文且重试耗尽）也要让窗口可见，
@@ -117,6 +117,17 @@ final class SnipOverlayWindow: NSPanel {
         SnipForegroundPolicy.claimForeground()
     }
 
+    /// 把键盘焦点给覆盖层，但**不抢正在编辑的输入框**
+    ///
+    /// `scheduleActivationRetry` 会在覆盖层上屏后每 80ms 重试一次、最多约 1 秒，
+    /// 每次都无条件 `makeFirstResponder(overlayView)`——用户在这 1 秒内点「文字」并点画布，
+    /// 刚设好的输入框焦点会被紧随其后的重试抢回覆盖层，表现就是「偶发打不进字」。
+    /// 输入框在编辑时这里只保留 key window，焦点原样留在输入框里。
+    private func claimFirstResponderIfNeeded() {
+        guard !overlayView.hasActiveTextInput else { return }
+        makeFirstResponder(overlayView)
+    }
+
     /// 有限次抢占前台（每次拿到就停，失败也最多等约 1 秒）
     private func scheduleActivationRetry(attempt: Int = 0) {
         guard attempt < 12 else {
@@ -129,7 +140,7 @@ final class SnipOverlayWindow: NSPanel {
                 == ProcessInfo.processInfo.processIdentifier
             if ours {
                 self.makeKey()
-                self.makeFirstResponder(self.overlayView)
+                self.claimFirstResponderIfNeeded()
                 return
             }
             NSApp.activate(ignoringOtherApps: true)

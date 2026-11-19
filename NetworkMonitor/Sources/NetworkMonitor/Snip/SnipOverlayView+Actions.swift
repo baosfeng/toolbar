@@ -71,7 +71,7 @@ extension SnipOverlayView {
         field.action = #selector(commitSizeEditing)
         field.onCancel = { [weak self] in self?.endSizeEditing(apply: false) }
         addSubview(field)
-        sizeEditor = field
+        replaceSizeEditor(field)
         window?.makeFirstResponder(field)
         field.selectText(nil)
         needsDisplay = true
@@ -85,7 +85,7 @@ extension SnipOverlayView {
         guard let field = sizeEditor else { return }
         let text = field.stringValue
         field.removeFromSuperview()
-        sizeEditor = nil
+        replaceSizeEditor(nil)
         window?.makeFirstResponder(self)
         defer { needsDisplay = true }
         guard apply, let size = SnipSizeInput.parse(text) else { return }

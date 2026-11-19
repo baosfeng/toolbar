@@ -18,6 +18,11 @@ protocol SnipOverlayViewDelegate: AnyObject {
     func overlayView(_ view: SnipOverlayView, didRequestPin rect: CGRect)
     /// 用户要求对选区做 OCR 文字识别（本地点坐标）
     func overlayView(_ view: SnipOverlayView, didRequestTextRecognition rect: CGRect)
+    /// 输入框（文字 / 尺寸）开始或结束编辑
+    ///
+    /// 覆盖层要把这个信号同步给系统层按键通道：编辑态下白名单键必须放行，
+    /// 否则输入框里的 a / 退格 / 回车会被当作截图指令吞掉（打不进字、删不掉）。
+    func overlayView(_ view: SnipOverlayView, didChangeTextEditing isEditing: Bool)
 }
 
 // MARK: - 截图覆盖层
@@ -59,8 +64,14 @@ final class SnipOverlayView: NSView {
     var windowDetectionEnabled = true
     /// 尺寸标签的实际矩形（绘制时更新），点击它可输入精确尺寸
     var sizeLabelFrame: CGRect = .zero
-    /// 放宽为 internal：动作扩展文件要创建与移除输入框
-    var sizeEditor: SizeEditorField?
+    /// 尺寸输入框
+    ///
+    /// 写入只走 `replaceSizeEditor`：编辑态信号要在一处收口（didSet 通知 delegate），
+    /// 散着赋值迟早漏掉某个入口——本轮「文字打不进字」就是漏信号的下场。
+    /// 放宽为 private(set)：动作扩展文件（+Actions）经 replaceSizeEditor 写入。
+    private(set) var sizeEditor: SizeEditorField? {
+        didSet { textEditingDidChange() }
+    }
     /// 放宽为 internal：DEBUG 取证时冻结指针位置
     var debugPointerFrozen = false
     /// 当前标注工具；nil 表示仍在操作选区
@@ -81,7 +92,11 @@ final class SnipOverlayView: NSView {
     /// 工具条是否可见（空格切换）
     var toolbarVisible = true
     /// 文字输入框
-    var textEditor: SizeEditorField?
+    ///
+    /// 写入只走 `replaceTextEditor`（同 sizeEditor：编辑态信号一处收口）。
+    private(set) var textEditor: SizeEditorField? {
+        didSet { textEditingDidChange() }
+    }
     /// 文字输入锚点（本地点坐标）
     var textEditingAnchor: CGPoint = .zero
     /// 当前选中的标注下标（文字缩放 / 旋转用）
@@ -257,6 +272,29 @@ final class SnipOverlayView: NSView {
             colorFormat = colorFormat == .hex ? .rgb : .hex
             needsDisplay = true
         }
+    }
+
+    // MARK: - 输入框编辑态
+
+    /// 编辑态收口：任何输入框的装上 / 卸下都从这里通知出去
+    ///
+    /// 只有一处生产信号，五个入口（beginTextEditing / commitTextEditing / cancelTextEditing /
+    /// beginSizeEditing / endSizeEditing）自动全覆盖。修之前信号写在按键接收端、排在 guard
+    /// 之后成了死代码，于是系统层 tap 恒按「非编辑态」吞掉输入框里的键。
+    private func textEditingDidChange() {
+        delegate?.overlayView(self, didChangeTextEditing: hasActiveTextInput)
+    }
+
+    /// 装上文字输入框（写完立刻同步编辑态）
+    /// 放宽为 internal：文字输入扩展文件（SnipTextEditing）要用。
+    func replaceTextEditor(_ field: SizeEditorField?) {
+        textEditor = field
+    }
+
+    /// 装上尺寸输入框
+    /// 放宽为 internal：动作扩展文件（+Actions）要用。
+    func replaceSizeEditor(_ field: SizeEditorField?) {
+        sizeEditor = field
     }
 
     // MARK: - 坐标

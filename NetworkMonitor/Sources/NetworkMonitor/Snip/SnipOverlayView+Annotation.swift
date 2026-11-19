@@ -181,54 +181,6 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         needsDisplay = true
     }
 
-    // MARK: - 文字输入
-
-    /// 在点击位置弹出输入框，回车落字
-    func beginTextEditing(at point: CGPoint) {
-        guard textEditor == nil else { return }
-        textEditingAnchor = point
-        let field = SizeEditorField(frame: CGRect(x: point.x, y: point.y, width: 220, height: 24))
-        field.stringValue = ""
-        field.placeholderString = "输入文字，回车确认"
-        field.font = .systemFont(ofSize: 13)
-        field.bezelStyle = .roundedBezel
-        field.focusRingType = .none
-        field.target = self
-        field.action = #selector(commitTextEditing)
-        field.onCancel = { [weak self] in self?.cancelTextEditing() }
-        addSubview(field)
-        textEditor = field
-        window?.makeFirstResponder(field)
-        needsDisplay = true
-    }
-
-    @objc func commitTextEditing() {
-        guard let field = textEditor else { return }
-        let content = field.stringValue
-        field.removeFromSuperview()
-        textEditor = nil
-        window?.makeFirstResponder(self)
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            needsDisplay = true
-            return
-        }
-        let annotation = SnipAnnotation(kind: .text,
-                                        start: textEditingAnchor,
-                                        end: textEditingAnchor,
-                                        text: trimmed,
-                                        style: currentStyle)
-        annotationStack.add(annotation)
-        needsDisplay = true
-    }
-
-    func cancelTextEditing() {
-        textEditor?.removeFromSuperview()
-        textEditor = nil
-        window?.makeFirstResponder(self)
-        needsDisplay = true
-    }
-
     func handleAnnotationMouseDragged(to point: CGPoint, lockingShift: Bool = false) -> Bool {
         if activeTool == .eraser, state.phase == .selected {
             eraseAnnotation(at: point)

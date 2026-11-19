@@ -42,6 +42,8 @@ func runSnipSuites() {
     runSnipPointerGestureTests()
     runSnipKeyboardInterceptionTests()
     runSnipKeyboardRoutingTests()
+    runSnipKeyboardGateTests()
+    runSnipKeyboardWiringTests()
     runSnipRightClickTests()
     runSnipLineWidthTests()
     runPinKeyCommandTests()
