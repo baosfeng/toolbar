@@ -24,7 +24,7 @@ extension TransferService: ScanRouteHandling {
         guard let url = ScanLinkBuilder.pageURL(token: issued.token, ip: ip, port: localIdentity.port) else {
             return .failure(.invalidRequest("扫码地址构造失败"))
         }
-        logger.info("已签发扫码接收链接：http://\(ip):\(localIdentity.port)\(ScanProtocol.pagePath)")
+        logger.info("已签发扫码接收链接：" + HTTPLogRedaction.url(url))
         return .success(ScanSessionInfo(token: issued.token, url: url, expiresAt: issued.expiresAt))
     }
 

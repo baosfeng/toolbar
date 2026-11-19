@@ -25,23 +25,21 @@ public final class OllamaBillingProvider: BillingProvider {
     public static let defaultBaseURL = URL(string: "https://ollama.com")!
 
     private let baseURL: URL
-    private let session: URLSession
-    private let logger: LoggingService
+    /// 统一传输层（URLSession 由构造参数注入，便于测试指向本地回环）
+    private let transport: any HTTPTransport
 
     public init(baseURL: URL = OllamaBillingProvider.defaultBaseURL,
                 session: URLSession = .shared,
                 logger: LoggingService = AppContext.shared.logger) {
         self.baseURL = baseURL
-        self.session = session
-        self.logger = logger
+        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
     }
 
     // MARK: - BillingProvider
 
     public func fetchBalance(credential: String) async throws -> BillingBalance {
-        let request = try makeRequest(path: "/api/balance", query: [], credential: credential)
-        let result = try await perform(request)
-        return try Self.decodeBalance(from: result.data)
+        let data = try await fetch(path: "/api/balance", query: [], credential: credential)
+        return try Self.decodeBalance(from: data)
     }
 
     public func fetchUsage(range: BillingRange, credential: String) async throws -> BillingUsage {
@@ -49,79 +47,25 @@ public final class OllamaBillingProvider: BillingProvider {
         if supportsModelBreakdown {
             query.append(("group_by", "model"))
         }
-        let request = try makeRequest(path: "/api/usage", query: query, credential: credential)
-        let result = try await perform(request)
-        return try Self.decodeUsage(from: result.data, requestedRange: range)
+        let data = try await fetch(path: "/api/usage", query: query, credential: credential)
+        return try Self.decodeUsage(from: data, requestedRange: range)
     }
 
     // MARK: - 网络
 
-    /// 单次 HTTP 结果
-    private struct HTTPResult {
-        let data: Data
-        let statusCode: Int
-    }
-
-    private func makeRequest(path: String, query: [(String, String)],
-                             credential: String) throws -> URLRequest {
+    /// 一次请求：统一 Endpoint（GET + Bearer + 15s 超时）+ 统一状态码映射
+    ///
+    /// 与改造前的差异只有超时（20 → 15）：路径 / 头 / 体 / 解码 / 错误文案全部不变。
+    private func fetch(path: String, query: [(String, String)],
+                       credential: String) async throws -> Data {
         let token = credential.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else { throw BillingError.missingCredential }
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw BillingError.invalidRequest("无效的 provider 地址")
-        }
-        components.path = path
-        if !query.isEmpty {
-            components.queryItems = query.map { URLQueryItem(name: $0.0, value: $0.1) }
-        }
-        guard let url = components.url else {
-            throw BillingError.invalidRequest("无效的请求地址")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 20
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        return request
-    }
-
-    /// 执行请求并按 HTTP 状态映射为 `BillingError`
-    private func perform(_ request: URLRequest) async throws -> HTTPResult {
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            logger.warning("计费请求网络失败: \(error.localizedDescription)")
-            throw BillingError.transport(error.localizedDescription)
-        }
-        guard let http = response as? HTTPURLResponse else {
-            throw BillingError.invalidResponse("非 HTTP 响应")
-        }
-        if (200..<300).contains(http.statusCode) {
-            return HTTPResult(data: data, statusCode: http.statusCode)
-        }
-        let message = Self.errorMessage(from: data)
-        switch http.statusCode {
-        case 400:
-            throw BillingError.invalidRequest(message)
-        case 401:
-            throw BillingError.unauthorized
-        case 403:
-            throw BillingError.forbidden(message)
-        case 429:
-            let retry = http.value(forHTTPHeaderField: "Retry-After").flatMap { Double($0) }
-            throw BillingError.rateLimited(retryAfter: retry)
-        case 500...599:
-            throw BillingError.serviceUnavailable(message)
-        default:
-            throw BillingError.invalidResponse("HTTP \(http.statusCode)")
-        }
-    }
-
-    /// 解析错误响应体 `{"error": "..."}`
-    private static func errorMessage(from data: Data) -> String? {
-        struct ErrorDTO: Decodable { let error: String? }
-        return (try? JSONDecoder().decode(ErrorDTO.self, from: data))?.error
+        let url = try BillingHTTPMapper.url(base: baseURL, path: path, query: query)
+        let endpoint = BillingEndpoint.get(url: url,
+                                           headers: ["Authorization": "Bearer \(token)"],
+                                           label: displayName,
+                                           errorText: { HTTPErrorBody.message(from: $0, dialect: .plainError) })
+        return try await transport.send(endpoint)
     }
 
     // MARK: - 解码（public 供测试与调试直接验证映射）

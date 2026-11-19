@@ -208,6 +208,18 @@ public final class TransferHTTPClient: @unchecked Sendable {
 
     // MARK: - 响应解码
 
+    /// 状态分级的中文标签（与 HTTP 层分级一一对应）
+    static func gradeLabel(_ grade: HTTPStatusCode) -> String {
+        switch grade {
+        case .badRequest: return "请求参数错误"
+        case .unauthorized: return "未授权"
+        case .forbidden: return "无权限"
+        case .rateLimited: return "限流"
+        case .serverError: return "服务端错误"
+        case .unexpected: return "未预期状态"
+        }
+    }
+
     private func decode<T: Codable & Sendable>(_ type: T.Type, from data: Data, status: Int) throws -> T {
         let decoder = JSONDecoder()
         if let envelope = try? decoder.decode(ApiResponse<T>.self, from: data) {
@@ -219,7 +231,9 @@ public final class TransferHTTPClient: @unchecked Sendable {
         if let failure = try? decoder.decode(ApiResponse<EmptyPayload>.self, from: data) {
             throw TransferError.remote(code: failure.code, message: failure.message)
         }
-        throw TransferError.ioFailed("响应结构非法（HTTP \(status)）")
+        // 状态分级复用 HTTP 层唯一一份口径（HTTPStatusCode.map），这里只加后缀便于排障
+        let grade = HTTPStatusCode.map(status, retryAfter: nil, message: nil)
+        throw TransferError.ioFailed("响应结构非法（HTTP \(status)，\(Self.gradeLabel(grade))）")
     }
 
 }

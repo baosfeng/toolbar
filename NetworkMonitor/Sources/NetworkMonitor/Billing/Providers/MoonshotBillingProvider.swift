@@ -48,7 +48,7 @@ public final class MoonshotBillingProvider: BillingProvider {
     private let baseURL: URL
     /// 站点本位币种（国内站 CNY、国际站 USD）
     private let currencyCode: String
-    private let client: BillingHTTPClient
+    private let transport: any HTTPTransport
     private let logger: LoggingService
 
     public init(baseURL: URL = MoonshotBillingProvider.defaultBaseURL,
@@ -58,7 +58,7 @@ public final class MoonshotBillingProvider: BillingProvider {
         self.baseURL = baseURL
         // 未显式指定币种时按站点推断：.ai = 国际站 = USD，其余（.cn）= CNY
         self.currencyCode = currencyCode ?? (baseURL.host?.hasSuffix("moonshot.ai") == true ? "USD" : "CNY")
-        self.client = BillingHTTPClient(session: session, logger: logger)
+        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
         self.logger = logger
     }
 
@@ -70,23 +70,15 @@ public final class MoonshotBillingProvider: BillingProvider {
     public func fetchBalance(credential: String) async throws -> BillingBalance {
         let token = BillingCredentialNormalizer.token(credential)
         guard !token.isEmpty else { throw BillingError.missingCredential }
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw BillingError.invalidRequest("无效的 provider 地址")
-        }
-        components.path = Self.balancePath
-        guard let url = components.url else { throw BillingError.invalidRequest("无效的请求地址") }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
-        let response = try await client.send(request, providerName: displayName)
-        guard response.isSuccess else {
-            throw MoonshotBillingDecoding.mapHTTPError(statusCode: response.statusCode,
-                                                       retryAfter: response.retryAfter,
-                                                       message: response.message)
-        }
+        let url = try BillingHTTPMapper.url(base: baseURL, path: Self.balancePath)
+        let endpoint = BillingEndpoint.get(url: url,
+                                           headers: ["Authorization": "Bearer " + token],
+                                           userAgent: HTTPTransportDefaults.userAgent,
+                                           label: displayName,
+                                           status: MoonshotBillingDecoding.mapHTTPError)
+        let data = try await transport.send(endpoint)
         do {
-            return try MoonshotBillingDecoding.decodeBalance(from: response.data,
+            return try MoonshotBillingDecoding.decodeBalance(from: data,
                                                              currencyCode: currencyCode)
         } catch {
             logger.warning("Moonshot 余额响应解析失败（接口可能已变更）：" + describe(error))

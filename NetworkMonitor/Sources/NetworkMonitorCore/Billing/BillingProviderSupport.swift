@@ -77,19 +77,20 @@ public enum BillingHTTPErrorMapper {
                            retryAfter: TimeInterval?,
                            message: String?,
                            forbiddenMessage: String? = nil) -> BillingError {
-        switch statusCode {
-        case 400:
-            return .invalidRequest(message)
-        case 401:
+        // 状态码分级只有一份（HTTP 层 HTTPStatusCode.map），这里只负责翻成 BillingError
+        switch HTTPStatusCode.map(statusCode, retryAfter: retryAfter, message: message) {
+        case .badRequest(let text):
+            return .invalidRequest(text)
+        case .unauthorized:
             return .unauthorized
-        case 403:
-            return .forbidden(forbiddenMessage ?? message)
-        case 429:
-            return .rateLimited(retryAfter: retryAfter)
-        case 500...599:
-            return .serviceUnavailable(message)
-        default:
-            return .invalidResponse("HTTP " + String(statusCode))
+        case .forbidden(let text):
+            return .forbidden(forbiddenMessage ?? text)
+        case .rateLimited(let seconds):
+            return .rateLimited(retryAfter: seconds)
+        case .serverError(let text):
+            return .serviceUnavailable(text)
+        case .unexpected(let code):
+            return .invalidResponse("HTTP " + String(code))
         }
     }
 }

@@ -93,8 +93,8 @@ public final class GitHubUpdateChecker: UpdateChecking {
     private let repository: String
     private let userAgent: String
     private let timeout: TimeInterval
-    private let session: URLSession
-    private let logger: LoggingService
+    /// 统一传输层（URLSession 由构造参数注入）
+    private let transport: any HTTPTransport
 
     /// - Parameters:
     ///   - userAgent: 形如「一览/1.24.2」，由 App 层拼好传入（Core 不知道自身版本）
@@ -108,84 +108,71 @@ public final class GitHubUpdateChecker: UpdateChecking {
         self.repository = repository
         self.userAgent = userAgent
         self.timeout = timeout
-        self.session = session
-        self.logger = logger
+        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
     }
 
     // MARK: 请求
 
+    /// 一次请求：统一 Endpoint（GitHub 头 + 8s 超时 + 不吃缓存），错误仍收成 UpdateCheckError
     public func fetchLatestRelease() async throws -> UpdateRelease {
-        let request = try makeRequest()
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch let error as URLError {
-            let mapped = Self.mapTransport(error)
-            logger.warning("更新检查失败：URLError(\(error.code.rawValue)) \(error.localizedDescription)")
-            throw mapped
-        } catch {
-            logger.warning("更新检查失败：\(error.localizedDescription)")
-            throw UpdateCheckError.noNetwork
-        }
-        guard let http = response as? HTTPURLResponse else {
-            throw UpdateCheckError.invalidResponse("非 HTTP 响应")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            let mapped = Self.mapStatus(http, data: data)
-            logger.warning("更新检查失败：HTTP \(http.statusCode) → \(mapped.userMessage)")
-            throw mapped
-        }
+        let endpoint = Endpoint<Data>(method: .get,
+                                      url: try makeURL(),
+                                      headers: ["Accept": "application/vnd.github+json",
+                                                "X-GitHub-Api-Version": "2022-11-28"],
+                                      userAgent: userAgent,
+                                      // GitHub 给 API 响应带 max-age=60：命中缓存时「检查更新」
+                                      // 会拿到一分钟内的旧结果（发布新版本后立刻再查一次就看不出来）
+                                      timeout: timeout,
+                                      cachePolicy: .reloadIgnoringLocalCacheData,
+                                      label: "更新检查",
+                                      decoder: { $0 },
+                                      errorMapper: Self.mapFailure)
+        let data = try await transport.send(endpoint)
         return try Self.release(fromJSON: data)
     }
 
-    private func makeRequest() throws -> URLRequest {
+    private func makeURL() throws -> URL {
         let root = baseURL.absoluteString.hasSuffix("/")
             ? String(baseURL.absoluteString.dropLast())
             : baseURL.absoluteString
         guard let url = URL(string: root + "/repos/" + repository + "/releases/latest") else {
             throw UpdateCheckError.invalidResponse("无效的请求地址")
         }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = timeout
-        // 不吃 HTTP 缓存：GitHub 给 API 响应带 max-age=60，命中缓存时「检查更新」
-        // 会拿到一分钟内的旧结果（发布新版本后立刻再查一次就看不出来）
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
-        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        return request
+        return url
     }
 
     // MARK: 映射
 
-    /// 网络层错误归一化（超时单独成一类，其余都归「网络不可用」）
-    static func mapTransport(_ error: URLError) -> UpdateCheckError {
-        switch error.code {
-        case .timedOut:
-            return .timedOut
-        case .cancelled:
-            return .noNetwork
-        default:
-            return .noNetwork
+    /// 传输层失败 → UpdateCheckError（错误仍由本家定义，传输层不感知）
+    ///
+    /// public 供 TestRunner 直接断言（与 release(fromJSON:) 同一处理口径）。
+    public static func mapFailure(_ failure: HTTPFailure) -> UpdateCheckError {
+        switch failure {
+        case .transport(let detail):
+            // 超时单独成一类，其余都归「网络不可用」（与改造前 mapTransport 同口径）
+            return detail.isTimeout ? .timedOut : .noNetwork
+        case .notHTTP:
+            return .invalidResponse("非 HTTP 响应")
+        case .response(let response):
+            return mapStatus(statusCode: response.statusCode,
+                             rateLimitRemaining: response.header("x-ratelimit-remaining"),
+                             data: response.data)
         }
     }
 
     /// HTTP 状态归一化（限流优先于通用 403：GitHub 限额用尽也是 403）
-    static func mapStatus(_ http: HTTPURLResponse, data: Data) -> UpdateCheckError {
+    public static func mapStatus(statusCode: Int, rateLimitRemaining: String?, data: Data) -> UpdateCheckError {
         let message = detailMessage(from: data)
-        if http.statusCode == 429 { return .rateLimited }
-        if http.statusCode == 403 {
-            let remaining = http.value(forHTTPHeaderField: "X-RateLimit-Remaining")
-            if remaining == "0" || message.lowercased().contains("rate limit") {
+        if statusCode == 429 { return .rateLimited }
+        if statusCode == 403 {
+            if rateLimitRemaining == "0" || message.lowercased().contains("rate limit") {
                 return .rateLimited
             }
         }
-        return .httpStatus(http.statusCode, message)
+        return .httpStatus(statusCode, message)
     }
 
-    private static func detailMessage(from data: Data) -> String {
+    static func detailMessage(from data: Data) -> String {
         struct Payload: Decodable { let message: String? }
         guard let payload = try? JSONDecoder().decode(Payload.self, from: data),
               let message = payload.message, !message.isEmpty else { return "" }

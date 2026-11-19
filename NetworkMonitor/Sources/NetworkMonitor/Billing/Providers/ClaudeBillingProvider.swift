@@ -28,14 +28,14 @@ public final class ClaudeBillingProvider: BillingProvider {
     static let betaHeader = "oauth-2025-04-20"
 
     private let baseURL: URL
-    private let client: BillingHTTPClient
+    private let transport: any HTTPTransport
     private let logger: LoggingService
 
     public init(baseURL: URL = ClaudeBillingProvider.defaultBaseURL,
                 session: URLSession = .shared,
                 logger: LoggingService = AppContext.shared.logger) {
         self.baseURL = baseURL
-        self.client = BillingHTTPClient(session: session, logger: logger)
+        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
         self.logger = logger
     }
 
@@ -44,25 +44,17 @@ public final class ClaudeBillingProvider: BillingProvider {
     public func fetchBalance(credential: String) async throws -> BillingBalance {
         let token = BillingCredentialNormalizer.token(credential)
         guard !token.isEmpty else { throw BillingError.missingCredential }
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw BillingError.invalidRequest("无效的 provider 地址")
-        }
-        components.path = Self.usagePath
-        components.queryItems = [URLQueryItem(name: "cedar_ember", value: "1")]
-        guard let url = components.url else { throw BillingError.invalidRequest("无效的请求地址") }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue(Self.betaHeader, forHTTPHeaderField: "anthropic-beta")
-        let response = try await client.send(request, providerName: displayName)
-        guard response.isSuccess else {
-            throw ClaudeBillingDecoding.mapHTTPError(statusCode: response.statusCode,
-                                                    retryAfter: response.retryAfter,
-                                                    message: response.message)
-        }
+        let url = try BillingHTTPMapper.url(base: baseURL, path: Self.usagePath,
+                                            query: [("cedar_ember", "1")])
+        let endpoint = BillingEndpoint.get(url: url,
+                                           headers: ["Authorization": "Bearer \(token)",
+                                                     "anthropic-beta": Self.betaHeader],
+                                           userAgent: HTTPTransportDefaults.userAgent,
+                                           label: displayName,
+                                           status: ClaudeBillingDecoding.mapHTTPError)
+        let data = try await transport.send(endpoint)
         do {
-            return try ClaudeBillingDecoding.decodeBalance(from: response.data)
+            return try ClaudeBillingDecoding.decodeBalance(from: data)
         } catch {
             logger.warning("Claude 额度响应解析失败（接口可能已变更）：\(describe(error))")
             throw error

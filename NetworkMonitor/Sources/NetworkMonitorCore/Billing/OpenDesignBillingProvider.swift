@@ -36,8 +36,8 @@ public final class OpenDesignBillingProvider: BillingProvider {
 
 
     private let baseURL: URL
-    private let session: URLSession
-    private let logger: LoggingService
+    /// 统一传输层（URLSession 由构造参数注入，便于测试指向本地回环）
+    private let transport: any HTTPTransport
     /// workspaceId 缓存（凭据失效时清空，避免长期复用失效结果）
     private let workspaceCache = WorkspaceCache()
 
@@ -45,8 +45,7 @@ public final class OpenDesignBillingProvider: BillingProvider {
                 session: URLSession = .shared,
                 logger: LoggingService = AppContext.shared.logger) {
         self.baseURL = baseURL
-        self.session = session
-        self.logger = logger
+        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
     }
 
     // MARK: - 能力位
@@ -67,10 +66,9 @@ public final class OpenDesignBillingProvider: BillingProvider {
     public func fetchBalance(credential: String) async throws -> BillingBalance {
         let token = try Self.normalizedToken(credential)
         let workspaceID = try await resolveWorkspaceID(token: token)
-        let request = try makeRequest(path: "/api/v1/workspaces/\(workspaceID)/billing/coding-plan-usage",
-                                      query: [], token: token)
-        let result = try await perform(request)
-        return try Self.decodeBalance(from: result.data)
+        let data = try await fetch(path: "/api/v1/workspaces/\(workspaceID)/billing/coding-plan-usage",
+                                  query: [], token: token)
+        return try Self.decodeBalance(from: data)
     }
 
     /// 用量查询 —— 保留协议实现，但服务端已不再提供可用的聚合汇总
@@ -116,89 +114,56 @@ public final class OpenDesignBillingProvider: BillingProvider {
     /// 解析 workspaceId（优先缓存）
     private func resolveWorkspaceID(token: String) async throws -> String {
         if let cached = workspaceCache.value(for: token) { return cached }
-        let request = try makeRequest(path: "/api/v1/workspaces", query: [], token: token)
-        let result = try await perform(request)
-        let id = try Self.decodeWorkspaceID(from: result.data)
+        let data = try await fetch(path: "/api/v1/workspaces", query: [], token: token)
+        let id = try Self.decodeWorkspaceID(from: data)
         workspaceCache.store(id, for: token)
         return id
     }
     // MARK: - 网络
 
-    private struct HTTPResult {
-        let data: Data
-    }
-
-    private func makeRequest(path: String, query: [(String, String)],
-                             token: String) throws -> URLRequest {
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw BillingError.invalidRequest("无效的 provider 地址")
-        }
-        components.path = path
-        if !query.isEmpty {
-            components.queryItems = query.map { URLQueryItem(name: $0.0, value: $0.1) }
-        }
-        guard let url = components.url else {
-            throw BillingError.invalidRequest("无效的请求地址")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 20
-        // 登录态只认 Cookie：Bearertoken 形式服务端一律 401
-        request.setValue("\(Self.sessionCookieName)=\(token)", forHTTPHeaderField: "Cookie")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        return request
-    }
-
-    /// 执行请求并按 HTTP 状态映射为 `BillingError`
-    private func perform(_ request: URLRequest) async throws -> HTTPResult {
-        let data: Data
-        let response: URLResponse
+    /// 一次请求：统一 Endpoint（GET + 登录态 Cookie + 15s 超时）+ 统一状态码映射
+    ///
+    /// 与改造前的差异只有超时（20 → 15）：路径 / Cookie 头 / 解码 / 错误文案都不变；
+    /// 401 清 workspace 缓存的既有语义保留在 catch 里（等价于改造前 perform 中的分支）。
+    private func fetch(path: String, query: [(String, String)],
+                       token: String) async throws -> Data {
+        let url = try BillingHTTPMapper.url(base: baseURL, path: path, query: query)
+        let endpoint = BillingEndpoint.get(url: url,
+                                           headers: ["Cookie": "\(Self.sessionCookieName)=\(token)"],
+                                           label: displayName,
+                                           errorText: { HTTPErrorBody.message(from: $0, dialect: .plainError) },
+                                           status: Self.mapHTTPError)
         do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            logger.warning("Open Design 计费请求网络失败: \(error.localizedDescription)")
-            throw BillingError.transport(error.localizedDescription)
-        }
-        guard let http = response as? HTTPURLResponse else {
-            throw BillingError.invalidResponse("非 HTTP 响应")
-        }
-        if (200..<300).contains(http.statusCode) {
-            return HTTPResult(data: data)
-        }
-        let code = Self.errorCode(from: data)
-        switch http.statusCode {
-        case 400:
-            throw BillingError.invalidRequest(Self.errorMessage(from: data))
-        case 401:
+            return try await transport.send(endpoint)
+        } catch BillingError.unauthorized {
             // 登录态失效：清掉 workspace 缓存，下次凭据更新后重新发现
             workspaceCache.clear()
             throw BillingError.unauthorized
+        }
+    }
+
+    /// 状态码 → BillingError（403 的 workspace_member_required 有专门话术）
+    ///
+    /// 纯函数，供测试直接验证映射；`message` 是已按本家口径提取好的错误体文案。
+    public static func mapHTTPError(statusCode: Int, retryAfter: TimeInterval?,
+                                    message: String?) -> BillingError {
+        switch statusCode {
+        case 400:
+            return .invalidRequest(message)
+        case 401:
+            return .unauthorized
         case 403:
-            let message = code == "workspace_member_required"
+            let text = message == "workspace_member_required"
                 ? "无权访问该工作区，请确认账号仍在成员列表中"
-                : Self.errorMessage(from: data)
-            throw BillingError.forbidden(message)
+                : message
+            return .forbidden(text)
         case 429:
-            let retry = http.value(forHTTPHeaderField: "Retry-After").flatMap { Double($0) }
-            throw BillingError.rateLimited(retryAfter: retry)
+            return .rateLimited(retryAfter: retryAfter)
         case 500...599:
-            throw BillingError.serviceUnavailable(Self.errorMessage(from: data))
+            return .serviceUnavailable(message)
         default:
-            throw BillingError.invalidResponse("HTTP \(http.statusCode)")
+            return .invalidResponse("HTTP \(statusCode)")
         }
     }
 
-    /// 解析错误响应体 `{"error":"..."}` 或 `{"success":false,"error":{"...":...}}`
-    private static func errorMessage(from data: Data) -> String? {
-        struct PlainDTO: Decodable { let error: String? }
-        if let plain = try? JSONDecoder().decode(PlainDTO.self, from: data), let message = plain.error {
-            return message
-        }
-        return nil
-    }
-
-    /// 解析错误码（如 `workspace_member_required`）
-    private static func errorCode(from data: Data) -> String? {
-        errorMessage(from: data)
-    }
 }

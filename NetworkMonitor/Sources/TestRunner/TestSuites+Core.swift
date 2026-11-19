@@ -20,6 +20,7 @@ func runCoreSuites() {
     runDatabaseConfigTests()
     runAppEventsTests()
     runLogRedactionTests()
+    runHTTPTransportTests()
     runNotificationTests()
     runCueSoundSynthTests()
     runCueSoundStoreTests()

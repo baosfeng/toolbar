@@ -28,14 +28,14 @@ public final class CursorBillingProvider: BillingProvider {
     public static let sessionCookieName = "WorkosCursorSessionToken"
 
     private let baseURL: URL
-    private let client: BillingHTTPClient
+    private let transport: any HTTPTransport
     private let logger: LoggingService
 
     public init(baseURL: URL = CursorBillingProvider.defaultBaseURL,
                 session: URLSession = .shared,
                 logger: LoggingService = AppContext.shared.logger) {
         self.baseURL = baseURL
-        self.client = BillingHTTPClient(session: session, logger: logger)
+        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
         self.logger = logger
     }
 
@@ -44,26 +44,18 @@ public final class CursorBillingProvider: BillingProvider {
     public func fetchBalance(credential: String) async throws -> BillingBalance {
         let cookie = CursorBillingDecoding.cookieHeader(from: credential)
         guard !cookie.isEmpty else { throw BillingError.missingCredential }
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw BillingError.invalidRequest("无效的 provider 地址")
-        }
-        components.path = Self.usagePath
-        guard let url = components.url else { throw BillingError.invalidRequest("无效的请求地址") }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        let url = try BillingHTTPMapper.url(base: baseURL, path: Self.usagePath)
         // 控制台接口对跨站来源比较敏感：带上来源头降低被 Cloudflare 拦的概率
-        request.setValue(baseURL.absoluteString, forHTTPHeaderField: "Origin")
-        request.setValue(baseURL.appending(path: "/dashboard").absoluteString, forHTTPHeaderField: "Referer")
-        let response = try await client.send(request, providerName: displayName)
-        guard response.isSuccess else {
-            throw CursorBillingDecoding.mapHTTPError(statusCode: response.statusCode,
-                                                     retryAfter: response.retryAfter,
-                                                     message: response.message)
-        }
+        let endpoint = BillingEndpoint.get(url: url,
+                                           headers: ["Cookie": cookie,
+                                                     "Origin": baseURL.absoluteString,
+                                                     "Referer": baseURL.appending(path: "/dashboard").absoluteString],
+                                           userAgent: HTTPTransportDefaults.userAgent,
+                                           label: displayName,
+                                           status: CursorBillingDecoding.mapHTTPError)
+        let data = try await transport.send(endpoint)
         do {
-            return try CursorBillingDecoding.decodeBalance(from: response.data)
+            return try CursorBillingDecoding.decodeBalance(from: data)
         } catch {
             logger.warning("Cursor 额度响应解析失败（接口可能已变更）：\(describe(error))")
             throw error

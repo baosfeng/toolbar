@@ -75,7 +75,34 @@ func runUpdateCheckerTests() {
     assertEqual(UpdateCheckError.invalidResponse("缺少 tag_name").userMessage,
                 "响应解析失败（缺少 tag_name）", "解析失败文案")
 
-    // MARK: 上次检查时间（偏好）
+    // MARK: HTTP 状态 → 错误（限流判定依赖响应头透出）
+
+    let rateLimitBody = Data(#"{"message":"API rate limit exceeded"}"#.utf8)
+    assertEqual(GitHubUpdateChecker.mapStatus(statusCode: 403, rateLimitRemaining: "0",
+                                              data: rateLimitBody), .rateLimited,
+                "403 且剩余配额 0 → 限流（X-RateLimit-Remaining 由传输层透出）")
+    assertEqual(GitHubUpdateChecker.mapStatus(statusCode: 403, rateLimitRemaining: nil,
+                                              data: rateLimitBody), .rateLimited,
+                "403 且错误体提到 rate limit → 限流")
+    assertEqual(GitHubUpdateChecker.mapStatus(statusCode: 403, rateLimitRemaining: "17",
+                                              data: Data(#"{"message":"Forbidden"}"#.utf8)),
+                .httpStatus(403, "Forbidden"), "403 但配额还有 → 普通状态错误")
+    assertEqual(GitHubUpdateChecker.mapStatus(statusCode: 429, rateLimitRemaining: nil,
+                                              data: Data()),
+                .rateLimited, "429 直接判限流")
+    assertEqual(GitHubUpdateChecker.mapStatus(statusCode: 404, rateLimitRemaining: nil,
+                                              data: Data()),
+                .httpStatus(404, ""), "404 → 无细节的状态错误")
+
+    // 传输层失败 → UpdateCheckError（超时单独成类，其余归「网络不可用」）
+    assertEqual(GitHubUpdateChecker.mapFailure(.transport(HTTPTransportFailure(message: "超时", isTimeout: true))),
+                .timedOut, "超时 → 请求超时")
+    assertEqual(GitHubUpdateChecker.mapFailure(.transport(HTTPTransportFailure(message: "断网"))),
+                .noNetwork, "连接失败 → 网络不可用")
+    assertEqual(GitHubUpdateChecker.mapFailure(.notHTTP), .invalidResponse("非 HTTP 响应"),
+                "非 HTTP 响应 → 解析失败")
+
+    // 上次检查时间（偏好）
 
     let storage = InMemoryStorage()
     let preferences = UpdateCheckPreferences(storage: storage)

@@ -39,8 +39,8 @@ public final class OpencodeGoBillingProvider: BillingProvider {
     static let rateLimitedStatus = "rate-limited"
 
     private let baseURL: URL
-    private let session: URLSession
-    private let logger: LoggingService
+    /// 统一传输层（URLSession 由构造参数注入，便于测试指向本地回环）
+    private let transport: any HTTPTransport
     /// 当前时刻（旧形态 resetInSec 是相对秒数，需要基准时刻换算出绝对时刻）
     private let now: @Sendable () -> Date
 
@@ -49,17 +49,15 @@ public final class OpencodeGoBillingProvider: BillingProvider {
                 logger: LoggingService = AppContext.shared.logger,
                 now: @escaping @Sendable () -> Date = { Date() }) {
         self.baseURL = baseURL
-        self.session = session
-        self.logger = logger
+        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
         self.now = now
     }
 
     // MARK: - BillingProvider
 
     public func fetchBalance(credential: String) async throws -> BillingBalance {
-        let request = try makeRequest(credential: credential)
-        let result = try await perform(request)
-        return try Self.decodeBalance(from: result.data, now: now())
+        let data = try await fetch(credential: credential)
+        return try Self.decodeBalance(from: data, now: now())
     }
 
     /// 用量明细：OpenCode Go 不提供 —— 恒抛 invalidRequest
@@ -132,48 +130,19 @@ public final class OpencodeGoBillingProvider: BillingProvider {
 
     // MARK: - 网络
 
-    /// 单次 HTTP 结果
-    private struct HTTPResult {
-        let data: Data
-    }
-
-    private func makeRequest(credential: String) throws -> URLRequest {
+    /// 一次请求：统一 Endpoint（GET + Bearer + 15s 超时）+ 统一状态码映射
+    ///
+    /// 与改造前的差异只有超时（20 → 15）：路径 / 头 / 解码 / 错误文案都不变。
+    private func fetch(credential: String) async throws -> Data {
         let token = credential.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !token.isEmpty else { throw BillingError.missingCredential }
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw BillingError.invalidRequest("无效的 provider 地址")
-        }
-        components.path = Self.usagePath
-        guard let url = components.url else {
-            throw BillingError.invalidRequest("无效的请求地址")
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 20
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        return request
-    }
-
-    /// 执行请求并按 HTTP 状态映射为 BillingError
-    private func perform(_ request: URLRequest) async throws -> HTTPResult {
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            logger.warning("OpenCode Go 计费请求网络失败: \(error.localizedDescription)")
-            throw BillingError.transport(error.localizedDescription)
-        }
-        guard let http = response as? HTTPURLResponse else {
-            throw BillingError.invalidResponse("非 HTTP 响应")
-        }
-        if (200..<300).contains(http.statusCode) {
-            return HTTPResult(data: data)
-        }
-        throw Self.mapHTTPError(statusCode: http.statusCode,
-                                retryAfter: http.value(forHTTPHeaderField: "Retry-After").flatMap { Double($0) },
-                                message: Self.errorMessage(from: data))
+        let url = try BillingHTTPMapper.url(base: baseURL, path: Self.usagePath)
+        let endpoint = BillingEndpoint.get(url: url,
+                                           headers: ["Authorization": "Bearer \(token)"],
+                                           label: displayName,
+                                           errorText: { HTTPErrorBody.message(from: $0, dialect: .errorOrNested) },
+                                           status: Self.mapHTTPError)
+        return try await transport.send(endpoint)
     }
 
     /// HTTP 状态码 → BillingError（纯函数，供测试直接验证映射）
@@ -195,21 +164,5 @@ public final class OpencodeGoBillingProvider: BillingProvider {
         default:
             return .invalidResponse("HTTP \(statusCode)")
         }
-    }
-
-    /// 解析错误响应体：兼容 {"error":"..."} 与 {"error":{"message":"..."}} 两种形态
-    private static func errorMessage(from data: Data) -> String? {
-        struct PlainDTO: Decodable { let error: String? }
-        struct NestedTextDTO: Decodable { let message: String? }
-        struct NestedDTO: Decodable { let error: NestedTextDTO? }
-
-        if let plain = try? JSONDecoder().decode(PlainDTO.self, from: data),
-           let message = plain.error, !message.isEmpty {
-            return message
-        }
-        if let nested = try? JSONDecoder().decode(NestedDTO.self, from: data) {
-            return nested.error?.message
-        }
-        return nil
     }
 }
