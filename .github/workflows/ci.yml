@@ -60,6 +60,19 @@ jobs:
       - name: File size gate
         run: bash NetworkMonitor/Scripts/check-file-size.sh
 
+      # 同族合计门禁（按类名前缀聚合，只许变小）：此前只在 pre-commit 与 release.sh 上跑，
+      # CI 全绿但本地 pre-commit 红的口子留了很久；两条门禁在同一处失败更容易定位
+      - name: File families gate
+        run: bash NetworkMonitor/Scripts/check-file-families.sh
+
+      # 脚手架生成器只做「生成新文件 + 打印人工步骤」，脚本本身坏了不会让构建红，
+      # 所以先做语法自检；产物可编译性靠本地 dry-run 验证（见 Scripts/scaffold/README.md）
+      - name: Scaffold scripts syntax
+        run: |
+          for script in NetworkMonitor/Scripts/scaffold/*.sh; do
+            bash -n "$script"
+          done
+
       # 发布说明生成器回归：v1.27.0 的三处「发出去才发现」在这里前置
       # （compare 链接指向 404 的 codeup owner / 逐条 hash 不可点 / @Sendable 在页脚挂出假贡献者）
       - name: Release notes regression

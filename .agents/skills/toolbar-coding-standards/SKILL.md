@@ -9,11 +9,12 @@ description: 本项目（toolbar / 一览）专属编码规范：架构原则、
 
 ## 项目速览
 
-- Swift 6.3（swiftLanguageModes: [.v6]），SwiftPM 四目标：
+- Swift 6.3（swiftLanguageModes: [.v6]），SwiftPM **五**目标：
   - `NetworkMonitorCore`（库，**禁止 import AppKit**）— 领域协议、数据库、统计、模型、事件分发、格式化
   - `NetworkMonitorUI`（库，与 AppKit / Core 都无关）— 只放展示纯逻辑（Hero 派生、单位排版等），让 TestRunner 能直接断言 UI 口径而不必 import 可执行 target
-  - `NetworkMonitor`（可执行）— UI、Hook 监听器、事件处理器、监控实现（AppKit 仅限此目标）
+  - `NetworkMonitor`（可执行）— UI、事件分发、监控实现（AppKit 仅限此目标）
   - `TestRunner`（可执行）— 手写断言测试（本机无 Xcode SDK，不用 XCTest）
+  - `nmcli`（可执行）— UI 自动化 CLI：给菜单栏 app 做程序化验收，用法见 `docs/开发指南/UI-自动化-CLI.md`
 - 构建：`cd NetworkMonitor && swift build --disable-sandbox --build-system native`（本机只有 Command Line Tools，默认后端初始化即失败，统一追加该参数）
 - 测试：`cd NetworkMonitor && swift run --disable-sandbox --build-system native TestRunner`（须显示「🎉 所有测试通过！」）
 - 打包：`cd NetworkMonitor && ./Scripts/build-app.sh`（部署到 /Applications 并自动启动）
@@ -24,6 +25,7 @@ description: 本项目（toolbar / 一览）专属编码规范：架构原则、
 - 改文档 → `docs/开发指南/文档规范.md`
 - 提交 → `docs/开发指南/提交规范.md`
 - 查代码 → 必须用 codebase-memory MCP 知识图谱，禁止直接 grep/glob/lsp
+- **加一类新东西（分页 / 设置页 / provider / 通知事件 / 菜单栏指标 / 探针）→ `docs/开发指南/扩展点清单.md`**：逐项列出必改的 file:line、必补测试、必更新文档
 - 规范更新 → 一律写入本 skill，**禁止另建独立规范文档**
 
 ## 架构分层与依赖方向
@@ -31,8 +33,9 @@ description: 本项目（toolbar / 一览）专属编码规范：架构原则、
 ```
 main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具体类的地方）
   → MenuBarManager（UI，构造器注入协议）
-  → ReasonixHookMonitor（UDS 监听）→ HookEventDispatcher（注册表）→ HookEventHandler 实现
   → 数据层：DatabaseService / HookEventRepository / TokenUsageRepository（AppDatabase 组合）
+  → 变化广播：AppEvents（写偏好 / 落库后发，UI 订阅即刷新）
+  → 通知出口：NotificationServicing（App 层封装 UNUserNotificationCenter，Core 不依赖 UserNotifications）
 ```
 
 依赖方向：`NetworkMonitor → NetworkMonitorCore`，Core 绝不反向依赖。协议全部定义在 `Sources/NetworkMonitorCore/Domain/Protocols/`。
@@ -56,10 +59,13 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
     族合计降下来后用 `--update` 收紧基线，增长属合理时先重划再 update
 - conformance 声明在扩展文件；跨文件访问成员时 private 放宽为 internal 并注释原因
 
-### 4. SPI 扩展（可插拔）
-- 新增事件处理 = 实现 `HookEventHandler`（`handledTypes` 空集 = 全部事件）+ `dispatcher.register`；**禁止改** `ReasonixHookMonitor` 核心
-- 新增事件类型 = 扩展枚举 + 新处理器，禁止在分发核心加 if 链
-- 处理器注册顺序：落库 → 工具调用 → 通知 → stats 同步
+### 4. 扩展点（协议 SPI + 注册表，逐项清单见 `docs/开发指南/扩展点清单.md`）
+- 新增**额度 provider** = 实现 `BillingProvider`（Core 协议）+ 在组合根 `AppCoordinator` 的 `billingKinds` 注册；UI 自动出现在额度页，不改面板代码
+- 新增**通知事件** = `NotificationEvent` 加 case + 补 5 个 switch + `NotificationCue` 补 cue；设置卡片用现成的 `SettingsNotificationEventCard`，事件跟着功能页走
+- 新增**面板分页 / 设置分类** = 枚举 case + 稳定 id 登记 + 懒装配/工厂注册；id 一旦写出就进偏好键，**发布后不可改名**
+- 新增**测试套件** = 在 `Sources/TestRunner/TestSuites+<域>.swift` 加一行调用（`main.swift` 不再改；漏登记由 `TestSuiteRegistrationTests` 判红）
+- 扩展一律「新增文件 + 一处注册」，**不在分发核心加 if 链**
+- 旧规范里写的 `ReasonixHookMonitor → HookEventDispatcher → HookEventHandler` 已在代码中不存在（`grep -rin 'reasonix' Sources/` 零命中），不要再引用
 
 ### 5. 基础设施注入
 - 禁止直读 `UserDefaults.standard`；用 `KeyValueStorage`（`AppContext.shared.storage` 或注入）
@@ -130,7 +136,8 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 
 ## 测试纪律
 
-- **新增代码必须配测试**：每新增类/方法在 `Sources/TestRunner/main.swift` 添加断言（`assertEqual`/`assertNotNil`），覆盖正常/边界/异常
+- **新增代码必须配测试**：新建 `Sources/TestRunner/<域>Tests.swift`，在 `Sources/TestRunner/TestSuites+<域>.swift` 加一行调用（**main.swift 不再改**），覆盖正常/边界/异常
+- 断言失败**累计**、跑完由 `TestAssertions.finish()` 统一 `exit(1)`：一次能看到全部 ❌；`guard … else { exit(1) }` 这类前置条件失败仍然即停
 - 数据库测试用 `db.initializeInMemory()`；协议可 mock（如 `RecordingHandler` 测 dispatcher）
 - 提交前必须 `swift run --disable-sandbox --build-system native TestRunner` 全绿
 

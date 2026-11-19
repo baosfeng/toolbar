@@ -14,4 +14,10 @@ repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
 bash "NetworkMonitor/Scripts/check-file-size.sh"
-exec bash "NetworkMonitor/Scripts/check-file-families.sh"
+bash "NetworkMonitor/Scripts/check-file-families.sh"
+
+# 脚手架脚本语法自检：生成器坏了不影响构建，只影响「下次新增功能」的体验，
+# 所以在提交时就拦住（四个脚本 + 公共库，bash -n 是纯解析、毫秒级）
+for script in NetworkMonitor/Scripts/scaffold/*.sh; do
+    bash -n "$script"
+done
