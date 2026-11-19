@@ -70,6 +70,11 @@ runPermissionSourceGuardTests()
 runClipboardHashTests()
 runClipboardFuzzySearchTests()
 
+// MARK: - 事务原语 / 迁移登记表 / 删板原子性（一个业务动作 = 一个事务）
+runDatabaseTransactionTests()
+runMigrationRegistryTests()
+runBoardDeleteAtomicityTests()
+
 // MARK: - 剪贴板：仓储 / 全文检索 / 超限清理 / 未初始化容错
 // schema 阶梯（迁移幂等 / 列序不错位）先行：后续仓储断言依赖表结构已就位
 runClipboardSchemaLadderTests()

@@ -39,10 +39,18 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
     let readQueue = DatabaseQueue(label: "com.bsfeng.yilan.database.read")
 
     /// 只读连接指针（只在 readQueue 上使用；nil = 不可用，只读查询退化为写队列）
-    private var readDB: OpaquePointer?
+    /// 只读连接指针（internal：只读连接生命周期的扩展文件要访问，见 DatabaseManager+ReadConnection.swift）
+    var readDB: OpaquePointer?
+
+    /// 删板事务的故障注入点：返回 true 即模拟「条目已删、板行删除失败」的崩溃现场
+    ///
+    /// 生产路径恒为 nil；TestRunner 用它守住 T1 的防复发断言（删一半必须整体回滚）。
+    /// 放主类而不是板扩展：扩展不能有存储属性。
+    public var deleteBoardFaultProbe: (() -> Bool)?
 
     /// readDB 的开合与取用互斥（查询持锁期间不会被 close 关掉连接）
-    private let readLock = NSLock()
+    /// 只读连接的开合与取用互斥（internal：只读连接的扩展文件要访问，见 DatabaseManager+ReadConnection.swift）
+    let readLock = NSLock()
 
     /// 显式指定的数据库文件路径（nil = 默认路径）
     private let pathOverride: String?
@@ -111,31 +119,10 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
         // 启用 WAL 模式 — 读写不互相阻塞
         applyPragma("journal_mode", value: "WAL")
 
-        migrateIfNeeded()
+        _migrateOnWriteQueue()
         // 只读连接必须在写连接建好表之后再开：READONLY 无法建表，也依赖 WAL / -shm 已就位
         openReadConnection()
         logger.info("数据库已就绪: \(LogRedaction.path(dbPath))")
-    }
-
-    /// 打开只读连接（与写连接指向同一份 WAL，各自独立持有）
-    ///
-    /// 用 `SQLITE_OPEN_READONLY`：连接级只读，写语句会直接被 SQLite 拒掉（测试有断言）。
-    /// WAL 模式下只读连接读的是最新已提交快照，写连接 checkpoint 与否都不影响可见性。
-    private func openReadConnection() {
-        var conn: OpaquePointer?
-        let status = dbPath.withCString {
-            sqlite3_open_v2($0, &conn, SQLITE_OPEN_READONLY, nil)
-        }
-        guard status == SQLITE_OK, let conn else {
-            if let conn { sqlite3_close(conn) }
-            logger.warning("只读连接打开失败（\(status)），只读查询退回写队列")
-            return
-        }
-        // mmap 与写连接同口径：purgeable 缓存死锁的规避点不能只做一半
-        applyPragma("mmap_size", value: "0", on: conn)
-        readLock.lock()
-        readDB = conn
-        readLock.unlock()
     }
 
     private func _openInMemory() {
@@ -146,22 +133,12 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
             return
         }
 
-        migrateIfNeeded()
+        _migrateOnWriteQueue()
         // `:memory:` 是每连接私有的，第二个连接看不见它：只读查询自然退化为走写队列
         logger.info("内存数据库已就绪")
     }
 
-    // MARK: - Schema 迁移
-
-    /// 基于 PRAGMA user_version 的增量迁移（幂等，每次启动自动执行）
-    /// - Note: public 仅为 TestRunner 验证迁移逻辑；应用启动时已自动调用
-    public func migrateIfNeeded() {
-        // 剪贴板历史表（幂等建表，user_version 迁移到 2）
-        migrateClipboardSchema()
-        // Harness 索引表：只读连接（READONLY）不能建表，必须在写连接上先建好，
-        // 否则首次索引前的聚合查询在只读连接上会报「no such table」
-        if let db { _ = harnessMigrateSchema(db) }
-    }
+    // MARK: - 连接参数与关闭
 
     /// 执行 PRAGMA 语句
     /// 设置 PRAGMA
@@ -171,7 +148,8 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
     /// step 返回 `SQLITE_ROW` 而不是 `SQLITE_DONE`。只认 DONE 会把「设置成功」
     /// 记成失败（日志里那两条「another row available」就是这么来的），
     /// 让真正失败的 PRAGMA 淹没在假告警里。
-    private func applyPragma(_ name: String, value: String, on connection: OpaquePointer? = nil) {
+    /// internal：只读连接打开时也要设同一份 mmap 口径（见 DatabaseManager+ReadConnection.swift）
+    func applyPragma(_ name: String, value: String, on connection: OpaquePointer? = nil) {
         guard let db = connection ?? db else { return }
         let sql = "PRAGMA \(name)=\(value);"
         var stmt: OpaquePointer?
@@ -219,69 +197,33 @@ public final class DatabaseManager: @unchecked Sendable, DatabaseService {
     }
 
     private func _query(sql: String, handler: (OpaquePointer) -> Void) {
-        guard let db else { return }
+        // 失败一律留痕：静默 return 会让「查不到数据」与「SQL 写错了」在调用方看起来一样
+        guard let db else {
+            logger.warning("数据库未就绪，查询被跳过: \(Self.sqlSummary(sql))")
+            return
+        }
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
 
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logger.error("查询准备失败(\(Self.sqlSummary(sql))): \(String(cString: sqlite3_errmsg(db)))")
             return
         }
 
-        while sqlite3_step(stmt) == SQLITE_ROW {
+        var stepResult = sqlite3_step(stmt)
+        while stepResult == SQLITE_ROW {
             handler(stmt!)
+            stepResult = sqlite3_step(stmt)
+        }
+        // 正常收尾是 SQLITE_DONE；其余（约束 / 磁盘 / 忙）必须留痕，否则调用方只看到「没数据」
+        if stepResult != SQLITE_DONE {
+            logger.error("查询执行失败(\(Self.sqlSummary(sql))): step=\(stepResult) \(String(cString: sqlite3_errmsg(db)))")
         }
     }
 
-    // MARK: - 只读访问
-
-    /// 只读执行：有只读连接时走只读队列，否则退化为写队列（内存库 / 连接未开）
-    ///
-    /// 读连接与写连接各自独立持有 → 后台索引写库期间，只读查询不再排在写队列后面。
-    /// - Parameters:
-    ///   - fallback: 数据库不可用时的返回值
-    ///   - body: 在对应队列上执行；**内部不得再调本类的队列同步接口**，否则死锁
-    @inline(__always)
-    func withReadDB<T>(_ fallback: T, _ body: (OpaquePointer) -> T) -> T {
-        readLock.lock()
-        guard let conn = readDB else {
-            readLock.unlock()
-            return serialQueue.sync { () -> T in
-                guard let db else { return fallback }
-                return body(db)
-            }
-        }
-        // 持锁到查询结束：close() 不会在查询中间关掉这条连接
-        defer { readLock.unlock() }
-        return readQueue.sync { body(conn) }
-    }
-}
-
-// MARK: - SQLite3 辅助扩展
-
-extension DatabaseManager {
-    /// SQLITE_TRANSIENT — 让 SQLite 在绑定时就复制文本
-    ///
-    /// 传 nil（= SQLITE_STATIC）时 SQLite 只保存指针、不复制内容，而
-    /// `(value as NSString).utf8String` 返回的缓冲区随桥接对象释放即失效
-    /// （表达式结束、下一行准备语句、下一次分配都可能复用它），
-    /// 于是写进库的可能是上一次的字符串或乱码。所有绑定一律走 TRANSIENT。
-    ///
-    /// 用局部量而非全局常量：非 Sendable 的 C 函数指针做全局常量会触发 Swift 6 并发检查。
-    static var sqliteTransient: sqlite3_destructor_type {
-        unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-    }
-
-    /// 绑定文本字段（自动复制）
-    func sqlite3_bind_text_copy(_ stmt: OpaquePointer?, _ index: Int32, _ value: String) {
-        sqlite3_bind_text(stmt, index, value, -1, Self.sqliteTransient)
-    }
-
-    /// 绑定可空文本字段：nil 则绑定 NULL
-    func sqlite3_bind_text_or_null(_ stmt: OpaquePointer?, _ index: Int32, _ value: String?) {
-        if let value {
-            sqlite3_bind_text_copy(stmt, index, value)
-        } else {
-            sqlite3_bind_null(stmt, index)
-        }
+    /// SQL 摘要：日志只留前 80 字符，避免整条语句刷屏
+    static func sqlSummary(_ sql: String) -> String {
+        let flattened = sql.replacingOccurrences(of: "\n", with: " ")
+        return flattened.count <= 80 ? flattened : String(flattened.prefix(80)) + "…"
     }
 }

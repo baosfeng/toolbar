@@ -23,6 +23,12 @@ public protocol DatabaseService: AnyObject, Sendable {
 
     /// 执行查询，每行回调一次 handler
     func query(sql: String, handler: @escaping (OpaquePointer) -> Void)
+
+    /// 在一个事务里执行一组写入：正常返回即提交，抛出即整体回滚（一个业务动作 = 一个事务）
+    ///
+    /// 实现必须把 `body` 调度到写队列上执行，且嵌套调用不再开第二个事务
+    /// （见 `DatabaseTransaction.swift`）。调用方不得在已持有写队列时再调本方法。
+    func withTransaction<T>(_ body: (OpaquePointer) throws -> T) throws -> T
 }
 
 // MARK: - 完整数据库能力组合

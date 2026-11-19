@@ -40,7 +40,8 @@ func runClipboardSchemaLadderTests() {
         db.initializeInMemory()
         defer { db.close() }
         db.query(sql: "PRAGMA user_version = 0") { _ in }
-        db.migrateIfNeeded()
+        // 迁移日志已记过，因此走 replayMigrations 强制重跑；各迁移段自身幂等
+        db.replayMigrations()
         assertEqual(currentVersion(db), Int(ClipboardSchema.latestVersion), "版本回退后可重放升到最新")
     }
 

@@ -105,25 +105,20 @@ extension DatabaseManager: HarnessTokenRepository {
         serialQueue.sync { () -> Bool in
             guard let db, harnessMigrateSchema(db) else { return false }
             // 单会话整体在一个事务内完成：先删旧事件再插入，保证重复扫描幂等
-            guard clipExec(db, "BEGIN IMMEDIATE") else {
-                logger.warning("Harness 会话写入事务开启失败: " + String(cString: sqlite3_errmsg(db)))
-                return false
-            }
-            guard harnessDeleteEvents(db, sessionID: record.sessionID) else {
-                _ = clipExec(db, "ROLLBACK")
-                return false
-            }
-            guard harnessInsertEvents(db, events: events, fallbackCwd: cwd) else {
-                _ = clipExec(db, "ROLLBACK")
-                return false
-            }
-            guard harnessUpsertScanRecord(db, record: record) else {
-                _ = clipExec(db, "ROLLBACK")
-                return false
-            }
-            guard clipExec(db, "COMMIT") else {
-                _ = clipExec(db, "ROLLBACK")
-                logger.warning("Harness 会话写入提交失败: " + String(cString: sqlite3_errmsg(db)))
+            do {
+                try NetworkMonitorCore.withTransaction(db, mode: .immediate) { conn in
+                    guard harnessDeleteEvents(conn, sessionID: record.sessionID) else {
+                        throw DatabaseOperationError("Harness 事件删除失败")
+                    }
+                    guard harnessInsertEvents(conn, events: events, fallbackCwd: cwd) else {
+                        throw DatabaseOperationError("Harness 事件写入失败")
+                    }
+                    guard harnessUpsertScanRecord(conn, record: record) else {
+                        throw DatabaseOperationError("Harness 扫描记录写入失败")
+                    }
+                }
+            } catch {
+                logger.warning("Harness 会话写入失败，已回滚: \(error)")
                 return false
             }
             return true

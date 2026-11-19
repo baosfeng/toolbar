@@ -9,6 +9,47 @@ import SQLite3
 /// - Warning: 不得在 query(sql:handler:) 回调内或串行队列上下文调用，否则死锁。
 extension DatabaseManager: ClipboardRepository {
 
+    // MARK: - 删除（先取被删行、再删行；事务边界由调用方决定）
+
+    /// 「先取被删行、再删行」单事务 —— 删除类接口共用（selectSQL 的 WHERE 必须与 deleteSQL 一致）
+    ///
+    /// 事务边界走 \`withTransaction\`；失败整体回滚并返回 nil（调用方据此跳过图片回收）。
+    func clipDeleteBatch(_ db: OpaquePointer, selectSQL: String, deleteSQL: String,
+                         failureLabel: String, bind: (OpaquePointer?) -> Void) -> [ClipboardItem]? {
+        do {
+            return try NetworkMonitorCore.withTransaction(db) { conn in
+                try clipDeleteRows(conn, selectSQL: selectSQL, deleteSQL: deleteSQL, bind: bind)
+            }
+        } catch {
+            logger.warning("\(failureLabel)失败，已回滚: \(error)")
+            return nil
+        }
+    }
+
+    /// 「先取被删行、再删行」——**调用方负责事务边界**（供需要与别的表同事务的路径复用）
+    ///
+    /// 先取后删是既有不变量：返回被删行（含 imagePath）供上层回收落盘原图与缩略图。
+    func clipDeleteRows(_ conn: OpaquePointer, selectSQL: String, deleteSQL: String,
+                        bind: (OpaquePointer?) -> Void) throws -> [ClipboardItem] {
+        var doomedStmt: OpaquePointer?
+        defer { sqlite3_finalize(doomedStmt) }
+        guard sqlite3_prepare_v2(conn, selectSQL, -1, &doomedStmt, nil) == SQLITE_OK else {
+            throw DatabaseOperationError("待删行查询准备失败: \(String(cString: sqlite3_errmsg(conn)))")
+        }
+        bind(doomedStmt)
+        let doomed = clipItems(from: doomedStmt)
+        var deleteStmt: OpaquePointer?
+        defer { sqlite3_finalize(deleteStmt) }
+        guard sqlite3_prepare_v2(conn, deleteSQL, -1, &deleteStmt, nil) == SQLITE_OK else {
+            throw DatabaseOperationError("删除语句准备失败: \(String(cString: sqlite3_errmsg(conn)))")
+        }
+        bind(deleteStmt)
+        guard sqlite3_step(deleteStmt) == SQLITE_DONE else {
+            throw DatabaseOperationError("删除失败: \(String(cString: sqlite3_errmsg(conn)))")
+        }
+        return doomed
+    }
+
     // MARK: - 写入
 
     public func saveClipboardItem(_ draft: ClipboardDraft) -> ClipboardItem? {
@@ -199,45 +240,6 @@ extension DatabaseManager: ClipboardRepository {
         }
     }
 
-    public func updateClipboardStackPositions(_ orderedIDs: [UUID]) {
-        serialQueue.sync { () -> Void in
-            guard let db else { return }
-            // 整体在单事务内完成：中途失败则回滚，避免留下半截编号
-            guard clipExec(db, "BEGIN") else {
-                logger.warning("剪贴板栈重排事务开启失败: \(String(cString: sqlite3_errmsg(db)))")
-                return
-            }
-            guard clipExec(db, "UPDATE clipboard_items SET stack_position = NULL;") else {
-                _ = clipExec(db, "ROLLBACK")
-                logger.warning("剪贴板栈清空失败: \(String(cString: sqlite3_errmsg(db)))")
-                return
-            }
-            let sql = "UPDATE clipboard_items SET stack_position = ? WHERE id = ?;"
-            var stmt: OpaquePointer?
-            defer { sqlite3_finalize(stmt) }
-            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
-                _ = clipExec(db, "ROLLBACK")
-                logger.warning("剪贴板栈重排准备失败: \(String(cString: sqlite3_errmsg(db)))")
-                return
-            }
-            for (offset, id) in orderedIDs.enumerated() {
-                sqlite3_reset(stmt)
-                sqlite3_clear_bindings(stmt)
-                sqlite3_bind_int(stmt, 1, Int32(offset + 1))
-                sqlite3_bind_text_copy(stmt, 2, id.uuidString.uppercased())
-                guard sqlite3_step(stmt) == SQLITE_DONE else {
-                    _ = clipExec(db, "ROLLBACK")
-                    logger.warning("剪贴板栈重排失败: \(String(cString: sqlite3_errmsg(db)))")
-                    return
-                }
-            }
-            if !clipExec(db, "COMMIT") {
-                _ = clipExec(db, "ROLLBACK")
-                logger.warning("剪贴板栈重排提交失败: \(String(cString: sqlite3_errmsg(db)))")
-            }
-        }
-    }
-
     // MARK: - 超限清理
 
     public func pruneClipboardItems(maxItems: Int, retentionDays: Int) -> [ClipboardItem] {
@@ -270,39 +272,5 @@ extension DatabaseManager: ClipboardRepository {
             }
             return deleted
         }
-    }
-}
-
-// MARK: - 批量删除共用辅助
-
-extension DatabaseManager {
-
-    /// 「先取被删行、再删行」单事务 —— 三条删除接口共用（selectSQL 的 WHERE 必须与 deleteSQL 一致）
-    func clipDeleteBatch(_ db: OpaquePointer, selectSQL: String, deleteSQL: String,
-                         failureLabel: String, bind: (OpaquePointer?) -> Void) -> [ClipboardItem]? {
-        guard clipExec(db, "BEGIN") else { return clipBatchFail(db, failureLabel, "事务开启失败") }
-        var doomedStmt: OpaquePointer?
-        defer { sqlite3_finalize(doomedStmt) }
-        guard sqlite3_prepare_v2(db, selectSQL, -1, &doomedStmt, nil) == SQLITE_OK else {
-            return clipBatchFail(db, failureLabel, "待删行查询准备失败")
-        }
-        bind(doomedStmt)
-        let doomed = clipItems(from: doomedStmt)
-        var deleteStmt: OpaquePointer?
-        defer { sqlite3_finalize(deleteStmt) }
-        guard sqlite3_prepare_v2(db, deleteSQL, -1, &deleteStmt, nil) == SQLITE_OK else {
-            return clipBatchFail(db, failureLabel, "准备失败")
-        }
-        bind(deleteStmt)
-        guard sqlite3_step(deleteStmt) == SQLITE_DONE else { return clipBatchFail(db, failureLabel, "失败") }
-        guard clipExec(db, "COMMIT") else { return clipBatchFail(db, failureLabel, "提交失败") }
-        return doomed
-    }
-
-    /// 回滚 + 一行 warning（失败标签区分操作，不带路径）
-    private func clipBatchFail(_ db: OpaquePointer, _ label: String, _ reason: String) -> [ClipboardItem]? {
-        _ = clipExec(db, "ROLLBACK")
-        logger.warning("\(label)\(reason): \(String(cString: sqlite3_errmsg(db)))")
-        return nil
     }
 }
