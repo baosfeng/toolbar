@@ -32,11 +32,20 @@ description: 本项目（toolbar / 一览）专属编码规范：架构原则、
 
 ```
 main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具体类的地方）
+  → 启动装配：AppComposition + AssembleStage（声明式 18 个 stage，按 requires 拓扑排序；见下）
   → MenuBarManager（UI，构造器注入协议）
   → 数据层：DatabaseService / HookEventRepository / TokenUsageRepository（AppDatabase 组合）
+     写路径唯一出口 DatabaseTransaction；建表 / 迁移登记在 MigrationRegistry
   → 变化广播：AppEvents（写偏好 / 落库后发，UI 订阅即刷新）
   → 通知出口：NotificationServicing（App 层封装 UNUserNotificationCenter，Core 不依赖 UserNotifications）
+  → HTTP 出口：NetworkMonitorCore/Infrastructure/HTTP/（Endpoint + HTTPTransport，App 层不再自带 HTTP 封装）
 ```
+
+**启动装配是声明式的，不是手写顺序**：`AppCoordinator.start()` 只建 `AppComposition`，阶段在
+`AppAssemblyStages.swift` / `AppAssemblyStages+Features.swift` 里逐条声明
+（`AssembleStage(name:requires:run:teardown:)`，现 18 个），执行顺序由 `AssembleTopology` 拓扑排序给出，
+重名 / 缺依赖 / 成环 = 启动即失败并 log.error；停止按启动顺序逆序调 teardown。
+加一个子系统 = 新增一条 stage 声明 + 在自己的 requires 里写清依赖，不改既有阶段。
 
 依赖方向：`NetworkMonitor → NetworkMonitorCore`，Core 绝不反向依赖。协议全部定义在 `Sources/NetworkMonitorCore/Domain/Protocols/`。
 
@@ -60,10 +69,12 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 - conformance 声明在扩展文件；跨文件访问成员时 private 放宽为 internal 并注释原因
 
 ### 4. 扩展点（协议 SPI + 注册表，逐项清单见 `docs/开发指南/扩展点清单.md`）
-- 新增**额度 provider** = 实现 `BillingProvider`（Core 协议）+ 在组合根 `AppCoordinator` 的 `billingKinds` 注册；UI 自动出现在额度页，不改面板代码
+- 新增**额度 provider** = 实现 `BillingProvider`（Core 协议）+ 在组合根装配阶段 `AppAssemblyStages+Features.swift` 的 `billingKinds` 注册；UI 自动出现在额度页，不改面板代码
 - 新增**通知事件** = `NotificationEvent` 加 case + 补 5 个 switch + `NotificationCue` 补 cue；设置卡片用现成的 `SettingsNotificationEventCard`，事件跟着功能页走
-- 新增**面板分页 / 设置分类** = 枚举 case + 稳定 id 登记 + 懒装配/工厂注册；id 一旦写出就进偏好键，**发布后不可改名**
-- 新增**测试套件** = 在 `Sources/TestRunner/TestSuites+<域>.swift` 加一行调用（`main.swift` 不再改；漏登记由 `TestSuiteRegistrationTests` 判红）
+- 新增**面板分页** = 一条 `PaneModuleDescriptor`（`NetworkMonitorUI/PaneModuleDescriptor.swift` 的 `PaneModuleCatalog`）+ 枚举 case 编号 + `stableIDs` + `PaneModule.makeModule(for:)` 一条分支（造页 / configure / firstDisplay 三闭包）；**只加分支、不改既有分支**，标题 / 图标 / 快照后缀 / 取证键全从描述符读
+- 新增**设置分类** = 一条 `SettingsSectionDescriptor`（`NetworkMonitorUI/SettingsSectionDescriptor.swift` 的 `SettingsSectionCatalog`）+ 枚举 case + `SettingsSectionID` + `SettingsSidebarLayout.groups`（与描述符 group 一致）+ `AppCoordinator+Settings` 一条 `register`
+- 两类 id 一旦写出就进偏好键，**发布后不可改名**；漏登记的代价是分段条少一段 / 快照互相覆盖，靠 `ModuleRegistryTests` 的注册表自洽断言兜住
+- 新增**测试套件** = 在 `Sources/TestRunner/TestSuites+<域>.swift` 的域函数里加一行调用（`main.swift` 不再改，只剩 40 行域调度；漏登记由 `TestSuiteRegistrationTests` 判红）
 - 扩展一律「新增文件 + 一处注册」，**不在分发核心加 if 链**
 - 旧规范里写的 `ReasonixHookMonitor → HookEventDispatcher → HookEventHandler` 已在代码中不存在（`grep -rin 'reasonix' Sources/` 零命中），不要再引用
 
@@ -136,7 +147,7 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 
 ## 测试纪律
 
-- **新增代码必须配测试**：新建 `Sources/TestRunner/<域>Tests.swift`，在 `Sources/TestRunner/TestSuites+<域>.swift` 加一行调用（**main.swift 不再改**），覆盖正常/边界/异常
+- **新增代码必须配测试**：新建 `Sources/TestRunner/<域>Tests.swift`（入口函数名 `run*Tests`），在 `Sources/TestRunner/TestSuites+<域>.swift` 的域函数里加一行调用（**main.swift 不再改**：40 行 = 探针入口 + 8 个域函数 + `finish()`），覆盖正常/边界/异常
 - 断言失败**累计**、跑完由 `TestAssertions.finish()` 统一 `exit(1)`：一次能看到全部 ❌；`guard … else { exit(1) }` 这类前置条件失败仍然即停
 - 数据库测试用 `db.initializeInMemory()`；协议可 mock（如 `RecordingHandler` 测 dispatcher）
 - 提交前必须 `swift run --disable-sandbox --build-system native TestRunner` 全绿
@@ -149,7 +160,7 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 
 ## 异常处理规范
 
-- 禁止直接抛出 `Error`/字符串作为异常，必须定义明确异常类型（如 `ReasonixHookError`）
+- 禁止直接抛出 `Error`/字符串作为异常，必须定义明确异常类型（如 `BillingError` / `AppAssemblyError`）
 - 异常按领域划分，禁止跨模块混用；禁止吞没异常（catch 后必须 `logger.error` 或重新抛出）
 - 不过度细化异常类型，用错误描述区分场景
 

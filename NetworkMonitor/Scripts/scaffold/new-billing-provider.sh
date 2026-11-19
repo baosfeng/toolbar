@@ -143,7 +143,7 @@ print_step_header 5
 
 echo ""
 echo "1. 在组合根登记（唯一注册点）"
-echo "   Sources/NetworkMonitor/AppCoordinator.swift:136  billingKinds 数组加三元组"
+echo "   Sources/NetworkMonitor/AppAssemblyStages+Features.swift:25  billingKinds 数组加三元组"
 echo "       ("${KIND_ID}", "${DISPLAY_NAME}", { ${PASCAL}BillingProvider(logger: billingLogger) }),"
 echo "     · 数组顺序 = 额度页 provider 卡顺序（语义相邻处插入）"
 echo "     · 实例（含命名实例 kindID::slug）由 BillingInstanceStore.ensureDefaults 自动派生，不用手写"

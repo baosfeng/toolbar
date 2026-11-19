@@ -4,8 +4,8 @@
 
 | 脚本 | 生成 | 人工步骤 |
 |---|---|---|
-| `new-panel-tab.sh <id> <中文名>` | `MenuPanel/<Pascal>PaneView.swift`（页头 / 内容 / 状态带骨架） | 9 处（枚举 / stableIDs / 懒装配 / 回调 / 首屏 / 快照 / 测试 / 登记 / 文档） |
-| `new-settings-pane.sh <id> <中文名>` | `Settings/Settings<Pascal>Pane.swift`（page 栈 + 卡片骨架） | 6 处（SettingsSection 四 switch / SectionID / 侧栏分组 / 工厂 / 测试 / 文档） |
+| `new-panel-tab.sh <id> <中文名>` | `MenuPanel/<Pascal>PaneView.swift`（页头 / 内容 / 状态带骨架） | 7 处（描述符 / 枚举编号 / stableIDs / 装配件分支 / 测试 / 登记 / 文档） |
+| `new-settings-pane.sh <id> <中文名>` | `Settings/Settings<Pascal>Pane.swift`（page 栈 + 卡片骨架） | 6 处（枚举 case + 描述符 / SectionID / 侧栏分组 / factory register / 测试 / 文档） |
 | `new-billing-provider.sh <kindID> <显示名>` | `Billing/Providers/<Pascal>BillingProvider.swift`（协议实现 + 8 类错误映射） | 5 处（组合根登记 / 窗口种类 / 测试 / 文档 / 自检） |
 | `new-notification-event.sh <rawValue> <中文名>` | `TestRunner/NotificationEvent<Pascal>Tests.swift`（事件表守卫） | 7 处（枚举 / 5 个 switch / cue / 偏好键 / 设置页挂卡 / 测试 / 登记） |
 
@@ -40,12 +40,12 @@ bash NetworkMonitor/Scripts/scaffold/new-panel-tab.sh weather 天气 --out /tmp/
 
 一句话：**自动改既有文件 = 撞别人分支**。
 
-1. **插入点全是别人正在改的热点文件**。面板分页要改 `MenuTabBarView.swift` / `PanelTabCatalog.swift` / `MenuPanelView+Panes.swift` / `MenuPanelController.swift`；设置分类要改 `SettingsSection.swift` 的四个 switch 与 `AppCoordinator+Settings.swift`。这些文件在本仓的并行开发里被多路共用，脚本用 sed 精准插行听起来可行，实际上：
+1. **插入点全是别人正在改的热点文件**。面板分页要改 `PaneModuleDescriptor.swift` / `MenuTabBarView.swift` / `PanelTabCatalog.swift` / `PaneModule.swift`；设置分类要改 `SettingsSectionDescriptor.swift` / `SettingsSection.swift` / `SettingsSkeletonLogic.swift` / `AppCoordinator+Settings.swift`。这些文件在本仓的并行开发里被多路共用，脚本用 sed 精准插行听起来可行，实际上：
    - 行号会漂移，`sed -i '20a\…'` 插错位置后**编译仍然通过**，只是行为不对；
    - 插入失败不会有人发现（脚本报错被 `|| true` 吞掉的先例见 `docs/踩坑/构建/打包脚本按名字杀进程连坐.md`）；
    - 用户 review 一个「生成器改了我 6 个核心文件」的 diff，比 review 一个新增文件难得多。
 2. **生成的文件是隔离的**，删掉就干净；改既有文件的失败要人肉回滚。
-3. **人工步骤本身有信息量**。「加 case 时同一文件 4 个 switch 必须一起补」「新分页会撞 `PanelTabCatalogTests` 的硬编码计数」这类约束，写在打印清单里，比藏在 sed 表达式里更容易被读到。
+3. **人工步骤本身有信息量**。「描述符与 `stableIDs` 必须同序」「描述符的 group 必须与侧栏分组表一致」「新分页会撞 `ModuleRegistryTests` 的逐项期望数组」这类约束，写在打印清单里，比藏在 sed 表达式里更容易被读到。
 
 所以脚本做到「生成物一定能编译，剩下的接线由人做」，并且**把该改的 file:line 打印出来**——照着清单改，比全仓考古快，也比自动改安全。
 
@@ -55,7 +55,7 @@ bash NetworkMonitor/Scripts/scaffold/new-panel-tab.sh weather 天气 --out /tmp/
 
 - 新面板分页：文件编译通过，但没进 `MenuPanelTab` 与 `stableIDs` 前，分页条上不会出现它。
 - 新设置分页：`super.init` 用 `SettingsSection(rawValue: "<id>") ?? .general` 做了两阶段接入——加 case 之前它能编译（页头临时显示「通用」），加完 case 把那一行改成 `.yourID` 即可。
-- 新额度 provider：类编译通过，但没进 `AppCoordinator.swift` 的 `billingKinds` 前，额度页不会出现它。
+- 新额度 provider：类编译通过，但没进 `AppAssemblyStages+Features.swift` 的 `billingKinds` 前，额度页不会出现它。
 - 新通知事件：守卫套件**加 case 之前是红的**（提示「尚未登记」），加完即转绿——这是引导，不是故障。
 
 ## 自测（改完脚本后必跑）

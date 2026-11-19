@@ -52,6 +52,9 @@ import NetworkMonitorUI
 /// 1. 现在：super.init 用 rawValue 回落到 .general，页头临时显示「通用」；
 /// 2. 在 SettingsSection 加 __PASCAL__ = "__SECTION_ID__" case 后，把下面的 super.init 换成
 ///    super.init(section: .__PASCAL__) —— 人工步骤 1 里给了精确行号。
+///
+/// 文案 / 图标 / 页头副标题 / 快照后缀一律取 `SettingsSectionCatalog` 的描述符，
+/// 本文件不写死标题（中文标题只在描述符里存一份）。
 final class Settings__PASCAL__Pane: SettingsPaneView {
 
     // MARK: 行
@@ -104,42 +107,45 @@ print_step_header 6
 
 
 echo ""
-echo "1. 加枚举 case"
-echo "   Sources/NetworkMonitor/Settings/SettingsSection.swift:8   enum SettingsSection: String, CaseIterable"
-echo "     · 加 case ${PASCAL} = "${SECTION_ID}"（顺序即侧栏顺序；插到语义相邻处）"
+echo "1. 加枚举 case + 描述符（四个 switch 已由描述符取代）"
+echo "   Sources/NetworkMonitor/Settings/SettingsSection.swift:11   enum SettingsSection: String, CaseIterable"
+echo "     · 加 case ${PASCAL} = \"${SECTION_ID}\"（顺序即侧栏顺序；插到语义相邻处）"
 echo "       —— case 名必须是合法标识符，这里用 PascalCase 并显式给出 rawValue 字符串（id 可带连字符）"
-echo "     · 同一文件 4 个 switch 必须一起补，否则编译报错："
-echo "         :22 title       → 「${TITLE}」"
-echo "         :39 symbolName  → SF Symbols 名（禁止 emoji）"
-echo "         :56 fileSuffix  → 「${SECTION_ID}」（快照文件名后缀）"
-echo "         :73 subtitle    → 一句话说明这一页管什么"
+echo "     · title / symbolName / fileSuffix / subtitle 四个属性一律转发描述符，本文件不用补 switch"
+echo "   Sources/NetworkMonitorUI/SettingsSectionDescriptor.swift:84  SettingsSectionCatalog.descriptors 追加一条"
+echo "       SettingsSectionDescriptor(id: .${PASCAL}, title: \"${TITLE}\","
+echo "                                 symbolName: <SF Symbols 名，禁止 emoji>,"
+echo "                                 subtitle: <一句话说明这一页管什么>,"
+echo "                                 fileSuffix: \"${SECTION_ID}\", group: <见步骤 3 的分段>)"
+echo "     · 这一条是侧栏标题 / 图标 / 页头副标题 / 快照后缀 / 侧栏分段的唯一真源"
 echo "     · 补完后把 Settings${PASCAL}Pane.swift 的 super.init 改成 .${PASCAL}"
 
 echo ""
 echo "2. 登记 UI 侧稳定 id（case 名与 App 侧一致，rawValue 是同一个 id 字符串）"
-echo "   Sources/NetworkMonitorUI/SettingsSkeletonLogic.swift:81  SettingsSectionID 加 case ${PASCAL} = "${SECTION_ID}""
+echo "   Sources/NetworkMonitorUI/SettingsSkeletonLogic.swift:81  SettingsSectionID 加 case ${PASCAL} = \"${SECTION_ID}\""
 
 echo ""
-echo "3. 进侧栏分组（唯一真源）"
+echo "3. 进侧栏分组（唯一真源，且必须与描述符的 group 字段一致）"
 echo "   Sources/NetworkMonitorUI/SettingsSkeletonLogic.swift:116-121  SettingsSidebarLayout.groups"
 echo "     · 选一段塞进去：general（常规）/ feature（功能）/ system（系统）"
+echo "     · 步骤 1 里描述符的 group 必须填同一段：两处不一致时 SettingsSectionCatalog.validate 判 groupMismatch"
 echo "     · 漏这一步：分类存在但侧栏不显示，页也切不过去"
 
 echo ""
 echo "4. 挂工厂"
-echo "   Sources/NetworkMonitor/AppCoordinator+Settings.swift:17  factories 字典加一行"
-echo "       .${PASCAL}: { [weak self] in"
+echo "   Sources/NetworkMonitor/AppCoordinator+Settings.swift:27  registerSettingsModules 加一条 register"
+echo "       modules.register(SettingsModule(section: .${PASCAL}) { [weak self] in"
 echo "           guard let self else { return Self.unavailable(.${PASCAL}) }"
 echo "           return Settings${PASCAL}Pane()"
-echo "       },"
+echo "       })"
+echo "     · 新增分类只加这一条 register，不改任何既有条目（顺序由 SettingsSectionCatalog 决定）"
 echo "     · 依赖缺失时返回占位页（Self.unavailable），不要让设置窗口打不开"
 
 echo ""
-echo "5. 测试（两处硬编码计数会红，这是设计如此）"
-echo "   Sources/TestRunner/SettingsThemeTests.swift:42   allItems.count 11 → 12"
-echo "   Sources/TestRunner/SettingsThemeTests.swift:43   Set(allItems).count 同步"
-echo "   Sources/TestRunner/SettingsThemeTests.swift:44   allItems 顺序须等于 SettingsSectionID.allCases"
-echo "   Sources/TestRunner/SettingsThemeTests.swift:48/50  若塞进已有段，该段的 items 期望数组要更新"
+echo "5. 测试（计数断言不再写死数字，通常不必改）"
+echo "   Sources/TestRunner/SettingsThemeTests.swift:56/58  若塞进已有段，该段的 items 期望数组要更新"
+echo "   Sources/TestRunner/ModuleRegistryTests.swift      描述符非空（标题 / 图标 / 副标题 / 后缀）由通用断言覆盖"
+echo "     · 分类数量与顺序一律与 SettingsDescriptorRegistry 对表，不再有「11 → 12」这类硬编码"
 
 echo ""
 echo "6. 文档与测试登记"

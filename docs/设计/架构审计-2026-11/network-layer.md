@@ -1,5 +1,10 @@
 # 网络 / 外部世界访问层审计（只读）
 
+> **快照说明**：本文件是改造**前**的只读审计（2026-11），保留原文作为迁移依据。文中
+> `BillingProviderHTTP.swift` / `BillingHTTPClient` **已在后续合并中删除**——出网已收敛为
+> `NetworkMonitorCore/Infrastructure/HTTP/`（Endpoint + HTTPTransport）；结论中的「未成层」
+> 描述的是当时状态，不是现状。
+
 - 审计范围：`NetworkMonitor/Sources` 全部 target（不含 TestRunner 的统计口径；TestRunner 只在需要对照时点名）
 - 手段：只读 grep / read，**未构建、未运行**（构建归 leader）
 - 结论一句话：**这一层没有成层**。HTTP 出网有 6 个实现、17 个出网点，其中只有 6 个走同一个封装，而那个封装还焊在 App target 里，Core 侧的 3 家 provider 用不到它；Process / UDP / HTTP 服务端 / 文件系统各有入口但互不相通；成功率 / 耗时 / 失败原因的观测出口不存在（只有文本日志）。
