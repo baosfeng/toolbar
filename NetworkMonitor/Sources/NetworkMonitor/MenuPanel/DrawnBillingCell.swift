@@ -24,8 +24,8 @@ final class DrawnBillingCell: NSView {
         var unit: String
         /// 名称（"5 小时" / "可用"）
         var title: String
-        /// 剩余比例 0…1
-        var fraction: Double
+        /// 剩余比例 0…1（nil = 不可得：不画填充条，数值位显示「—」）
+        var fraction: Double?
         /// 告警级别
         var level: BillingCellLayout.Level
         /// 角标（"已限流"；已按同行 / 分行规则处理）
@@ -67,11 +67,14 @@ final class DrawnBillingCell: NSView {
     // MARK: - 数据更新
 
     /// 更新一格百分比限额
+    ///
+    /// 数值不可得（分母非法 / 字段缺失）时数值位走「—」、不画填充条，
+    /// 并在角标位写明「数据不可得」——否则用户看到的是与「真的 0%」一模一样的空条。
     func update(limit: BillingPercentLimit, compact: Bool = false) {
         let split = PaneValueFormatting.split(formatPercentCompact(limit.remainingFraction))
         let hasReset = limit.resetsAt != nil
-        // 同行时角标带分隔符（"已限流 ·"），分行时原样
-        let badge = BillingCellLayout.badgeText(limit.badge, hasReset: hasReset, compact: compact)
+        // 同行时角标带分隔符（"已限流 ·"），分行时原样；不可得说明与 provider 角标并存
+        let badge = Self.combinedBadge(limit: limit, hasReset: hasReset, compact: compact)
         spec = Spec(value: split.number,
                     unit: split.unit,
                     title: limit.title,
@@ -79,11 +82,21 @@ final class DrawnBillingCell: NSView {
                     level: BillingCellLayout.level(for: limit.remainingFraction),
                     badge: badge,
                     reset: Self.resetText(limit.resetsAt),
-                    showsBar: true,
+                    showsBar: !limit.isUnavailable,
                     compact: compact,
                     accessibility: Self.accessibilityText(title: limit.title,
                                                           percent: formatPercent(limit.remainingFraction),
-                                                          badge: limit.badge))
+                                                          badge: [limit.badge, limit.unavailableNote]
+                                                              .compactMap { $0 }
+                                                              .joined(separator: " ")))
+    }
+
+    /// 角标位文案：不可得说明在前，provider 角标在后
+    static func combinedBadge(limit: BillingPercentLimit, hasReset: Bool, compact: Bool) -> String? {
+        let parts = [limit.unavailableNote, limit.badge].compactMap { $0 }
+        guard !parts.isEmpty else { return nil }
+        return BillingCellLayout.badgeText(parts.joined(separator: " "),
+                                           hasReset: hasReset, compact: compact)
     }
 
     /// 金额型余额（provider 只给可用金额、没有百分比限额）
@@ -101,9 +114,9 @@ final class DrawnBillingCell: NSView {
                     accessibility: title + " " + amount)
     }
 
-    /// 恢复占位态
+    /// 恢复占位态（与「数值不可得」同一文案源：`billingUnavailablePlaceholder`）
     func clear() {
-        spec = Spec(value: "—",
+        spec = Spec(value: billingUnavailablePlaceholder,
                     unit: "",
                     title: "",
                     fraction: 0,
@@ -206,8 +219,8 @@ final class DrawnBillingCell: NSView {
         DrawnInk.fill(CGRect(x: 0, y: y, width: bounds.width, height: Self.barHeight),
                       radius: radius,
                       color: PaneCardStyle.trackColor)
-        guard spec.fraction > 0 else { return }
-        let width = min(max(Self.barHeight, bounds.width * CGFloat(spec.fraction)), bounds.width)
+        guard let fraction = spec.fraction, fraction > 0 else { return }
+        let width = min(max(Self.barHeight, bounds.width * CGFloat(fraction)), bounds.width)
         DrawnInk.fill(CGRect(x: 0, y: y, width: width, height: Self.barHeight),
                       radius: radius,
                       color: Self.fillColor(spec.level))
@@ -246,9 +259,10 @@ final class DrawnBillingCell: NSView {
 
     private static func fillColor(_ level: BillingCellLayout.Level) -> NSColor {
         switch level {
-        case .normal: return PaneCardStyle.okColor
-        case .warn:   return PaneCardStyle.warnInk
-        case .danger: return PaneCardStyle.requestColor
+        case .normal:      return PaneCardStyle.okColor
+        case .warn:        return PaneCardStyle.warnInk
+        case .danger:      return PaneCardStyle.requestColor
+        case .unavailable: return PaneCardStyle.tertiaryText
         }
     }
 

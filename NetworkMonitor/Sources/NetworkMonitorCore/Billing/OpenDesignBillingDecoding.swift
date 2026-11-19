@@ -37,14 +37,18 @@ extension OpenDesignBillingProvider {
             throw BillingError.forbidden("当前账号未开通编码计划")
         }
         let limits = dto.windows.map { window -> BillingPercentLimit in
-            let used = Double(window.usedCredits) ?? 0
-            let limit = Double(window.limitCredits) ?? 0
-            let remaining = Double(window.remainingCredits) ?? max(limit - used, 0)
+            let used = window.usedCredits.flatMap { Double($0) }
+            let limit = window.limitCredits.flatMap { Double($0) }
+            // 服务端给了 remainingCredits 就用它，缺失时才按「上限 − 已用」推算
+            let remaining = window.remainingCredits.flatMap { Double($0) }
+                ?? limit.map { max($0 - (used ?? 0), 0) }
             // 重置时刻只解析一次：resetsAt 与 window.resetsAt 必须指向同一时刻
             let resetsAt = window.resetsAt.flatMap(parseISO8601)
             return BillingPercentLimit(id: window.policyId,
                                        title: windowTitle(durationSeconds: window.durationSeconds),
-                                       remainingFraction: limit > 0 ? remaining / limit : 0,
+                                       // limitCredits 缺失 / 为 0 = 分母非法 → nil（不可得），
+                                       // 该窗口渲染「—」而不是 0%（0% 会被读成「额度用光」）
+                                       remainingFraction: remainingFraction(remaining: remaining, limit: limit),
                                        resetsAt: resetsAt,
                                        usedAmount: used,
                                        limitAmount: limit,
@@ -53,6 +57,12 @@ extension OpenDesignBillingProvider {
                                                            resetsAt: resetsAt))
         }
         return BillingBalance(included: nil, purchasedUSD: nil, percentLimits: limits)
+    }
+
+    /// 剩余 credits / 上限 → 剩余比例（任一缺失或分母非正 → nil = 不可得）
+    static func remainingFraction(remaining: Double?, limit: Double?) -> Double? {
+        guard let remaining, let limit, limit > 0, remaining.isFinite, limit.isFinite else { return nil }
+        return min(max(remaining / limit, 0), 1)
     }
 
     /// 窗口时长 + 重置时刻 → 领域窗口（缺任一要素则为 nil）

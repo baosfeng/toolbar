@@ -127,7 +127,7 @@ private func testOpenDesignBalanceDecoding() {
     assertEqual(fiveHour.limitAmount ?? -1, 50_000, "限额 credits")
     assertEqual(fiveHour.unitLabel ?? "", "credits", "单位为 credits")
     assertEqual(fiveHour.hasAmountDetail, true, "有绝对值明细")
-    assertEqual((fiveHour.remainingFraction * 100).rounded(), 100, "剩余 99.75% 四舍五入 100%")
+    assertEqual(((fiveHour.remainingFraction ?? -1) * 100).rounded(), 100, "剩余 99.75% 四舍五入 100%")
     assertNotNil(fiveHour.resetsAt, "重置时间可解析")
     // 窗口字段：恢复通知据此区分「会话窗口重置」与「周 / 月额度重置」
     assertNotNil(fiveHour.window, "18000 秒窗口带 window")
@@ -141,7 +141,7 @@ private func testOpenDesignBalanceDecoding() {
     assertEqual(weekly.window?.kind ?? .custom, .weekly, "604800 秒归为周窗口")
     assertEqual(weekly.window?.resetsAt, weekly.resetsAt,
                 "周窗口重置时刻与 resetsAt 同一时刻")
-    assertEqual((weekly.remainingFraction * 1_000).rounded() / 1_000, 0.491, "每周剩余比例 73622/150000")
+    assertEqual(((weekly.remainingFraction ?? -1) * 1_000).rounded() / 1_000, 0.491, "每周剩余比例 73622/150000")
     assertEqual(formatLimitUsage(used: weekly.usedAmount, limit: weekly.limitAmount,
                                  unit: weekly.unitLabel) ?? "",
                 "已用 76,378 / 150,000 credits", "credits 明细文案")
@@ -158,13 +158,14 @@ private func testOpenDesignBalanceDecoding() {
         assertEqual("\(String(describing: ineligibleError))", "forbidden", "未开通抛 forbidden")
     }
 
-    // 限额为 0：比例为 0 不崩
+    // 限额为 0：分母非法 → 不可得（nil），不是 0%（0% 会被读成「额度用光」）
     let zeroLimit = """
     { "eligible": true, "windows": [ { "policyId": "p0", "durationSeconds": 3600,
       "usedCredits": "0", "limitCredits": "0", "remainingCredits": "0" } ] }
     """
     let zeroBalance = try? OpenDesignBillingProvider.decodeBalance(from: Data(zeroLimit.utf8))
-    assertEqual(zeroBalance?.percentLimits.first?.remainingFraction ?? -1, 0, "限额 0 比例归零")
+    assertEqual(zeroBalance?.percentLimits.first?.isUnavailable ?? false, true, "限额 0 判为不可得")
+    assertEqual(zeroBalance?.percentLimits.first?.remainingFraction == nil, true, "限额 0 不产出 0%")
     assertEqual(zeroBalance?.percentLimits.first?.title ?? "", "1 小时", "3600 秒 → 1 小时")
     assertEqual(zeroBalance?.percentLimits.first?.resetsAt == nil, true, "缺 resetsAt 为 nil")
     // 缺重置时刻构造不出窗口：退回「无窗口」，不编造重置时刻

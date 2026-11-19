@@ -37,4 +37,5 @@ func runBillingSuites() {
     runBillingBalanceProviderDecodingTests()
     runBillingRefreshGateTests()
     runBillingCellLayoutTests()
+    runBillingUnavailableValueTests()
 }

@@ -49,9 +49,11 @@ struct OpenDesignCodingPlanDTO: Decodable {
     struct Window: Decodable {
         let policyId: String
         let durationSeconds: Double?
-        let usedCredits: String
-        let limitCredits: String
-        let remainingCredits: String
+        // 三个 credits 字段全部可选：服务端少给一个上限时，该窗口应判为「不可得」，
+        // 而不是让整份响应解析失败（一个窗口坏不该拖垮其它窗口）。
+        let usedCredits: String?
+        let limitCredits: String?
+        let remainingCredits: String?
         let resetsAt: String?
     }
 

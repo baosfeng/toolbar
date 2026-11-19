@@ -71,9 +71,12 @@ public struct BillingIncludedBalance: Sendable, Equatable {
         self.period = period
     }
 
-    /// 剩余比例 0...1（总额度非正时按 0 处理）
-    public var remainingFraction: Double {
-        guard allowanceUSD > 0 else { return 0 }
+    /// 剩余比例 0...1（总额度非正 / 脏数据时为 nil = 不可得，不能拿 0% 顶替）
+    ///
+    /// 分母非法不等于「额度用光」：`allowanceUSD` 为 0 只说明服务端没给有效上限，
+    /// 显示 0% 会让用户误读成「已用尽」。
+    public var remainingFraction: Double? {
+        guard allowanceUSD > 0, remainingUSD.isFinite else { return nil }
         return min(max(remainingUSD / allowanceUSD, 0), 1)
     }
 }
@@ -84,8 +87,8 @@ public struct BillingPercentLimit: Sendable, Equatable {
     public let id: String
     /// 展示名称
     public let title: String
-    /// 剩余比例 0...1
-    public let remainingFraction: Double
+    /// 剩余比例 0...1（nil = 不可得：分母非法 / 字段缺失；绝不拿 0 顶替）
+    public let remainingFraction: Double?
     /// 下次重置时间
     public let resetsAt: Date?
     /// 已用量绝对值（nil = provider 只给百分比）
@@ -102,12 +105,13 @@ public struct BillingPercentLimit: Sendable, Equatable {
     /// 有窗口时两者指向同一时刻。
     public let window: BillingQuotaWindow?
 
-    public init(id: String, title: String, remainingFraction: Double, resetsAt: Date?,
+    public init(id: String, title: String, remainingFraction: Double?, resetsAt: Date?,
                 usedAmount: Double? = nil, limitAmount: Double? = nil, unitLabel: String? = nil,
                 badge: String? = nil, window: BillingQuotaWindow? = nil) {
         self.id = id
         self.title = title
-        self.remainingFraction = min(max(remainingFraction, 0), 1)
+        // 只有「服务端明确给出的有限数值」才钳制；nil / NaN / ±inf 一律为不可得
+        self.remainingFraction = remainingFraction.flatMap { $0.isFinite ? min(max($0, 0), 1) : nil }
         self.resetsAt = resetsAt
         self.usedAmount = usedAmount
         self.limitAmount = limitAmount
@@ -118,6 +122,16 @@ public struct BillingPercentLimit: Sendable, Equatable {
 
     /// 是否可展示绝对值明细（已用与限额都有值）
     public var hasAmountDetail: Bool { usedAmount != nil && limitAmount != nil }
+
+    /// 是否取不到剩余比例（展示层据此写「不可得」而不是 0%）
+    public var isUnavailable: Bool { remainingFraction == nil }
+
+    /// 不可得时的说明文案（nil = 数值可得，不需要说明）
+    ///
+    /// 加在角标位上：0% 与「取不到」在格子里必须一眼可分。
+    public var unavailableNote: String? {
+        isUnavailable ? "数据不可得" : nil
+    }
 }
 
 /// 账户余额（各 provider 通用）

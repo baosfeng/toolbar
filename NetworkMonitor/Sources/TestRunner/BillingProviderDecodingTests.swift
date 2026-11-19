@@ -44,18 +44,18 @@ private func testClaudeDecoding() {
                     ["claude-session", "claude-weekly", "claude-weekly-sonnet", "claude-extra"],
                     "窗口按白名单顺序映射，null 窗口被跳过")
         let session = limits.first { $0.id == "claude-session" }!
-        assertEqual(abs(session.remainingFraction - 0.575) < 0.0001, true, "已用 42.5% → 剩余 57.5%")
+        assertEqual(abs((session.remainingFraction ?? -1) - 0.575) < 0.0001, true, "已用 42.5% → 剩余 57.5%")
         assertEqual(session.window?.kind ?? .custom, .session, "5 小时窗口归为会话窗口")
         assertEqual(session.window?.duration ?? 0, 18_000, "会话窗口 18000 秒")
         assertNotNil(session.resetsAt, "会话窗口有重置时刻")
         let weekly = limits.first { $0.id == "claude-weekly" }!
         assertEqual(weekly.window?.kind ?? .custom, .weekly, "周窗口种类")
         assertEqual(weekly.window?.title ?? "", "每周", "周窗口标题")
-        assertEqual(abs(weekly.remainingFraction - 0.22) < 0.0001, true, "周已用 78% → 剩余 22%")
+        assertEqual(abs((weekly.remainingFraction ?? -1) - 0.22) < 0.0001, true, "周已用 78% → 剩余 22%")
         let extra = limits.first { $0.id == "claude-extra" }!
         assertEqual(extra.unitLabel ?? "", "USD", "额外用量单位来自 currency")
         assertEqual(extra.hasAmountDetail, true, "额外用量带绝对值明细")
-        assertEqual(abs((extra.remainingFraction - 0.825)) < 0.0001, true, "额外用量剩余比例")
+        assertEqual(abs(((extra.remainingFraction ?? -1) - 0.825)) < 0.0001, true, "额外用量剩余比例")
     } catch {
         assertEqual("抛错：\(error)", "不应抛错", "Claude 真实样本解码")
     }
@@ -118,7 +118,7 @@ private func testCodexDecoding() {
         let session = limits[0]
         assertEqual(session.title, "5 小时", "窗口标题按 limit_window_seconds 推断")
         assertEqual(session.window?.kind ?? .custom, .session, "18000 秒归为会话窗口")
-        assertEqual(abs(session.remainingFraction - 0.88) < 0.0001, true, "已用 12% → 剩余 88%")
+        assertEqual(abs((session.remainingFraction ?? -1) - 0.88) < 0.0001, true, "已用 12% → 剩余 88%")
         assertEqual(session.resetsAt?.timeIntervalSince1970 ?? 0, 1_799_999_999, "reset_at 为 epoch 秒")
         let weekly = limits[1]
         assertEqual(weekly.window?.kind ?? .custom, .weekly, "604800 秒归为周窗口")
@@ -176,14 +176,14 @@ private func testCursorDecoding() {
         assertEqual(limits.map(\.id), ["cursor-plan", "cursor-on-demand"], "计划 + 按量付费两行")
         let plan = limits[0]
         assertEqual(plan.title, "本月", "计划窗口标题")
-        assertEqual(abs(plan.remainingFraction - 0.4) < 0.0001, true, "totalPercentUsed 60 → 剩余 40%")
+        assertEqual(abs((plan.remainingFraction ?? -1) - 0.4) < 0.0001, true, "totalPercentUsed 60 → 剩余 40%")
         assertEqual(plan.window?.kind ?? .custom, .monthly, "账单周期归为月窗口")
         assertNotNil(plan.resetsAt, "月窗口有重置时刻")
         assertEqual(plan.unitLabel ?? "", "USD", "金额单位美元")
         assertEqual(plan.limitAmount ?? 0, 20, "2000 分 → 20 美元")
         let onDemand = limits[1]
         assertEqual(onDemand.title, "按量付费", "按量付费标题")
-        assertEqual(abs(onDemand.remainingFraction - 0.9) < 0.0001, true, "按量已用 500/5000 → 剩余 90%")
+        assertEqual(abs((onDemand.remainingFraction ?? -1) - 0.9) < 0.0001, true, "按量已用 500/5000 → 剩余 90%")
     } catch {
         assertEqual("抛错：\(error)", "不应抛错", "Cursor 真实样本解码")
     }

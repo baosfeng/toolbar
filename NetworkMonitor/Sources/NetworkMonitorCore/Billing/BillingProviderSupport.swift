@@ -47,14 +47,20 @@ public enum BillingCredentialNormalizer {
 public enum BillingPercentMath {
 
     /// 已用百分比（0…100，脏数据可能越界）→ 剩余比例（0…1）
-    public static func remainingFraction(usedPercent: Double) -> Double {
-        guard usedPercent.isFinite else { return 0 }
+    ///
+    /// 非有限值（NaN / ±inf）= 服务端没给出可用数值 → 返回 nil（不可得）。
+    /// 不能拿 0% 顶替：0% 的语义是「已用尽」，与「取不到」必须能区分。
+    public static func remainingFraction(usedPercent: Double) -> Double? {
+        guard usedPercent.isFinite else { return nil }
         return min(max(1 - usedPercent / 100, 0), 1)
     }
 
-    /// 已用值 / 上限 → 剩余比例（上限非正时返回 0）
-    public static func remainingFraction(used: Double, limit: Double) -> Double {
-        guard limit > 0, used.isFinite else { return 0 }
+    /// 已用值 / 上限 → 剩余比例（上限非正 / 数值非法时返回 nil = 不可得）
+    ///
+    /// 上限 ≤ 0 表示服务端没给有效分母（不是「额度为 0」）：此时算不出比例，
+    /// 返回 nil 让调用方按「不可得」渲染「—」，而不是画一条 0% 的空条。
+    public static func remainingFraction(used: Double, limit: Double) -> Double? {
+        guard limit > 0, used.isFinite, limit.isFinite else { return nil }
         return min(max(1 - used / limit, 0), 1)
     }
 }

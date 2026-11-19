@@ -195,7 +195,7 @@ final class BillingProviderBlockView: NSView {
     private func applyStatus(_ state: BillingMonitor.ProviderState) {
         let kind = BillingProviderStatusLogic.kind(
             errorMessage: state.errorMessage,
-            remainingFractions: (state.balance?.percentLimits ?? []).map(\.remainingFraction),
+            remainingFractions: (state.balance?.percentLimits ?? []).compactMap(\.remainingFraction),  // 不可得窗口不参与比较
             isLoading: state.isLoading,
             hasBalance: state.balance.map { !$0.isEmpty } ?? false)
         chip.update(kind: Self.chipKind(kind), text: BillingProviderStatusLogic.text(kind))

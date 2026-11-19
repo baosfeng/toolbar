@@ -207,6 +207,7 @@ extension BillingPaneView {
             (state.balance?.percentLimits ?? []).map { limit in
                 BillingHeroInput(providerName: state.descriptor.displayName,
                                  windowTitle: limit.title,
+                                 // 不可得窗口不进 Hero 比较（Hero 无数据时显示「—」）
                                  remaining: limit.remainingFraction,
                                  resetsAt: limit.resetsAt)
             }
