@@ -247,19 +247,21 @@ public enum BillingAlertEvaluator {
             updated[key] = current
         }
 
-        if let included = balance.included {
+        // 不可得的额度不参与评估：拿 0 顶替会直接触发「已用尽」误报
+        if let included = balance.included, let fraction = included.remainingFraction {
             consider(resourceID: "included",
                      title: "内含",
-                     fraction: included.remainingFraction,
+                     fraction: fraction,
                      window: included.period.map {
                          BillingQuotaWindow(kind: .monthly, duration: $0.duration, resetsAt: $0.end)
                      },
                      resetAt: included.period?.end)
         }
         for limit in balance.percentLimits {
+            guard let fraction = limit.remainingFraction else { continue }
             consider(resourceID: limit.id,
                      title: limit.title,
-                     fraction: limit.remainingFraction,
+                     fraction: fraction,
                      window: limit.window,
                      resetAt: limit.resetsAt)
         }

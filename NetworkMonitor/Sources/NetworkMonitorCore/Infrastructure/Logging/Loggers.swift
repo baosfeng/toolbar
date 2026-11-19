@@ -55,12 +55,28 @@ public final class OSLogLogger: LoggingService {
 // MARK: - 控制台日志实现（测试用）
 
 /// 控制台日志实现 — 直接 `print` 输出，适合开发/测试环境
-public final class ConsoleLogger: LoggingService {
+///
+/// 用途分两档，避免「stdout 只有失败信息」导致现场无法三态判读：
+/// - error / warning 走 stderr（原有的 `2>` 分流不变）；
+/// - info 走 stdout（诊断时 `2>/dev/null` 即可只留「成功 / 不可得」）；
+/// - debug 仍然丢弃（高频采样日志不该落盘）。
+///
+/// 另设字符预算：CLI 跑全量套件时 stdout 会被探针快照淹没，超预算后截断并只提示一次，
+/// 保证「额度行」仍可被 grep 到。按**字符数**计量：UTF-8 下中文 3 字节，
+/// 按字节算会低估真实占用。
+public final class ConsoleLogger: LoggingService, @unchecked Sendable {
     private let minLevel: LogLevel
     private let dateFormatter: DateFormatter
+    /// 控制台输出字符上限（0 = 不限）
+    private let characterLimit: Int
+    /// 预算与截断标记只在锁内读写（`@unchecked Sendable` 的来由）
+    private let budgetLock = NSLock()
+    private var characterCount = 0
+    private var isTruncated = false
 
-    public init(minLevel: LogLevel = .debug) {
+    public init(minLevel: LogLevel = .debug, characterLimit: Int = 400_000) {
         self.minLevel = minLevel
+        self.characterLimit = characterLimit
         self.dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "HH:mm:ss.SSS"
     }
@@ -77,6 +93,26 @@ public final class ConsoleLogger: LoggingService {
         case .warning: prefix = "⚠️"
         case .error:   prefix = "❌"
         }
-        print("[\(timestamp)] \(prefix) [\(level.rawValue)] \(message)")
+        let line = "[\(timestamp)] \(prefix) [\(level.rawValue)] \(message)"
+
+        // error / warning 必须落盘（三态判读的最后一道），只让 info 吃预算
+        if level == .info {
+            budgetLock.lock()
+            let exhausted = isTruncated || (characterLimit > 0 && characterCount + line.count > characterLimit)
+            if exhausted, !isTruncated {
+                isTruncated = true
+                FileHandle.standardError.write(Data("[…] 控制台日志已达 \(characterLimit) 字符上限，后续 info 日志丢弃\n".utf8))
+            } else if !exhausted {
+                characterCount += line.count
+            }
+            budgetLock.unlock()
+            if exhausted { return }
+        }
+
+        if level == .warning || level == .error {
+            FileHandle.standardError.write(Data((line + "\n").utf8))
+        } else if level == .info {
+            print(line)
+        }
     }
 }

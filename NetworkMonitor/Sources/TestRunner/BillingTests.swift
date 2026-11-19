@@ -85,8 +85,9 @@ private func testBillingModels() {
 
     let included = BillingIncludedBalance(remainingUSD: 72.5, allowanceUSD: 100, period: period)
     assertEqual(included.remainingFraction, 0.725, "剩余比例")
+    // 总额度为 0 ≠ 额度用光：分母非法时是「不可得」，返回 nil（渲染「—」而不是 0%）
     let zeroAllowance = BillingIncludedBalance(remainingUSD: 10, allowanceUSD: 0)
-    assertEqual(zeroAllowance.remainingFraction, 0, "总额度为 0 时比例为 0")
+    assertEqual(zeroAllowance.remainingFraction == nil, true, "总额度为 0 时比例不可得")
 
     let balance = BillingBalance(included: included, purchasedUSD: 25,
                                  percentLimits: [BillingPercentLimit(id: "session", title: "会话",

@@ -13,10 +13,15 @@ public enum BillingCellLayout {
         case normal
         case warn
         case danger
+        /// 数值不可得（字段缺失 / 分母非法）：不画填充、不参与告警分档
+        case unavailable
     }
 
-    /// 剩余比例 → 告警级别（<20% 红、<50% 橙）
-    public static func level(for fraction: Double) -> Level {
+    /// 剩余比例 → 告警级别（<20% 红、<50% 橙、nil 不可得）
+    ///
+    /// nil 与 0 必须分开：0% 是「已用尽」（危险档），nil 是「取不到」（不画条、不告警）。
+    public static func level(for fraction: Double?) -> Level {
+        guard let fraction else { return .unavailable }
         if fraction < 0.2 { return .danger }
         if fraction < 0.5 { return .warn }
         return .normal

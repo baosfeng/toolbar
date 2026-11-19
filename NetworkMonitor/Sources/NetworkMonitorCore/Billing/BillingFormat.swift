@@ -82,6 +82,17 @@ public func formatPercent(_ fraction: Double) -> String {
     return formatExactNumber(clamped * 100) + "%"
 }
 
+/// 不可得占位符 —— 额度数值取不到时的统一文案（不是 0%，也不是空串）
+public let billingUnavailablePlaceholder = "—"
+
+/// 可选百分比的展示口径：nil（不可得）→ 「—」，其余与 `formatPercent` 同源
+///
+/// 判据：只有「服务端明确给出 0」才显示 0%；字段缺失 / 分母非法一律「—」。
+public func formatPercent(_ fraction: Double?) -> String {
+    guard let fraction else { return billingUnavailablePlaceholder }
+    return formatPercent(fraction)
+}
+
 /// 额度卡大号数字用的紧凑百分比（0...1 → "49.06%"）
 ///
 /// 规则：
@@ -92,8 +103,14 @@ public func formatPercent(_ fraction: Double) -> String {
 /// 为什么单独一个函数：服务端会返回 1 - 157/50000 这种长小数，
 /// 旧版 16pt 字号还能忍，卡内 19–24pt 时六位小数直接毁版式；
 /// `formatPercent` 保持原值展示不动，避免改掉日志与无障碍的口径。
-public func formatPercentCompact(_ fraction: Double) -> String {
-    guard fraction.isFinite else { return "—" }
+public func formatPercentCompact(_ fraction: Double?) -> String {
+    guard let fraction else { return billingUnavailablePlaceholder }
+    return formatPercentCompact(fraction)
+}
+
+/// 非可选紧凑百分比（内部复用；nil 口径见上面的重载）
+func formatPercentCompact(_ fraction: Double) -> String {
+    guard fraction.isFinite else { return billingUnavailablePlaceholder }
     let clamped = min(max(fraction, 0), 1)
     let percent = clamped * 100
     var text = String(format: "%.2f", percent)
@@ -127,6 +144,48 @@ public func formatShortDateTime(_ date: Date) -> String {
     formatter.dateFormat = "M/d HH:mm"
     return formatter.string(from: date)
 }
+// MARK: - 刷新日志口径（三态可分辨）
+
+/// 三态日志的固定前缀 —— 现场用一条 grep 就能把「失败 / 成功但取不到 / 真的 0」分开
+///
+/// 这三条是额度页排障的唯一入口，文案由纯函数产出，改动前先改这里的测试。
+public enum BillingLogLine {
+
+    /// 失败日志的前缀（失败文案在 BillingMonitor 里生成，这里只登记可 grep 的锚点）
+    public static let failurePrefix = "计费查询失败"
+
+    /// 请求成功：窗口数 + 首个窗口剩余比例 + 不可得项数 + 数值摘要
+    ///
+    /// `summary` 形如「5 小时 98% · 每周 99%」，不含凭据与 URL（走 LogRedaction 之外的纯数值路径）。
+    public static func success(providerID: String, balance: BillingBalance) -> String {
+        let firstText = balance.percentLimits.first.map { limit in
+            "\(limit.title)=\(formatPercent(limit.remainingFraction))"
+        } ?? "无百分比窗口"
+        let unavailableCount = balance.percentLimits.filter(\.isUnavailable).count
+        return "计费刷新成功（\(providerID)）：窗口 \(balance.percentLimits.count) 条｜首个 \(firstText)｜"
+            + "不可得 \(unavailableCount)｜\(formatBalanceSummary(balance))"
+    }
+
+    /// 请求成功但数值不可得（与「真的 0%」必须能分开）
+    public static func unavailable(providerID: String, titles: [String]) -> String {
+        "额度数据不完整（\(providerID)）：\(titles.joined(separator: " / ")) 剩余比例不可得"
+            + "（上限缺失或非法），界面按「—」展示"
+    }
+
+    /// 请求成功但响应里一条额度都没有
+    public static func empty(providerID: String) -> String {
+        "计费刷新成功（\(providerID)）：响应里没有任何额度值"
+    }
+
+    /// 一次成功刷新的全部日志行（无余额时回落到「空响应」一条）
+    public static func refreshLines(providerID: String, balance: BillingBalance?) -> [String] {
+        guard let balance else { return [empty(providerID: providerID)] }
+        var lines = [success(providerID: providerID, balance: balance)]
+        let missing = balance.percentLimits.filter(\.isUnavailable).map(\.title)
+        if !missing.isEmpty { lines.append(unavailable(providerID: providerID, titles: missing)) }
+        return lines
+    }
+}
 /// 余额快照摘要（调试日志用，如「5 小时 98% · 每周 99% · 每月 48%」）
 ///
 /// 生产日志里没有额度数值就无从判断「额度页没数据」是没配凭据、接口失败还是解析偏移；
@@ -135,7 +194,11 @@ public func formatBalanceSummary(_ balance: BillingBalance) -> String {
     if !balance.percentLimits.isEmpty {
         return balance.percentLimits.map { limit -> String in
             let badge = limit.badge.map { " \($0)" } ?? ""
-            return "\(limit.title) \(formatPercent(limit.remainingFraction))\(badge)"
+            // 不可得的窗口在日志里点名「不可得」，与「真的是 0%」区分开
+            guard let fraction = limit.remainingFraction else {
+                return "\(limit.title) \(billingUnavailablePlaceholder) 不可得\(badge)"
+            }
+            return "\(limit.title) \(formatPercent(fraction))\(badge)"
         }.joined(separator: " · ")
     }
     if let total = balance.totalAvailableUSD {
