@@ -48,4 +48,10 @@ func runManualProbesIfRequested() {
         runNumberUnitTable()
         exit(0)
     }
+
+    // 装配顺序与负向验证：--assembly-probe（打印实际拓扑顺序 + 缺依赖 / 成环 / 重名的失败文案）
+    if arguments.contains("--assembly-probe") {
+        runAssemblyProbe()
+        exit(0)
+    }
 }

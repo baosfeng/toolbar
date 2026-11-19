@@ -39,6 +39,7 @@ func runCoreSuites() {
     runLatestRequestGateTests()
     runSnapshotClockTests()
     runPreferenceDomainMigrationTests()
+    runAppAssemblyTests()  // 启动装配：拓扑排序 / 缺依赖 / 成环 / 与改造前手写顺序等价
     // MARK: - 套件登记守卫（守护本文件本身：孤儿测试文件静默不跑）
     runTestSuiteRegistrationTests()
 }

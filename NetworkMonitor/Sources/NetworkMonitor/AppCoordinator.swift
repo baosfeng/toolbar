@@ -18,18 +18,21 @@ public final class AppCoordinator {
     // 放宽为 internal：`AppCoordinator+Clipboard` 的流量落盘扩展读累计字节
     var networkMonitor: (any NetworkMonitoringService)!
     /// 进程网络监控
-    private let processMonitor: any ProcessNetworkMonitoringService = ProcessNetworkMonitor()
+    // 放宽为 internal：装配阶段（AppAssemblyStages）跨文件构造 MenuBarManager 时要读
+    let processMonitor: any ProcessNetworkMonitoringService = ProcessNetworkMonitor()
     /// 数据库（放宽为 internal：剪贴板落库回调与设置页存储统计都要读仓储）
     var database: (any AppDatabase)!
     /// 每日流量追踪
-    private var trafficTracker: (any TrafficTrackingService)!
+    // 放宽为 internal：装配阶段（AppAssemblyStages）跨文件写入并注入 MenuBarManager
+    var trafficTracker: (any TrafficTrackingService)!
     /// 累计流量定期落盘定时器（崩溃丢失窗口压到 1 分钟）
     // 放宽为 internal：`AppCoordinator+Clipboard` 的流量落盘扩展读写
     var trafficPersistenceTimer: Timer?
     /// DSH Token 统计服务（设置页「Token 用量」要读诊断 / 事件数并触发重扫）
     var harnessUsageService: (any HarnessUsageServicing)?
     /// 系统指标监控服务（装配细节见 AppCoordinator+SystemMonitor）
-    private(set) var systemMonitor: (any SystemMonitoringService)?
+    // 放宽为 internal：装配阶段（AppAssemblyStages+Features）跨文件写入
+    var systemMonitor: (any SystemMonitoringService)?
     /// 屏幕活动监听（锁屏 / 休眠暂停额度刷新）
     ///
     /// 必须强持有：通知中心只持 observer 闭包，监听器被释放后闭包里的 [weak self] 恒为 nil，
@@ -81,6 +84,25 @@ public final class AppCoordinator {
     /// 互传服务实例（设置页统计/清理要用；仅装配扩展写）
     var transferService: TransferService?
 
+    // MARK: - 装配
+
+    /// 当前装配器（停止时按它记录的启动顺序逆序清理）
+    private var compositionHandle: AppComposition?
+    /// 额度状态管理器（设置页 / 面板 / 屏幕活动阶段共用同一实例）
+    var billingMonitor: BillingMonitor?
+    /// 菜单栏管理器（菜单栏阶段产出；start() 的返回值）
+    // 放宽为 internal：装配阶段（AppAssemblyStages+Features）跨文件写入
+    var menuBarManager: MenuBarManager?
+    /// 数据库具体实现
+    ///
+    /// 组合根唯一允许持有具体类型的例外：Token 统计与剪贴板清理要的是
+    /// DatabaseService & ClipboardRepository & HarnessTokenRepository 的组合能力，
+    /// 现有 AppDatabase 组合别名还没并入 HarnessTokenRepository，按协议取会丢能力。
+    var databaseManager: DatabaseManager?
+    /// 系统监控偏好（与 monitor 同源，菜单栏阶段要一起注入）
+    var menuBarSystemContext: (monitor: any SystemMonitoringService,
+                               preferences: SystemMonitorPreferences)?
+
     // MARK: - 日志
 
     public var logger: LoggingService = AppContext.shared.logger
@@ -99,164 +121,40 @@ public final class AppCoordinator {
 #endif
 
     /// 启动所有服务
+    ///
+    /// 只做两件事：声明装配阶段（顺序与依赖见 `AppAssemblyPlan`）、交给装配器执行。
+    /// 阶段顺序由 requires 拓扑排序给出，声明错误（重名 / 缺依赖 / 成环）启动即失败。
     func start() -> MenuBarManager {
-        let databaseManager = DatabaseManager()  // 1. 数据库（同一实例满足 DatabaseService 与 ClipboardRepository）
-        databaseManager.initialize()
-        database = databaseManager
-
-        // 2. 网络监控
-        let savedRx = UInt64(AppContext.shared.storage.integer(forKey: "totalRx"))
-        let savedTx = UInt64(AppContext.shared.storage.integer(forKey: "totalTx"))
-        networkMonitor = NetworkSpeedMonitor(totalRx: savedRx, totalTx: savedTx)
-
-        // 3. 流量追踪
-        trafficTracker = TrafficTracker(monitor: networkMonitor)
-
-        // 3b. 通知与音效（偏好 / 音效库 / 播放器 / 系统通知服务 / 触觉；
-        //     必须早于剪贴板与额度链路，它们都从这里取实例）
-        setupNotificationAndFeedback()
-
-        // 4. 剪贴板历史链路
-        setupClipboard(database: database)
-
-        setupSnip()
-
-        // 4c. 系统权限链路：必须在 setupSnip 之后（屏幕录制状态读捕获服务 preflight）
-        setupPermissions()
-
-        // 5. 局域网互传（发现层 + 传输服务 + 面板控制器）
-        let transfer = makeTransferController()
-
-        // 6. 额度页链路（provider 类型工厂 + 实例列表 + 凭据存储 + 状态管理器）
-        //
-        // 同一 provider 类型可起多个实例：默认实例 id == kindID（沿用旧凭据键，升级零迁移），
-        // 命名实例（如 cursor::work）各自一份凭据与开关。具体 provider 类只在这里 new。
-        // 闭包内显式取局部 logger：逃逸闭包引用 self 属性需显式 self，这里避免噪音
-        let billingLogger = logger
-        let billingKinds: [(kindID: String, title: String, make: @MainActor () -> any BillingProvider)] = [
-            ("ollama", "Ollama", { OllamaBillingProvider(logger: billingLogger) }),
-            ("open-design", "Open Design", { OpenDesignBillingProvider(logger: billingLogger) }),
-            ("opencode-go", "OpenCode Go", { OpencodeGoBillingProvider(logger: billingLogger) }),
-            // 订阅额度三家：均为非公开端点（可能失效），失败只回报错误、保留上次成功数据
-            ("claude", "Claude", { ClaudeBillingProvider(logger: billingLogger) }),
-            ("codex", "Codex", { CodexBillingProvider(logger: billingLogger) }),
-            ("cursor", "Cursor", { CursorBillingProvider(logger: billingLogger) }),
-            ("deepseek", "DeepSeek", { DeepSeekBillingProvider(logger: billingLogger) }), // 官方文档化端点三家，只出余额卡
-            ("openrouter", "OpenRouter", { OpenRouterBillingProvider(logger: billingLogger) }),
-            ("moonshot", "Moonshot / Kimi", { MoonshotBillingProvider(logger: billingLogger) }),
-        ]
-        let billingInstanceStore = BillingInstanceStore()
-        let billingInstances = billingInstanceStore.ensureDefaults(
-            kinds: billingKinds.map { BillingInstanceKindSeed(kindID: $0.kindID, title: $0.title) })
-        let billingRegistry = BillingProviderRegistry()
-        for instance in billingInstances {
-            guard let kind = billingKinds.first(where: { $0.kindID == instance.kindID }) else { continue }
-            billingRegistry.register(BillingProviderInstance(base: kind.make(), instance: instance),
-                                     instance: instance)
+        let composition = AppComposition(stages: assembleStages, logger: logger)
+        compositionHandle = composition
+        var environment = AppEnvironment(coordinator: self)
+        do {
+            try composition.run(in: &environment)
+        } catch {
+            // 声明错误（重名 / 缺依赖 / 成环）是编码错误，测试期就该判红；
+            // 运行时只剩「明确失败」一种处置——静默跳过会得到「少了某条链路却看起来正常」的进程。
+            // 先逆序清理已经跑起来的阶段，再中止（不留半装配状态）
+            logger.error("应用装配失败，已中止启动：\(error)")
+            composition.teardown(in: environment)
+            preconditionFailure("应用装配失败：\(error)")
         }
-        // 环境变量回退键按实例解析（解析链唯一实现在 BillingProviderInstance.environmentCredentialKey）
-        let billingCredentials = PreferencesBillingCredentialStore(
-            environmentKeyResolver: { billingRegistry.provider(id: $0)?.environmentCredentialKey
-                ?? BillingInstanceID.environmentKey(forInstanceID: $0) })
-        // 旧明文迁移：按注册表全量走一遍，不等用户点开某个 provider（详见该方法的说明）
-        billingCredentials.migrateLegacyPlaintext(for: billingRegistry.all.map(\.id))
-        // 额度提醒（阈值 / 窗口重置 / 余额回升）：应用启动时请求通知权限。
-        // 通知出口统一注入 NotificationServicing（本类不再自己持 UNUserNotificationCenter）
-        let billingAlerts = BillingAlertService(storage: AppContext.shared.storage,
-                                               notifications: notificationService,
-                                               soundPlayer: soundPlayer,
-                                               logger: logger)
-        billingAlerts.requestAuthorizationIfNeeded()
-        let billingMonitor = BillingMonitor(registry: billingRegistry,
-                                            credentialStore: billingCredentials,
-                                            alertService: billingAlerts,
-                                            instances: billingInstanceStore,
-                                            providerFactory: { kindID in
-                                                billingKinds.first { $0.kindID == kindID }?.make()
-                                            },
-                                            logger: logger)
-        // 6c. 更新检查（设置页「关于」的数据源；启动 5 秒后自动查一次，24 小时限频）
-        updateCheck = makeUpdateCheckService()
-
-        // 6d. 统一设置窗口（六个分类页；额度页直接用上面这个 billingMonitor）
-        settingsWindow = makeSettingsWindow(billingMonitor: billingMonitor)
-
-        // 锁屏 / 休眠期间暂停额度后台轮询，解锁后立即刷新一次
-        //
-        // 【必须持有】监听器只被局部变量引用时，EOF 后即释放；而通知中心只持闭包，
-        // 闭包里的 [weak self] 从此恒为 nil —— 额度刷新再也不会暂停 / 恢复，且无声无息
-        // （现象：额度页停在旧数据、时间戳不动、进程无对外连接）。故存成协调器属性。
-        let screenActivity = ScreenActivityMonitor(logger: logger)
-        screenActivity.onChange = { [weak billingMonitor] active in
-            if active {
-                billingMonitor?.resume()
-            } else {
-                billingMonitor?.pause()
-            }
+        guard let manager = menuBarManager else {
+            let message = "应用装配失败：菜单栏阶段未产出 MenuBarManager"
+            logger.error(message)
+            preconditionFailure(message)
         }
-        screenActivity.start()
-        self.screenActivity = screenActivity
-
-        harnessUsageService = HarnessAssembly.makeService(database: databaseManager)  // DSH Token 统计链路
-
-        let systemContext = makeSystemMonitor()  // 6e. 系统监控链路（采样驱动见 MenuBarManager+Sampling）
-        systemMonitor = systemContext.monitor
-
-        // 7. 创建 MenuBarManager（注入依赖 + 面板所需仓储与粘贴器）
-        let manager = MenuBarManager(
-            networkMonitor: networkMonitor,
-            processMonitor: processMonitor,
-            trafficTracker: trafficTracker,
-            clipboardRepository: databaseManager,
-            captureService: clipboardWatcher,
-            paster: clipboardPaster,
-            transferController: transfer,
-            billingMonitor: billingMonitor,
-            harnessUsage: harnessUsageService,
-            systemMonitor: systemContext.monitor,
-            systemPreferences: systemContext.preferences
-        )
-        // 面板打开前先重读权限：页脚与设置页读同一份快照，授权后不必重启
-        manager.onOpenClipboardHistory = { [weak self] in self?.toggleClipboardPanel() }
-        manager.onOpenSettings = { [weak self] section in self?.settingsWindow?.show(section: section) }
-
-        // 8. 累计流量定期落盘（崩溃 / 强杀时也能保住当日基准）
-        startTrafficPersistence()
-
-        // 8b. 更新检查：启动 5 秒后自动查一次（受 24 小时限频）
-        scheduleAutoUpdateCheck()
-
-        // 9. 启动定时轮询（由 MenuBarManager 的 setupTimer 完成）
-
-        // 启动清理：先按容量上限清一次（上限可能刚被调小、或上次退出没来得及清），再孤儿清扫
-        ClipboardImageGC.sweepOrphansAfterLaunch(repository: databaseManager,
-                                                 maxBytes: clipboardPreferences.maxBytes,
-                                                 logger: logger)
         logger.info("AppCoordinator 启动完成")
         return manager
     }
 
     /// 应用退出前清理
+    ///
+    /// 顺序不再手写：装配器按启动顺序逆序调用各阶段的 teardown（改造前是手写逆序）。
     public func stop() {
-        // 保存累计流量
-        trafficPersistenceTimer?.invalidate()
-        trafficPersistenceTimer = nil
-        persistTrafficTotals()
-
-        // 屏幕活动监听（注销通知与自检定时器）
-        screenActivity?.stop()
-        screenActivity = nil
-
-        // 局域网互传
-        transferController?.stop()
-
-        // 剪贴板链路
-        clipboardWatcher?.stop()
-        clipboardStack?.stop()
-        clipboardOCR?.cancelAll()
-        globalHotKey?.unregister()
-
-        database?.close()
+        if let compositionHandle {
+            compositionHandle.teardown(in: AppEnvironment(coordinator: self))
+        }
+        compositionHandle = nil
         logger.info("AppCoordinator 已关闭")
     }
 }
