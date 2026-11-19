@@ -1,9 +1,11 @@
+import AppKit
 import Foundation
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 应用协调器（更新检查装配）
 
-/// 更新检查装配 — 检查器、偏好与服务只在这里 new
+/// 更新检查装配 — 检查器、偏好、安装器与服务只在这里 new
 ///
 /// 关于页只依赖 `UpdateCheckService`：数据源换实现（镜像 / 本地缓存）时界面零改动，
 /// 服务实例由协调器长期持有，切页重建关于页也能立刻拿到当前状态与上次检查时间。
@@ -28,7 +30,25 @@ extension AppCoordinator {
         return UpdateCheckService(checker: checker,
                                   preferences: UpdateCheckPreferences(),
                                   currentVersion: { Self.appVersion },
+                                  installer: makeUpdateInstaller(),
+                                  terminate: { NSApp.terminate(nil) },
                                   logger: logger)
+    }
+
+    /// 真实安装器 — 下载走统一 HTTP 传输层，替换目标只认「当前运行包」
+    ///
+    /// 版本校验复用检查更新的解析器：Core 不能依赖 UI 库，
+    /// 所以把 `UpdateVersionLogic` 的解析闭包注入进去，两处口径天然一致。
+    private func makeUpdateInstaller() -> any UpdateInstallRunning {
+        UpdateInstaller(downloader: UpdatePackageDownloader(userAgent: Self.updateUserAgent,
+                                                            logger: logger),
+                        verifier: UpdatePackageVerifier(versionFromTag: { tag in
+                            guard case .success(let version) = UpdateVersionLogic.version(fromTag: tag) else {
+                                return nil
+                            }
+                            return version.displayText
+                        }),
+                        logger: logger)
     }
 
     /// 启动后延迟约 5 秒自动检查一次
@@ -52,5 +72,20 @@ extension AppCoordinator {
     /// 匿名请求的 User-Agent：`一览/1.24.2`
     static var updateUserAgent: String {
         "\(AppIdentity.displayName)/\(appVersion)"
+    }
+}
+
+// MARK: - 安装执行体实现
+
+/// `UpdateInstaller` 满足服务的安装协议 —— 目标主机在这里固定为「当前运行包」
+extension UpdateInstaller: UpdateInstallRunning {
+
+    func install(_ release: UpdateRelease,
+                 _ architecture: UpdateArchitecture,
+                 _ progress: @escaping @Sendable (UpdateInstallPhase) -> Void) async throws -> URL {
+        try await install(release: release,
+                          host: .current(),
+                          architecture: architecture,
+                          progress: progress)
     }
 }

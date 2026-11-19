@@ -34,6 +34,9 @@ func runCoreSuites() {
     runUpdateVersionTests()
     runUpdateCheckStateTests()
     runUpdateCheckerTests()
+    runUpdateNotesBlockTests()   // 发布说明分块：标题 / 条目 / 段落 / 行内标记 / 上限
+    runUpdateInstallLogicTests() // 安装纯逻辑：架构选择 / 版本校验 / 状态文案 / 自动安装偏好
+    runUpdateInstallFlowTests()  // 安装流程：沙箱替换 + 六条失败回滚（不碰 /Applications）
     runDatabaseReadQueueTests()
     runDatabaseQueueWaitTests()
     runLatestRequestGateTests()

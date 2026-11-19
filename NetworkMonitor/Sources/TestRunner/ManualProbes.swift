@@ -36,6 +36,12 @@ func runManualProbesIfRequested() {
         exit(0)
     }
 
+    // 发布说明分段自证（真实远端 body + 四个边界样例）：--update-notes-samples
+    if arguments.contains("--update-notes-samples") {
+        runUpdateNotesSamplesProbe()
+        exit(0)
+    }
+
     // 剪贴板容量上限真实链路自证：--clipboard-capacity-probe <目录>
     if let index = arguments.firstIndex(of: "--clipboard-capacity-probe"),
        index + 1 < arguments.count {

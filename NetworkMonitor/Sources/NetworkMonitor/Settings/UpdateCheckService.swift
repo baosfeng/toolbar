@@ -12,6 +12,9 @@ import NetworkMonitorUI
 /// - 每次检查结束（无论成败）写 `update.lastCheckAt`，失败同样计入限频，
 ///   避免断网时每次启动都重试一次；
 /// - 状态变化只回调、不弹窗：界面自己决定怎么显示。
+///
+/// 安装（1.30 起）：命中新版本后可「下载并安装」，流程与失败口径在 Core 的 `UpdateInstaller`，
+/// 本服务只负责「谁能调、调到什么状态、什么时候重启」。
 @MainActor
 final class UpdateCheckService {
 
@@ -21,13 +24,30 @@ final class UpdateCheckService {
     private(set) var lastCheckAt: Date?
     /// 命中新版本时的发布页（「打开发布页」目标；未命中为 nil）
     private(set) var releasePageURL: URL?
+    /// 命中新版本时的发布（安装按钮要它的 tag 与资产地址）
+    private(set) var latestRelease: UpdateRelease?
+    /// 命中新版本时的原始发布说明（关于页分块渲染用；未命中为空）
+    var latestNotes: String { latestRelease?.notes ?? "" }
+    /// 安装状态（界面唯一安装状态源）
+    private(set) var installState: UpdateInstallState = .idle
     /// 状态变化回调（关于页登记；页面切走即释放，不会累积）
     var onStateChange: (() -> Void)?
+    /// 安装状态变化回调
+    var onInstallStateChange: (() -> Void)?
+
+    /// 是否开启「发现新版本后自动下载安装」（默认关）
+    var autoInstallEnabled: Bool { preferences.autoInstallEnabled }
 
     private let checker: any UpdateChecking
     private let preferences: UpdateCheckPreferences
     private let currentVersion: () -> String
     private let logger: LoggingService
+    /// 本机架构（测试可换成另一架构，驱动「资产缺失」失败路径）
+    private let architecture: UpdateArchitecture
+    /// 安装执行体（组合根注入；nil = 本构建不支持自动安装，只保留发布页出口）
+    private let installer: UpdateInstallRunning?
+    /// 安装成功后让应用退出（真实实现延迟 0.6 秒退出，先让界面把提示显示出来）
+    private let terminate: () -> Void
 
     /// 当前版本展示文本（关于页「当前版本」行）
     var currentVersionText: String { currentVersion() }
@@ -35,10 +55,16 @@ final class UpdateCheckService {
     init(checker: any UpdateChecking,
          preferences: UpdateCheckPreferences,
          currentVersion: @escaping () -> String,
+         architecture: UpdateArchitecture = .from(machine: ProcessInfo.processInfo.machineHardwareName),
+         installer: UpdateInstallRunning? = nil,
+         terminate: @escaping () -> Void = {},
          logger: LoggingService = AppContext.shared.logger) {
         self.checker = checker
         self.preferences = preferences
         self.currentVersion = currentVersion
+        self.architecture = architecture
+        self.installer = installer
+        self.terminate = terminate
         self.logger = logger
         lastCheckAt = preferences.lastCheckAt
     }
@@ -60,6 +86,13 @@ final class UpdateCheckService {
         check()
     }
 
+    /// 开关「发现新版本后自动下载安装」
+    func setAutoInstallEnabled(_ enabled: Bool) {
+        preferences.setAutoInstallEnabled(enabled)
+        logger.info("更新检查：自动安装已\(enabled ? "开启" : "关闭")")
+        onInstallStateChange?()
+    }
+
     // MARK: 执行
 
     /// 执行一次检查并等待结束（探针要拿结果；按钮侧走 `check()`）
@@ -68,6 +101,7 @@ final class UpdateCheckService {
         guard state != .checking else { return state }
         state = .checking
         releasePageURL = nil
+        latestRelease = nil
         notify()
         do {
             let release = try await checker.fetchLatestRelease()
@@ -81,7 +115,58 @@ final class UpdateCheckService {
         lastCheckAt = checkedAt
         preferences.markChecked(at: checkedAt)
         notify()
+        if case .available = state, autoInstallEnabled {
+            logger.info("更新检查：已开启自动安装，开始安装新版本")
+            install()
+        }
         return state
+    }
+
+    // MARK: 安装
+
+    /// 下载并安装（按钮点击 / 自动安装；有在途安装时忽略）
+    func install() {
+        guard let installer, let release = latestRelease else { return }
+        guard !installState.stage.isBusy else { return }
+        installState = UpdateInstallState(stage: .downloading)
+        notifyInstall()
+        Task {
+            do {
+                _ = try await installer.install(release, architecture) { [weak self] phase in
+                    Task { @MainActor in
+                        self?.apply(phase)
+                    }
+                }
+                installState = UpdateInstallState(stage: .readyToRelaunch)
+                notifyInstall()
+                // 先让界面把「即将重启 + 需重新授权」显示出来，再退出
+                try? await Task.sleep(for: .seconds(0.6))
+                terminate()
+            } catch {
+                let reason = (error as? UpdateInstallError)?.userMessage ?? error.localizedDescription
+                logger.error("更新安装失败：\(reason)")
+                installState = UpdateInstallState(stage: .failed, failureReason: reason)
+                notifyInstall()
+            }
+        }
+    }
+
+    /// 本构建是否支持自动安装（不支持时界面只留「打开发布页」）
+    var canInstall: Bool { installer != nil }
+
+    // MARK: 私有
+
+    /// Core 的阶段 → 界面阶段
+    private func apply(_ phase: UpdateInstallPhase) {
+        let stage: UpdateInstallStage
+        switch phase {
+        case .downloading: stage = .downloading
+        case .verifying: stage = .verifying
+        case .installing: stage = .installing
+        case .readyToRelaunch: stage = .readyToRelaunch
+        }
+        installState = UpdateInstallState(stage: stage)
+        notifyInstall()
     }
 
     /// 版本判定 — tag 解析失败归「失败」而不是「已是最新」
@@ -97,6 +182,7 @@ final class UpdateCheckService {
             switch UpdateVersionLogic.isUpdateAvailable(current: currentVersion(), latest: latest.displayText) {
             case true:
                 releasePageURL = release.htmlURL
+                latestRelease = release
                 return .available(latest: latest.displayText,
                                   notes: UpdateNotes.summary(release.notes))
             case false:
@@ -110,4 +196,22 @@ final class UpdateCheckService {
     private func notify() {
         onStateChange?()
     }
+
+    private func notifyInstall() {
+        onInstallStateChange?()
+    }
+}
+
+// MARK: - 安装执行协议
+
+/// 安装执行体 — 服务只依赖这个协议，组合根决定真实实现
+///
+/// 做成协议而不是直接持有 `UpdateInstaller`：安装器要注入进度回调、
+/// 测试要能在沙箱目录里跑完整流程而不碰 `/Applications`。
+///
+/// `Sendable` 是必须的：安装跑在后台任务里，主线程只收进度回调。
+protocol UpdateInstallRunning: Sendable {
+    func install(_ release: UpdateRelease,
+                 _ architecture: UpdateArchitecture,
+                 _ progress: @escaping @Sendable (UpdateInstallPhase) -> Void) async throws -> URL
 }

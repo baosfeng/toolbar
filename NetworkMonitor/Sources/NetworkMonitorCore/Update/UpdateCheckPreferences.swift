@@ -36,4 +36,23 @@ public struct UpdateCheckPreferences {
     public func markChecked(at date: Date = Date()) {
         storage.set(date.timeIntervalSince1970, forKey: Self.lastCheckAtKey)
     }
+
+    // MARK: 自动安装
+
+    /// 「发现新版本后自动下载安装」开关
+    ///
+    /// 默认**关闭**：替换应用包是破坏性动作（ad-hoc 签名下会让 TCC 授权失效），
+    /// 缺键即关，只有用户明确打开过才生效。
+    public static let autoInstallKey = "update.autoInstall"
+
+    /// 是否已开启自动安装（缺键 = 关）
+    public var autoInstallEnabled: Bool {
+        guard storage.object(forKey: Self.autoInstallKey) != nil else { return false }
+        return storage.bool(forKey: Self.autoInstallKey)
+    }
+
+    /// 写入自动安装开关（只记意图，真正的安装时机由服务判）
+    public func setAutoInstallEnabled(_ enabled: Bool) {
+        storage.set(enabled, forKey: Self.autoInstallKey)
+    }
 }
