@@ -59,7 +59,7 @@ func runUpdateCheckLiveProbe() {
 // MARK: - 行缓冲
 
 /// 后台任务写、主线程读的字符串缓冲（跨并发边界用锁保护）
-private final class ProbeLineBox: @unchecked Sendable {
+final class ProbeLineBox: @unchecked Sendable {
     private let lock = NSLock()
     private var lines: [String] = []
 

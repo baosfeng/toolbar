@@ -15,12 +15,37 @@ public struct UpdateRelease: Equatable, Sendable {
     public let notes: String
     /// 发布时间（解析失败为 nil，不阻塞版本判定）
     public let publishedAt: Date?
+    /// 附件清单（安装包 zip；按架构各一个）
+    public let assets: [UpdateAsset]
 
-    public init(tagName: String, htmlURL: URL?, notes: String, publishedAt: Date?) {
+    public init(tagName: String, htmlURL: URL?, notes: String, publishedAt: Date?,
+                assets: [UpdateAsset] = []) {
         self.tagName = tagName
         self.htmlURL = htmlURL
         self.notes = notes
         self.publishedAt = publishedAt
+        self.assets = assets
+    }
+
+    /// 资产名清单（选择本机架构包 / 报错文案用）
+    public var assetNames: [String] { assets.map(\.name) }
+}
+
+// MARK: - 发布附件
+
+/// 发布附件 —— releases API 里的 `assets`（只留安装包要用的两列）
+///
+/// 名字与下载地址是分开的两件事：资产名决定「选哪个架构」，
+/// 地址可以是 `browser_download_url` 或镜像地址，所以两者都留。
+public struct UpdateAsset: Equatable, Sendable {
+    /// 资产名（`Yilan-arm64.app.zip`）
+    public let name: String
+    /// 下载地址（缺地址时视为不可用）
+    public let downloadURL: URL?
+
+    public init(name: String, downloadURL: URL?) {
+        self.name = name
+        self.downloadURL = downloadURL
     }
 }
 
@@ -188,12 +213,25 @@ public final class GitHubUpdateChecker: UpdateChecking {
         let htmlURL: String?
         let body: String?
         let publishedAt: String?
+        let assets: [AssetPayload]?
 
         enum CodingKeys: String, CodingKey {
             case tagName = "tag_name"
             case htmlURL = "html_url"
             case body
             case publishedAt = "published_at"
+            case assets
+        }
+    }
+
+    /// 附件子集（`browser_download_url` 是 GitHub 给的真实下载地址）
+    private struct AssetPayload: Decodable {
+        let name: String?
+        let browserDownloadURL: String?
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case browserDownloadURL = "browser_download_url"
         }
     }
 
@@ -211,9 +249,14 @@ public final class GitHubUpdateChecker: UpdateChecking {
         guard let tag = payload.tagName, !tag.isEmpty else {
             throw UpdateCheckError.invalidResponse("缺少 tag_name")
         }
+        let assets = (payload.assets ?? []).compactMap { asset -> UpdateAsset? in
+            guard let name = asset.name, !name.isEmpty else { return nil }
+            return UpdateAsset(name: name, downloadURL: asset.browserDownloadURL.flatMap { URL(string: $0) })
+        }
         return UpdateRelease(tagName: tag,
                              htmlURL: payload.htmlURL.flatMap { URL(string: $0) },
                              notes: payload.body ?? "",
-                             publishedAt: payload.publishedAt.flatMap { try? Date($0, strategy: .iso8601) })
+                             publishedAt: payload.publishedAt.flatMap { try? Date($0, strategy: .iso8601) },
+                             assets: assets)
     }
 }
