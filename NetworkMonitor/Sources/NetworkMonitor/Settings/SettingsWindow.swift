@@ -19,13 +19,11 @@ import NetworkMonitorUI
 @MainActor
 final class SettingsWindow: NSObject, NSWindowDelegate {
 
-    /// 页工厂 — 由组合根提供，窗口只按分类取用
-    typealias PaneFactory = () -> SettingsPaneView
-
     // 放宽为 internal：DEBUG 快照扩展文件（SettingsWindow+Snapshot.swift）要换挂内容视图
     let window: NSWindow
-    // 放宽为 internal：DEBUG 快照扩展文件（SettingsWindow+Snapshot.swift）要用
-    let factories: [SettingsSection: PaneFactory]
+    /// 分类装配注册表 —— 每页的造页闭包由组合根按 `register` 一行声明（见 `SettingsModule.swift`）
+    // 放宽为 internal：DEBUG 快照扩展按分类取页
+    let modules: SettingsModuleRegistry
     private let logger: LoggingService
     // 放宽为 internal：DEBUG 快照扩展文件要重建同构容器
     let contentScroll = NSScrollView()
@@ -39,9 +37,9 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private var appearanceObserver: NSObjectProtocol?
     private var renderTierObserver: NSObjectProtocol?
 
-    init(factories: [SettingsSection: PaneFactory],
+    init(modules: SettingsModuleRegistry,
          logger: LoggingService = AppContext.shared.logger) {
-        self.factories = factories
+        self.modules = modules
         self.logger = logger
         window = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsTheme.windowSize),
                           styleMask: [.titled, .closable, .miniaturizable],
@@ -124,15 +122,15 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 
     /// 切到指定分类（重建该页并刷新）
     func select(_ section: SettingsSection) {
-        guard factories[section] != nil else {
-            logger.warning("设置页缺少工厂：\(section)")
+        guard modules.module(for: section) != nil else {
+            logger.warning("设置页缺少装配声明：\(section.rawValue)")
             return
         }
         currentSection = section
         for (itemSection, item) in items {
             item.isSelected = (itemSection == section)
         }
-        guard let pane = factories[section]?() else { return }
+        guard let pane = modules.makePane(for: section) else { return }
         currentPane?.removeFromSuperview()
         currentPane = pane
         pane.translatesAutoresizingMaskIntoConstraints = false

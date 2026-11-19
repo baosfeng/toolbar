@@ -29,6 +29,9 @@ func runPaneSuites() {
     runDrawnUnflipTests()
     runDrawnSurfaceMathTests()
     runPanelTabCatalogTests()  // 分页
+    // 分页 / 设置分类的组装式装配（Descriptor + Registry：正常 / 重复 / 缺项 / 顺序）
+    runPaneModuleRegistryTests()
+    runSettingsSectionRegistryTests()
     runThemeContrastTests()
     runRenderTierTests()
     runRenderTierGlassTests()

@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorUI
 
 // MARK: - 面板分页枚举
 
@@ -18,42 +19,31 @@ enum MenuPanelTab: Int, CaseIterable {
     case token = 4
     case system = 5
 
-    /// 分段标签标题
-    var title: String {
-        switch self {
-        case .network: return "网络"
-        case .transfer: return "传送"
-        case .credits: return "额度"
-        case .token: return "Token"
-        case .system: return "系统"
+    /// 本分页的描述符 —— 文案 / 图标 / 快照后缀 / 取证标识的唯一来源（见 `PaneModuleCatalog`）
+    ///
+    /// 改造前这里是三个穷尽 switch（title / stableID / symbolName）：加一个分页要改三处，
+    /// 漏一处没有编译错误，只会静默用错图标或存错偏好 id。现在描述符目录是唯一真源，
+    /// 枚举只负责编号（rawValue 冻结，见 `PanelTabCatalog.legacyRawValueToStableID`）。
+    var descriptor: PaneModuleDescriptor {
+        if let descriptor = PaneModuleCatalog.descriptor(forRawValue: rawValue) {
+            return descriptor
         }
+        // 目录漏登记：开发期断言 + 兜底值（不静默套用别的分页文案，也不崩 release）
+        assertionFailure("分页 \(self) 未在 PaneModuleCatalog 登记")
+        return PaneModuleDescriptor.placeholder(rawValue: rawValue)
     }
+
+    /// 分段标签标题
+    var title: String { descriptor.title }
 
     /// 稳定 id —— 顺序偏好里存的就是它
     ///
     /// 不用 `rawValue`：那是 Int（编号），将来再下线一个分页时编号仍会变；
-    /// 稳定 id 与 `PanelTabCatalog.stableIDs` 同源，改一处必须改两处。
-    var stableID: String {
-        switch self {
-        case .network: return "network"
-        case .transfer: return "transfer"
-        case .credits: return "credits"
-        case .token: return "token"
-        case .system: return "system"
-        }
-    }
+    /// 稳定 id 与 `PanelTabCatalog.stableIDs` 同源（自洽性由 TestRunner 断言）。
+    var stableID: String { descriptor.id }
 
     /// 分段标签图标（SF Symbols，禁止 emoji）
-    var symbolName: String {
-        switch self {
-        case .network: return "network"
-        case .transfer: return "paperplane"
-        case .credits: return "creditcard"
-        case .token: return "chart.bar.xaxis"
-        // macOS 14+（SF Symbols 5）可用：实测本机可解析，解析失败时仅少一个图标
-        case .system: return "gauge.with.dots.needle.67percent"
-        }
-    }
+    var symbolName: String { descriptor.symbolName }
 }
 
 // MARK: - 顶部细分段

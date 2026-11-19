@@ -104,34 +104,19 @@ extension MenuPanelController: MenuPanelViewDelegate {
     /// 懒装配把「建页」与「推数据」拆开了：常规刷新链路只更新已装配页，
     /// 所以首次切页必须在这里把该页该有的数据一次性补齐。
     private func refreshPaneFirstDisplay(_ tab: MenuPanelTab) {
-        switch tab {
-        case .network:
-            // 补的是 5 秒档的流量 / 柱图 / 进程，以及与系统页同源的 Wi-Fi 链路条；
-            // 速率与折线本来由 1 秒 tick 每秒推，这里顺手补一帧避免首屏「0 B/s」
-            refreshMidFrequency()
-            content.updateSpeeds(down: max(monitor.downloadSpeed, 0),
-                                 up: max(monitor.uploadSpeed, 0),
-                                 downHistory: downHistory,
-                                 upHistory: upHistory)
-            content.updateWiFiLink(systemMonitor?.snapshot?.wifi)
-        case .transfer:
-            // attach 时已渲染一次，这里强制补推一次（收起期间的数据变化不能漏）
-            transferController?.refreshNow()
-        case .credits:
-            renderBillingSnapshot()
-        case .token:
-            refreshToken()
-        case .system:
-            // 系统页的首屏由 didSelectTab 里的 poll + refreshSystem 补齐（每次切到都会走）
-            break
-        }
+        // 补什么由注册表里该分页的 `firstDisplay` 闭包声明（见 `MenuPanel/PaneModule.swift`）：
+        // 加一个分页只加一份声明，这里不再有穷尽 switch。
+        guard let module = content.paneModules.module(for: tab),
+              let pane = content.paneIfLoaded(tab) else { return }
+        module.firstDisplay(self, pane)
     }
 
     /// 用状态管理器当前快照立即渲染额度页
     ///
     /// 额度是推送式回调（`billingMonitor.onUpdate`）：该页还没装配时收到的推送会被跳过，
     /// 切回来时必须用最后一帧状态补一次，否则要等下一轮刷新（最坏 60 秒节流）。
-    private func renderBillingSnapshot() {
+    // 放宽为 internal：分页注册表的 credits 首屏闭包跨文件调用（见 MenuPanel/PaneModule.swift）
+    func renderBillingSnapshot() {
         guard let billingMonitor, !billingPushInFlight else { return }
         billingPushInFlight = true
         defer { billingPushInFlight = false }

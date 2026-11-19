@@ -6,7 +6,7 @@ import AppKit
 /// 快照所需的几个入口 — 从 `SettingsWindow.swift` 拆出
 ///
 /// 拆出原因：窗口主文件只留容器与切页，而这些方法只服务于 DEBUG 快照取证。
-/// 跨文件访问：`window` / `factories` / `rootView` / `currentPane` / `contentScroll`
+/// 跨文件访问：`window` / `modules` / `rootView` / `currentPane` / `contentScroll`
 /// 由 private 放宽为 internal，仅供本扩展使用。
 extension SettingsWindow {
 
@@ -16,7 +16,7 @@ extension SettingsWindow {
     /// 侧栏直接复用 `SettingsSidebarBuilder`：结构改过之后探针图必须与真实窗口同构，
     /// 否则「首次进入空白」这类回归会被探针图掩盖。
     func makeFreshForFirstOpenProbe() -> NSView? {
-        guard let factory = factories[.general] else { return nil }
+        guard let factory = modules.module(for: .general) else { return nil }
         let probeWindow = NSWindow(contentRect: NSRect(origin: .zero, size: SettingsTheme.windowSize),
                                    styleMask: [.titled, .closable, .miniaturizable],
                                    backing: .buffered, defer: false)
@@ -34,7 +34,7 @@ extension SettingsWindow {
         let container = SettingsFlippedView()
         container.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = container
-        let pane = factory()
+        let pane = factory.makePane()
         pane.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(pane)
         root.addSubview(sidebar)
