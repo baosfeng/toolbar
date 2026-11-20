@@ -1,14 +1,12 @@
 import Foundation
+import NetworkMonitorCore
 
 // MARK: - 采样节拍（随面板可见性降频）
 
-/// 状态栏 1 秒刷新链里的两路采样节流
-///
-/// 拆出来两个理由：
-/// 1. 面板收起时无人看：系统采样 1 秒→5 秒、nettop 进程采样 3 秒→15 秒；
-/// 2. MenuBarManager.swift 已到单文件字节上限，节流逻辑独立成扩展文件。
-///
-/// 状态栏仍需的网速由 monitor.poll() 提供，不走这里，所以收起时状态栏照常每秒刷新。
+/// 状态栏 1 秒刷新链里的两路采样节流 —— 拆出来两个理由：面板收起时无人看（系统 1→5 秒、
+/// nettop 3→15 秒）；MenuBarManager.swift 已到单文件字节上限。
+/// 判定走 Core 的 `MinimumIntervalGate`：按本次生效的间隔构造闸门、以上次放行时刻续窗口，
+/// 换间隔不会多放行一次；状态栏网速由 monitor.poll() 提供，不走这里，收起时照常每秒刷新。
 extension MenuBarManager {
 
     /// 面板收起时的系统采样周期下限（秒）：保留告警阈值所需的灵敏度，又能去掉无人看的帧
@@ -25,12 +23,14 @@ extension MenuBarManager {
         let systemInterval = panelVisible
             ? systemSampleInterval
             : max(systemSampleInterval, Self.hiddenSystemSampleInterval)
-        if now.timeIntervalSince(lastSystemPoll) >= systemInterval {
+        var systemGate = MinimumIntervalGate(interval: systemInterval, lastRunAt: lastSystemPoll)
+        if systemGate.shouldRun(now: now) {
             lastSystemPoll = now
             systemMonitor?.poll()
         }
         let processInterval = panelVisible ? Self.visibleProcessPollInterval : Self.hiddenProcessPollInterval
-        if now.timeIntervalSince(lastProcessPoll) >= processInterval {
+        var processGate = MinimumIntervalGate(interval: processInterval, lastRunAt: lastProcessPoll)
+        if processGate.shouldRun(now: now) {
             lastProcessPoll = now
             processMonitor.poll()
         }

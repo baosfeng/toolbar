@@ -18,8 +18,13 @@ public struct MinimumIntervalGate: Sendable {
     /// 上次放行的时刻（nil = 还没有放行过）
     public private(set) var lastRunAt: Date?
 
-    public init(interval: TimeInterval) {
+    /// - Parameter lastRunAt: 既有的上次放行时刻（nil = 还没有放行过）
+    ///
+    /// 允许显式承接：调用方的间隔随可见性 / 档位变化时，换了间隔仍要沿用同一个窗口，
+    /// 否则每次换间隔都会多放行一次；从「自己记一个 Date」迁移过来的调用方也靠它保持等价。
+    public init(interval: TimeInterval, lastRunAt: Date? = nil) {
         self.interval = interval
+        self.lastRunAt = lastRunAt
     }
 
     /// 本次是否放行；放行时把 `now` 记为新的 `lastRunAt`

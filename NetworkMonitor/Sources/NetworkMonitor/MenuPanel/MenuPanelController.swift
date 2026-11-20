@@ -43,8 +43,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     let popover = NSPopover()
     /// 面板根视图（用注入存储构造：分页偏好必须与设置页读写同一份存储）
     let content: MenuPanelView
-    // 以下三个监控服务由 private 放宽为 internal：打开 / 刷新链路已拆到
-    // MenuPanelController+Open.swift（速率、流量、进程采样），同模块内无其他调用方。
+    // 以下三个监控服务由 private 放宽为 internal：刷新链路已拆到
+    // MenuPanelController+Refresh.swift（速率、流量、进程采样），同模块内无其他调用方。
     let monitor: any NetworkMonitoringService
     let processMonitor: any ProcessNetworkMonitoringService
     let trafficTracker: any TrafficTrackingService
@@ -93,8 +93,8 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
 
     // MARK: 状态
 
-    // 以下四项由 private 放宽为 internal：打开 / 刷新链路已拆到
-    // MenuPanelController+Open.swift（采样折线、中频节流），同模块内无其他调用方。
+    // 以下四项由 private 放宽为 internal：刷新链路已拆到
+    // MenuPanelController+Refresh.swift（采样折线、中频节流），同模块内无其他调用方。
 
     /// 折线采样（60 个 1 秒点）
     var downHistory: [Double] = []
@@ -103,8 +103,11 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     // 原先是 static let，切档后永远停在默认值——「设置页切了但没生效」的典型成因。
     /// 折线采样点上限（1 点 = 1 个 tick），默认取标准档
     var maxHistory: Int = RenderTierLogic.standard.historyPoints
-    /// 中频刷新间隔，默认取标准档
-    var midInterval: TimeInterval = RenderTierLogic.standard.midInterval
+    /// 中频刷新间隔（秒）——直接读当前档位，不另存一份实例状态
+    ///
+    /// 原先存成实例变量、由 `applyRenderTier` 改写：多一份状态就多一次「切了档但没写进去」
+    /// 的分叉机会（`PanelRefreshPolicy` 与取证都读档位，两处永远同一口径）。
+    var midInterval: TimeInterval { RenderTierLogic.profile(for: currentRenderTier).midInterval }
     /// 当前渲染档位（切档后由 `applyRenderTier` 更新，tick 据此判定是否停摆）
     var currentRenderTier: RenderTier = .standard
     var lastMidRefresh: Date = .distantPast
@@ -116,7 +119,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     // 放宽为 internal：toggle / popoverDidClose 已拆到 MenuPanelController+Open.swift
     var lastCloseDate: Date = .distantPast
     /// 内容更新批处理深度（> 0 时尺寸重算只记账、不布局）
-    // 放宽为 internal：批处理开合与判定都在 MenuPanelController+Open.swift
+    // 放宽为 internal：批处理开合在 MenuPanelController+Refresh.swift，判定在 PanelContentSizing
     var contentBatchDepth = 0
     /// 批处理期间是否收到过强制尺寸重算请求
     var contentBatchNeedsForceSize = false
@@ -134,7 +137,7 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     /// 置位期间收到的「内容变更」不再回拉，见 `BillingRefreshGate`。
     var billingPushInFlight = false
     /// 是否已做过启动预热（只做一次）
-    // 放宽为 internal：预热逻辑在 MenuPanelController+Open.swift
+    // 放宽为 internal：预热逻辑在 MenuPanelController+Open.swift（显示 / 收起同文件）
     var hasPrewarmed = false
     // 放宽为 internal：数据源绑定扩展（+DataSources）负责注册 / 读取
     // 放宽为 internal：数据绑定扩展要注册 / 移除

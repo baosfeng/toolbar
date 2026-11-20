@@ -9,21 +9,15 @@ import NetworkMonitorCore
 /// 不感知具体采样实现；未装配时全部降级为空态（显示「—」）。
 extension MenuPanelController {
 
-    /// 系统页视图刷新间隔（秒）：与网络页中频刷新同一档
-    static let systemRefreshInterval: TimeInterval = 5.0
-
-    /// 每秒调用（面板展开时）：取快照推进历史，再按间隔节流渲染
+    /// 面板展开期间每拍推进系统指标历史（1 秒一个点）
     ///
     /// 历史只在面板展开期间累积：收起后曲线会出现断档，但避免后台长期占内存。
-    func systemTick() {
-        guard popover.isShown else { return }
+    /// 渲染节流不在这里：本轮要不要调 `renderSystem()` 由 `PanelRefreshPolicy` 的
+    /// 5 秒闸门给出，这里只负责记账。
+    func appendSystemHistory() {
         if let snapshot = systemMonitor?.snapshot {
             systemHistory.append(snapshot)
         }
-        let now = Date()
-        guard now.timeIntervalSince(lastSystemRefresh) >= Self.systemRefreshInterval else { return }
-        lastSystemRefresh = now
-        renderSystem()
     }
 
     /// 面板打开 / 切到系统页时的刷新（先采一帧由调用方决定，这里只渲染）
