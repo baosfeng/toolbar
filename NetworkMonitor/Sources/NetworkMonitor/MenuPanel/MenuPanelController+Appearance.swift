@@ -45,15 +45,14 @@ extension MenuPanelController {
                     + "玻璃=\(preferences.glassEnabled ? "开" : "关")")
     }
 
-    /// 应用渲染帧率档：改写中频节流、采样点上限与动效时长
+    /// 应用渲染帧率档：改写采样点上限与动效时长（中频间隔直接读档位，不另存）
     ///
-    /// 三处都是**实例/可变**状态（改造前是 `static let`，换档不生效）：
-    /// `midInterval`、`maxHistory`、`MotionKit.durations`。
+    /// `maxHistory` 与 `MotionKit.durations` 是**实例/可变**状态（改造前是 `static let`，
+    /// 换档不生效）；中频间隔不另存，直接读当前档位（见 `midInterval`）。
     /// Timer 周期不在这里改——它归 `MenuBarManager`（同一个 Timer 同时驱动状态栏与面板）。
     func applyRenderTier(_ tier: RenderTier) {
         currentRenderTier = tier
         let profile = RenderTierLogic.profile(for: tier)
-        midInterval = profile.midInterval
         maxHistory = profile.historyPoints
         // 点数变少时立刻裁剪，否则旧历史会把折线按旧上限继续画
         if downHistory.count > maxHistory {

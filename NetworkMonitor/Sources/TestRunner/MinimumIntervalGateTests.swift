@@ -61,4 +61,13 @@ func runMinimumIntervalGateTests() {
     var copy = original
     assertEqual(copy.shouldRun(now: t0.addingTimeInterval(2)), true, "拷贝可独立放行")
     assertEqual(original.lastRunAt, t0, "原闸门状态不被拷贝改变")
+
+    // 显式承接上次放行时刻：间隔随可见性 / 档位切换时换窗口而不重置（采样节流在用）
+    var seeded = MinimumIntervalGate(interval: 5, lastRunAt: t0)
+    assertEqual(seeded.lastRunAt, t0, "承接的上次放行时刻原样保留")
+    assertEqual(seeded.shouldRun(now: t0.addingTimeInterval(4.999)), false, "承接后窗口内仍拒绝")
+    assertEqual(seeded.shouldRun(now: t0.addingTimeInterval(5)), true, "承接后到点放行")
+    var freshSeeded = MinimumIntervalGate(interval: 5, lastRunAt: nil)
+    assertEqual(freshSeeded.shouldRun(now: t0), true, "承接 nil 等同首次，恒放行")
+    assertEqual(freshSeeded.lastRunAt, t0, "承接 nil 放行后照常记录时刻")
 }
