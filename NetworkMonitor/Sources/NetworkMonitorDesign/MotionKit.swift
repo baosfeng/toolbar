@@ -11,42 +11,42 @@ import NetworkMonitorCore
 ///
 /// 使用约定：剪贴板 / 菜单面板 / 设置一律调本入口，不再各模块自写 CAAnimation。
 @MainActor
-enum MotionKit {
+public enum MotionKit {
 
     // MARK: 取值
 
     /// 时长与错峰令牌（与 `TransferMotion` 同口径）
-    struct Durations: Sendable {
+    public struct Durations: Sendable {
         /// 状态变化（选中切换 / 按下松开 / 图层交叉过渡）
-        let state: TimeInterval
+        public let state: TimeInterval
         /// 展开 / 淡入
-        let expand: TimeInterval
+        public let expand: TimeInterval
         /// 弹层出现
-        let overlay: TimeInterval
+        public let overlay: TimeInterval
         /// 关闭 / 删除
-        let close: TimeInterval
+        public let close: TimeInterval
         /// 列表逐项延迟（错峰步长）
-        let stagger: TimeInterval
+        public let stagger: TimeInterval
 
         /// 设计规格冻结的默认取值
-        static let standard = Durations(state: 0.12, expand: 0.34,
+        public static let standard = Durations(state: 0.12, expand: 0.34,
                                         overlay: 0.22, close: 0.15, stagger: 0.024)
     }
 
     /// 全局时长令牌 —— **可变**：渲染帧率档切换会重写它（原先是 `static let`，
     /// 换档后动效永远停在默认值，正是「设置页切了但没反应」那类问题的成因）
-    private(set) static var durations = Durations.standard
+    public private(set) static var durations = Durations.standard
 
     /// 当前渲染档是否允许播放动效
     ///
     /// 与系统的「减弱动态效果」是**或**的关系：任一路要求降级，动效就落终态。
-    private(set) static var tierAllowsMotion = true
+    public private(set) static var tierAllowsMotion = true
 
     /// 按渲染档更新动效参数（切档时由 `RenderTierCoordinator` 调用）
     ///
     /// 只改「展开 / 弹层 / 错峰」三档，状态档（0.12s）与关闭档（0.15s）保持系统惯例值：
     /// 这两档是「按下松开」「收起来」这类即时反馈，改长只会显得拖沓。
-    static func apply(profile: RenderTierProfile) {
+    public static func apply(profile: RenderTierProfile) {
         tierAllowsMotion = profile.motionEnabled
         durations = Durations(state: Durations.standard.state,
                               expand: profile.motionExpand,
@@ -56,7 +56,7 @@ enum MotionKit {
     }
 
     /// 恢复默认时长（标准档 / 测试用）
-    static func resetDurations() {
+    public static func resetDurations() {
         tierAllowsMotion = true
         durations = Durations.standard
     }
@@ -68,7 +68,7 @@ enum MotionKit {
     private static let crossFadeKey = "motion.crossFade"
 
     /// 是否允许动效：系统「减弱动态效果」与渲染档位任一要求降级时落终态
-    static var isEnabled: Bool {
+    public static var isEnabled: Bool {
         tierAllowsMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
@@ -81,7 +81,7 @@ enum MotionKit {
     ///   - view: 目标视图
     ///   - offsetY: 起始纵向偏移（pt），动画期间回落到 0
     ///   - delay: 延迟（错峰用，取值见 `stagger(index:)`）
-    static func fadeIn(_ view: NSView, offsetY: CGFloat = 10, delay: TimeInterval = 0) {
+    public static func fadeIn(_ view: NSView, offsetY: CGFloat = 10, delay: TimeInterval = 0) {
         guard isEnabled else {
             view.alphaValue = 1
             view.layer?.transform = CATransform3DIdentity
@@ -109,7 +109,7 @@ enum MotionKit {
     }
 
     /// 淡出（卡片消失 / 弹层关闭）；动效关闭时直接落终态并回调
-    static func fadeOut(_ view: NSView, duration: TimeInterval = durations.close,
+    public static func fadeOut(_ view: NSView, duration: TimeInterval = durations.close,
                         completion: (() -> Void)? = nil) {
         guard isEnabled else {
             view.alphaValue = 0
@@ -135,7 +135,7 @@ enum MotionKit {
     ///
     /// 允许动效时把窗口落到「透明 + 下移 offsetY」的起始态，首次合成就不会先以终态闪一帧；
     /// 不允许动效时（含 `offsetY` 为 0）直接落终态：alpha 1 + `toFrame`，后续 `fadeIn` 不再过渡。
-    static func stageWindowEntrance(_ window: NSWindow, fromOffsetY offsetY: CGFloat, toFrame: NSRect) {
+    public static func stageWindowEntrance(_ window: NSWindow, fromOffsetY offsetY: CGFloat, toFrame: NSRect) {
         guard isEnabled else {
             window.alphaValue = 1
             window.setFrame(toFrame, display: false)
@@ -149,7 +149,7 @@ enum MotionKit {
     ///
     /// 时序敏感：只在调用方已把窗口置为 key 之后再跑，避免与「先记前台 App、后合成 ⌘V」的时序耦合；
     /// 动效关闭或时长非正时直接落终态（alpha 1 + 终态 frame），不做任何过渡。
-    static func fadeIn(window: NSWindow, toFrame: NSRect, duration: TimeInterval) {
+    public static func fadeIn(window: NSWindow, toFrame: NSRect, duration: TimeInterval) {
         guard isEnabled, duration > 0 else {
             window.alphaValue = 1
             window.setFrame(toFrame, display: true)
@@ -167,7 +167,7 @@ enum MotionKit {
     ///
     /// 让出 key 的 `orderOut` 仍归窗口自己负责，动效层只管不透明度：回调里由调用方 orderOut，
     /// 因此动效关闭时也等价于「立刻 orderOut、零过渡」。
-    static func fadeOut(window: NSWindow, duration: TimeInterval = durations.close,
+    public static func fadeOut(window: NSWindow, duration: TimeInterval = durations.close,
                         completion: (() -> Void)? = nil) {
         guard isEnabled, duration > 0 else {
             window.alphaValue = 0
@@ -185,7 +185,7 @@ enum MotionKit {
     }
 
     /// 弹入：缩放 0.7 → 1.15 → 1（收藏星 / 栈角标这类小元素出现）
-    static func popIn(_ view: NSView) {
+    public static func popIn(_ view: NSView) {
         view.wantsLayer = true
         view.alphaValue = 1
         guard isEnabled, let layer = view.layer else { return }
@@ -198,17 +198,17 @@ enum MotionKit {
     }
 
     /// 按下 / 缩小：默认缩放 0.96（删除动效传更小的目标实现「缩小」）
-    static func press(_ view: NSView, scale: CGFloat = 0.96) {
+    public static func press(_ view: NSView, scale: CGFloat = 0.96) {
         applyScale(view, to: scale, key: "motion.press")
     }
 
     /// 松开：恢复 1.0
-    static func release(_ view: NSView) {
+    public static func release(_ view: NSView) {
         applyScale(view, to: 1, key: "motion.release")
     }
 
     /// 失败：横向抖动 ±4pt 三次（动效关闭时不抖）
-    static func shake(_ view: NSView) {
+    public static func shake(_ view: NSView) {
         guard isEnabled else { return }
         view.wantsLayer = true
         guard let layer = view.layer else { return }
@@ -225,7 +225,7 @@ enum MotionKit {
     ///   - layer: 目标图层（描边层 / 底色层 / 缩略图层）
     ///   - duration: 过渡时长，默认状态档 0.12s；传 0 表示直接落终态
     ///   - opacity: 目标不透明度；nil 表示按当前值反向切换（真·交叉切换）
-    static func crossFade(layer: CALayer, duration: TimeInterval = durations.state,
+    public static func crossFade(layer: CALayer, duration: TimeInterval = durations.state,
                           to opacity: Float? = nil) {
         let target = opacity ?? (layer.opacity > 0.5 ? 0 : 1)
         guard isEnabled, duration > 0 else {
@@ -253,7 +253,7 @@ enum MotionKit {
     ///   - view: 目标视图
     ///   - duration: 过渡时长，默认状态档 0.12s；传 0 表示直接落终态
     ///   - alpha: 目标不透明度
-    static func crossFade(view: NSView, duration: TimeInterval = durations.state, to alpha: CGFloat) {
+    public static func crossFade(view: NSView, duration: TimeInterval = durations.state, to alpha: CGFloat) {
         view.wantsLayer = true
         guard isEnabled, duration > 0 else {
             view.alphaValue = alpha
@@ -271,7 +271,7 @@ enum MotionKit {
     }
 
     /// 错峰延迟：第 index 个元素的进场延迟（每张 0.024s，总时长封顶 0.3s）
-    static func stagger(index: Int) -> TimeInterval {
+    public static func stagger(index: Int) -> TimeInterval {
         min(Double(max(0, index)) * durations.stagger, staggerLimit)
     }
 
@@ -283,7 +283,7 @@ enum MotionKit {
     ///
     /// - Parameter progress: 线性进度 0…1
     /// - Returns: 曲线上的值 0…1
-    static func easedOut(_ progress: CGFloat) -> CGFloat {
+    public static func easedOut(_ progress: CGFloat) -> CGFloat {
         let x = min(max(progress, 0), 1)
         // 控制点 (0,0) (0,0) (0.58,1) (1,1)：x(u) = 1.74u² − 0.74u³，y(u) = 3u² − 2u³
         var u = x
@@ -297,7 +297,7 @@ enum MotionKit {
     }
 
     /// 弹入缩放 —— 与 `popIn` 的 keyframe `[0.7, 1.15, 1]`（keyTimes `[0, 0.6, 1]`）同一段曲线
-    static func popScale(_ progress: CGFloat) -> CGFloat {
+    public static func popScale(_ progress: CGFloat) -> CGFloat {
         let p = min(max(progress, 0), 1)
         if p < 0.6 {
             return 0.7 + (1.15 - 0.7) * (p / 0.6)

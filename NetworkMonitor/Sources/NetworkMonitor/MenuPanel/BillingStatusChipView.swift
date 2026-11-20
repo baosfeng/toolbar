@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - 状态胶囊（取代 5pt 圆点）
 

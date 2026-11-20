@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - 快照：系统页滚到底 / 超高内容自证（仅 DEBUG）
 

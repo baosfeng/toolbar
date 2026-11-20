@@ -6,12 +6,12 @@ import AppKit
 ///
 /// 自绘视图的 `accessibilityChildren()` 可以返回任意 `NSAccessibilityElement`：
 /// 它没有视图、没有图层，只带 role / label / frame 与一个按下动作。
-final class DrawnRowAccessibilityElement: NSAccessibilityElement {
+public final class DrawnRowAccessibilityElement: NSAccessibilityElement {
 
     /// 元素被按下时执行的动作（nil = 只读元素）
-    var activate: (() -> Void)?
+    public var activate: (() -> Void)?
 
-    override func accessibilityPerformPress() -> Bool {
+    public override func accessibilityPerformPress() -> Bool {
         guard let activate else { return false }
         activate()
         return true
@@ -26,7 +26,7 @@ final class DrawnRowAccessibilityElement: NSAccessibilityElement {
 /// 元素 frame 一律按「每次读取时现算」处理：自绘元素不是视图，不会跟着布局自动更新，
 /// 所以 `accessibilityChildren()` 每次都要把视图内矩形换算成屏幕矩形重新赋给元素。
 @MainActor
-enum DrawnAccessibilityReporter {
+public enum DrawnAccessibilityReporter {
 
     /// 卡级单元素模式：把视图本身配成无障碍节点
     ///
@@ -35,7 +35,7 @@ enum DrawnAccessibilityReporter {
     ///   - role: 角色（可点整卡 = .button，纯展示分组 = .group）
     ///   - label: 可读名（nil = 不改，留给内容刷新时逐条更新）
     ///   - value: 状态值（同上）
-    static func configure(_ view: NSView, role: NSAccessibility.Role,
+    public static func configure(_ view: NSView, role: NSAccessibility.Role,
                           label: String? = nil, value: String? = nil) {
         view.setAccessibilityElement(true)
         view.setAccessibilityRole(role)
@@ -44,7 +44,7 @@ enum DrawnAccessibilityReporter {
     }
 
     /// 卡级单元素模式：只改角色（整卡从「组」变「按钮」这类运行时切换）
-    static func setRole(_ role: NSAccessibility.Role, for view: NSView) {
+    public static func setRole(_ role: NSAccessibility.Role, for view: NSView) {
         view.setAccessibilityRole(role)
     }
 
@@ -55,7 +55,7 @@ enum DrawnAccessibilityReporter {
     ///   - label: 可读名
     ///   - parent: 归属视图
     ///   - activate: 按下动作（nil = 只读）
-    static func element(role: NSAccessibility.Role, label: String, parent: NSView,
+    public static func element(role: NSAccessibility.Role, label: String, parent: NSView,
                         activate: (() -> Void)? = nil) -> DrawnRowAccessibilityElement {
         let element = DrawnRowAccessibilityElement()
         element.setAccessibilityParent(parent)
@@ -66,7 +66,7 @@ enum DrawnAccessibilityReporter {
     }
 
     /// 视图内矩形 → 屏幕矩形（自绘元素的 frame 口径；无窗口时按视图坐标交回）
-    static func screenFrame(of rect: CGRect, in view: NSView) -> CGRect {
+    public static func screenFrame(of rect: CGRect, in view: NSView) -> CGRect {
         guard let window = view.window else { return rect }
         return window.convertToScreen(view.convert(rect, to: nil))
     }

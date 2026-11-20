@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - Token 页底部状态行与口径说明（从 TokenRowViews.swift 拆出：单文件体积门禁）
 //

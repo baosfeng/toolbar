@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - Token 二级页（面板内覆盖式，不新开窗口）
 

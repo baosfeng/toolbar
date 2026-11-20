@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - 面板行（拆出自 MenuPanelComponents.swift，原文件超单文件 15 KiB 上限）
 

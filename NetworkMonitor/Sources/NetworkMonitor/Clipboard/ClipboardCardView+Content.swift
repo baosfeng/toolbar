@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 卡片内容绘制（卡身 / 图片占位 / 缩略图 / 卡脚 / 星标 / 角标）

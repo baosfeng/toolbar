@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - Wi-Fi 链路样式（网络页链路条与系统页状态带共用）
 

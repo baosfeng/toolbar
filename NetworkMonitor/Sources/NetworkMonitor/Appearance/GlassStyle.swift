@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - 玻璃拟态（三层：面板 / 卡片 / 弹窗）
 

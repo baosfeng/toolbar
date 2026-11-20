@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - Token 二级页与小时卡取证（从 TokenPaneSnapshot 拆出：单文件体积门禁）
 

@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 卡头微图例

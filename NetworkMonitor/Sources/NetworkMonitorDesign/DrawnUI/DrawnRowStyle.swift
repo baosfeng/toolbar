@@ -12,35 +12,57 @@ import NetworkMonitorUI
 ///
 /// 列宽分配走 `DrawnRowLayout.metrics`（纯逻辑，已断言），本类型只负责按算好的矩形画。
 @MainActor
-struct DrawnSingleRowStyle {
+public struct DrawnSingleRowStyle {
 
     /// 行内左右内边距
-    var horizontalInset: CGFloat = PaneCardStyle.cardPaddingX
+    public var horizontalInset: CGFloat = PaneCardStyle.cardPaddingX
     /// 名称 / 进度条 / 数值之间的间距
-    var elementGap: CGFloat = 6
+    public var elementGap: CGFloat = 6
     /// 行名字体
-    var titleFont: NSFont = PaneCardStyle.rowNameFont
+    public var titleFont: NSFont = PaneCardStyle.rowNameFont
     /// 行值字体（强调行换粗体）
-    var valueFont: NSFont = PaneCardStyle.rowValueFont
+    public var valueFont: NSFont = PaneCardStyle.rowValueFont
     /// 行名颜色
-    var titleColor: NSColor = PaneCardStyle.primaryText
+    public var titleColor: NSColor = PaneCardStyle.primaryText
     /// 进度条轨道色
-    var trackColor: NSColor = PaneCardStyle.trackColor
+    public var trackColor: NSColor = PaneCardStyle.trackColor
     /// 进度条填充色
-    var barColor: NSColor = PaneCardStyle.okColor
+    public var barColor: NSColor = PaneCardStyle.okColor
     /// 进度条高度
-    var barHeight: CGFloat = 5
+    public var barHeight: CGFloat = 5
     /// 进度条可画的最小宽度（不足则整条不画）
-    var minBarWidth: CGFloat = 60
+    public var minBarWidth: CGFloat = 60
     /// 行名固定列宽（nil = 按文字实际宽度占位）
-    var fixedTitleWidth: CGFloat?
+    public var fixedTitleWidth: CGFloat?
+
+    public init(horizontalInset: CGFloat = PaneCardStyle.cardPaddingX,
+                elementGap: CGFloat = 6,
+                titleFont: NSFont = PaneCardStyle.rowNameFont,
+                valueFont: NSFont = PaneCardStyle.rowValueFont,
+                titleColor: NSColor = PaneCardStyle.primaryText,
+                trackColor: NSColor = PaneCardStyle.trackColor,
+                barColor: NSColor = PaneCardStyle.okColor,
+                barHeight: CGFloat = 5,
+                minBarWidth: CGFloat = 60,
+                fixedTitleWidth: CGFloat? = nil) {
+        self.horizontalInset = horizontalInset
+        self.elementGap = elementGap
+        self.titleFont = titleFont
+        self.valueFont = valueFont
+        self.titleColor = titleColor
+        self.trackColor = trackColor
+        self.barColor = barColor
+        self.barHeight = barHeight
+        self.minBarWidth = minBarWidth
+        self.fixedTitleWidth = fixedTitleWidth
+    }
 
     /// 画一行
     /// - Parameters:
     ///   - row: 行规格
     ///   - rect: 行矩形（flipped 坐标）
     ///   - leadingWidth: 行名左侧固定占用宽度（图标列；0 = 无），它之后再吃一个间距
-    func draw(_ row: DrawnRowSpec, in rect: CGRect, leadingWidth: CGFloat = 0) {
+    public func draw(_ row: DrawnRowSpec, in rect: CGRect, leadingWidth: CGFloat = 0) {
         let titleRun = DrawnTextRun(string: row.title, font: titleFont, color: titleColor)
         let valueRun = DrawnTextRun(
             string: row.value,

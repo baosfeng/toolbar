@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 正文分段高亮（搜索命中叠色）

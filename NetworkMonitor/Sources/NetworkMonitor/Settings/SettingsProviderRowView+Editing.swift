@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - provider 行（编辑 / 清除确认 / 控件工厂）
 

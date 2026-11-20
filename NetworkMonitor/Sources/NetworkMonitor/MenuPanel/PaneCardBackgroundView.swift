@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - 共用卡片底（六页同一底色 / 圆角 / 玻璃三件套）
 

@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - 额度页样式（对 PaneCardStyle 的转发）
 

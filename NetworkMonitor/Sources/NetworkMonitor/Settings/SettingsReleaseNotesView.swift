@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 新版本说明区
