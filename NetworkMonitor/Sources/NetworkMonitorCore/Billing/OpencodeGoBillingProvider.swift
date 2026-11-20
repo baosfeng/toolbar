@@ -39,17 +39,18 @@ public final class OpencodeGoBillingProvider: BillingProvider {
     static let rateLimitedStatus = "rate-limited"
 
     private let baseURL: URL
-    /// 统一传输层（URLSession 由构造参数注入，便于测试指向本地回环）
+    /// 统一传输层（由构造参数注入，便于测试替换成替身或指向本地回环）
     private let transport: any HTTPTransport
     /// 当前时刻（旧形态 resetInSec 是相对秒数，需要基准时刻换算出绝对时刻）
     private let now: @Sendable () -> Date
 
+    /// - Parameter logger: 保留签名兼容；出网日志由注入的 transport 输出
     public init(baseURL: URL = OpencodeGoBillingProvider.defaultBaseURL,
-                session: URLSession = .shared,
+                transport: any HTTPTransport = URLSessionHTTPTransport.shared,
                 logger: LoggingService = AppContext.shared.logger,
                 now: @escaping @Sendable () -> Date = { Date() }) {
         self.baseURL = baseURL
-        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
+        self.transport = transport
         self.now = now
     }
 

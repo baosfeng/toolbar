@@ -53,12 +53,12 @@ public final class MoonshotBillingProvider: BillingProvider {
 
     public init(baseURL: URL = MoonshotBillingProvider.defaultBaseURL,
                 currencyCode: String? = nil,
-                session: URLSession = .shared,
+                transport: any HTTPTransport = URLSessionHTTPTransport.shared,
                 logger: LoggingService = AppContext.shared.logger) {
         self.baseURL = baseURL
         // 未显式指定币种时按站点推断：.ai = 国际站 = USD，其余（.cn）= CNY
         self.currencyCode = currencyCode ?? (baseURL.host?.hasSuffix("moonshot.ai") == true ? "USD" : "CNY")
-        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
+        self.transport = transport
         self.logger = logger
     }
 

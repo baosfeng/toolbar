@@ -25,14 +25,15 @@ public final class OllamaBillingProvider: BillingProvider {
     public static let defaultBaseURL = URL(string: "https://ollama.com")!
 
     private let baseURL: URL
-    /// 统一传输层（URLSession 由构造参数注入，便于测试指向本地回环）
+    /// 统一传输层（由构造参数注入，便于测试替换成替身或指向本地回环）
     private let transport: any HTTPTransport
 
+    /// - Parameter logger: 保留签名兼容；出网日志由注入的 transport 输出
     public init(baseURL: URL = OllamaBillingProvider.defaultBaseURL,
-                session: URLSession = .shared,
+                transport: any HTTPTransport = URLSessionHTTPTransport.shared,
                 logger: LoggingService = AppContext.shared.logger) {
         self.baseURL = baseURL
-        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
+        self.transport = transport
     }
 
     // MARK: - BillingProvider

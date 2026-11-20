@@ -24,8 +24,10 @@ extension AppCoordinator {
 #else
         let apiBase = GitHubUpdateChecker.defaultBaseURL
 #endif
+        // 与额度 provider 共用同一个传输层实例（组合根持有）
         let checker = GitHubUpdateChecker(baseURL: apiBase,
                                           userAgent: Self.updateUserAgent,
+                                          transport: httpTransport,
                                           logger: logger)
         return UpdateCheckService(checker: checker,
                                   preferences: UpdateCheckPreferences(),
@@ -41,6 +43,7 @@ extension AppCoordinator {
     /// 所以把 `UpdateVersionLogic` 的解析闭包注入进去，两处口径天然一致。
     private func makeUpdateInstaller() -> any UpdateInstallRunning {
         UpdateInstaller(downloader: UpdatePackageDownloader(userAgent: Self.updateUserAgent,
+                                                            transport: httpTransport,
                                                             logger: logger),
                         verifier: UpdatePackageVerifier(versionFromTag: { tag in
                             guard case .success(let version) = UpdateVersionLogic.version(fromTag: tag) else {
