@@ -59,7 +59,7 @@ public enum SystemProcessBoard {
     /// CPU 榜数值文本：**原值不 clamp**（多线程可 >100%，削平会让排序失真）
     public static func cpuValueText(_ cpuPercent: Double) -> String {
         guard cpuPercent.isFinite else { return "—" }
-        return String(format: "%.1f%%", max(0, cpuPercent))
+        return PercentFormatting.unclampedFixed(cpuPercent, decimals: 1)
     }
 
     /// 单条进程在指定维度下的条形比例
@@ -90,14 +90,6 @@ public enum SystemProcessBoard {
 
     /// 常驻内存文本（1024 进位，B 取整、K 以上 1 位小数）— 与详情页容量口径一致
     public static func formatBytes(_ bytes: UInt64) -> String {
-        let units = ["B", "KB", "MB", "GB", "TB", "PB"]
-        var scaled = Double(bytes)
-        var index = 0
-        while scaled >= 1024, index < units.count - 1 {
-            scaled /= 1024
-            index += 1
-        }
-        guard index > 0 else { return String(format: "%.0f %@", scaled, units[index]) }
-        return String(format: "%.1f %@", scaled, units[index])
+        ByteFormatting.binary(Double(bytes))
     }
 }

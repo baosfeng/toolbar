@@ -16,6 +16,7 @@ import Foundation
 @MainActor
 func runCoreSuites() {
     runCoreFormattingTests()
+    runFormattingTests()  // Formatting 层原语：钳制 / 小数位 / 1024 与 1000 进位 / 千分位 / 相对时间分档
     runTrafficTrackerTests()
     runDatabaseConfigTests()
     runAppEventsTests()

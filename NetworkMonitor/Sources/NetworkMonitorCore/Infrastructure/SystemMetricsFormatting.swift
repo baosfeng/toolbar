@@ -16,34 +16,21 @@ public enum SystemMetricsFormatting {
     /// - 大于 1 的比例按 100% 封顶（避免 UI 出现 120% 这类越界读数）；
     /// - 四舍五入到整数：0.005 → "1%"，0.004 → "0%"。
     public static func percentText(_ ratio: Double) -> String {
-        let clamped = clampedUnit(ratio)
-        let percent = Int((clamped * 100).rounded())
-        return "\(percent)%"
+        PercentFormatting.integer(ratio)
     }
 
     // MARK: 字节速率
 
-    /// 字节速率格式化：B/KB/MB/GB/TH/s，K 及以上保留 1 位小数
+    /// 字节速率格式化：B/KB/MB/GB/TB/s，K 及以上保留 1 位小数
     ///
-    /// - nil（不可得）→ "—"；
+    /// - nil / 非有限（不可得）→ "—"（与「真的是 0 B/s」区分开）；
     /// - 0 → "0 B/s"；512 → "512 B/s"（B 级取整，不带小数）；
     /// - 1536 → "1.5 KB/s"；负数按绝对值处理（差分溢出不应显示成负速率）。
+    ///
+    /// 单位阶与小数位在 `ByteFormatting.binaryRate`，这里只保留「不可得」的占位语义。
     public static func byteRateText(_ bytesPerSecond: Double?) -> String {
         guard let bytesPerSecond, bytesPerSecond.isFinite else { return "—" }
-        let value = abs(bytesPerSecond)
-        if value < 1_024 {
-            return "\(Int(value.rounded())) B/s"
-        }
-        let units: [(threshold: Double, divisor: Double, suffix: String)] = [
-            (1_099_511_627_776, 1_099_511_627_776, "TB/s"),
-            (1_073_741_824, 1_073_741_824, "GB/s"),
-            (1_048_576, 1_048_576, "MB/s"),
-            (1_024, 1_024, "KB/s"),
-        ]
-        guard let unit = units.first(where: { value >= $0.threshold }) else {
-            return "\(Int(value.rounded())) B/s"
-        }
-        return String(format: "%.1f %@", value / unit.divisor, unit.suffix)
+        return ByteFormatting.binaryRate(bytesPerSecond)
     }
 
     // MARK: 容量
@@ -75,12 +62,6 @@ public enum SystemMetricsFormatting {
         let efficiency = Array(perCore.prefix(effCount))
         let performance = Array(perCore.dropFirst(effCount).prefix(perfCount))
         return (performance, efficiency)
-    }
-
-    /// 把 0...1 之外的值收敛到单位区间；非有限值按 0 处理
-    private static func clampedUnit(_ value: Double) -> Double {
-        guard value.isFinite else { return 0 }
-        return min(max(value, 0), 1)
     }
 }
 
