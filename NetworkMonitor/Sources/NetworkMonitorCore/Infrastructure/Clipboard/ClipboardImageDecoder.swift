@@ -176,8 +176,15 @@ public enum ClipboardImageDecoder {
     }
 
     /// CGImage 编成 TIFF 字节（回写剪贴板用，供只认 TIFF 的老 App 粘贴）
+    ///
+    /// 用 LZW 压缩（`kCGImagePropertyTIFFCompression = 5`）：未压缩 TIFF 是像素数 × 4 字节
+    /// （全屏 Retina 约 22MB），LZW 后与 PNG 同量级（3024×1964 实测 22.7MB → 2.0MB），
+    /// 否则「多表示兼容」的代价就是把一张巨图塞进系统剪贴板。
     public static func tiffData(from image: CGImage) -> Data? {
-        encode(image, as: .tiff)
+        let options: [CFString: Any] = [
+            kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5]
+        ]
+        return encode(image, as: .tiff, options: options as CFDictionary)
     }
 
     /// CGImage 编成 JPEG 字节（回写剪贴板用，质量 0.9）
