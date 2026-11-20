@@ -40,6 +40,25 @@ enum SnipForegroundPolicy {
         samples.removeAll()
     }
 
+    /// 结束 App 内正在进行的模态会话（`NSOpenPanel` / `NSSavePanel` / `NSAlert` 的 `runModal`）
+    ///
+    /// 为什么必须做：app-modal 期间 AppKit 只把**鼠标**事件派给模态窗口。实测（macOS 27，
+    /// 设置页「选择快速保存目录」开着 NSOpenPanel）：截图覆盖层照样上屏、也能收键盘
+    /// （⌘A 全屏 + 回车能复制），但鼠标拖拽选区全被模态窗口吃掉，回车毫无反应——
+    /// 用户口径就是「打开系统文件浏览器的时候无法截图」。
+    ///
+    /// 结束模态即恢复常规事件派发；面板按 `.cancel` 返回，用户没有丢任何已确认的选择
+    /// （选目录 / 另存为都要重新点一次，这比「按了截图完全不响应」可接受）。
+    /// - Returns: 是否真的结束了一个模态会话（调用方据此决定要不要等面板从屏幕撤走）
+    @discardableResult
+    static func dismissAppModalIfNeeded() -> Bool {
+        guard let modal = NSApp.modalWindow else { return false }
+        AppContext.shared.logger.info("截图前结束 App 模态会话（\(modal.className)），否则鼠标事件会被模态窗口拦截")
+        NSApp.stopModal(withCode: .cancel)
+        modal.orderOut(nil)
+        return true
+    }
+
     /// 抢前台：只激活 + 让覆盖层成为 key，不改激活策略（改策略就会出 Dock 图标）
     static func claimForeground() {
         NSApp.activate(ignoringOtherApps: true)

@@ -81,6 +81,7 @@ extension SnipController {
         bridge.attach(self)
         keyboardBridge = bridge
         if installEventTap(bridge) {
+            hasSystemKeyTap = true
             logger.info("截图键盘通道：CGEventTap（系统层）")
         } else if !keyboardTapWarningShown {
             // 只在第一次提示：没有「输入监控」权限时 tap 必然失败，反复刷日志没有信息量

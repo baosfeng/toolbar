@@ -52,9 +52,15 @@ extension SnipController {
             }
         }
         guard keyAssigned else {
-            // 窗口挂上了但没拿到键盘：明确告诉用户，而不是让人对着不响应的覆盖层按半天
-            logger.warning("截图覆盖层未能成为键盘焦点（App 可能未激活）")
-            SnipFailureNotice.present(message: "覆盖层未接管键盘，请用鼠标选区或再按一次快捷键", logger: logger)
+            // 首次 makeKey 失败不代表收不到键盘（后面还有 12 次 / 约 1 秒的激活重试，实测多数 200ms 内成功）。
+            // 旧实现在这里立刻弹「覆盖层未接管键盘」，日志里每次截图都留一条假失败；
+            // 有系统层 CGEventTap 时键盘本来就能用，只有连 tap 都没有（缺输入监控权限）才值得打扰用户。
+            if hasSystemKeyTap {
+                logger.info("覆盖层未成为 key window，键盘由系统层 CGEventTap 兜底，鼠标选区不受影响")
+            } else {
+                logger.warning("截图覆盖层未能成为键盘焦点且无系统层按键兜底")
+                SnipFailureNotice.present(message: "覆盖层未能接管键盘，请在系统设置里授予「输入监控」，或用鼠标选区", logger: logger)
+            }
             return
         }
         logger.info("截图覆盖层已就绪，共 \(overlays.count) 屏")
