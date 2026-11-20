@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureBilling
 
 // MARK: - 面板数据更新（拆出 MenuPanelView.swift）
 

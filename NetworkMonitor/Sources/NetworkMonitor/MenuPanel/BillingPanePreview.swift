@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureBilling
 
 // MARK: - 额度页快照示意数据（仅 DEBUG）
 

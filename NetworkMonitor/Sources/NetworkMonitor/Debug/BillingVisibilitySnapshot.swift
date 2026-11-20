@@ -2,6 +2,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorDesign
+import NetworkMonitorFeatureBilling
 
 // MARK: - 额度页可见性取证（仅 DEBUG）
 

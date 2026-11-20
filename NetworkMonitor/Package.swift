@@ -28,12 +28,19 @@ let package = Package(
                 .linkedFramework("QuartzCore")
             ]
         ),
+        // 额度服务层（provider 实现 + 状态管理器 + 提醒）：只依赖 Core，不碰 AppKit。
+        // 单独成 target 是为了让业务逻辑能被 TestRunner 直接断言（App 是可执行 target，测不了）。
+        .target(
+            name: "NetworkMonitorFeatureBilling",
+            dependencies: ["NetworkMonitorCore"]
+        ),
         .executableTarget(
             name: "NetworkMonitor",
             dependencies: [
                 "NetworkMonitorCore",
                 "NetworkMonitorUI",
-                "NetworkMonitorDesign"
+                "NetworkMonitorDesign",
+                "NetworkMonitorFeatureBilling"
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -50,7 +57,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "TestRunner",
-            dependencies: ["NetworkMonitorCore", "NetworkMonitorUI"]
+            dependencies: ["NetworkMonitorCore", "NetworkMonitorUI", "NetworkMonitorFeatureBilling"]
         ),
         // UI 自动化 CLI（nmcli）：纯系统框架直连目标进程做程序化验收，
         // 不依赖 cua、零第三方依赖，用法见 docs/开发指南/UI-自动化-CLI.md
