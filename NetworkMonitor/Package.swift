@@ -34,13 +34,33 @@ let package = Package(
             name: "NetworkMonitorFeatureBilling",
             dependencies: ["NetworkMonitorCore"]
         ),
+        // 操作反馈层（音效 / 触觉 / 成对出口）：允许 import AppKit（NSSound / NSHapticFeedbackManager），
+        // 只依赖 Core。单独成 target 是为了让「cue 转发 / 档位映射」能被 TestRunner 直接断言。
+        .target(
+            name: "NetworkMonitorFeatureFeedback",
+            dependencies: ["NetworkMonitorCore"],
+            linkerSettings: [
+                .linkedFramework("AppKit")
+            ]
+        ),
+        // 诊断层（主线程看门狗 + 心跳现场）：允许 import AppKit（NSEvent 本地事件监听），
+        // 只依赖 Core（复用 Core 的 MainThreadWatchdogPolicy）。停顿判定口径可被 TestRunner 直接断言。
+        .target(
+            name: "NetworkMonitorFeatureDiagnostics",
+            dependencies: ["NetworkMonitorCore"],
+            linkerSettings: [
+                .linkedFramework("AppKit")
+            ]
+        ),
         .executableTarget(
             name: "NetworkMonitor",
             dependencies: [
                 "NetworkMonitorCore",
                 "NetworkMonitorUI",
                 "NetworkMonitorDesign",
-                "NetworkMonitorFeatureBilling"
+                "NetworkMonitorFeatureBilling",
+                "NetworkMonitorFeatureFeedback",
+                "NetworkMonitorFeatureDiagnostics"
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -57,7 +77,13 @@ let package = Package(
         ),
         .executableTarget(
             name: "TestRunner",
-            dependencies: ["NetworkMonitorCore", "NetworkMonitorUI", "NetworkMonitorFeatureBilling"]
+            dependencies: [
+                "NetworkMonitorCore",
+                "NetworkMonitorUI",
+                "NetworkMonitorFeatureBilling",
+                "NetworkMonitorFeatureFeedback",
+                "NetworkMonitorFeatureDiagnostics"
+            ]
         ),
         // UI 自动化 CLI（nmcli）：纯系统框架直连目标进程做程序化验收，
         // 不依赖 cua、零第三方依赖，用法见 docs/开发指南/UI-自动化-CLI.md
