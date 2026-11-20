@@ -18,7 +18,7 @@ enum PanelGeometry {
     /// 数值来自实测：面板宽 346pt 时高亮块宽 59.2pt、左右边距 25pt；
     /// 纵向 35pt 是「点得中」的实测值（20pt 落在色带边缘外，点了不切页）。
     static let horizontalInset: CGFloat = 25
-    static let tabCenterOffsetY: CGFloat = 35
+    static let tabCenterOffsetY: CGFloat = 24  // 10（contentStack 顶距）+ 28（barHeight）/2；旧值 35 落点已偏到分段条下方
 
     /// 兜底 tab 名表（枚举里还有、用户可能打开的全集）
     ///
