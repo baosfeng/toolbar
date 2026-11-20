@@ -1,4 +1,5 @@
 import Foundation
+import NetworkMonitorCore
 
 // MARK: - 更新检查状态
 
@@ -112,13 +113,13 @@ public enum UpdateRelativeTime {
     /// 距今多久（`nil` = 从未检查）
     public static func describe(since date: Date?, now: Date = Date()) -> String {
         guard let date else { return "从未" }
-        let seconds = now.timeIntervalSince(date)
-        // 时钟回拨 / 未来时间戳：按「刚刚」处理，不显示负分钟数
-        guard seconds.isFinite, seconds >= 0 else { return "刚刚" }
-        if seconds < 60 { return "刚刚" }
-        if seconds < 3600 { return "\(Int(seconds / 60)) 分钟前" }
-        if seconds < 86400 { return "\(Int(seconds / 3600)) 小时前" }
-        return "\(Int(seconds / 86400)) 天前"
+        // 分档边界由 RelativeTimeFormatting 统一给出（含时钟回拨按「刚刚」的兜底），这里只拼文案
+        switch RelativeTimeFormatting.bucket(seconds: now.timeIntervalSince(date)) {
+        case .justNow: return "刚刚"
+        case .minutes(let minutes): return "\(minutes) 分钟前"
+        case .hours(let hours): return "\(hours) 小时前"
+        case .days(let days): return "\(days) 天前"
+        }
     }
 }
 

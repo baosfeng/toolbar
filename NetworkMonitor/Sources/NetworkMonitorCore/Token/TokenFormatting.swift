@@ -27,21 +27,17 @@ package enum TokenFormatting {
 
     /// 一位小数
     package static func decimal(_ value: Double) -> String {
-        String(format: "%.1f", value)
+        GroupedNumberFormatting.decimal(value, decimals: 1)
     }
 
     /// 占比：0.095 → 9.5%
     package static func percent(_ fraction: Double, decimals: Int = 1) -> String {
-        String(format: "%.\(decimals)f", fraction * 100) + "%"
+        PercentFormatting.fixed(fraction, decimals: decimals)
     }
 
     /// 千分位
     package static func grouped(_ value: Int) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = ","
-        formatter.maximumFractionDigits = 0
-        return formatter.string(from: NSNumber(value: value)) ?? String(value)
+        GroupedNumberFormatting.integer(value)
     }
 
     /// 同比文案：↑+19.4% / ↓ 3.2% / 持平 / —

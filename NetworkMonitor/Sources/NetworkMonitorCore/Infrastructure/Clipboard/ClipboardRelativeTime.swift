@@ -16,10 +16,23 @@ public enum ClipboardRelativeTime {
     /// - Returns: 相对时间文案；时间差为负（目标时间在未来）返回「刚刚」
     public static func string(from date: Date, now: Date = Date()) -> String {
         let seconds = now.timeIntervalSince(date)
-        if seconds < 60 { return "刚刚" }
-        if seconds < 3_600 { return "\(Int(seconds / 60)) 分钟前" }
-        if seconds < 86_400 { return "\(Int(seconds / 3_600)) 小时前" }
-        if seconds < 86_400 * 30 { return "\(Int(seconds / 86_400)) 天前" }
+        // 分档边界由 RelativeTimeFormatting 统一给出，这里只负责拼中文文案
+        switch RelativeTimeFormatting.bucket(seconds: seconds) {
+        case .justNow:
+            return "刚刚"
+        case .minutes(let minutes):
+            return "\(minutes) 分钟前"
+        case .hours(let hours):
+            return "\(hours) 小时前"
+        case .days(let days):
+            // 30 天及以上回退成日期：更久远的记录用「天前」既读不出年月也不比日期短
+            guard seconds < 86_400 * 30 else { return dateText(date) }
+            return "\(days) 天前"
+        }
+    }
+
+    /// 超过 30 天回退的「M月d日」
+    private static func dateText(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "M月d日"
         return formatter.string(from: date)
