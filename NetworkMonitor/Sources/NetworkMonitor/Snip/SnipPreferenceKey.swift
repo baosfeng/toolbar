@@ -8,7 +8,7 @@ import Foundation
 /// SnipController 与该设置页共用同一份定义。
 public enum SnipPreferenceKey {
     public static let autoSaveAfterCopy = "snip.autoSaveAfterCopy"
-    public static let pinDefaultAlpha = "snip.pinDefaultAlpha"
+    /// 贴图默认透明度的键不在这里：PinDefaultAlphaPreferenceKey.pinDefaultAlpha（Core，与钳制规则同处，消费方共用）
     public static let annotationColor = "snip.annotationColor"
     public static let annotationLineWidth = "snip.annotationLineWidth"
     /// 标注默认线型：实线 / 虚线（官方专业版「虚线/点线」能力，默认实线）
