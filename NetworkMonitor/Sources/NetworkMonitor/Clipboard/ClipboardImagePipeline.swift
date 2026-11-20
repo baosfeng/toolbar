@@ -29,9 +29,16 @@ actor ClipboardImagePipeline {
     /// - Parameters:
     ///   - data: 主线程从 pasteboard 读到的原始字节（PNG / TIFF 等待选之一）
     ///   - logger: 日志（`LoggingService` 是 Sendable，可直接跨 actor 使用）
-    func process(data: Data, logger: LoggingService) -> Result? {
-        guard let contentHash = ClipboardContentHasher.prepareImageData(data) else { return nil }
-        let outcome = ClipboardImageStore.store(data: data, contentHash: contentHash, logger: logger)
+    /// - Parameters:
+    ///   - data: 主线程从 pasteboard 读到的原始字节（PNG / TIFF 等待选之一）
+    ///   - isOversized: 原始字节已超单图上限（超限条目不落盘，只按头部尺寸产出占位）
+    func process(data: Data, isOversized: Bool, logger: LoggingService) -> Result? {
+        // 超限条目也要能进历史（占位），所以哈希不按单图上限截断
+        guard let contentHash = ClipboardContentHasher.prepareImageData(
+            data, maxBytes: isOversized ? Int.max : ClipboardLimit.maxImageBytes) else { return nil }
+        let outcome = isOversized
+            ? ClipboardImageStore.oversizedOutcome(data: data)
+            : ClipboardImageStore.store(data: data, contentHash: contentHash, logger: logger)
         return Result(contentHash: contentHash, outcome: outcome)
     }
 }

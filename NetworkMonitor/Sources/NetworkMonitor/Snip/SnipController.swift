@@ -57,6 +57,9 @@ final class SnipController: SnipOverlayViewDelegate {
     var eventTapSource: CFRunLoopSource?
     /// 系统层 tap 缺失的提示是否已记录（避免每次截图刷一条）
     var keyboardTapWarningShown = false
+    /// 系统层 CGEventTap 是否已装好（装好时键盘不依赖覆盖层是否为 key window）
+    /// 放宽为 internal：键盘扩展文件写入、覆盖层装配扩展文件读取
+    var hasSystemKeyTap = false
 
     /// 打开设置窗（⌥⇧,） — 由组合根注入
     var onOpenSettings: (() -> Void)?
@@ -163,6 +166,12 @@ final class SnipController: SnipOverlayViewDelegate {
             // 2) 原 App 退场与覆盖层上屏之间会空出一段只看得见桌面的时间，就是「屏幕闪一下」。
             // 因此顺序改成「前台不动 → 抓屏 → 抢前台 → 上屏覆盖层」，
             // 保住了要截的画面，也把两帧之间的空白压到几乎不存在。
+            // 若 App 内开着模态面板（系统文件面板 / 弹窗），先结束它：modal 期间 AppKit
+            // 只把鼠标事件派给模态窗口，覆盖层能上屏却框选不了——用户口径「打开系统文件浏览器时无法截图」。
+            // 等面板真的撤走再抓屏，否则文件面板会被一起拍进截图。
+            if SnipForegroundPolicy.dismissAppModalIfNeeded() {
+                try? await Task.sleep(nanoseconds: 80_000_000)
+            }
             do {
                 let result = try await captureService.captureAllDisplays()
                 guard !result.isEmpty else {

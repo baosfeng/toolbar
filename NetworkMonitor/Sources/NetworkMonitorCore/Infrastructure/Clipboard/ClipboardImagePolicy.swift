@@ -15,6 +15,8 @@ public struct ClipboardImageRejection: Equatable, Sendable {
         case pixelCountExceeded
         /// 单边超上限（极长条图：像素总数可能仍很小，但同样会撑爆位图）
         case edgeExceeded
+        /// 原始字节超上限（未压缩 TIFF 的全屏截图约 22MB，像素数却完全合法）
+        case byteSizeExceeded
     }
 
     /// 命中的判据
@@ -45,6 +47,8 @@ public struct ClipboardImageRejection: Equatable, Sendable {
             return "图片像素过多（\(width)×\(height) = \(pixelCount) 像素，上限 \(limit)）"
         case .edgeExceeded:
             return "图片单边过长（\(width)×\(height)，单边上限 \(limit)）"
+        case .byteSizeExceeded:
+            return "图片原始字节超过单图上限（\(width)×\(height)，上限 \(limit) 字节）"
         }
     }
 
@@ -55,8 +59,12 @@ public struct ClipboardImageRejection: Equatable, Sendable {
             return "图片无法识别（已跳过）"
         case .pixelCountExceeded, .edgeExceeded:
             return "图片 \(width)×\(height)（超过像素上限，未保存原图）"
+        case .byteSizeExceeded:
+            let megabytes = Double(limit) / 1_048_576
+            return "图片 \(width)×\(height)（原图超过 \(String(format: "%.0f", megabytes))MB 上限，未保存）"
         }
     }
+
 }
 
 // MARK: - 像素与内存预算
@@ -128,6 +136,26 @@ public enum ClipboardImagePolicy {
                                            limit: pixelLimit)
         }
         return nil
+    }
+
+    /// 原始字节超限的拒绝（尺寸来自头部解析，像素数本身可能完全合法）
+    ///
+    /// 与像素守卫分开：像素守卫判「解得开也放不下」，这里判「放得下但原始字节太大」——
+    /// 典型来源是只提供未压缩 TIFF 的 App（例如旧版截图链路写出的 22MB 全屏图）。
+    ///
+    /// - Parameters:
+    ///   - width: 像素宽（读不出来时传 0）
+    ///   - height: 像素高（读不出来时传 0）
+    ///   - limit: 单图字节上限（≤ 0 时取 20MB）
+    public static func byteSizeRejection(width: Int,
+                                         height: Int,
+                                         limit: Int = 20 * 1024 * 1024) -> ClipboardImageRejection {
+        let byteLimit = limit > 0 ? limit : 20 * 1024 * 1024
+        return ClipboardImageRejection(kind: .byteSizeExceeded,
+                                       width: width,
+                                       height: height,
+                                       pixelCount: pixelCount(width: width, height: height) ?? 0,
+                                       limit: byteLimit)
     }
 
     /// 尺寸是否可用（拒绝原因见 rejection）

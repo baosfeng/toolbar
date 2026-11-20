@@ -61,6 +61,18 @@ func runClipboardImagePolicyTests() {
     assertEqual(ClipboardImagePolicy.rejection(width: 0, height: 0)?.placeholderPreview, "图片无法识别（已跳过）", "尺寸非法占位文案")
     assertEqual(ClipboardImagePolicy.rejection(width: 12000, height: 12000)?.logDescription.isEmpty, false, "拒绝原因有排查描述")
 
+    // 8) 原始字节超限（全屏裸 TIFF 22MB 走这条）：独立判据 + 占位文案带上限
+    let byteRejection = ClipboardImagePolicy.byteSizeRejection(width: 3024, height: 1964)
+    assertEqual(byteRejection.kind, ClipboardImageRejection.Kind.byteSizeExceeded,
+                "字节超限是独立判据，不混进像素守卫")
+    assertEqual(byteRejection.width, 3024, "占位带出宽")
+    assertEqual(byteRejection.height, 1964, "占位带出高")
+    assertEqual(byteRejection.limit, 20 * 1024 * 1024, "默认单图上限 20MB")
+    assertEqual(byteRejection.placeholderPreview.contains("未保存"), true, "字节超限占位文案说明未保存")
+    assertEqual(byteRejection.placeholderPreview.contains("20MB"), true, "占位文案带 MB 上限")
+    assertEqual(ClipboardImagePolicy.byteSizeRejection(width: 0, height: 0, limit: 0).limit,
+                20 * 1024 * 1024, "上限 ≤0 归一化为默认值")
+
     print("✅ Clipboard 图片像素守卫 works")
 }
 

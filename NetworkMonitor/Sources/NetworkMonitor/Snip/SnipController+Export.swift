@@ -35,10 +35,12 @@ extension SnipController {
             logger.warning("复制失败：选区裁剪为空")
             return
         }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        let image = NSImage(cgImage: cropped, size: target.globalRect.size)
-        pasteboard.writeObjects([image])
+        // 写入走 PNG 优先的多表示出口：裸 NSImage 只会写未压缩 TIFF（全屏 22.7 MB），
+        // 既超过剪贴板历史单图上限（采不到这张图），也让其它 App 粘贴时解一张巨图。
+        guard SnipPasteboardImageWriter.write(cropped, logger: logger) else {
+            logger.warning("复制失败：写入系统剪贴板被拒")
+            return
+        }
         logger.info("已复制选区 \(Int(target.globalRect.width))×\(Int(target.globalRect.height))")
         // 截图完成提示音（默认关；设置页「截图完成」一行开）
         onCaptureCompleted?()

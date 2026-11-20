@@ -91,6 +91,19 @@ enum ClipboardImageStore {
         return .stored(Stored(path: fileURL.path, width: size.width, height: size.height))
     }
 
+    /// 字节超限的占位结局：只读头部尺寸，不落盘、不生成缩略图
+    ///
+    /// 旧实现在采集端直接 `continue`——整条静默消失，用户只看到「复制了但历史里没有」。
+    /// 现在落一条占位记录（卡片显示「原图超过 20MB 上限，未保存」），至少可解释。
+    /// - Returns: rejected 占位；连尺寸都读不出来（字节本身坏了）时返回 nil，与既有语义一致
+    static func oversizedOutcome(data: Data) -> Outcome? {
+        guard let size = ClipboardImageDecoder.pixelSize(of: data) else { return nil }
+        let rejection = ClipboardImagePolicy.byteSizeRejection(width: size.width,
+                                                               height: size.height,
+                                                               limit: ClipboardLimit.maxImageBytes)
+        return .rejected(rejection)
+    }
+
     // MARK: 缩略图
 
     /// 生成并写入缩略图（ImageIO 内部降采样，不展开原图）

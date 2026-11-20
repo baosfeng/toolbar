@@ -3,7 +3,7 @@ Clipboard/ClipboardCardFlowView 407 3
 Clipboard/ClipboardCardView 835 6
 Clipboard/ClipboardPanelController 606 6
 Clipboard/ClipboardPanelView 553 2
-Clipboard/PasteboardWatcher 365 2
+Clipboard/PasteboardWatcher 393 2
 Debug/DrawnUIProbe 412 3
 Debug/MenuPanelSnapshot 611 6
 Debug/TokenPaneSnapshot 1041 8
@@ -33,7 +33,7 @@ Settings/SettingsProvidersPane 495 3
 Settings/SettingsTokenPane 321 2
 Settings/SettingsTransferPane 412 3
 Settings/SettingsWindow 584 3
-Snip/SnipController 1257 7
+Snip/SnipController 1266 7
 Snip/SnipOverlayView 1436 8
 Snip/SnipToolBarView 472 3
 SystemMetrics/SystemMonitor 365 2
