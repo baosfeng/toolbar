@@ -254,9 +254,7 @@ extension TransferService {
         let size = context.session.files[index].size
         context.session.files[index].transferred = min(max(0, offset + sent), max(0, size))
         contexts[sessionId] = context
-        let now = Date()
-        guard now.timeIntervalSince(lastSendProgressNotify) >= 0.12 else { return }
-        lastSendProgressNotify = now
+        guard sendProgressGate.shouldRun() else { return }
         notifySessions()
     }
 
