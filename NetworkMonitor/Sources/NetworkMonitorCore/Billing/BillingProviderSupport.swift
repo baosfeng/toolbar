@@ -67,30 +67,68 @@ public enum BillingPercentMath {
 
 // MARK: - HTTP 状态码 → 错误语义
 
-/// HTTP 状态码收敛 —— 新的官方端点型 provider（DeepSeek / OpenRouter / Moonshot）共用
+/// HTTP 状态码 → 额度领域错误 —— Core 侧 9 家 HTTP provider 共用，全仓唯一一份状态码 switch
 ///
-/// 口径与订阅型 provider 一致，只把 403 的用户话术做成参数（各家的权限语义不同）：
-/// 401/403 = 凭据无效 / 无权限、429 = 频率限制、5xx = 服务端错误、其余 = 解析错误。
+/// 分级复用 HTTP 层的 `HTTPStatusCode.map`：401 = 凭据无效、403 = 无权限、
+/// 429 = 频率限制（带 Retry-After）、5xx = 服务端错误、其余 = 响应异常。
+/// 各家不同的只有「403 / 400 对用户说什么」，用下面两个枚举注入。
 public enum BillingHTTPErrorMapper {
+
+    /// 400 的文案口径
+    public enum BadRequestText: Sendable {
+        /// 透传服务端文案；服务端没给时由 `BillingError.userMessage` 出通用措辞
+        case serverText
+        /// 服务端没给文案时回落「请求参数有误（接口可能已变更）」（订阅型三家口径）
+        case interfaceChanged
+
+        /// 实际对用户的话术
+        func text(_ serverText: String?) -> String? {
+            switch self {
+            case .serverText: return serverText
+            case .interfaceChanged: return serverText ?? "请求参数有误（接口可能已变更）"
+            }
+        }
+    }
+
+    /// 403 的话术口径（各家权限语义不同）
+    public enum ForbiddenText: Sendable {
+        /// 透传服务端文案
+        case serverText
+        /// 固定话术，不看服务端文案
+        case fixed(String)
+        /// 按服务端文案改写（如把错误码翻成能照做的中文）
+        case mapped(@Sendable (String?) -> String?)
+
+        /// 实际对用户的话术
+        func text(_ serverText: String?) -> String? {
+            switch self {
+            case .serverText: return serverText
+            case .fixed(let text): return text
+            case .mapped(let transform): return transform(serverText)
+            }
+        }
+    }
 
     /// 状态码 → `BillingError`
     /// - Parameters:
     ///   - statusCode: HTTP 状态码
     ///   - retryAfter: 响应头 `Retry-After` 秒数（429 用）
     ///   - message: 服务端错误体里提取的可读文案
-    ///   - forbiddenMessage: 403 时的用户话术（nil 时用通用措辞）
+    ///   - forbidden: 403 的话术口径
+    ///   - badRequest: 400 的话术口径
     public static func map(statusCode: Int,
                            retryAfter: TimeInterval?,
                            message: String?,
-                           forbiddenMessage: String? = nil) -> BillingError {
+                           forbidden: ForbiddenText = .serverText,
+                           badRequest: BadRequestText = .serverText) -> BillingError {
         // 状态码分级只有一份（HTTP 层 HTTPStatusCode.map），这里只负责翻成 BillingError
         switch HTTPStatusCode.map(statusCode, retryAfter: retryAfter, message: message) {
         case .badRequest(let text):
-            return .invalidRequest(text)
+            return .invalidRequest(badRequest.text(text))
         case .unauthorized:
             return .unauthorized
         case .forbidden(let text):
-            return .forbidden(forbiddenMessage ?? text)
+            return .forbidden(forbidden.text(text))
         case .rateLimited(let seconds):
             return .rateLimited(retryAfter: seconds)
         case .serverError(let text):

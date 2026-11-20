@@ -119,18 +119,15 @@ public final class __PASCAL__BillingProvider: BillingProvider {
 
     // MARK: - HTTP 状态码收敛
 
-    /// 8 种 BillingError 的映射口径与其余 provider 一致（见 BillingProvider.swift:49）
+    /// 状态码 → BillingError 走全仓共用的一份（BillingHTTPErrorMapper），
+    /// 本文件只声明本家的 403 话术；8 种 BillingError 语义见 BillingProvider.swift:49
     static func mapHTTPError(statusCode: Int,
                              retryAfter: TimeInterval?,
                              message: String?) -> BillingError {
-        switch statusCode {
-        case 401: return .unauthorized
-        case 403: return .forbidden(message)
-        case 429: return .rateLimited(retryAfter: retryAfter)
-        case 400..<500: return .invalidRequest(message)
-        case 500..<600: return .serviceUnavailable(message)
-        default: return .invalidResponse(message ?? "HTTP \(statusCode)")
-        }
+        BillingHTTPErrorMapper.map(statusCode: statusCode,
+                                   retryAfter: retryAfter,
+                                   message: message,
+                                   forbidden: .fixed("该 API Key 无权读取本服务"))
     }
 }
 SWIFT

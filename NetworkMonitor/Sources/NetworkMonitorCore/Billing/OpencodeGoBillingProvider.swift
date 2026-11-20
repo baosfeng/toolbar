@@ -147,23 +147,13 @@ public final class OpencodeGoBillingProvider: BillingProvider {
     }
 
     /// HTTP 状态码 → BillingError（纯函数，供测试直接验证映射）
+    ///
+    /// 401 = Key 无效 / 过期（官方体 `AuthError`）、403 = Key 有效但没有 Go 订阅
+    /// （把官方话术翻成能直接照做的中文），其余口径全仓共用。
     public static func mapHTTPError(statusCode: Int, retryAfter: TimeInterval?,
                                     message: String?) -> BillingError {
-        switch statusCode {
-        case 400:
-            return .invalidRequest(message)
-        case 401:
-            // Key 无效 / 过期（官方体：{"type":"error","error":{"type":"AuthError",...}}）
-            return .unauthorized
-        case 403:
-            // Key 有效但没有 Go 订阅：把官方话术翻成用户能直接照做的中文
-            return .forbidden(noSubscriptionMessage)
-        case 429:
-            return .rateLimited(retryAfter: retryAfter)
-        case 500...599:
-            return .serviceUnavailable(message)
-        default:
-            return .invalidResponse("HTTP \(statusCode)")
-        }
+        BillingHTTPErrorMapper.map(
+            statusCode: statusCode, retryAfter: retryAfter, message: message,
+            forbidden: .fixed(noSubscriptionMessage))
     }
 }

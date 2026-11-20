@@ -1,7 +1,7 @@
 import Foundation
 import NetworkMonitorCore
 
-// MARK: - 三家 provider 测试辅助
+// MARK: - 额度 provider 测试辅助
 
 /// 取错误文案（成功时返回 "<no error>"）
 ///

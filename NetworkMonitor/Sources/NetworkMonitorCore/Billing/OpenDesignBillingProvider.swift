@@ -148,23 +148,13 @@ public final class OpenDesignBillingProvider: BillingProvider {
     /// 纯函数，供测试直接验证映射；`message` 是已按本家口径提取好的错误体文案。
     public static func mapHTTPError(statusCode: Int, retryAfter: TimeInterval?,
                                     message: String?) -> BillingError {
-        switch statusCode {
-        case 400:
-            return .invalidRequest(message)
-        case 401:
-            return .unauthorized
-        case 403:
-            let text = message == "workspace_member_required"
-                ? "无权访问该工作区，请确认账号仍在成员列表中"
-                : message
-            return .forbidden(text)
-        case 429:
-            return .rateLimited(retryAfter: retryAfter)
-        case 500...599:
-            return .serviceUnavailable(message)
-        default:
-            return .invalidResponse("HTTP \(statusCode)")
-        }
+        BillingHTTPErrorMapper.map(
+            statusCode: statusCode, retryAfter: retryAfter, message: message,
+            forbidden: .mapped { text in
+                text == "workspace_member_required"
+                    ? "无权访问该工作区，请确认账号仍在成员列表中"
+                    : text
+            })
     }
 
 }

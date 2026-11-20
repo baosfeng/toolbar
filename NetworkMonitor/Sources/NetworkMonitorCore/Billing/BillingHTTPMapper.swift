@@ -8,11 +8,6 @@ import Foundation
 /// 通过参数给出（Claude 说 OAuth token、Cursor 说 Cookie、OpenCode Go 说没订阅）。
 public enum BillingHTTPMapper {
 
-    /// 默认口径：无话术覆写时按 BillingHTTPErrorMapper 的通用措辞
-    public static func billing(_ failure: HTTPFailure) -> BillingError {
-        billing(failure, forbidden: nil, badRequestFallback: nil)
-    }
-
     /// 拼请求地址 —— 失败文案与改造前一致（provider 各自原来都写了两句中文）
     public static func url(base: URL, path: String, query: [(String, String)] = []) throws -> URL {
         do {
@@ -25,12 +20,12 @@ public enum BillingHTTPMapper {
     }
 
     /// - Parameters:
-    ///   - forbidden: 403 的用户话术（nil 时用错误体文案 / 通用措辞）
+    ///   - forbidden: 403 的话术口径（默认透传错误体文案）
     ///   - badRequestFallback: 400 且错误体没文案时的兜底话术（nil 时与通用口径一致）
     ///   - errorText: 错误体文案提取口径（各家后端形态不同，默认取通用四段）
     ///   - status: 状态码 → 领域错误（provider 自己的 mapper；nil 时走 BillingHTTPErrorMapper 通用口径）
     public static func billing(_ failure: HTTPFailure,
-                               forbidden: String? = nil,
+                               forbidden: BillingHTTPErrorMapper.ForbiddenText = .serverText,
                                badRequestFallback: String? = nil,
                                errorText: @escaping @Sendable (Data) -> String? = HTTPErrorBody.genericMessage(from:),
                                status: (@Sendable (Int, TimeInterval?, String?) -> BillingError)? = nil) -> BillingError {
@@ -47,7 +42,7 @@ public enum BillingHTTPMapper {
             return BillingHTTPErrorMapper.map(statusCode: response.statusCode,
                                                retryAfter: response.retryAfter,
                                                message: message,
-                                               forbiddenMessage: forbidden)
+                                               forbidden: forbidden)
         }
     }
 }
