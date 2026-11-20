@@ -118,22 +118,24 @@ public final class GitHubUpdateChecker: UpdateChecking {
     private let repository: String
     private let userAgent: String
     private let timeout: TimeInterval
-    /// 统一传输层（URLSession 由构造参数注入）
+    /// 统一传输层（由组合根按协议注入）
     private let transport: any HTTPTransport
 
     /// - Parameters:
     ///   - userAgent: 形如「一览/1.24.2」，由 App 层拼好传入（Core 不知道自身版本）
+    ///   - transport: 出网实现（缺省用共享实例，供测试注入替身）
+    ///   - logger: 保留签名兼容；出网日志由 transport 输出
     public init(baseURL: URL = GitHubUpdateChecker.defaultBaseURL,
                 repository: String = GitHubUpdateChecker.defaultRepository,
                 userAgent: String,
                 timeout: TimeInterval = GitHubUpdateChecker.defaultTimeout,
-                session: URLSession = .shared,
+                transport: any HTTPTransport = URLSessionHTTPTransport.shared,
                 logger: LoggingService = AppContext.shared.logger) {
         self.baseURL = baseURL
         self.repository = repository
         self.userAgent = userAgent
         self.timeout = timeout
-        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
+        self.transport = transport
     }
 
     // MARK: 请求

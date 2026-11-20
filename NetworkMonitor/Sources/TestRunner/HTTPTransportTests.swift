@@ -3,8 +3,7 @@ import NetworkMonitorCore
 
 // MARK: - 统一 HTTP 传输层
 
-/// 传输层契约单测（不联网）：Endpoint 构造 / 超时覆写 / 响应头透出 /
-/// 状态码 → 错误映射（每类一次）/ Retry-After 解析 / 脱敏规则。
+/// 传输层契约单测（不联网）：Endpoint / 超时 / 响应头 / 错误映射 / 脱敏。
 func runHTTPTransportTests() {
     print("🧪 Testing 统一 HTTP 传输层（Endpoint / 超时 / 响应头 / 映射 / 脱敏）...")
     testEndpointDefaults()
@@ -15,6 +14,7 @@ func runHTTPTransportTests() {
     testResponseHeadersAndRetryAfter()
     testRedaction()
     testBillingMapperUsesProviderStatus()
+    testProviderUsesInjectedTransport()
     print("✅ 统一 HTTP 传输层 works")
 }
 
@@ -68,7 +68,7 @@ private func testRequestConstruction() {
     assertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer t", "凭据头透传")
     assertEqual(request.url?.absoluteString, "https://example.com/api?x=1", "URL + query 原样")
 
-    // 未声明 UA / Accept 时补默认：UA 只在显式给出时才发（nil = 不发，保持历史行为）
+    // 未声明 UA / Accept 时补默认（UA 只在显式给出时才发）
     let bare = Endpoint<Data>(url: url, label: "样例", decoder: { $0 })
     let bareRequest = transport.makeRequest(bare)
     assertEqual(bareRequest.value(forHTTPHeaderField: "User-Agent"), nil, "未声明 UA 时不发（与改造前一致）")
@@ -99,7 +99,7 @@ private func testTransportFailureMapping() {
     assertEqual(HTTPTransportFailure.make(URLError(.cancelled)).isCancelled, true, "URLError.cancelled 标为取消")
     assertEqual(HTTPTransportFailure.make(URLError(.cannotConnectToHost)).isTimeout, false, "连接失败不是超时")
 
-    // 统一口径：传输失败 → HTTPTransportError.transport（不改写成状态码）
+    // 统一口径：传输失败 → HTTPTransportError.transport
     guard case .transport = HTTPTransportDefaults.error(.transport(transportFailure)) as? HTTPTransportError else {
         assertEqual("不是 transport", "transport", "传输失败归 transport")
         return
@@ -205,12 +205,12 @@ private func testBillingMapperUsesProviderStatus() {
     assertEqual(BillingHTTPMapper.billing(.notHTTP), .invalidResponse("非 HTTP 响应"),
                 "非 HTTP 响应 → invalidResponse")
 
-    // 默认口径：走 BillingHTTPErrorMapper（403 用错误体文案）
+    // 默认口径：403 用错误体文案
     let forbidden = BillingHTTPMapper.billing(.response(HTTPResponse(data: Data(#"{"error":"nope"}"#.utf8),
                                                                    statusCode: 403)))
     assertEqual(forbidden, .forbidden("nope"), "403 默认用错误体文案")
 
-    // per-provider 覆写：同一 403 换成该家话术（各 provider 的 403 措辞不同）
+    // per-provider 覆写：同一 403 换该家话术
     let overridden = BillingHTTPMapper.billing(.response(HTTPResponse(data: Data(), statusCode: 403)),
                                                status: OpencodeGoBillingProvider.mapHTTPError)
     assertEqual(overridden, .forbidden(OpencodeGoBillingProvider.noSubscriptionMessage),
@@ -222,7 +222,7 @@ private func testBillingMapperUsesProviderStatus() {
     assertEqual(withFallback, .invalidRequest("请求参数有误（接口可能已变更）"),
                 "400 无错误体时用 provider 兜底话术")
 
-    // 地址构造：path + query 拼装与改造前同形（失败文案沿用「无效的 provider 地址 / 请求地址」）
+    // 地址构造：path + query 拼装与改造前同形
     assertEqual(billingURL(path: "/api/v1/key"), "https://openrouter.ai/api/v1/key",
                 "base + path 拼装")
     assertEqual(billingURL(path: "/api/usage", query: [("range", "1d"), ("group_by", "model")]),
@@ -235,4 +235,36 @@ private func testBillingMapperUsesProviderStatus() {
 private func billingURL(path: String, query: [(String, String)] = []) -> String {
     let base = URL(string: "https://openrouter.ai")!
     return (try? BillingHTTPMapper.url(base: base, path: path, query: query))?.absoluteString ?? ""
+}
+
+// MARK: - 注入的 transport
+
+/// provider 必须用注入的传输层（替身收到请求才算生效）
+private func testProviderUsesInjectedTransport() {
+    let stub = RecordingTransport()
+    let provider = OllamaBillingProvider(baseURL: URL(string: "https://example.com")!,
+                                         transport: stub,
+                                         logger: ConsoleLogger(minLevel: .error))
+    let done = DispatchSemaphore(value: 0)
+    Task.detached {
+        _ = try? await provider.fetchBalance(credential: "sk-test")
+        done.signal()
+    }
+    done.wait()
+    assertEqual(stub.count, 1, "注入 transport 被调用一次")
+    assertEqual(stub.path, "/api/balance", "路径由 provider 组装")
+    assertEqual(stub.authorization, "Bearer sk-test", "凭据头透传")
+}
+
+/// 记录 provider 实际发出的请求（只在被等待的那次调用里写）
+private final class RecordingTransport: HTTPTransport, @unchecked Sendable {
+    var count = 0
+    var path = ""
+    var authorization = ""
+    func send<Response: Sendable>(_ endpoint: Endpoint<Response>) async throws -> Response {
+        count += 1
+        path = endpoint.url.path
+        authorization = endpoint.headers["Authorization"] ?? ""
+        return try endpoint.decoder(Data("{}".utf8))
+    }
 }

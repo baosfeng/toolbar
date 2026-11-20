@@ -81,13 +81,16 @@ public final class UpdatePackageDownloader: UpdatePackageDownloading {
     private let timeout: TimeInterval
     private let transport: any HTTPTransport
 
+    /// - Parameters:
+    ///   - transport: 出网实现（缺省用共享实例，供测试注入替身）
+    ///   - logger: 保留签名兼容；出网日志由 transport 输出
     public init(userAgent: String,
                 timeout: TimeInterval = UpdatePackageDownloader.defaultTimeout,
-                session: URLSession = .shared,
+                transport: any HTTPTransport = URLSessionHTTPTransport.shared,
                 logger: LoggingService = AppContext.shared.logger) {
         self.userAgent = userAgent
         self.timeout = timeout
-        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
+        self.transport = transport
     }
 
     public func downloadPackage(from url: URL) async throws -> Data {

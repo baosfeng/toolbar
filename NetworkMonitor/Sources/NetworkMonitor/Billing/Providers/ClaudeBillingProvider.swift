@@ -32,10 +32,10 @@ public final class ClaudeBillingProvider: BillingProvider {
     private let logger: LoggingService
 
     public init(baseURL: URL = ClaudeBillingProvider.defaultBaseURL,
-                session: URLSession = .shared,
+                transport: any HTTPTransport = URLSessionHTTPTransport.shared,
                 logger: LoggingService = AppContext.shared.logger) {
         self.baseURL = baseURL
-        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
+        self.transport = transport
         self.logger = logger
     }
 
