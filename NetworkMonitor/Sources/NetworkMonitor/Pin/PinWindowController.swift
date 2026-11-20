@@ -218,12 +218,11 @@ final class PinWindowController {
     }
 
     private func copyImage(from window: PinWindow) {
-        let image = NSImage(cgImage: window.currentImage,
-                            size: NSSize(width: window.currentImage.width,
-                                         height: window.currentImage.height))
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects([image])
+        // 与截图复制同一条写入出口：裸 NSImage 只出未压缩 TIFF，大图会超过剪贴板历史单图上限
+        guard SnipPasteboardImageWriter.write(window.currentImage, logger: logger) else {
+            logger.warning("复制贴图失败：写入系统剪贴板被拒")
+            return
+        }
         logger.info("已复制贴图")
     }
 

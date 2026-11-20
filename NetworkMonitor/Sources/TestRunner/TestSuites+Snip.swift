@@ -35,6 +35,7 @@ func runSnipSuites() {
     runSnipHotKeyMigrationTests()
     runSnipHotKeyPreferencesTests()
     runSnipDockIconPolicyTests()
+    runSnipPasteboardRepresentationPlanTests()  // 复制到剪贴板的表示规划（PNG 优先 / 大图不写 22MB TIFF）
     runSnipToolBarLayoutTests()
     runSnipToolBarConfigurationTests()
     runSnipToolBarOrderTests()

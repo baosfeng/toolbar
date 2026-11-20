@@ -33,6 +33,7 @@ func runClipboardSuites() {
     runClipboardPanelMockTests()
     runClipboardRelativeTimeTests()
     runClipboardImagePolicyTests()
+    runClipboardImageCandidateSelectionTests()  // 采集候选选择：超限不再静默丢弃（改占位）
     runClipboardImageStoreTests()
     runClipboardCardWindowTests()  // 卡片流滑动窗口（内存削减口径）
     runClipboardSelectionTests()  // 卡片多选变换（单击 / ⌘ / ⇧ / ⌘A / 清空）

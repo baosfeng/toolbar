@@ -23,7 +23,8 @@ final class PasteboardWatcher: ClipboardCaptureService {
     let preferences: ClipboardPreferences   // 放宽为 internal：暂停扩展（ClipboardPauseControl）要读写暂停偏好
     /// internal：图片后台结算在 PasteboardWatcher+Images.swift（跨文件访问，同目录内无其他调用方）
     let logger: LoggingService
-    private let pasteboard: NSPasteboard
+    /// 放宽为 internal：PasteboardWatcher+Images.swift 的解析逻辑要读
+    let pasteboard: NSPasteboard
     /// 用户活跃度探针（免权限读秒 + 前台状态缓存）
     private let activityMonitor: UserActivityMonitor
     /// 提前唤醒的通知观察者（stop() 时注销）
@@ -204,106 +205,5 @@ final class PasteboardWatcher: ClipboardCaptureService {
         return frontmost
     }
 
-    // MARK: 内容解析
-
-    /// 采集解析的两条出路：文本类当场产出草稿，图片类只把字节交出去（结算在后台）
-    /// internal：PasteboardWatcher+Images.swift 消费
-    enum DraftResolution {
-        case immediate(ClipboardDraft)
-        case deferred(ImageRequest)
-    }
-
-    /// 待后台结算的图片字节（主线程只负责读 pasteboard 与记录来源）
-    /// internal：PasteboardWatcher+Images.swift 消费
-    struct ImageRequest: Sendable {
-        let data: Data
-        let bundleID: String?
-        let appName: String?
-        let now: Date
-    }
-
-    /// 按优先级解析：文件 URL > 图片 > RTF > 纯文本
-    private func makeDraft(source: NSRunningApplication?) -> DraftResolution? {
-        let bundleID = source?.bundleIdentifier
-        let appName = source?.localizedName
-        let pasteboardItems = pasteboard.pasteboardItems ?? []
-        let now = Date()
-
-        // 1) 文件 URL（多个文件合并为一条记录）：text 存原始路径，preview 存分类摘要
-        let paths = pasteboardItems
-            .compactMap { $0.string(forType: .fileURL) }
-            .compactMap { URL(string: $0)?.path }
-        if !paths.isEmpty, let payload = ClipboardContentHasher.prepareText(paths.joined(separator: "\n")) {
-            return .immediate(ClipboardDraft(kind: .file,
-                                  contentHash: payload.contentHash,
-                                  text: payload.text,
-                                  preview: ClipboardFileSummary.summarize(paths: paths, fallbackText: payload.text),
-                                  sourceBundleID: bundleID,
-                                  sourceAppName: appName,
-                                  createdAt: now))
-        }
-
-        // 2) 图片（按 ClipboardImageFormat 候选顺序取首个可读表示，同一表示用于哈希与落盘）
-        //    字节在这里读、结算在 ClipboardImagePipeline：主线程不碰哈希 / 落盘 / 缩略图
-        if let request = makeImageRequest(pasteboardItems: pasteboardItems, bundleID: bundleID, appName: appName, now: now) {
-            return .deferred(request)
-        }
-
-        // 3) RTF（模型不存富文本字节，落纯文本正文）
-        if let rtfData = pasteboard.data(forType: .rtf),
-           let attributed = NSAttributedString(rtf: rtfData, documentAttributes: nil),
-           let payload = ClipboardContentHasher.prepareText(attributed.string) {
-            return .immediate(ClipboardDraft(kind: .rtf,
-                                  contentHash: payload.contentHash,
-                                  text: payload.text,
-                                  preview: ClipboardPreview.make(from: payload.text),
-                                  sourceBundleID: bundleID,
-                                  sourceAppName: appName,
-                                  createdAt: now))
-        }
-
-        // 4) 纯文本：多个 pasteboardItems 按换行拼接为一条记录
-        var texts = pasteboardItems.compactMap { $0.string(forType: .string) }
-        if texts.isEmpty, let text = pasteboard.string(forType: .string) { texts = [text] }
-        guard let payload = ClipboardContentHasher.prepareText(texts.joined(separator: "\n")) else { return nil }
-        return .immediate(ClipboardDraft(kind: .text,
-                              contentHash: payload.contentHash,
-                              text: payload.text,
-                              preview: ClipboardPreview.make(from: payload.text),
-                              sourceBundleID: bundleID,
-                              sourceAppName: appName,
-                              createdAt: now))
-    }
-
-    /// 图片条目：多个 pasteboardItems 只取首个可解码项
-    ///
-    /// 这里只做「取一份可读字节」——哈希 / 像素守卫 / 落盘 / 缩略图交给 `ClipboardImagePipeline`。
-    /// 快速预筛与旧同步路径同判据（空 / 超压缩字节上限直接看下一个候选），避免把明显无效的
-    /// 表示排进后台队列。
-    private func makeImageRequest(pasteboardItems: [NSPasteboardItem],
-                                  bundleID: String?,
-                                  appName: String?,
-                                  now: Date) -> ImageRequest? {
-        for pasteboardItem in pasteboardItems {
-            guard let imageData = Self.imageRepresentation(of: pasteboardItem) else { continue }
-            guard !imageData.isEmpty, imageData.count <= ClipboardLimit.maxImageBytes else {
-                logger.debug("图片为空或超过压缩字节上限，跳过落库")
-                continue
-            }
-            return ImageRequest(data: imageData, bundleID: bundleID, appName: appName, now: now)
-        }
-        return nil
-    }
-
-    /// 按 ClipboardImageFormat 候选顺序取首个可读表示（同一次复制只取一种）
-    ///
-    /// 候选 = 白名单八类 + 白名单外图片类型兜底，前两项仍是 PNG / TIFF，既有语义不变；
-    /// 落盘扩展名仍由字节真实类型决定，像素守卫在落盘前生效。
-    private static func imageRepresentation(of pasteboardItem: NSPasteboardItem) -> Data? {
-        let typeNames = pasteboardItem.types.map(\.rawValue)
-        return ClipboardImageFormat.firstReadableCandidate(
-            in: typeNames,
-            read: { pasteboardItem.data(forType: NSPasteboard.PasteboardType($0)) }
-        )?.data
-    }
+    // MARK: 内容解析（实现在 PasteboardWatcher+Images.swift）
 }
