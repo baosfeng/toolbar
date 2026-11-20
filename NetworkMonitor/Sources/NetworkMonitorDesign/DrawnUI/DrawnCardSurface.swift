@@ -13,22 +13,22 @@ import NetworkMonitorUI
 /// 路径统一用 `NSBezierPath(roundedRect:xRadius:yRadius:)`：实测与本项目原 `DrawnInk.fill`
 /// 的 `CGPath(roundedRect:)` 填充逐像素相同（60×60 圆角矩形 0px 差），
 /// 而描边两者不同（同矩形同线宽 104px 抗锯齿差），故描边一律沿用本 API。
-struct DrawnCardSurface {
+public struct DrawnCardSurface {
 
     /// 表面矩形（需要内缩描边时由调用方先行 `insetBy`）
-    var rect: CGRect
+    public var rect: CGRect
     /// 圆角半径
-    var radius: CGFloat
+    public var radius: CGFloat
     /// 填充色（nil = 只描边）
-    var fill: NSColor?
+    public var fill: NSColor?
     /// 描边色（nil = 不描边）
-    var stroke: NSColor?
+    public var stroke: NSColor?
     /// 描边线宽
-    var lineWidth: CGFloat = 0
+    public var lineWidth: CGFloat = 0
     /// 整层不透明度（过渡值：1 = 常态；≤ 0.001 时整层不画）
-    var alpha: CGFloat = 1
+    public var alpha: CGFloat = 1
 
-    init(rect: CGRect,
+    public init(rect: CGRect,
          radius: CGFloat,
          fill: NSColor? = nil,
          stroke: NSColor? = nil,
@@ -43,7 +43,7 @@ struct DrawnCardSurface {
     }
 
     /// 画这一层：填充 → 描边（同一路径，与改造前的视图绘制逐像素同源）
-    func draw() {
+    public func draw() {
         guard DrawnLayerAlpha.isVisible(alpha), rect.width > 0, rect.height > 0 else { return }
         guard fill != nil || stroke != nil else { return }
         let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)

@@ -16,19 +16,19 @@ import NetworkMonitorCore
 /// `NSColor` 动态闭包不是 `@MainActor` 隔离的，闭包内读 actor 隔离的静态属性编不过；
 /// 这里改成「调用时先把 Theme 快照出来再捕获」——`Theme` 是 `Sendable` 纯值，闭包只做纯计算。
 @MainActor
-enum ThemeStyle {
+public enum ThemeStyle {
 
     // MARK: 当前状态
 
     /// 当前主题（默认 Apple，与改造前观感逐项一致）
-    private(set) static var current: Theme = ThemeCatalog.apple
+    public private(set) static var current: Theme = ThemeCatalog.apple
     /// 玻璃是否生效（用户显式值优先，否则跟随档位）
-    private(set) static var glassEnabled = true
+    public private(set) static var glassEnabled = true
     /// 当前渲染档位参数
-    private(set) static var profile: RenderTierProfile = RenderTierLogic.standard
+    public private(set) static var profile: RenderTierProfile = RenderTierLogic.standard
 
     /// 应用外观状态（启动时与每次切主题 / 切档时调用）
-    static func apply(theme: Theme, glassEnabled: Bool, profile: RenderTierProfile) {
+    public static func apply(theme: Theme, glassEnabled: Bool, profile: RenderTierProfile) {
         current = theme
         self.glassEnabled = glassEnabled
         self.profile = profile
@@ -40,7 +40,7 @@ enum ThemeStyle {
     ///
     /// 每次访问都返回新的动态 `NSColor`：主题切换后重新取即得新色，
     /// 视图只要 `needsDisplay` 就会以新主题解析。
-    static func color(_ role: ThemeRole) -> NSColor {
+    public static func color(_ role: ThemeRole) -> NSColor {
         let theme = current
         return NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
@@ -49,13 +49,13 @@ enum ThemeStyle {
     }
 
     /// 取角色的静态实色（按当前绘制外观解析；给 `CGColor` / `CGContext` 场景用）
-    static func solid(_ role: ThemeRole) -> NSColor {
+    public static func solid(_ role: ThemeRole) -> NSColor {
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         return resolve(current.color(role, dark: isDark), isDark: isDark)
     }
 
     /// 单次解析：`ThemeColor` → `NSColor`（纯函数，可在非隔离闭包里跑）
-    nonisolated static func resolve(_ color: ThemeColor, isDark: Bool) -> NSColor {
+    public nonisolated static func resolve(_ color: ThemeColor, isDark: Bool) -> NSColor {
         switch color {
         case let .hex(value):
             return NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
@@ -75,29 +75,29 @@ enum ThemeStyle {
     // MARK: 玻璃强度（主题材质配方转 CGFloat）
 
     /// 卡片底 alpha（1 = 不透明实色；未开玻璃时强制 1）
-    static var cardFillAlpha: CGFloat {
+    public static var cardFillAlpha: CGFloat {
         glassEnabled ? CGFloat(current.material.cardFillAlpha) : 1
     }
 
     /// 卡片顶部高光 alpha（未开玻璃时 0）
-    static var highlightAlpha: CGFloat {
+    public static var highlightAlpha: CGFloat {
         glassEnabled ? CGFloat(current.material.highlightAlpha) : 0
     }
 
     /// 卡片描边 alpha（未开玻璃时 0）
-    static var strokeAlpha: CGFloat {
+    public static var strokeAlpha: CGFloat {
         glassEnabled ? CGFloat(current.material.strokeAlpha) : 0
     }
 
     /// 面板叠加着色（未开玻璃或主题不着色时 nil）
-    static var panelTint: NSColor? {
+    public static var panelTint: NSColor? {
         let alpha = current.material.panelTintAlpha
         guard glassEnabled, alpha > 0 else { return nil }
         return color(.panelTint).withAlphaComponent(CGFloat(alpha))
     }
 
     /// 玻璃风格；未开玻璃返回 `nil`（消费方走降级路径）
-    static var glassStyle: ThemeMaterialRecipe.Style? {
+    public static var glassStyle: ThemeMaterialRecipe.Style? {
         guard glassEnabled, current.material.style != .none else { return nil }
         return current.material.style
     }
@@ -112,7 +112,7 @@ enum ThemeStyle {
     ///   - bounds: 卡片的绘制矩形
     ///   - radius: 圆角（取 `PaneCardStyle.cardRadius`）
     ///   - fillRole: 底面角色（默认 `.cardFill`；四族卡传自己的 `familyNFill`）
-    static func drawCard(in bounds: NSRect, radius: CGFloat, fillRole: ThemeRole = .cardFill) {
+    public static func drawCard(in bounds: NSRect, radius: CGFloat, fillRole: ThemeRole = .cardFill) {
         let fill = color(fillRole)
         let path = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
 

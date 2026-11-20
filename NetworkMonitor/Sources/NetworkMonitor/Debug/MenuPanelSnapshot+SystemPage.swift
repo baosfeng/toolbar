@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - 系统页取证装配（拆出 MenuPanelSnapshot.swift）
 

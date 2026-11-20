@@ -12,7 +12,7 @@ import NetworkMonitorUI
 /// 缓存键说明：palette 着色图在**绘制时**才按当前外观解析（实测同一张配置图在浅 / 深外观下绘制结果不同），
 /// 因此键只需 (符号名, 点尺寸, 颜色描述)，跨外观复用不会串色；模板图上色的结果按图标对象 + 着色缓存。
 @MainActor
-enum DrawnSymbolRun {
+public enum DrawnSymbolRun {
 
     /// 缓存上限（超过即整体清空：符号种类个位数，不做 LRU）
     private static let cacheLimit = 64
@@ -37,7 +37,7 @@ enum DrawnSymbolRun {
     ///   - name: 符号名
     ///   - color: 着色（写进 palette，绘制时按当前外观解析）
     ///   - pointSize: 点尺寸
-    static func symbol(named name: String, color: NSColor, pointSize: CGFloat) -> NSImage? {
+    public static func symbol(named name: String, color: NSColor, pointSize: CGFloat) -> NSImage? {
         let key = DrawnSymbolCacheKey.symbol(name: name, pointSize: pointSize,
                                              colorDescription: color.description)
         if let hit = symbolCache[key] { return hit }
@@ -51,7 +51,7 @@ enum DrawnSymbolRun {
     }
 
     /// 模板图按 tint 上色（带缓存；非模板图原样返回）
-    static func tinted(_ image: NSImage, tint: NSColor?) -> NSImage {
+    public static func tinted(_ image: NSImage, tint: NSColor?) -> NSImage {
         guard image.isTemplate, let tint else { return image }
         let key = TintKey(image: ObjectIdentifier(image), tint: tint.description)
         if let hit = tintCache[key] { return hit }
@@ -71,7 +71,7 @@ enum DrawnSymbolRun {
     /// 等比缩放进方框并居中（行前图标）：模板图先按 tint 上色
     ///
     /// 自绘不走 `NSImageView.contentTintColor`，模板图原样画出来是纯黑块，故这里必须上色。
-    static func drawFitted(_ image: NSImage, in rect: CGRect, tint: NSColor? = nil) {
+    public static func drawFitted(_ image: NSImage, in rect: CGRect, tint: NSColor? = nil) {
         guard rect.width > 0, rect.height > 0 else { return }
         let shown = tinted(image, tint: tint)
         let scale = min(rect.width / max(shown.size.width, 1),
@@ -92,7 +92,7 @@ enum DrawnSymbolRun {
     ///
     /// 不缩放：符号图自带留白，放大铺满方框会让字形偏粗一档（改造前 `NSImageView`
     /// 的 `.scaleProportionallyUpOrDown` 在 12pt 符号上也是 1:1，实测星形 9×9）。
-    static func drawNative(_ image: NSImage, in rect: CGRect) {
+    public static func drawNative(_ image: NSImage, in rect: CGRect) {
         guard rect.width > 0, rect.height > 0 else { return }
         let size = image.size
         image.draw(in: CGRect(x: rect.midX - size.width / 2,

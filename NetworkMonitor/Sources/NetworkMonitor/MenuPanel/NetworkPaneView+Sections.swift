@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - 网络页区块装配（从 NetworkPaneView.swift 拆出：单文件体积门禁）
 

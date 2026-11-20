@@ -12,7 +12,7 @@ import AppKit
 /// 五页第一行都是这一条：额度「额度 · 21:04 · ⟳」、Token「DSH · 1866 会话 · 分段 · ⟳」、
 /// 系统「系统 · 采样 21:04」、网络「网络 · 实时」、剪贴板 / 传送「剪贴板 / 传送 · N 条」。
 /// 右侧槽由调用方塞分段控件 / 时间戳 / 刷新按钮，宽度不限。
-final class PaneHeaderRowView: NSView {
+public final class PaneHeaderRowView: NSView {
 
     /// 页名（11pt 粗体，次级色）
     private let titleLabel: NSTextField
@@ -23,7 +23,7 @@ final class PaneHeaderRowView: NSView {
 
     private let stack = NSStackView()
 
-    init(title: String) {
+    public init(title: String) {
         titleLabel = MenuPanelLabel.text(title, font: PaneCardStyle.cardTitleFont,
                                          color: PaneCardStyle.secondaryText)
         metaLabel = MenuPanelLabel.text("", font: PaneCardStyle.metaFont,
@@ -61,17 +61,17 @@ final class PaneHeaderRowView: NSView {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { nil }
+    public required init?(coder: NSCoder) { nil }
 
     /// 右侧口径文字（nil / 空串 = 不显示）
-    func updateMeta(_ text: String?) {
+    public func updateMeta(_ text: String?) {
         metaLabel.stringValue = text ?? ""
         metaLabel.isHidden = (text ?? "").isEmpty
         updateAccessibilityLabel()
     }
 
     /// 替换右侧动作槽内容
-    func setTrailing(_ views: [NSView]) {
+    public func setTrailing(_ views: [NSView]) {
         for view in trailingSlot.arrangedSubviews {
             trailingSlot.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -95,13 +95,13 @@ final class PaneHeaderRowView: NSView {
 /// 此前额度页 7pt 内边距 + 0xEEEFF2 底、Token 页 7pt + 同一底但另写一份视图、
 /// 系统页 7pt + 0xF0F0F4 底（自己一套色板），三份各画一次，切页时页脚底色能看出差别。
 @MainActor
-enum PaneBandChrome {
+public enum PaneBandChrome {
 
     /// 带高（内容区高度）
-    static var height: CGFloat { PaneCardStyle.stateBandHeight }
+    public static var height: CGFloat { PaneCardStyle.stateBandHeight }
 
     /// 绘制状态带底
-    static func draw(in bounds: NSRect) {
+    public static func draw(in bounds: NSRect) {
         PaneCardStyle.bandFill.setFill()
         NSBezierPath(roundedRect: bounds,
                      xRadius: PaneCardStyle.bandRadius,
@@ -109,7 +109,7 @@ enum PaneBandChrome {
     }
 
     /// 内容栈到带边的约束
-    static func constrain(_ stack: NSView, in host: NSView) {
+    public static func constrain(_ stack: NSView, in host: NSView) {
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: PaneCardStyle.bandPaddingX),
             stack.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -PaneCardStyle.bandPaddingX),
@@ -122,7 +122,7 @@ enum PaneBandChrome {
     ///
     /// 键统一 10pt 等宽三级色、值 10.5pt 等宽粗体——与额度 / Token 页原有取值一致，
     /// 系统页此前用 9pt 微标签 + 9pt 数值，是五页里最小的一档，一并归位。
-    static func makeItemView(key: String, value: String, tone: NSColor) -> NSView {
+    public static func makeItemView(key: String, value: String, tone: NSColor) -> NSView {
         let title = MenuPanelLabel.text(key, font: PaneCardStyle.metaFont,
                                         color: PaneCardStyle.tertiaryText)
         let valueLabel = MenuPanelLabel.text(value, font: PaneCardStyle.rowValueStrongFont,

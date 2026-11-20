@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 筛选芯片行视图（搜索行内的类型 / 来源 App / 日期芯片）

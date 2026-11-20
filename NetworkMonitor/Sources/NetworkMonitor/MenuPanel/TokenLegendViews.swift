@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - Token 图例（色块 / 行视图；从 TokenRowViews.swift 拆出：单文件体积门禁）
 

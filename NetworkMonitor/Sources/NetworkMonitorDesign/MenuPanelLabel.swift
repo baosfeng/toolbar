@@ -4,10 +4,10 @@ import AppKit
 
 /// 面板标签构造 — 统一字体/颜色/截断方式，避免各处手写 NSTextField 参数
 @MainActor
-enum MenuPanelLabel {
+public enum MenuPanelLabel {
 
     /// 普通标签
-    static func text(_ content: String, font: NSFont,
+    public static func text(_ content: String, font: NSFont,
                      color: NSColor = PaneCardStyle.primaryText) -> NSTextField {
         let label = NSTextField(labelWithString: content)
         label.font = font
@@ -20,12 +20,12 @@ enum MenuPanelLabel {
     }
 
     /// 分区标题（次要色 + 小号加粗）
-    static func section(_ content: String) -> NSTextField {
+    public static func section(_ content: String) -> NSTextField {
         text(content, font: MenuPanelStyle.sectionFont, color: MenuPanelStyle.secondaryText)
     }
 
     /// 弹性占位视图（NSStackView 中撑开两侧内容）
-    static func spacer() -> NSView {
+    public static func spacer() -> NSView {
         let spacer = NSView()
         spacer.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
         spacer.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .horizontal)
@@ -33,7 +33,7 @@ enum MenuPanelLabel {
     }
 
     /// 数值标签（等宽数字）
-    static func value(_ content: String, color: NSColor = .labelColor) -> NSTextField {
+    public static func value(_ content: String, color: NSColor = .labelColor) -> NSTextField {
         text(content, font: MenuPanelStyle.valueFont, color: color)
     }
 
@@ -41,7 +41,7 @@ enum MenuPanelLabel {
     ///
     /// 默认色取面板统一的次级文字色：`secondaryLabelColor` 在 10–12pt 字号下
     /// 实测约 3.9:1，达不到 4.5:1，且与其它页的文字色不是同一个取值。
-    static func symbol(_ name: String, pointSize: CGFloat = 12,
+    public static func symbol(_ name: String, pointSize: CGFloat = 12,
                        color: NSColor = PaneCardStyle.secondaryText) -> NSImageView? {
         guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
         let config = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)

@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - 额度页迷你走势（与 Token sparkline 同一语法）
 

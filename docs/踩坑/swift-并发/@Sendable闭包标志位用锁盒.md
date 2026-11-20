@@ -52,5 +52,5 @@ let receivedHash = OSAllocatedUnfairLock<String?>(initialState: nil)
 - `NetworkMonitor/Sources/TestRunner/ClipboardThumbnailGateTests.swift:77,90`
 - `NetworkMonitor/Sources/NetworkMonitor/SystemMetrics/SystemMonitor.swift:224`
 - `NetworkMonitor/Sources/NetworkMonitor/Snip/SnipFailureNotice.swift:70-77`
-- `NetworkMonitor/Sources/NetworkMonitor/Motion/MotionKit.swift:73-103`、`NetworkMonitor/Sources/NetworkMonitor/Transfer/TransferMotion.swift:52-78`
+- `NetworkMonitor/Sources/NetworkMonitorDesign/MotionKit.swift:73-103`、`NetworkMonitor/Sources/NetworkMonitor/Transfer/TransferMotion.swift:52-78`
 - `NetworkMonitor/Sources/NetworkMonitor/Pin/PinWindowController.swift:49`

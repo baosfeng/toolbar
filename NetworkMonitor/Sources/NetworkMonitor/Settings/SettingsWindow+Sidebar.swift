@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 侧栏（拆出自 SettingsWindow.swift：窗口主文件只留容器与切页）

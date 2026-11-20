@@ -11,37 +11,53 @@ import AppKit
 /// `.byWordWrapping` + `lineSpacing` + `usesLineFragmentOrigin` + `truncatesLastVisibleLine`，
 /// 因此自绘正文与原生标签逐像素同源，只有测量走了 `DrawnTextMeasurer` 缓存。
 @MainActor
-struct DrawnTextBlock {
+public struct DrawnTextBlock {
 
     /// 文字内容
-    var string: String
+    public var string: String
     /// 字体
-    var font: NSFont
+    public var font: NSFont
     /// 文字颜色
-    var color: NSColor
+    public var color: NSColor
     /// 行距
-    var lineSpacing: CGFloat = 2
+    public var lineSpacing: CGFloat = 2
     /// 最多绘制行数（超出行数尾部省略；0 表示不限）
-    var maxLines: Int = 0
+    public var maxLines: Int = 0
     /// 断行方式（正文用 .byWordWrapping，单行降级说明用 .byTruncatingMiddle）
-    var lineBreakMode: NSLineBreakMode = .byWordWrapping
+    public var lineBreakMode: NSLineBreakMode = .byWordWrapping
     /// 对齐方式
-    var alignment: NSTextAlignment = .left
+    public var alignment: NSTextAlignment = .left
+
+    public init(string: String,
+                font: NSFont,
+                color: NSColor,
+                lineSpacing: CGFloat = 2,
+                maxLines: Int = 0,
+                lineBreakMode: NSLineBreakMode = .byWordWrapping,
+                alignment: NSTextAlignment = .left) {
+        self.string = string
+        self.font = font
+        self.color = color
+        self.lineSpacing = lineSpacing
+        self.maxLines = maxLines
+        self.lineBreakMode = lineBreakMode
+        self.alignment = alignment
+    }
 
     /// 行高（与绘制同源：字体行高 + 行距，向上取整）
-    var lineHeight: CGFloat {
+    public var lineHeight: CGFloat {
         ceil(font.ascender - font.descender + lineSpacing)
     }
 
     /// 换行后的自然高度（未按 `maxLines` 封顶；走测量缓存）
-    func measuredHeight(width: CGFloat) -> CGFloat {
+    public func measuredHeight(width: CGFloat) -> CGFloat {
         guard !string.isEmpty, width > 0 else { return 0 }
         return DrawnTextMeasurer.shared.blockHeight(string: string, font: font,
                                                     width: width, lineSpacing: lineSpacing)
     }
 
     /// 实际绘制高度（行数封顶后的整数高度）
-    func drawHeight(width: CGFloat) -> CGFloat {
+    public func drawHeight(width: CGFloat) -> CGFloat {
         let measured = measuredHeight(width: width)
         guard measured > 0 else { return 0 }
         guard maxLines > 0 else { return ceil(measured) }
@@ -49,7 +65,7 @@ struct DrawnTextBlock {
     }
 
     /// 垂直居中画进 rect：内容按自然高度居中，超过 `maxLines` 时尾部省略
-    func draw(centeredIn rect: CGRect) {
+    public func draw(centeredIn rect: CGRect) {
         let height = drawHeight(width: rect.width)
         guard height > 0, rect.width > 0 else { return }
         let target = CGRect(x: rect.minX,
@@ -60,7 +76,7 @@ struct DrawnTextBlock {
     }
 
     /// 顶对齐画进给定 rect（单行降级说明这类「位置已定」的文字用）
-    func draw(topIn rect: CGRect) {
+    public func draw(topIn rect: CGRect) {
         guard !string.isEmpty, rect.width > 0, rect.height > 0 else { return }
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = lineBreakMode

@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - Token 页可读性度量（从 TokenPaneSnapshot.swift 拆出：单文件体积门禁）
 

@@ -17,11 +17,23 @@ let package = Package(
             name: "NetworkMonitorUI",
             dependencies: ["NetworkMonitorCore"]
         ),
+        // 设计系统（渲染基础层）：卡片令牌 / 页头页脚骨架 / 主题转译 / 动效令牌 / 自绘组件库。
+        // 单独成 target 是为了让「设计系统」不再寄生在 MenuPanel 页面目录里，
+        // 页面只依赖它、它不反向依赖页面；允许 import AppKit（绘制本身就在这一层）。
+        .target(
+            name: "NetworkMonitorDesign",
+            dependencies: ["NetworkMonitorCore", "NetworkMonitorUI"],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("QuartzCore")
+            ]
+        ),
         .executableTarget(
             name: "NetworkMonitor",
             dependencies: [
                 "NetworkMonitorCore",
-                "NetworkMonitorUI"
+                "NetworkMonitorUI",
+                "NetworkMonitorDesign"
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
