@@ -71,6 +71,8 @@ public func formatTokenCount(_ value: Int) -> String {
 /// 用途：无障碍朗读、日志摘要、明细等「需要精确值」的位置。
 /// 额度卡里的大号数字请用 `formatPercentCompact`（原值最多 6 位小数会把版式撑坏）。
 public func formatPercent(_ fraction: Double) -> String {
+    // NaN 保持改造前的文本 "NaN%"：手写分组实现会输出 "nan"，与 NumberFormatter 口径不同
+    if fraction.isNaN { return "NaN%" }
     let clamped = min(max(fraction, 0), 1)
     return formatExactNumber(clamped * 100) + "%"
 }
