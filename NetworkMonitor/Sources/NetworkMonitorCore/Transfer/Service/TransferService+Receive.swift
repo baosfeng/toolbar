@@ -56,7 +56,8 @@ extension TransferService {
 
         let expectedSize = context.session.files[fileIndex].size
         let expectedDigest = context.session.files[fileIndex].sha256
-        var lastNotify = Date.distantPast
+        // 进度通知最小间隔 0.15s：逐块回调直接刷新会刷爆 UI 与观察者队列
+        var notifyGate = MinimumIntervalGate(interval: 0.15)
         var lastError: TransferError?
 
         // 4. 边收边写（64 KiB 一块，内存与文件大小无关）
@@ -70,9 +71,7 @@ extension TransferService {
                 lastError = .ioFailed("写入失败")
                 break
             }
-            let now = Date()
-            if now.timeIntervalSince(lastNotify) > 0.15 {
-                lastNotify = now
+            if notifyGate.shouldRun() {
                 updateReceiveProgress(sessionId: sessionId, fileId: fileId,
                                       transferred: writer.totalWritten)
             }

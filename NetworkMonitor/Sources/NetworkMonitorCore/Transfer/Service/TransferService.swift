@@ -111,8 +111,8 @@ public actor TransferService: TransferRouteHandling {
     // MARK: - 状态
 
     var contexts: [String: SessionContext] = [:]
-    /// 发送进度通知节流时间戳（扩展文件使用）
-    var lastSendProgressNotify: Date = .distantPast
+    /// 发送进度通知节流闸门（扩展文件使用）
+    var sendProgressGate = MinimumIntervalGate(interval: 0.12)
     // 放宽为 internal：观察者订阅方法在 `TransferService+Observer` 扩展中
     var onSessionsChanged: (@Sendable ([TransferSession]) -> Void)?
     var onSessionFinished: (@Sendable (TransferSession) -> Void)?

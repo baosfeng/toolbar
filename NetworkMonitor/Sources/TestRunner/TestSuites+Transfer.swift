@@ -17,6 +17,7 @@ import Foundation
 func runTransferSuites() {
     runTransferBandSignatureTests()
     runDiscoveryHeartbeatPolicyTests()
+    runMinimumIntervalGateTests()   // 最小间隔节流原语（收/发进度通知、单播应答冷却、进程采样）
     runTransferTests()
     runScanTests()
 }
