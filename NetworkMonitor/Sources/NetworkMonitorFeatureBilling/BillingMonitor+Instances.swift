@@ -14,7 +14,7 @@ extension BillingMonitor {
     ///
     /// - Returns: 成功时返回新实例；失败时返回可读的 `BillingInstanceError`
     @discardableResult
-    func addInstance(kindID: String, slug: String, title: String) -> Result<BillingInstance, BillingInstanceError> {
+    public func addInstance(kindID: String, slug: String, title: String) -> Result<BillingInstance, BillingInstanceError> {
         guard let providerFactory else {
             return .failure(.notFound(kindID))
         }
@@ -36,7 +36,7 @@ extension BillingMonitor {
     }
 
     /// 重命名实例（只改展示名，凭据与提醒状态都保留）
-    func renameInstance(_ instanceID: String, title: String) {
+    public func renameInstance(_ instanceID: String, title: String) {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let registration = registry.registrations.first(where: { $0.instance.id == instanceID }) else {
@@ -54,7 +54,7 @@ extension BillingMonitor {
     ///
     /// 连带清理：凭据（避免留一条无人使用的密文）、启用键、提醒状态（避免同名新实例
     /// 继承旧阈值记录）、在途请求代次。
-    func removeInstance(_ instanceID: String) {
+    public func removeInstance(_ instanceID: String) {
         guard !BillingInstanceID.isDefault(instanceID),
               let instance = registry.instance(id: instanceID) else { return }
         credentialStore.setCredential(nil, for: instanceID)

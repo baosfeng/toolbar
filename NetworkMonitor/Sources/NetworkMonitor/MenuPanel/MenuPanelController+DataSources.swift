@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureBilling
 import NetworkMonitorUI
 
 // MARK: - 菜单面板控制器（数据源绑定）

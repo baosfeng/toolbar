@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureBilling
 import NetworkMonitorUI
 
 // MARK: - 装配阶段（额度 / 设置 / 菜单栏 / 收尾）

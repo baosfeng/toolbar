@@ -13,7 +13,7 @@ extension BillingMonitor {
     ///
     /// 停用不移除凭据：重新启用时 `isConfigured` 仍由凭据存储决定，余额 / 用量从零开始
     /// （停用期间没有新数据，沿用旧值会展示过期额度）。
-    func setProviderEnabled(_ enabled: Bool, providerID: String) {
+    public func setProviderEnabled(_ enabled: Bool, providerID: String) {
         guard registry.provider(id: providerID) != nil else { return }
         preferences.setEnabled(enabled, for: providerID)
         // 用户刚操作完：重置该 provider 的节流基准，启用时立即查询
@@ -32,9 +32,9 @@ extension BillingMonitor {
     ///
     /// `instance` 提供实例标识与展示名；`provider` 是同一个实例的查询实现
     /// （装饰器已把 `provider.id` 改写为实例标识，两者一致）。
-    static func makeState(for provider: any BillingProvider,
-                          instance: BillingInstance,
-                          credentialStore: any BillingCredentialStore) -> ProviderState {
+    public static func makeState(for provider: any BillingProvider,
+                                 instance: BillingInstance,
+                                 credentialStore: any BillingCredentialStore) -> ProviderState {
         let descriptor = ProviderDescriptor(id: instance.id,
                                             kindID: instance.kindID,
                                             instanceLabel: instance.slug,

@@ -1,17 +1,28 @@
-import AppKit
+import Foundation
 import NetworkMonitorCore
-import UserNotifications
 
 // MARK: - 额度提醒入口协议
 
 /// 额度提醒入口 — BillingMonitor 只依赖此协议，通知实现可替换（测试用空实现）
 @MainActor
-protocol BillingAlerting: AnyObject {
+public protocol BillingAlerting: AnyObject {
     /// 余额刷新成功后调用：按用尽 / 偏低 / 恢复 / 回升四类规则发系统通知并记录状态
     func handle(balance: BillingBalance, providerID: String, providerName: String)
 
     /// 删除实例时清掉该实例的提醒状态（键前缀 `<instanceID>.`）
     func clearAlerts(for providerID: String)
+}
+
+// MARK: - 应用内提示音兜底协议
+
+/// 通知未授权时的那一下应用内提示音 —— 只依赖这一个动作。
+///
+/// 真实播放器在 App 层（要 NSSound / 音效库 / AVFoundation），本 target 不碰 AppKit，
+/// 故按依赖倒置在这里立端口，由 App 的 `NotificationSoundPlayer` 适配（ISP：只取用到的一个方法）。
+@MainActor
+public protocol BillingAlertSoundPlaying: AnyObject {
+    /// 按「指定事件」自己的配置播一个 cue（兜底路径不能绕开该行事件的声音选择）
+    func play(event: NotificationEvent, cue: NotificationCue)
 }
 
 // MARK: - 额度提醒实现
@@ -37,7 +48,7 @@ protocol BillingAlerting: AnyObject {
 /// - 「通知与音效」页对应行的开关决定这条提醒**是否真的推送**（声音 / 提醒方式也在那一行）。
 /// 任一层关掉都不打扰用户；两层都开才推送。
 @MainActor
-final class BillingAlertService: BillingAlerting {
+public final class BillingAlertService: BillingAlerting {
 
     /// 状态存储键（JSON：[String: BillingAlertState]）
     static let storageKey = "billing.alert.state"
@@ -45,16 +56,16 @@ final class BillingAlertService: BillingAlerting {
     private let storage: any KeyValueStorage
     private let logger: LoggingService
     private let notifications: any NotificationServicing
-    private let soundPlayer: NotificationSoundPlayer
+    private let soundPlayer: any BillingAlertSoundPlaying
     private let preferences: BillingAlertPreferences
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    init(storage: any KeyValueStorage = AppContext.shared.storage,
-         notifications: any NotificationServicing,
-         soundPlayer: NotificationSoundPlayer,
-         logger: LoggingService = AppContext.shared.logger,
-         preferences: BillingAlertPreferences? = nil) {
+    public init(storage: any KeyValueStorage = AppContext.shared.storage,
+                notifications: any NotificationServicing,
+                soundPlayer: any BillingAlertSoundPlaying,
+                logger: LoggingService = AppContext.shared.logger,
+                preferences: BillingAlertPreferences? = nil) {
         self.storage = storage
         self.notifications = notifications
         self.soundPlayer = soundPlayer
@@ -63,13 +74,13 @@ final class BillingAlertService: BillingAlerting {
     }
 
     /// 请求通知权限（App 启动时调用一次；已授权/已拒绝时系统静默返回）
-    func requestAuthorizationIfNeeded() {
+    public func requestAuthorizationIfNeeded() {
         notifications.requestAuthorization()
     }
 
     // MARK: - 处理
 
-    func handle(balance: BillingBalance, providerID: String, providerName: String) {
+    public func handle(balance: BillingBalance, providerID: String, providerName: String) {
         let oldState = loadState()
         let result = BillingAlertEvaluator.evaluate(balance: balance,
                                                     providerID: providerID,
@@ -93,7 +104,7 @@ final class BillingAlertService: BillingAlerting {
     ///
     /// 连带清掉该实例的窗口恢复勾选：同名新实例回到「所有窗口都通知」的默认，
     /// 否则旧的 weekly=false 会被新实例静默继承。
-    func clearAlerts(for providerID: String) {
+    public func clearAlerts(for providerID: String) {
         preferences.removeRecoveredWindowSelection(providerID: providerID)
         var state = loadState()
         let prefix = providerID + "."

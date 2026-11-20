@@ -8,18 +8,19 @@ import NetworkMonitorCore
 /// 设计要点：
 /// - 一次展示全部 provider：`states` 与注册表同序，UI 不再需要切换 provider
 /// - 只依赖 Core 的计费契约（provider 注册表 / provider 协议 / 凭据存储协议），不触碰任何 UI
+/// - 住在 `NetworkMonitorFeatureBilling`（不 import AppKit）：额度业务规则因此能被 TestRunner 直接断言
 /// - `onUpdate` 在主线程回调最新快照，面板只负责渲染
 /// - 每 provider 独立代次：切换某块的范围不会作废其它 provider 的在途请求
 /// - 自动刷新 60 秒节流（`force` 跳过）；429 按 `Retry-After` 全局退避
 /// - 未配置凭据的 provider 不发网络请求，快照标记为未配置态
 @MainActor
-final class BillingMonitor {
+public final class BillingMonitor {
 
     // MARK: - 依赖
 
-    let registry: BillingProviderRegistry
+    public let registry: BillingProviderRegistry
     // 放宽为 internal：`BillingMonitor+Fetching` 的刷新调度扩展需要读取凭据
-    let credentialStore: any BillingCredentialStore
+    public let credentialStore: any BillingCredentialStore
     /// provider 启用偏好（停用者不查询、不出现在额度页，凭据保留）
     let preferences: BillingProviderPreferences
     /// 额度阈值提醒（可选；测试/未装配时为 nil）
@@ -35,17 +36,17 @@ final class BillingMonitor {
 
     /// 全部 provider 的展示状态（与注册顺序一致）
     // 以下状态放宽为 internal：供 `BillingMonitor+Fetching` 的调度扩展读写
-    var states: [ProviderState]
+    public internal(set) var states: [ProviderState]
     /// 每 provider 的请求代次 — 只作废旧 provider 的在途结果，互不干扰
     var generations: [String: Int] = [:]
     /// 每 provider 上次发起刷新的时刻（各自节流基准，provider 间隔不同）
-    var lastAttempts: [String: Date] = [:]
+    public internal(set) var lastAttempts: [String: Date] = [:]
     /// 限流退避截止时间（429 后按 Retry-After 设置，全局生效）
     // 放宽为 internal：`BillingMonitor+Apply` 的合并逻辑要写退避截止时间
     var retryNotBefore: Date?
     /// 屏幕锁定 / 休眠时暂停后台刷新（不调接口，也不发提醒）
     // 放宽为 internal：`BillingMonitorSnapshot` 的快照要带出暂停态供面板显示
-    var isPaused = false
+    public internal(set) var isPaused = false
     /// 暂停期间是否已回报过快照（避免每秒重复 emit 触发布局）
     private var didReportWhilePaused = false
 
@@ -57,11 +58,11 @@ final class BillingMonitor {
     // MARK: - 回调
 
     /// 快照更新回调（主线程）
-    var onUpdate: ((Snapshot) -> Void)?
+    public var onUpdate: ((Snapshot) -> Void)?
 
     // MARK: - 初始化
 
-    init(registry: BillingProviderRegistry,
+    public init(registry: BillingProviderRegistry,
          credentialStore: any BillingCredentialStore,
          alertService: (any BillingAlerting)? = nil,
          preferences: BillingProviderPreferences = BillingProviderPreferences(),
@@ -89,7 +90,7 @@ final class BillingMonitor {
     /// 全量刷新：所有已配置 provider 的余额 + 用量并发拉取
     ///
     /// - Parameter force: 跳过 60 秒节流与限流退避（打开面板、保存凭据时使用）
-    func refresh(force: Bool = false) {
+    public func refresh(force: Bool = false) {
         // 锁屏 / 休眠期间不调接口（解锁后 resume() 会强制刷新一次）
         guard !isPaused else {
             // 暂停期间仍回报一次快照：否则重启后若长期处于暂停态，额度页会整页空白
@@ -116,7 +117,7 @@ final class BillingMonitor {
     }
 
     /// 切换某个 provider 的用量范围 — 只重拉该 provider 的用量，余额沿用
-    func selectRange(_ range: BillingRange, providerID: String) {
+    public func selectRange(_ range: BillingRange, providerID: String) {
         guard let index = states.firstIndex(where: { $0.descriptor.id == providerID }),
               // provider 不支持的窗口（如服务端只给 7 天）不切换，避免必然 400 的请求
               states[index].descriptor.supportedRanges.contains(range),
@@ -166,7 +167,7 @@ final class BillingMonitor {
     ///
     /// 暂停态要立即回报一次快照（面板据此显示「已暂停」）：只把 isPaused 置位而不 emit，
     /// 界面会停在「查询中」或旧时间戳，用户看到的就是「额度没用了」却说不出原因。
-    func pause() {
+    public func pause() {
         guard !isPaused else { return }
         isPaused = true
         logger.info("计费刷新暂停：屏幕锁定 / 休眠")
@@ -175,7 +176,7 @@ final class BillingMonitor {
     }
 
     /// 解锁 / 唤醒：恢复并立即刷新一次
-    func resume() {
+    public func resume() {
         guard isPaused else { return }
         isPaused = false
         logger.info("计费刷新恢复：屏幕可用")
@@ -187,7 +188,7 @@ final class BillingMonitor {
     // MARK: - 凭据
 
     /// 保存指定 provider 的凭据并立即刷新（空串等同于清除）
-    func saveCredential(_ key: String, providerID: String) {
+    public func saveCredential(_ key: String, providerID: String) {
         guard let index = states.firstIndex(where: { $0.descriptor.id == providerID }) else { return }
         credentialStore.setCredential(key, for: providerID)
         let configured = credentialStore.credential(for: providerID) != nil
@@ -205,7 +206,7 @@ final class BillingMonitor {
     }
 
     /// 清除指定 provider 的凭据（回到未配置态，不发请求）
-    func clearCredential(providerID: String) {
+    public func clearCredential(providerID: String) {
         guard let index = states.firstIndex(where: { $0.descriptor.id == providerID }) else { return }
         credentialStore.setCredential(nil, for: providerID)
         states[index].isConfigured = false

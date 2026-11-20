@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureBilling
 import NetworkMonitorUI
 import ServiceManagement
 
