@@ -11,10 +11,10 @@ import NetworkMonitorCore
 /// - 无触控板时由系统自行忽略，不做设备探测；
 /// - 触觉不受事件的「提示音开关」影响：音效关掉、触觉照样生效（这是既有口径，也是用户预期）。
 @MainActor
-final class HapticFeedback {
+public final class HapticFeedback {
 
     /// 触发时机（保留语义分类；具体图案由设置里的档位决定）
-    enum Kind: String, CaseIterable, Sendable {
+    public enum Kind: String, CaseIterable, Sendable {
         /// 卡片选中切换
         case selection
         /// 收藏切换（有「档位变化」的语义）
@@ -23,17 +23,17 @@ final class HapticFeedback {
         case generic
 
         /// 归属事件
-        var event: NotificationEvent { .clipboardAction }
+        public var event: NotificationEvent { .clipboardAction }
     }
 
     private let preferences: NotificationPreferences
 
-    init(preferences: NotificationPreferences) {
+    public init(preferences: NotificationPreferences) {
         self.preferences = preferences
     }
 
     /// 触发一次反馈（档位关闭时直接返回）
-    func tap(_ kind: Kind) {
+    public func tap(_ kind: Kind) {
         let level = preferences.config(for: kind.event).haptic
         guard level.isEnabled else { return }
         NSHapticFeedbackManager.defaultPerformer.perform(Self.pattern(for: level),
@@ -41,7 +41,7 @@ final class HapticFeedback {
     }
 
     /// 档位 → 系统图案
-    static func pattern(for level: NotificationHaptic) -> NSHapticFeedbackManager.FeedbackPattern {
+    public static func pattern(for level: NotificationHaptic) -> NSHapticFeedbackManager.FeedbackPattern {
         switch level {
         case .light: return .alignment
         case .strong: return .levelChange

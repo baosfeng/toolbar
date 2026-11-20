@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorFeatureBilling
+import NetworkMonitorFeatureFeedback
 
 // MARK: - 应用协调器
 

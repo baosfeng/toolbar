@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorDesign
+import NetworkMonitorFeatureDiagnostics
 import NetworkMonitorUI
 
 // MARK: - 菜单面板（刷新链路）

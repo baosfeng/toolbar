@@ -15,21 +15,18 @@ import NetworkMonitorCore
 ///
 /// 看护线程**不回头问主线程**：它只读「最后一次心跳时存下的上下文」。主线程真卡住时，
 /// 若看护线程去问主线程「你在哪一页」，它自己也会被卡住，什么也记不下来。
-final class MainThreadWatchdog: @unchecked Sendable {
+public final class MainThreadWatchdog: @unchecked Sendable {
 
-    private let logger: LoggingService
+    private let logger: any LoggingService
     private let lock = NSLock()
-    private var lastBeatAt = DispatchTime.now().uptimeNanoseconds
-    private var lastTab = "-"
-    private var lastPanelShown = false
-    private var lastIndexingState = "-"
-    /// 本次停顿是否已记过（同一次停顿只记一条，心跳恢复时清位）
-    private var reportedStall = false
+    /// 心跳现场（锁内读改写，判定口径在 MainThreadHeartbeat）
+    private var heartbeatState: MainThreadHeartbeat
     private var timer: DispatchSourceTimer?
     private var eventMonitor: Any?
 
-    init(logger: LoggingService = AppContext.shared.logger) {
+    public init(logger: any LoggingService = AppContext.shared.logger) {
         self.logger = logger
+        self.heartbeatState = MainThreadHeartbeat(now: DispatchTime.now().uptimeNanoseconds)
     }
 
     deinit {
@@ -40,7 +37,7 @@ final class MainThreadWatchdog: @unchecked Sendable {
     // MARK: - 生命周期
 
     /// 启动看护（主线程调用：本地事件监听必须装在主线程）
-    func start() {
+    public func start() {
         guard timer == nil else { return }
         let source = DispatchSource.makeTimerSource(
             queue: DispatchQueue(label: "com.bsfeng.yilan.mainThreadWatchdog", qos: .utility)
@@ -70,21 +67,17 @@ final class MainThreadWatchdog: @unchecked Sendable {
     // MARK: - 心跳
 
     /// 只打点（心跳块 / sendEvent 等高频路径）
-    func heartbeat() {
+    public func heartbeat() {
         lock.lock()
-        lastBeatAt = DispatchTime.now().uptimeNanoseconds
-        reportedStall = false
+        heartbeatState.beat(at: DispatchTime.now().uptimeNanoseconds)
         lock.unlock()
     }
 
     /// 打点 + 更新「停顿现场」上下文（tick 路径，每个刷新节拍一次）
-    func beat(tab: String, panelShown: Bool, indexingState: String) {
+    public func beat(tab: String, panelShown: Bool, indexingState: String) {
         lock.lock()
-        lastBeatAt = DispatchTime.now().uptimeNanoseconds
-        lastTab = tab
-        lastPanelShown = panelShown
-        lastIndexingState = indexingState
-        reportedStall = false
+        heartbeatState.beat(at: DispatchTime.now().uptimeNanoseconds, tab: tab,
+                            panelShown: panelShown, indexingState: indexingState)
         lock.unlock()
     }
 
@@ -93,19 +86,13 @@ final class MainThreadWatchdog: @unchecked Sendable {
     private func checkForStall() {
         let now = DispatchTime.now().uptimeNanoseconds
         lock.lock()
-        let gap = Double(now &- lastBeatAt) / 1_000_000_000
-        guard MainThreadWatchdogPolicy.isStalled(gapSeconds: gap), !reportedStall else {
-            lock.unlock()
-            return
-        }
-        // 只记一条：间隔继续增长也不刷屏，等心跳恢复（主线程能跑心跳块）才清位
-        reportedStall = true
-        let tab = lastTab
-        let shown = lastPanelShown
-        let indexing = lastIndexingState
+        let stall = heartbeatState.takeStall(at: now)
         lock.unlock()
-        logger.warning(MainThreadWatchdogPolicy.message(gapSeconds: gap, tab: tab,
-                                                        panelShown: shown, indexingState: indexing))
+        // 只记一条：间隔继续增长也不刷屏，等心跳恢复（主线程能跑心跳块）才清位
+        guard let stall else { return }
+        logger.warning(MainThreadWatchdogPolicy.message(gapSeconds: stall.gapSeconds, tab: stall.tab,
+                                                        panelShown: stall.panelShown,
+                                                        indexingState: stall.indexingState))
     }
 }
 
@@ -119,9 +106,9 @@ extension MainThreadWatchdog {
     ///
     /// 用途：证明「主线程停顿 → 看门狗日志真的落下来」（`log show --predicate 'process == "一览"'`）。
     /// 生产构建不包含本分支。
-    static let stallEvidenceEnvKey = "NM_WATCHDOG_STALL_MS"
+    public static let stallEvidenceEnvKey = "NM_WATCHDOG_STALL_MS"
 
-    func scheduleStallEvidenceIfRequested() {
+    public func scheduleStallEvidenceIfRequested() {
         guard let raw = ProcessInfo.processInfo.environment[Self.stallEvidenceEnvKey],
               let milliseconds = Int(raw), milliseconds > 0 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {

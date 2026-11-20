@@ -1,19 +1,17 @@
-import AppKit
-
 // MARK: - 剪贴板动作反馈出口
 
 /// 剪贴板音效出口 — 视图与控制器只依赖协议，实现是组合根装配的 SoundFeedback
 ///
 /// 每次调用现读偏好（由实现保证），开关改完立即生效，这里不做任何缓存。
 @MainActor
-protocol ClipboardSoundPerforming: AnyObject {
+public protocol ClipboardSoundPerforming: AnyObject {
     /// 播放一个音效场景
     func play(_ cue: SoundFeedback.Cue)
 }
 
 /// 剪贴板触觉出口 — 同上
 @MainActor
-protocol ClipboardHapticPerforming: AnyObject {
+public protocol ClipboardHapticPerforming: AnyObject {
     /// 触发一次触觉反馈
     func tap(_ kind: HapticFeedback.Kind)
 }
@@ -28,14 +26,20 @@ extension HapticFeedback: ClipboardHapticPerforming {}
 /// 由组合根在装配剪贴板链路时构造（见 AppCoordinator+Feedback），
 /// 面板控制器与面板视图都只拿这一个值，不各自去取单例。
 @MainActor
-struct ClipboardFeedback {
+public struct ClipboardFeedback {
     /// 音效出口
-    let sound: any ClipboardSoundPerforming
+    public let sound: any ClipboardSoundPerforming
     /// 触觉出口
-    let haptics: any ClipboardHapticPerforming
+    public let haptics: any ClipboardHapticPerforming
+
+    /// 成员构造（public：组合根在 App target 里装配具体实现）
+    public init(sound: any ClipboardSoundPerforming, haptics: any ClipboardHapticPerforming) {
+        self.sound = sound
+        self.haptics = haptics
+    }
 
     /// 空实现：面板在设置窗 / 快照等无反馈装配的场合使用（全部静默）
-    static let silent = ClipboardFeedback(sound: SilentSoundFeedback(), haptics: SilentHapticFeedback())
+    public static let silent = ClipboardFeedback(sound: SilentSoundFeedback(), haptics: SilentHapticFeedback())
 }
 
 // MARK: - 静默实现

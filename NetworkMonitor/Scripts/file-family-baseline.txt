@@ -1,6 +1,6 @@
 Clipboard/ClipboardCardFlowView 407 3
 Clipboard/ClipboardCardView 835 6
-Clipboard/ClipboardPanelController 606 6
+Clipboard/ClipboardPanelController 607 6
 Clipboard/ClipboardPanelView 553 2
 Clipboard/PasteboardWatcher 393 2
 Debug/DrawnUIProbe 415 3

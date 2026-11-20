@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorDesign
+import NetworkMonitorFeatureFeedback
 import NetworkMonitorUI
 
 // MARK: - 面板控制器

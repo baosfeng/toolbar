@@ -2,6 +2,7 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorDesign
 import NetworkMonitorFeatureBilling
+import NetworkMonitorFeatureDiagnostics
 import NetworkMonitorUI
 
 // MARK: - 面板内容控制器
