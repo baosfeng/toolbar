@@ -61,6 +61,9 @@ final class PinWindow: NSPanel {
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
         animationBehavior = .none
+        // 默认透明度来自设置页：建窗时读一次，之后滚轮 / 快捷键只改本窗，不影响偏好
+        alphaValue = CGFloat(PinDefaultAlphaResolver.resolve(
+            raw: storage.object(forKey: PinDefaultAlphaPreferenceKey.pinDefaultAlpha) as? Double))
 
         imageView.frame = NSRect(origin: .zero, size: initialSize)
         imageView.image = NSImage(cgImage: image, size: initialSize)
@@ -140,6 +143,9 @@ final class PinWindow: NSPanel {
     }
 
     /// 重置为 100% 大小与 100% 不透明（中键单击的官方语义）
+    ///
+    /// 不回落设置页的默认透明度：默认值只决定「新建贴图」的初始值，
+    /// 中键是「恢复满不透明」的临时动作，回落默认值会让设过 0.5 的用户再也回不到 100%。
     func resetSizeAndAlpha() {
         isThumbnail = false
         alphaValue = 1

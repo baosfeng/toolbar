@@ -53,5 +53,6 @@ func runSnipSuites() {
     runSnipAnnotationSelectionTests()
     runSnipPinSourceTextTests()
     runPinMenuOrderTests()
+    runPinDefaultAlphaTests()  // 贴图默认透明度：设置页写入 → 新贴图窗生效（缺键 1 / 越界钳制）
     runPinDragSessionTests()
 }
