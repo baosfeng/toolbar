@@ -54,6 +54,11 @@ enum SettingsSnapshot {
                let appearancePane = settings.currentPaneForSnapshot as? SettingsAppearancePane {
                 appearancePane.debugLogAppearanceControlStates("snapshot")
             }
+            // 鼠标滚轮平滑卡的开关 / 滑块是 NSControl：勾选态与置灰态离屏看不出来，
+            // 状态判定以 settings-smoothing-states.txt 为准（控件态与偏好真值并排）
+            if section == .general, let general = settings.currentPaneForSnapshot as? SettingsGeneralPane {
+                general.debugLogSmoothScrollStates("snapshot")
+            }
             // Token 页的「索引事件」平时异步查库：离屏渲染要同步补一次，否则图上永远是「…」
             if section == .token, let tokenPane = settings.currentPaneForSnapshot as? SettingsTokenPane {
                 tokenPane.debugPrefillEventCount()

@@ -32,6 +32,7 @@ public enum AppAssemblyPlan {
     public static let trafficPersistence = "定时落盘"
     public static let autoUpdateCheck = "自动更新检查"
     public static let launchCleanup = "启动清理"
+    public static let smoothScroll = "鼠标滚轮平滑滚动"
 
     /// 阶段声明表（顺序 = 改造前手写顺序；`requires` 精确表达现注释里的真实依赖）
     public static let declarations: [AssembleStageSpec] = [
@@ -73,23 +74,26 @@ public enum AppAssemblyPlan {
         AssembleStageSpec(name: autoUpdateCheck, requires: [updateCheck]),
         // 9. 启动清理：剪贴板容量清理与孤儿清扫（读数据库与剪贴板偏好）
         AssembleStageSpec(name: launchCleanup, requires: [database, clipboard]),
+        // 10. 鼠标滚轮平滑：可选模块，默认关闭；不依赖任何前面的阶段
+        //     （只读偏好，关着就什么都不装，不碰全局输入路径）
+        AssembleStageSpec(name: smoothScroll),
     ]
 
     /// 改造前 `AppCoordinator.start()` 的手写执行顺序（冻结快照，不随实现改动）
     public static let legacyStartOrder: [String] = [
         "数据库", "网络监控", "流量追踪", "通知与音效", "剪贴板", "截图", "系统权限",
         "局域网互传", "额度", "更新检查", "设置窗口", "屏幕活动", "Token 统计", "系统监控",
-        "菜单栏", "定时落盘", "自动更新检查", "启动清理",
+        "菜单栏", "定时落盘", "自动更新检查", "启动清理", "鼠标滚轮平滑滚动",
     ]
 
     /// 带反向清理的阶段（改造前手写在这个集合上的顺序见 `legacyTeardownOrder`）
     public static let teardownStages: [String] = [
-        database, clipboard, transfer, screenActivity, trafficPersistence,
+        database, clipboard, transfer, screenActivity, trafficPersistence, smoothScroll,
     ]
 
     /// 改造前 `stop()` 的清理顺序（冻结快照）——必须等于启动顺序的逆序裁剪
     public static let legacyTeardownOrder: [String] = [
-        trafficPersistence, screenActivity, transfer, clipboard, database,
+        smoothScroll, trafficPersistence, screenActivity, transfer, clipboard, database,
     ]
 
     /// 声明表经拓扑排序得到的实际启动顺序
