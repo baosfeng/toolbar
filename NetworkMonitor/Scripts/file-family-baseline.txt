@@ -40,6 +40,6 @@ Settings/SettingsWindow 583 3
 Snip/SnipController 1279 7
 Snip/SnipOverlayView 1426 8
 Snip/SnipToolBarView 472 3
-TestRunner/TestSuites 355 8
+TestRunner/TestSuites 356 8
 Token/TokenDerive 705 4
 Transfer/TransferController 383 2
