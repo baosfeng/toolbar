@@ -16,7 +16,9 @@ public enum HTTPURLBuilder {
         case invalidURL
     }
 
-    public static func url(base: URL, path: String, query: [(String, String)] = []) throws -> URL {
+    /// - Note: 用 typed throws（SE-0413）声明 `Failure`：这个函数只有两种失败，错误种类封闭；
+    ///   调用方 `catch` 能穷举，新增失败种类时编译期即发现（不必翻 catch-all 分支猜）。
+    public static func url(base: URL, path: String, query: [(String, String)] = []) throws(Failure) -> URL {
         guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
             throw Failure.invalidBase
         }

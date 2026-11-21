@@ -158,7 +158,8 @@ public final class GitHubUpdateChecker: UpdateChecking {
         return try Self.release(fromJSON: data)
     }
 
-    private func makeURL() throws -> URL {
+    /// - Note: typed throws（SE-0413）：拼不出 URL 只有一种失败，错误域封闭。
+    private func makeURL() throws(UpdateCheckError) -> URL {
         let root = baseURL.absoluteString.hasSuffix("/")
             ? String(baseURL.absoluteString.dropLast())
             : baseURL.absoluteString
@@ -241,7 +242,11 @@ public final class GitHubUpdateChecker: UpdateChecking {
     ///
     /// 缺 `tag_name` 直接算解析失败：没有版本号的发布无法判定新旧，
     /// 静默返回空 tag 会让界面上「最新版本」永远空白且看不出原因。
-    public static func release(fromJSON data: Data) throws -> UpdateRelease {
+    ///
+    /// - Note: 用 typed throws（SE-0413）声明 `UpdateCheckError`：本函数的失败种类封闭
+    ///   （JSON 形态不符 / 缺 tag_name 两种），解码错误已在内部就地翻成领域错误；
+    ///   声明后任何新增的抛出点若不属于这个错误域，编译期即报红。
+    public static func release(fromJSON data: Data) throws(UpdateCheckError) -> UpdateRelease {
         let payload: ReleasePayload
         do {
             payload = try JSONDecoder().decode(ReleasePayload.self, from: data)
