@@ -38,7 +38,7 @@ description: 本项目（toolbar / 一览）专属编码规范：架构原则、
 main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具体类的地方）
   → 启动装配：AppComposition + AssembleStage（声明式 18 个 stage，按 requires 拓扑排序；见下）
   → MenuBarManager（UI，构造器注入协议）
-  → 数据层：DatabaseService / HookEventRepository / TokenUsageRepository（AppDatabase 组合）
+  → 数据层：DatabaseService + 剪贴板仓储（ClipboardRepository / ClipboardOCRRepository / ClipboardBoardRepository）组合为 AppDatabase；Token 索引走独立的 HarnessTokenRepository
      写路径唯一出口 DatabaseTransaction；建表 / 迁移登记在 MigrationRegistry
   → 变化广播：AppEvents（写偏好 / 落库后发，UI 订阅即刷新）
   → 通知出口：NotificationServicing（App 层封装 UNUserNotificationCenter，Core 不依赖 UserNotifications）
@@ -65,7 +65,7 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 
 ### 2. 接口隔离（ISP）
 - 一个协议一个领域；新领域新建协议文件，禁止往 `DatabaseService` 等现有协议塞方法
-- 数据库三协议：`DatabaseService`（连接/query/close）、`HookEventRepository`（Hook 写入查询）、`TokenUsageRepository`（token 写入）；组合用 `AppDatabase`
+- 数据库协议：`DatabaseService`（连接/query/close）+ 剪贴板仓储 `ClipboardRepository` / `ClipboardOCRRepository` / `ClipboardBoardRepository`，组合别名 `AppDatabase`；Token 索引走独立 `HarnessTokenRepository`，不进 `AppDatabase`
 
 ### 3. 单一职责（SRP）
 - 单文件 >500 行 / 15 KiB（15360 字节）必须拆分；存量超标文件不追溯整改，仅在改动该文件时顺带治理
