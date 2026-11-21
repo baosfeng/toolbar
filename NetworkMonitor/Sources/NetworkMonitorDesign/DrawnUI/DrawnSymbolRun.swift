@@ -51,7 +51,7 @@ public enum DrawnSymbolRun {
     }
 
     /// 模板图按 tint 上色（带缓存；非模板图原样返回）
-    public static func tinted(_ image: NSImage, tint: NSColor?) -> NSImage {
+    static func tinted(_ image: NSImage, tint: NSColor?) -> NSImage {
         guard image.isTemplate, let tint else { return image }
         let key = TintKey(image: ObjectIdentifier(image), tint: tint.description)
         if let hit = tintCache[key] { return hit }
@@ -71,7 +71,7 @@ public enum DrawnSymbolRun {
     /// 等比缩放进方框并居中（行前图标）：模板图先按 tint 上色
     ///
     /// 自绘不走 `NSImageView.contentTintColor`，模板图原样画出来是纯黑块，故这里必须上色。
-    public static func drawFitted(_ image: NSImage, in rect: CGRect, tint: NSColor? = nil) {
+    static func drawFitted(_ image: NSImage, in rect: CGRect, tint: NSColor? = nil) {
         guard rect.width > 0, rect.height > 0 else { return }
         let shown = tinted(image, tint: tint)
         let scale = min(rect.width / max(shown.size.width, 1),

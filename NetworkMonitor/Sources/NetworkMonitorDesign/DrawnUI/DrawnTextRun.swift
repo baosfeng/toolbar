@@ -9,9 +9,9 @@ import AppKit
 /// 那是自绘最大的重复开销。尺寸只与「字符串 + 字体 + 宽度上限」有关，与颜色无关。
 /// 缓存有界：超过条数上限整体清空（不按 LRU 精细淘汰，换来实现与开销都可控）。
 @MainActor
-public final class DrawnTextMeasurer {
+final class DrawnTextMeasurer {
 
-    public static let shared = DrawnTextMeasurer()
+    static let shared = DrawnTextMeasurer()
 
     private struct WidthKey: Hashable {
         let string: String
@@ -47,7 +47,7 @@ public final class DrawnTextMeasurer {
     private init() {}
 
     /// 单行宽度（受 `limit` 限制；`limit` 一般传行内可用宽度）
-    public func width(string: String, font: NSFont, limit: CGFloat) -> CGFloat {
+    func width(string: String, font: NSFont, limit: CGFloat) -> CGFloat {
         guard !string.isEmpty else { return 0 }
         let key = WidthKey(string: string, fontName: font.fontName, fontSize: font.pointSize, limit: limit)
         if let hit = widths[key] { return hit }
@@ -60,7 +60,7 @@ public final class DrawnTextMeasurer {
     }
 
     /// 单行行高（字体行高，缓存后零成本）
-    public func lineHeight(font: NSFont) -> CGFloat {
+    func lineHeight(font: NSFont) -> CGFloat {
         let key = HeightKey(fontName: font.fontName, fontSize: font.pointSize)
         if let hit = heights[key] { return hit }
         if heights.count >= capacity { heights.removeAll(keepingCapacity: true) }
@@ -74,7 +74,7 @@ public final class DrawnTextMeasurer {
     /// AppKit 的标签对齐矩形宽就是「文本宽」，而文本宽落在半像素网格上
     /// （实测 15 种常见字串全部吻合：CPU→24.5、8P · 2E→36.5、11.2 GB / 16.0 GB→88.5）。
     /// 排版必须用这个值而不是取整到整数的 width：差 0.5pt 会让整行元素漂半个像素。
-    public func layoutWidth(string: String, font: NSFont) -> CGFloat {
+    func layoutWidth(string: String, font: NSFont) -> CGFloat {
         guard !string.isEmpty else { return 0 }
         let key = WidthKey(string: string, fontName: font.fontName,
                            fontSize: font.pointSize, limit: 0)
@@ -90,7 +90,7 @@ public final class DrawnTextMeasurer {
     ///
     /// 与 `NSAttributedString.boundingRect(with:options:)` 同源同参数，因此自绘正文的
     /// 「最多 N 行 / 尾部省略」判定与改造前的标签绘制完全一致，只差这一次 CoreText 排版。
-    public func blockHeight(string: String, font: NSFont, width: CGFloat, lineSpacing: CGFloat) -> CGFloat {
+    func blockHeight(string: String, font: NSFont, width: CGFloat, lineSpacing: CGFloat) -> CGFloat {
         guard !string.isEmpty, width > 0 else { return 0 }
         let key = BlockKey(string: string, fontName: font.fontName, fontSize: font.pointSize,
                            width: width, lineSpacing: lineSpacing)
@@ -115,7 +115,7 @@ public final class DrawnTextMeasurer {
     ///
     /// 单行 meta 文字（类型提示 / 相对时间）在改造前用 `size(withAttributes:)` 定位，
     /// 这里缓存同一份数值：取整到 0.5pt 网格的 `layoutWidth` 会让文字漂半个像素。
-    public func exactSize(string: String, font: NSFont) -> CGSize {
+    func exactSize(string: String, font: NSFont) -> CGSize {
         guard !string.isEmpty else { return .zero }
         let key = WidthKey(string: string, fontName: font.fontName, fontSize: font.pointSize, limit: -1)
         if let hit = exactSizes[key] { return hit }
@@ -129,7 +129,7 @@ public final class DrawnTextMeasurer {
     ///
     /// 实测 11pt 粗体 = 14（而 ascender−descender 只有 12.95）、10.5pt 粗体 = 13，
     /// 因此不能自己用 ascender 推，直接按同一个字体量一次并缓存。
-    public func labelHeight(font: NSFont) -> CGFloat {
+    func labelHeight(font: NSFont) -> CGFloat {
         let key = HeightKey(fontName: font.fontName, fontSize: font.pointSize)
         if let hit = labelHeights[key] { return hit }
         if labelHeights.count >= capacity { labelHeights.removeAll(keepingCapacity: true) }
@@ -147,11 +147,11 @@ public final class DrawnTextMeasurer {
 @MainActor
 public struct DrawnTextRun {
 
-    public var string: String
+    var string: String
     public var font: NSFont
-    public var color: NSColor
+    var color: NSColor
     /// 超宽时是否截断（false 时按实测宽度溢出绘制，用于不介意压边的场景）
-    public var truncates: Bool = true
+    var truncates: Bool = true
 
     public init(string: String, font: NSFont, color: NSColor, truncates: Bool = true) {
         self.string = string

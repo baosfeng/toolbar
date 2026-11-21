@@ -61,7 +61,7 @@ public final class PaneHeaderRowView: NSView {
     }
 
     @available(*, unavailable)
-    public required init?(coder: NSCoder) { nil }
+    required init?(coder: NSCoder) { nil }
 
     /// 右侧口径文字（nil / 空串 = 不显示）
     public func updateMeta(_ text: String?) {
@@ -122,7 +122,7 @@ public enum PaneBandChrome {
     ///
     /// 键统一 10pt 等宽三级色、值 10.5pt 等宽粗体——与额度 / Token 页原有取值一致，
     /// 系统页此前用 9pt 微标签 + 9pt 数值，是五页里最小的一档，一并归位。
-    public static func makeItemView(key: String, value: String, tone: NSColor) -> NSView {
+    static func makeItemView(key: String, value: String, tone: NSColor) -> NSView {
         let title = MenuPanelLabel.text(key, font: PaneCardStyle.metaFont,
                                         color: PaneCardStyle.tertiaryText)
         let valueLabel = MenuPanelLabel.text(value, font: PaneCardStyle.rowValueStrongFont,

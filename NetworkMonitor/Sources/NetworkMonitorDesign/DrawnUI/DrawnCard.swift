@@ -35,14 +35,14 @@ public final class DrawnCard: NSView {
     /// 卡片底色（默认取主题卡片底）
     public var fillColor: NSColor = PaneCardStyle.cardFill { didSet { needsDisplay = true } }
     /// 左右内边距
-    public var paddingX: CGFloat = PaneCardStyle.cardPaddingX { didSet { needsLayout = true } }
+    var paddingX: CGFloat = PaneCardStyle.cardPaddingX { didSet { needsLayout = true } }
     /// 上下内边距
-    public var paddingY: CGFloat = PaneCardStyle.cardPaddingY { didSet { needsLayout = true } }
+    var paddingY: CGFloat = PaneCardStyle.cardPaddingY { didSet { needsLayout = true } }
     /// 卡头与行的间距
-    public var headSpacing: CGFloat = 3 { didSet { needsLayout = true } }
+    var headSpacing: CGFloat = 3 { didSet { needsLayout = true } }
 
     /// 卡头内「标题」与「右侧说明」之间的最小间距（与系统页同源；说明超宽时先让位）
-    public static let headGap: CGFloat = 6
+    static let headGap: CGFloat = 6
 
     private var titleRun: DrawnTextRun {
         DrawnTextRun(string: title, font: PaneCardStyle.cardTitleFont, color: PaneCardStyle.primaryText)
@@ -51,13 +51,13 @@ public final class DrawnCard: NSView {
         DrawnTextRun(string: caption, font: PaneCardStyle.metaFont, color: PaneCardStyle.tertiaryText)
     }
 
-    public override init(frame frameRect: NSRect) {
+    override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(list)
     }
 
     @available(*, unavailable)
-    public required init?(coder: NSCoder) { nil }
+    required init?(coder: NSCoder) { nil }
 
     /// 卡头行高（无卡头时为 0）
     private var headHeight: CGFloat { title.isEmpty ? 0 : PaneCardStyle.cardHeadHeight }

@@ -28,7 +28,7 @@ public enum MenuPanelStyle {
     /// 正文 / 行名（10.5pt）
     public static let bodyFont: NSFont = PaneCardStyle.rowNameFont
     /// 行数值（10.5pt 等宽）
-    public static let valueFont: NSFont = PaneCardStyle.rowValueFont
+    static let valueFont: NSFont = PaneCardStyle.rowValueFont
     /// 小号数值（图表坐标 / 表头补充说明，10pt 等宽）
     public static let smallValueFont: NSFont = PaneCardStyle.metaFont
     /// 主数值大字号（24pt 等宽粗体，与额度 / Token 页 Hero 同档）

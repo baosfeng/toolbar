@@ -63,7 +63,7 @@ public final class DrawnBlend {
     }
 
     /// 停止在途过渡（保持当前值）
-    public func cancel() {
+    func cancel() {
         stopTimer()
     }
 

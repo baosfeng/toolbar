@@ -88,11 +88,11 @@ public enum PaneCardStyle {
     /// 列表行高（条目 / 进程 / 设备…）
     ///
     /// 原 32pt（剪贴板 / 传送）比 28pt（进程）高一档，同屏两套行距；统一到 28pt。
-    public static let rowHeight: CGFloat = 28
+    static let rowHeight: CGFloat = 28
     /// 紧凑行高（进程行）
-    public static let compactRowHeight: CGFloat = 26
+    static let compactRowHeight: CGFloat = 26
     /// 次速率数字（网络页上行）
-    public static let sideValueFont = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
+    static let sideValueFont = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
 
     // MARK: 页面尺寸
 
@@ -101,7 +101,7 @@ public enum PaneCardStyle {
     /// 页头 / 状态带左右内边距（此前 7 / 8 / 12 混用）
     public static let bandPaddingX: CGFloat = 7
     /// 状态带圆角（此前 6 / 8 混用）
-    public static let bandRadius: CGFloat = 6
+    static let bandRadius: CGFloat = 6
     /// 状态带组间距（键值对之间）
     public static let bandGroupSpacing: CGFloat = 8
     /// 状态带组内间距（键与值之间）
@@ -113,7 +113,7 @@ public enum PaneCardStyle {
     /// 主图柱高（首屏）
     public static let bucketChartHeight: CGFloat = 22
     /// 展开区主图柱高
-    public static let expandedChartHeight: CGFloat = 44
+    static let expandedChartHeight: CGFloat = 44
     /// 迷你折线高度 / 宽度
     public static let sparkHeight: CGFloat = 12
     public static let sparkWidth: CGFloat = 54

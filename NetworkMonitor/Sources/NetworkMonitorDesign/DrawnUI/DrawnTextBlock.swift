@@ -14,11 +14,11 @@ import AppKit
 public struct DrawnTextBlock {
 
     /// 文字内容
-    public var string: String
+    var string: String
     /// 字体
     public var font: NSFont
     /// 文字颜色
-    public var color: NSColor
+    var color: NSColor
     /// 行距
     public var lineSpacing: CGFloat = 2
     /// 最多绘制行数（超出行数尾部省略；0 表示不限）
@@ -65,7 +65,7 @@ public struct DrawnTextBlock {
     }
 
     /// 垂直居中画进 rect：内容按自然高度居中，超过 `maxLines` 时尾部省略
-    public func draw(centeredIn rect: CGRect) {
+    func draw(centeredIn rect: CGRect) {
         let height = drawHeight(width: rect.width)
         guard height > 0, rect.width > 0 else { return }
         let target = CGRect(x: rect.minX,

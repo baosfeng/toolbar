@@ -30,7 +30,7 @@ public enum DrawnInk {
     ///   - rect: 进度条整体区域（高度即条高）
     ///   - progress: 0…1，超过范围会被夹到边界
     ///   - radius: 条的两端圆角，默认取高度一半（胶囊）
-    public static func progressBar(in rect: CGRect,
+    static func progressBar(in rect: CGRect,
                             progress: Double,
                             track: NSColor,
                             fill: NSColor,
@@ -53,7 +53,7 @@ public enum DrawnInk {
     }
 
     /// 空描边条（不可得态占位：只有轮廓、没有填充）
-    public static func outlineBar(in rect: CGRect, color: NSColor, radius: CGFloat? = nil) {
+    static func outlineBar(in rect: CGRect, color: NSColor, radius: CGFloat? = nil) {
         guard rect.width > 0, rect.height > 0, let ctx = NSGraphicsContext.current?.cgContext else { return }
         let r = radius ?? rect.height / 2
         ctx.saveGState()
@@ -67,7 +67,7 @@ public enum DrawnInk {
     // MARK: 色点 / 分段条
 
     /// 行前色点（6pt 圆角块，与 Token 页图例色点同形）
-    public static func swatch(in rect: CGRect, color: NSColor, radius: CGFloat = 1.5) {
+    static func swatch(in rect: CGRect, color: NSColor, radius: CGFloat = 1.5) {
         guard rect.width > 0, rect.height > 0 else { return }
         fill(rect, radius: radius, color: color)
     }
@@ -75,7 +75,7 @@ public enum DrawnInk {
     /// 分段占比条（轨道 + 若干段，整体两端圆角、段内直角）
     ///
     /// 份额之和不要求等于 1：超出部分按顺序排在右侧被裁掉，不足则露出右侧轨道。
-    public static func stackedBar(in rect: CGRect, shares: [Double], colors: [NSColor], track: NSColor) {
+    static func stackedBar(in rect: CGRect, shares: [Double], colors: [NSColor], track: NSColor) {
         guard rect.width > 0, rect.height > 0, let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.saveGState()
         ctx.addPath(roundedPath(rect, radius: rect.height / 2))
@@ -96,7 +96,7 @@ public enum DrawnInk {
     // MARK: 小色块
 
     /// 圆点（状态指示灯）
-    public static func dot(in rect: CGRect, color: NSColor) {
+    static func dot(in rect: CGRect, color: NSColor) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.setFillColor(color.cgColor)
         ctx.fillEllipse(in: rect)
@@ -111,7 +111,7 @@ public enum DrawnInk {
     }
 
     /// 1pt 分隔线（按屏幕缩放对齐，避免糊边）
-    public static func hairline(from x0: CGFloat, to x1: CGFloat, y: CGFloat, color: NSColor) {
+    static func hairline(from x0: CGFloat, to x1: CGFloat, y: CGFloat, color: NSColor) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         let alignedY = (y * scale).rounded() / scale
@@ -155,7 +155,7 @@ public enum DrawnInk {
     ///
     /// 与原生 WiFiSignalDotView / SystemPressureDotView 同一段 NSBezierPath 绘制：
     /// 圆取 rect 内缩半个像素，描边压在圆心上（不额外内缩）。
-    public static func circle(in rect: CGRect, fill: NSColor, stroke: NSColor? = nil, lineWidth: CGFloat = 1) {
+    static func circle(in rect: CGRect, fill: NSColor, stroke: NSColor? = nil, lineWidth: CGFloat = 1) {
         guard rect.width > 0, rect.height > 0 else { return }
         let oval = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
         fill.setFill()

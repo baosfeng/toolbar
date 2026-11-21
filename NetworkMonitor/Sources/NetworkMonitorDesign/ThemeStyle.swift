@@ -49,13 +49,13 @@ public enum ThemeStyle {
     }
 
     /// 取角色的静态实色（按当前绘制外观解析；给 `CGColor` / `CGContext` 场景用）
-    public static func solid(_ role: ThemeRole) -> NSColor {
+    static func solid(_ role: ThemeRole) -> NSColor {
         let isDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         return resolve(current.color(role, dark: isDark), isDark: isDark)
     }
 
     /// 单次解析：`ThemeColor` → `NSColor`（纯函数，可在非隔离闭包里跑）
-    public nonisolated static func resolve(_ color: ThemeColor, isDark: Bool) -> NSColor {
+    nonisolated static func resolve(_ color: ThemeColor, isDark: Bool) -> NSColor {
         switch color {
         case let .hex(value):
             return NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
