@@ -549,7 +549,7 @@ curl -sL --compressed "https://docs.snipaste.com/wiki/更新日志.md"      # 78
 | g24 | `closeAll()` | 1 | 只有定义 `PinWindowController.swift:156`，无调用方 → 「退出时销毁已关闭贴图」缺失 |
 | g25 | `annotationColor` | 3 | 只在设置页与键名定义，**无消费方** → 「默认颜色对新截图生效」实际未生效（见 §9） |
 | g26 | `annotationLineWidth` | 3 | 同上，**无消费方** → 默认线宽未生效 |
-| g27 | `pinDefaultAlpha` | 3 | 同上，**无消费方** → 贴图默认不透明度未生效 |
+| g27 | `pinDefaultAlpha` | 5 | 设置页读写 + `Pin/PinWindow.swift:65` 建窗消费（`PinDefaultAlphaResolver` 钳制 0.3…1，缺键 1）→ 已生效 |
 | g28 | `restoreLastClosed` | 1 | 只有定义 `PinWindowController.swift:123`，无调用方 → 恢复走的是 `restoreMatching`（`:39,52`） |
 | g29 | `SnipAspectLock` | 7 | 定义 + 1 生产调用（`SnipSelectionState.swift:88`）+ 5 测试 → 仅 Shift 锁比例 |
 | g30 | `dashed` | 24 | Sources 里落在 Snip 的只有模型 `SnipAnnotation.swift:39-49` 与渲染 `SnipAnnotationRenderer.swift:25-27`，**无 UI 入口** → 虚线「能力在、入口无」 |

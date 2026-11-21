@@ -1,5 +1,7 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
+import NetworkMonitorFeatureBilling
 
 // MARK: - provider 行
 
@@ -260,11 +262,13 @@ final class ProviderRowView: NSView {
     func refreshText() -> String {
         if isLoading { return "查询中" }
         guard let lastUpdated else { return "尚未刷新" }
-        let seconds = Int(Date().timeIntervalSince(lastUpdated))
-        if seconds < 60 { return "刚刚刷新" }
-        if seconds < 3_600 { return "\(seconds / 60) 分钟前刷新" }
-        if seconds < 86_400 { return "\(seconds / 3_600) 小时前刷新" }
-        return "\(seconds / 86_400) 天前刷新"
+        // 分档边界由 RelativeTimeFormatting 统一给出（剪贴板卡片 / 更新检查同源），这里只拼文案
+        switch RelativeTimeFormatting.bucket(seconds: Date().timeIntervalSince(lastUpdated)) {
+        case .justNow: return "刚刚刷新"
+        case .minutes(let minutes): return "\(minutes) 分钟前刷新"
+        case .hours(let hours): return "\(hours) 小时前刷新"
+        case .days(let days): return "\(days) 天前刷新"
+        }
     }
 
     func placeholderText() -> String {

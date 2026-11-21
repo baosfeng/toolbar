@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - Token 页行视图（分布行 / 对比行 / 键值行 / 图例 / 状态带）
 

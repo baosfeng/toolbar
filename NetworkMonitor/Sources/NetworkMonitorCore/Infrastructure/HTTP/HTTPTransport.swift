@@ -136,3 +136,13 @@ public final class URLSessionHTTPTransport: HTTPTransport {
         return result
     }
 }
+
+// MARK: - 共享默认实例
+
+public extension URLSessionHTTPTransport {
+    /// 全仓共享的默认实例 —— 只在调用方未显式注入时求值
+    ///
+    /// 应用内的 provider 与更新链路都由组合根创建实例后按协议注入，本默认值留给
+    /// 测试与独立调用点，从而让 URLSession 的构造点不再散落在各 provider 内部。
+    static let shared = URLSessionHTTPTransport(session: .shared, logger: AppContext.shared.logger)
+}

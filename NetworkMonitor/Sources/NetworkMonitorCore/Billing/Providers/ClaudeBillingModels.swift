@@ -109,22 +109,12 @@ public enum ClaudeBillingDecoding {
                                    unitLabel: extra.currency ?? "credits")
     }
 
-    /// HTTP 状态码 → 领域错误（401 / 403 给「凭据失效」类明确文案）
+    /// HTTP 状态码 → 领域错误（403 的「更新 OAuth token」是本家专属话术，其余口径全仓共用）
     public static func mapHTTPError(statusCode: Int, retryAfter: TimeInterval?,
                                     message: String?) -> BillingError {
-        switch statusCode {
-        case 400:
-            return .invalidRequest(message ?? "请求参数有误（接口可能已变更）")
-        case 401:
-            return .unauthorized
-        case 403:
-            return .forbidden("凭据已失效或缺少 usage 权限，请更新 OAuth token")
-        case 429:
-            return .rateLimited(retryAfter: retryAfter)
-        case 500...599:
-            return .serviceUnavailable(message)
-        default:
-            return .invalidResponse("HTTP \(statusCode)")
-        }
+        BillingHTTPErrorMapper.map(
+            statusCode: statusCode, retryAfter: retryAfter, message: message,
+            forbidden: .fixed("凭据已失效或缺少 usage 权限，请更新 OAuth token"),
+            badRequest: .interfaceChanged)
     }
 }

@@ -30,7 +30,7 @@ DISPLAY_NAME="${POSITIONAL[1]}"
 require_id "${KIND_ID}" "provider kindID"
 
 PASCAL="$(pascal_case "${KIND_ID}")"
-TARGET_DIR="${OUT_DIR:-${NM_DIR}/Sources/NetworkMonitor/Billing/Providers}"
+TARGET_DIR="${OUT_DIR:-${NM_DIR}/Sources/NetworkMonitorFeatureBilling/Providers}"
 PROVIDER_PATH="${TARGET_DIR}/${PASCAL}BillingProvider.swift"
 
 echo "额度 provider 脚手架：kindID=${KIND_ID} / 显示名=${DISPLAY_NAME} / 类名=${PASCAL}BillingProvider"
@@ -119,18 +119,15 @@ public final class __PASCAL__BillingProvider: BillingProvider {
 
     // MARK: - HTTP 状态码收敛
 
-    /// 8 种 BillingError 的映射口径与其余 provider 一致（见 BillingProvider.swift:49）
+    /// 状态码 → BillingError 走全仓共用的一份（BillingHTTPErrorMapper），
+    /// 本文件只声明本家的 403 话术；8 种 BillingError 语义见 BillingProvider.swift:49
     static func mapHTTPError(statusCode: Int,
                              retryAfter: TimeInterval?,
                              message: String?) -> BillingError {
-        switch statusCode {
-        case 401: return .unauthorized
-        case 403: return .forbidden(message)
-        case 429: return .rateLimited(retryAfter: retryAfter)
-        case 400..<500: return .invalidRequest(message)
-        case 500..<600: return .serviceUnavailable(message)
-        default: return .invalidResponse(message ?? "HTTP \(statusCode)")
-        }
+        BillingHTTPErrorMapper.map(statusCode: statusCode,
+                                   retryAfter: retryAfter,
+                                   message: message,
+                                   forbidden: .fixed("该 API Key 无权读取本服务"))
     }
 }
 SWIFT
@@ -150,7 +147,7 @@ echo "     · 实例（含命名实例 kindID::slug）由 BillingInstanceStore.e
 
 echo ""
 echo "2. 若 provider 有周期窗口：声明窗口种类"
-echo "   Sources/NetworkMonitorCore/Billing/__PASCAL__BillingProvider.swift（本文件）加"
+echo "   Sources/NetworkMonitorFeatureBilling/Providers/__PASCAL__BillingProvider.swift（本文件）加"
 echo "       public var declaredQuotaWindowKinds: [BillingWindowKind] { [.session, .weekly] }"
 echo "     · 这是设置页「恢复通知按窗口勾选」的回落清单；不声明就按「实际观测 → 四档兜底」"
 echo "     · 纯余额型（无窗口）保持默认 []"

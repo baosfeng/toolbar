@@ -36,6 +36,10 @@ func runPaneSuites() {
     runRenderTierTests()
     runRenderTierGlassTests()
     runRenderTierGateTests()
+    // 面板 tick 的三层判定（额度 / 可见层 / 中频）与 5 秒系统页闸门
+    runPanelRefreshPolicyTests()
+    // 高度重算的两道闸门（签名 / 三档节流 / force 穿透）
+    runPanelContentSizingTests()
     runAppearancePreferencesTests()
     runSettingsThemeTests()
 }

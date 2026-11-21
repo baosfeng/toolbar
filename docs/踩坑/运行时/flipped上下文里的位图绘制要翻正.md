@@ -51,6 +51,6 @@ DrawnInk.withUnflippedIfNeeded(around: target) {
 ## 参考文件
 
 - `NetworkMonitor/Sources/NetworkMonitorUI/DrawnUnflip.swift`（镜像变换与 `needsFlip` 判定）
-- `NetworkMonitor/Sources/NetworkMonitor/DrawnUI/DrawnUIKit.swift`（`withUnflippedIfNeeded`）
+- `NetworkMonitor/Sources/NetworkMonitorDesign/DrawnUI/DrawnUIKit.swift`（`withUnflippedIfNeeded`）
 - `NetworkMonitor/Sources/NetworkMonitor/Clipboard/ClipboardCardView+Resources.swift`（`drawAspectFill` 接入）
 - [离屏快照里 NSImage 会上下颠倒](离屏快照里NSImage会上下颠倒.md) — 同一个翻转现象的「取证路径」视角（离屏截图才暴露，先怀疑抓图而不是产品绘制）

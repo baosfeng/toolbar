@@ -22,6 +22,7 @@ func runBillingSuites() {
     runBillingPercentDisplayTests()
     runBillingTests()
     runBillingVisibilityTests()
+    runBillingFeatureBoundaryTests()
     runBillingInstanceTests()
     runBillingProviderPreferenceTests()
     runProviderRowStatusAndWindowInventoryTests()

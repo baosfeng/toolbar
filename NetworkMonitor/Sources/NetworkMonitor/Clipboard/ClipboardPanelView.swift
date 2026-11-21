@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureFeedback
 import NetworkMonitorUI
 
 // MARK: - 面板内容视图回调

@@ -81,22 +81,18 @@ final class ProcessNetworkMonitor: @preconcurrency ProcessNetworkMonitoringServi
     private(set) var processSpeeds: [ProcessNetUsage] = []
     private var lastUpdateTime: Date?
 
-    /// 上次发起采样的时间（节流用）
-    private var lastPollDate: Date = .distantPast
-    /// 采样最小间隔 — nettop 单次采样约 1 秒，3 秒间隔避免频繁 fork 子进程
-    private static let pollInterval: TimeInterval = 3.0
+    /// 采样节流 — nettop 单次采样约 1 秒，3 秒间隔避免频繁 fork 子进程
+    private var pollGate = MinimumIntervalGate(interval: 3.0)
     /// 后台采样队列 — nettop 子进程在此队列执行，不阻塞主线程
     private let workQueue = DispatchQueue(label: "com.networkmonitor.process-poll", qos: .utility)
 
     func poll() {
         // 节流：主线程每秒调用，但真正采样最多每 3 秒一次
-        let now = Date()
-        guard now.timeIntervalSince(lastPollDate) >= Self.pollInterval else { return }
-        lastPollDate = now
+        guard pollGate.shouldRun() else { return }
 
         let previousSnapshot = previous
         let lastUpdate = lastUpdateTime
-        let defaultElapsed = Self.pollInterval
+        let defaultElapsed = pollGate.interval
 
         workQueue.async { [weak self] in
             // 后台执行 nettop（约 1 秒），主线程不阻塞

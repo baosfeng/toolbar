@@ -1,5 +1,7 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
+import NetworkMonitorFeatureBilling
 import NetworkMonitorUI
 
 // MARK: - provider 卡（与 Token 分族卡同族）

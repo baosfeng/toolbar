@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - 页脚状态带（五页共用语法）
 

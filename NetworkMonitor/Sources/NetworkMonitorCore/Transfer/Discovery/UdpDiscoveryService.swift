@@ -33,7 +33,7 @@ public final class UdpDiscoveryService: @unchecked Sendable {
     private var fallbackTasks: [DispatchWorkItem] = []
     /// 心跳退避策略（纯值类型，判定逻辑在 Core 里可测；只作用于心跳公告）
     private var heartbeatPolicy = DiscoveryHeartbeatPolicy()
-    private var offerCooldowns: [String: Date] = [:]
+    private var offerGates: [String: MinimumIntervalGate] = [:]
     var running = false
     /// socket 计数（只在状态锁内读写，避免测试观测时与网络队列互相等待）
     let socketStateLock = NSLock()
@@ -187,13 +187,12 @@ public final class UdpDiscoveryService: @unchecked Sendable {
     /// 单播应答 `discover`（同一来源 IP 2s 内只回一次）
     private func replyOffer(to ip: String) {
         let now = Date()
-        if let last = offerCooldowns[ip], now.timeIntervalSince(last) < DiscoveryMessage.offerCooldown {
-            return
-        }
-        offerCooldowns[ip] = now
-        // 冷却表按需清理，避免长时间运行后无限增长
-        if offerCooldowns.count > 64 {
-            offerCooldowns = offerCooldowns.filter { now.timeIntervalSince($0.value) < DiscoveryMessage.offerCooldown * 2 }
+        var gate = offerGates[ip] ?? MinimumIntervalGate(interval: DiscoveryMessage.offerCooldown)
+        guard gate.shouldRun(now: now) else { return }
+        offerGates[ip] = gate
+        // 冷却表按需清理，避免长时间运行后无限增长（无放行记录的一律清掉）
+        if offerGates.count > 64 {
+            offerGates = offerGates.filter { now.timeIntervalSince($0.value.lastRunAt ?? .distantPast) < DiscoveryMessage.offerCooldown * 2 }
         }
         guard let data = DiscoveryMessage.announce(identity: identity, kind: .offer).encoded() else { return }
         send(data, to: ip)

@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - 菜单栏取证入口（仅 DEBUG）
 

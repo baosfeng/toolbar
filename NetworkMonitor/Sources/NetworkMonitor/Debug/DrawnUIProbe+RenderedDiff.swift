@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 2 倍渲染对照（1x 离屏快照会把原生标签的 alpha 文字合成两次）

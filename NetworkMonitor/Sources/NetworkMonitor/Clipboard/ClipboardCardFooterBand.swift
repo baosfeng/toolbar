@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 卡片卡脚（标题 + 来源两行）

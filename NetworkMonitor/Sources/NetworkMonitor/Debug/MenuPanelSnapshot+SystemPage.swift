@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - 系统页取证装配（拆出 MenuPanelSnapshot.swift）
 
@@ -25,7 +26,7 @@ extension MenuPanelSnapshot {
     /// 把系统页示意数据（快照 + 历史 + 卡显隐）装进面板
     ///
     /// 空态必须连历史一起跳过：真实链路在没有 snapshot 时不会累积 history
-    /// （见 MenuPanelController.systemTick），若这里仍灌历史，就会出现
+    /// （见 MenuPanelController.appendSystemHistory），若这里仍灌历史，就会出现
     /// 「数值全是 —、曲线却画着」的假空态，把验收带偏。
     static func applySystemPage(to panel: MenuPanelView) {
         let mode = ProcessInfo.processInfo.environment["NM_SNAPSHOT_SYSTEM_MODE"] ?? "full"

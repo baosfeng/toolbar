@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 整卡的无障碍上报（从 SystemCardView.swift 拆出）

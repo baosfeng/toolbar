@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 首屏视图台账（改造前后对账）

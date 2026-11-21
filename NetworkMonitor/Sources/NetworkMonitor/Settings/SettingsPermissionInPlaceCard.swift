@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 功能页的就地简版

@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureFeedback
 
 // MARK: - 事件行依赖
 

@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - 卡片流容器与空态（从 ClipboardCardFlowView 拆出，守住单文件体积上限）
 

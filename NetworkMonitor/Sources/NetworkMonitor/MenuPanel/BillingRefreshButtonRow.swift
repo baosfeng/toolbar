@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import NetworkMonitorDesign
 
 // MARK: - 页头刷新按钮行
 

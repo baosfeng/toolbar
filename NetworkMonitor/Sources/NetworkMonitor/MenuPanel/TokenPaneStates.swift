@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - 状态页（加载 / 空 / 数据源不可用）
 

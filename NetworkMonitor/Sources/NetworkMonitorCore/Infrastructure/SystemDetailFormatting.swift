@@ -15,17 +15,12 @@ public enum SystemDetailFormatting {
 
     /// 百分比数值（不带 % 号）— 详情页大号数字与单位分开排版
     public static func percentNumberText(_ ratio: Double) -> String {
-        "\(Int((clampedUnit(ratio) * 100).rounded()))"
+        PercentFormatting.integerNumber(ratio)
     }
 
     /// 紧凑百分比：一位小数，整数时不带小数位（0.012875 → "1.3%"，0.40 → "40%"）
     public static func compactPercentText(_ ratio: Double) -> String {
-        let percent = clampedUnit(ratio) * 100
-        let rounded = percent.rounded()
-        if abs(percent - rounded) < 0.05 {
-            return "\(Int(rounded))%"
-        }
-        return String(format: "%.1f%%", percent)
+        PercentFormatting.compact(ratio)
     }
 
     /// 一组比例的平均值（每核均值）；空数组或全部非法 → "—"
@@ -50,18 +45,10 @@ public enum SystemDetailFormatting {
         return byteCountText(Double(bytes))
     }
 
-    /// 容量（字节，Double 入口：GPU 显存等）；非有限或负数 → "—"
+    /// 容量（字节，Double 入口：GPU 显存等）；非有限 → "—"，负数按 0 处理（不出现负容量）
     public static func byteCountText(_ bytes: Double?) -> String {
         guard let bytes, bytes.isFinite else { return placeholder }
-        let units = ["B", "KB", "MB", "GB", "TB", "PB"]
-        var scaled = max(0, bytes)
-        var index = 0
-        while scaled >= 1024, index < units.count - 1 {
-            scaled /= 1024
-            index += 1
-        }
-        guard index > 0 else { return String(format: "%.0f %@", scaled, units[index]) }
-        return String(format: "%.1f %@", scaled, units[index])
+        return ByteFormatting.binary(bytes)
     }
 
     /// 无单位 GB 数值（1 位小数）— 内存四段行与详情页大号数字用
@@ -90,8 +77,7 @@ public enum SystemDetailFormatting {
     /// 分段占总量的整数百分比："11%"；总量 0 → "—"（不可得与「真的 0%」区分）
     public static func sharePercentText(part: UInt64, total: UInt64) -> String {
         guard total > 0 else { return placeholder }
-        let ratio = min(1, Double(part) / Double(total))
-        return "\(Int((ratio * 100).rounded()))%"
+        return PercentFormatting.integer(Double(part) / Double(total))
     }
 
     // MARK: 衍生状态
@@ -106,7 +92,7 @@ public enum SystemDetailFormatting {
     ///
     /// 非有限值按 0 档（与 `SystemPaneView.clamp` 同一兜底口径）。
     public static func heatTier(_ usage: Double) -> Int {
-        let value = clampedUnit(usage)
+        let value = PercentFormatting.clampedUnit(usage)
         if value >= 0.30 { return 2 }
         if value >= 0.10 { return 1 }
         return 0
@@ -116,7 +102,7 @@ public enum SystemDetailFormatting {
     ///
     /// 与原型一致：P 核多数是个位数（0.7 / 1.2 这类一位小数才有区分度），E 核是两位数。
     public static func heatPercentText(_ usage: Double) -> String {
-        let percent = clampedUnit(usage) * 100
+        let percent = PercentFormatting.clampedUnit(usage) * 100
         guard percent < 10 else { return String(Int(percent.rounded())) }
         let tenths = (percent * 10).rounded() / 10
         if abs(tenths - tenths.rounded()) < 0.05 {
@@ -193,11 +179,5 @@ public enum SystemDetailFormatting {
             return "\(Int(rounded.rounded())) 秒"
         }
         return String(format: "%.1f 秒", rounded)
-    }
-
-    /// 0...1 钳制；非有限值归 0
-    private static func clampedUnit(_ value: Double) -> Double {
-        guard value.isFinite else { return 0 }
-        return min(max(value, 0), 1)
     }
 }

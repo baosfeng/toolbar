@@ -42,13 +42,13 @@ extension SystemMonitor {
     /// 慢节拍间隔（秒）：负载其实很便宜，但进程全量与 IOReport 没必要 1 秒一跑
     static let slowSampleInterval: TimeInterval = 5
 
-    /// 是否该在本帧做慢采
-    ///
-    /// - 首帧（从未慢采）→ true，尽早建立进程基线；
-    /// - 之后按「距上次慢采 ≥ slowSampleInterval」判断。
+    /// 是否该在本帧做慢采：判定复用 Core 的 `MinimumIntervalGate`（首帧没有放行时刻即放行，
+    /// 之后按「距上次慢采 ≥ slowSampleInterval」）。
+    /// 闸门是**一次性值**、不持有实例：放行时刻由采集完成回调写回（`lastSlowSampleDate` 记的是
+    /// 完成时刻），持有实例会让「判定用的时刻」与「回写的时刻」各走一套、慢慢分叉。
     static func shouldRunSlowSample(now: Date, lastSlowDate: Date?) -> Bool {
-        guard let lastSlowDate else { return true }
-        return now.timeIntervalSince(lastSlowDate) >= slowSampleInterval
+        var gate = MinimumIntervalGate(interval: slowSampleInterval, lastRunAt: lastSlowDate)
+        return gate.shouldRun(now: now)
     }
 
     /// 在后台串行队列上执行一次慢节拍采集

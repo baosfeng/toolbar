@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - Token 屏外框（固定高度：内容可滚动 + 页脚）
 

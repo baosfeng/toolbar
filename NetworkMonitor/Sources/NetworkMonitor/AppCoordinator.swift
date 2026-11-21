@@ -1,5 +1,7 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureBilling
+import NetworkMonitorFeatureFeedback
 
 // MARK: - 应用协调器
 
@@ -102,6 +104,13 @@ public final class AppCoordinator {
     /// 系统监控偏好（与 monitor 同源，菜单栏阶段要一起注入）
     var menuBarSystemContext: (monitor: any SystemMonitoringService,
                                preferences: SystemMonitorPreferences)?
+
+    /// 全应用共享的 HTTP 出网实例 —— 组合根唯一构造点，按协议注入各调用方
+    ///
+    /// 额度 provider 与更新检查 / 安装包下载原先各自 new 传输层，URLSession 配置与
+    /// 连接池因此散在多处；收敛到这里后，provider 内部只声明依赖、不再自建。
+    let httpTransport: any HTTPTransport = URLSessionHTTPTransport(session: .shared,
+                                                                   logger: AppContext.shared.logger)
 
     // MARK: - 日志
 

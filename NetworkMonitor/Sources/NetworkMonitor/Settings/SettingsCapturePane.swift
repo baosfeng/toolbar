@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 截图与贴图设置页
@@ -224,7 +225,7 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
 
         refreshPinContentSource()
 
-        let alpha = min(max(storage.object(forKey: SnipPreferenceKey.pinDefaultAlpha) as? Double ?? 1, 0.3), 1)
+        let alpha = PinDefaultAlphaResolver.load(storage: storage)
         alphaSlider?.doubleValue = alpha
         alphaValueLabel?.stringValue = "\(Int((alpha * 100).rounded()))%"
 
@@ -281,7 +282,7 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
 
     @objc private func alphaChanged() {
         let value = alphaSlider?.doubleValue ?? 1
-        storage.set(Double(value), forKey: SnipPreferenceKey.pinDefaultAlpha)
+        storage.set(Double(value), forKey: PinDefaultAlphaPreferenceKey.pinDefaultAlpha)
         alphaValueLabel?.stringValue = "\(Int((value * 100).rounded()))%"
     }
 

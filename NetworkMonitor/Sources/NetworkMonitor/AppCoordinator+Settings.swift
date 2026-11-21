@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureBilling
 import NetworkMonitorUI
 
 // MARK: - 应用协调器（统一设置窗口装配）

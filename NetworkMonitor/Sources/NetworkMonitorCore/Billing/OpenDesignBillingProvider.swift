@@ -36,16 +36,17 @@ public final class OpenDesignBillingProvider: BillingProvider {
 
 
     private let baseURL: URL
-    /// 统一传输层（URLSession 由构造参数注入，便于测试指向本地回环）
+    /// 统一传输层（由构造参数注入，便于测试替换成替身或指向本地回环）
     private let transport: any HTTPTransport
     /// workspaceId 缓存（凭据失效时清空，避免长期复用失效结果）
     private let workspaceCache = WorkspaceCache()
 
+    /// - Parameter logger: 保留签名兼容；出网日志由注入的 transport 输出
     public init(baseURL: URL = OpenDesignBillingProvider.defaultBaseURL,
-                session: URLSession = .shared,
+                transport: any HTTPTransport = URLSessionHTTPTransport.shared,
                 logger: LoggingService = AppContext.shared.logger) {
         self.baseURL = baseURL
-        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
+        self.transport = transport
     }
 
     // MARK: - 能力位
@@ -147,23 +148,13 @@ public final class OpenDesignBillingProvider: BillingProvider {
     /// 纯函数，供测试直接验证映射；`message` 是已按本家口径提取好的错误体文案。
     public static func mapHTTPError(statusCode: Int, retryAfter: TimeInterval?,
                                     message: String?) -> BillingError {
-        switch statusCode {
-        case 400:
-            return .invalidRequest(message)
-        case 401:
-            return .unauthorized
-        case 403:
-            let text = message == "workspace_member_required"
-                ? "无权访问该工作区，请确认账号仍在成员列表中"
-                : message
-            return .forbidden(text)
-        case 429:
-            return .rateLimited(retryAfter: retryAfter)
-        case 500...599:
-            return .serviceUnavailable(message)
-        default:
-            return .invalidResponse("HTTP \(statusCode)")
-        }
+        BillingHTTPErrorMapper.map(
+            statusCode: statusCode, retryAfter: retryAfter, message: message,
+            forbidden: .mapped { text in
+                text == "workspace_member_required"
+                    ? "无权访问该工作区，请确认账号仍在成员列表中"
+                    : text
+            })
     }
 
 }

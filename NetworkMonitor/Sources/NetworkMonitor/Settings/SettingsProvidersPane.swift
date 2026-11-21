@@ -1,5 +1,7 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
+import NetworkMonitorFeatureBilling
 import NetworkMonitorUI
 
 // MARK: - 额度 Provider 设置页

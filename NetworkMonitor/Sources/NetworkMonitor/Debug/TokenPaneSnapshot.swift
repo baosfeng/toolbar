@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - Token 页补充快照（仅 DEBUG）
 

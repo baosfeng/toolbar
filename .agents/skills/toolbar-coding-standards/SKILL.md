@@ -9,10 +9,14 @@ description: 本项目（toolbar / 一览）专属编码规范：架构原则、
 
 ## 项目速览
 
-- Swift 6.3（swiftLanguageModes: [.v6]），SwiftPM **五**目标：
+- Swift 6.3（swiftLanguageModes: [.v6]），SwiftPM **九**目标：
   - `NetworkMonitorCore`（库，**禁止 import AppKit**）— 领域协议、数据库、统计、模型、事件分发、格式化
   - `NetworkMonitorUI`（库，与 AppKit / Core 都无关）— 只放展示纯逻辑（Hero 派生、单位排版等），让 TestRunner 能直接断言 UI 口径而不必 import 可执行 target
-  - `NetworkMonitor`（可执行）— UI、事件分发、监控实现（AppKit 仅限此目标）
+  - `NetworkMonitorDesign`（库，允许 AppKit）— 设计系统：卡片令牌 / 页头页脚骨架 / 主题转译 / 动效令牌 / 自绘组件库
+  - `NetworkMonitorFeatureBilling`（库，**禁止 import AppKit**）— 额度服务层：provider 实现 / 状态管理器 / 快照 / 提醒；让 TestRunner 能直接断言额度业务逻辑
+  - `NetworkMonitorFeatureFeedback`（库，**允许 AppKit**：NSSound / NSHapticFeedbackManager）— 操作反馈层：音效端口 / 触觉映射 / 成对出口 `ClipboardFeedback`；只依赖 Core，让 TestRunner 直接断言 cue 转发与档位映射
+  - `NetworkMonitorFeatureDiagnostics`（库，**允许 AppKit**：NSEvent 本地监听）— 诊断层：主线程看门狗 + 心跳现场 `MainThreadHeartbeat`；只依赖 Core（复用 `MainThreadWatchdogPolicy`），停顿判定可被 TestRunner 直接断言
+  - `NetworkMonitor`（可执行）— UI、事件分发、监控实现（AppKit 仅限允许名单：本目标 + Design / Feedback / Diagnostics）
   - `TestRunner`（可执行）— 手写断言测试（本机无 Xcode SDK，不用 XCTest）
   - `nmcli`（可执行）— UI 自动化 CLI：给菜单栏 app 做程序化验收，用法见 `docs/开发指南/UI-自动化-CLI.md`
 - 构建：`cd NetworkMonitor && swift build --disable-sandbox --build-system native`（本机只有 Command Line Tools，默认后端初始化即失败，统一追加该参数）
@@ -48,6 +52,10 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 加一个子系统 = 新增一条 stage 声明 + 在自己的 requires 里写清依赖，不改既有阶段。
 
 依赖方向：`NetworkMonitor → NetworkMonitorCore`，Core 绝不反向依赖。协议全部定义在 `Sources/NetworkMonitorCore/Domain/Protocols/`。
+
+功能层同理：额度服务层 `NetworkMonitorFeatureBilling → NetworkMonitorCore`（不反向依赖 App），
+需要 App 侧能力时立协议端口、由 App 适配（如兜底提示音 `BillingAlertSoundPlaying` → `NotificationSoundPlayer`）。
+拆出功能 target 的判据：这段逻辑要能被 TestRunner 直接断言，而不只是 App 自己编译得过。
 
 ## 强制原则（Code Review 硬门槛）
 

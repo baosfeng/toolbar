@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - 传输动效
 

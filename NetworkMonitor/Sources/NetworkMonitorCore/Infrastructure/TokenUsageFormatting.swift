@@ -23,20 +23,13 @@ public enum TokenFormat {
 
     /// 千分位分组：`72,271`
     public static func grouped(_ value: Int) -> String {
-        let negative = value < 0
-        let digits = Array(String(value.magnitude))
-        var output: [Character] = []
-        for (index, digit) in digits.reversed().enumerated() {
-            if index > 0, index % 3 == 0 { output.append(",") }
-            output.append(digit)
-        }
-        return (negative ? "-" : "") + String(output.reversed())
+        GroupedNumberFormatting.integer(value)
     }
 
-    /// 百分比：`98.6%`；无数据（nil）显示破折号，不显示 0%
+    /// 百分比：`98.6%`；无数据（nil / 非有限）显示破折号，不显示 0%
     public static func percent(_ fraction: Double?, decimals: Int = 1) -> String {
         guard let fraction, fraction.isFinite else { return "—" }
-        return String(format: "%.\(decimals)f%%", fraction * 100)
+        return PercentFormatting.fixed(fraction, decimals: decimals)
     }
 
     /// 日期键的月-日：`2026-10-24` → `10-24`

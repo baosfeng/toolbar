@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureFeedback
 
 // MARK: - 应用协调器（操作反馈与通知装配）
 
@@ -46,3 +47,11 @@ extension AppCoordinator {
             .joined(separator: " "))
     }
 }
+
+// MARK: - 播放器适配反馈端口
+
+/// 真实音效播放器适配反馈层的音效端口
+///
+/// 依赖方向仍是 App → Feature：反馈层只认 `FeedbackSoundPlaying`，不认识播放器与音效库；
+/// 端口由 App 在这里补上，播放器的试听 / 去重 / 音量口径都不变。
+extension NotificationSoundPlayer: FeedbackSoundPlaying {}

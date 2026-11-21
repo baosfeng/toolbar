@@ -3,33 +3,18 @@ import Foundation
 // MARK: - Formatting
 
 /// Formats a byte-per-second value into a short string like "1.2M", "340K", "500B".
+///
+/// 口径在 `ByteFormatting.shortDecimal`（1000 进位、单位不带空格），菜单栏宽度是硬约束。
 public func formatSpeedShort(_ bps: Double) -> String {
-    let absBps = abs(bps)
-    switch absBps {
-    case 1_000_000_000...:
-        return String(format: "%.1fG", absBps / 1_000_000_000)
-    case 1_000_000...:
-        return String(format: "%.1fM", absBps / 1_000_000)
-    case 1_000...:
-        return String(format: "%.0fK", absBps / 1_000)
-    default:
-        return String(format: "%.0fB", absBps)
-    }
+    ByteFormatting.shortDecimal(bps)
 }
 
 /// Formats bytes in full form (e.g., "1.2 MB").
 ///
-/// 0 单独处理为 "0 KB"：ByteCountFormatter 对 0 会返回本地化文案 "Zero KB"，
-/// 菜单/面板里看着像异常值（实机反馈「Zero KB」）。
+/// 口径在 `ByteFormatting.fullDecimal`（1000 进位、数值与单位间带空格）：
+/// 0 单独处理为 "0 KB"，否则 ByteCountFormatter 会返回本地化文案 "Zero KB"（实机反馈过）。
 public func formatBytesFull(_ bytes: UInt64) -> String {
-    guard bytes > 0 else { return "0 KB" }
-    let f = ByteCountFormatter()
-    f.countStyle = .decimal
-    f.includesUnit = true
-    f.includesCount = true
-    f.allowedUnits = [.useAll]
-    f.isAdaptive = true
-    return f.string(fromByteCount: Int64(bytes))
+    ByteFormatting.fullDecimal(bytes)
 }
 
 // MARK: - IP Address

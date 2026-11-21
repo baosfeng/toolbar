@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureBilling
 
 // MARK: - 额度格与摘要行
 

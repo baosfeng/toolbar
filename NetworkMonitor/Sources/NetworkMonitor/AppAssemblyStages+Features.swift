@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureBilling
 import NetworkMonitorUI
 
 // MARK: - 装配阶段（额度 / 设置 / 菜单栏 / 收尾）
@@ -22,18 +23,20 @@ extension AppCoordinator {
                       run: { env in
                           let coordinator = env.coordinator
                           let billingLogger = coordinator.logger
+                          // 九家 provider 共用组合根这一份传输层（连接池与超时配置只有一份）
+                          let billingTransport = coordinator.httpTransport
                           let billingKinds: [(kindID: String, title: String, make: @MainActor () -> any BillingProvider)] = [
-                              ("ollama", "Ollama", { OllamaBillingProvider(logger: billingLogger) }),
-                              ("open-design", "Open Design", { OpenDesignBillingProvider(logger: billingLogger) }),
-                              ("opencode-go", "OpenCode Go", { OpencodeGoBillingProvider(logger: billingLogger) }),
+                              ("ollama", "Ollama", { OllamaBillingProvider(transport: billingTransport, logger: billingLogger) }),
+                              ("open-design", "Open Design", { OpenDesignBillingProvider(transport: billingTransport, logger: billingLogger) }),
+                              ("opencode-go", "OpenCode Go", { OpencodeGoBillingProvider(transport: billingTransport, logger: billingLogger) }),
                               // 订阅额度三家：均为非公开端点（可能失效），失败只回报错误、保留上次成功数据
-                              ("claude", "Claude", { ClaudeBillingProvider(logger: billingLogger) }),
-                              ("codex", "Codex", { CodexBillingProvider(logger: billingLogger) }),
-                              ("cursor", "Cursor", { CursorBillingProvider(logger: billingLogger) }),
+                              ("claude", "Claude", { ClaudeBillingProvider(transport: billingTransport, logger: billingLogger) }),
+                              ("codex", "Codex", { CodexBillingProvider(transport: billingTransport, logger: billingLogger) }),
+                              ("cursor", "Cursor", { CursorBillingProvider(transport: billingTransport, logger: billingLogger) }),
                               // 官方文档化端点三家，只出余额卡
-                              ("deepseek", "DeepSeek", { DeepSeekBillingProvider(logger: billingLogger) }),
-                              ("openrouter", "OpenRouter", { OpenRouterBillingProvider(logger: billingLogger) }),
-                              ("moonshot", "Moonshot / Kimi", { MoonshotBillingProvider(logger: billingLogger) }),
+                              ("deepseek", "DeepSeek", { DeepSeekBillingProvider(transport: billingTransport, logger: billingLogger) }),
+                              ("openrouter", "OpenRouter", { OpenRouterBillingProvider(transport: billingTransport, logger: billingLogger) }),
+                              ("moonshot", "Moonshot / Kimi", { MoonshotBillingProvider(transport: billingTransport, logger: billingLogger) }),
                           ]
                           let billingInstanceStore = BillingInstanceStore()
                           let billingInstances = billingInstanceStore.ensureDefaults(

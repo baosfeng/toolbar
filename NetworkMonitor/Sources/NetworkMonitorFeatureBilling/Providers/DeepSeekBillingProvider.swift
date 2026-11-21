@@ -1,0 +1,81 @@
+import Foundation
+import NetworkMonitorCore
+
+// MARK: - DeepSeek 余额 provider
+
+/// DeepSeek 余额 —— 官方文档化端点，单 API key 认证，纯余额卡
+///
+/// 端点来源：https://api-docs.deepseek.com/api/get-user-balance/
+/// 请求：GET https://api.deepseek.com/user/balance，认证 `Authorization: Bearer <API key>`
+/// 响应：`balance_infos[].total_balance / granted_balance / topped_up_balance` + `currency`
+///
+/// 口径：
+/// - 只查余额，没有用量明细 → `supportsUsage = false`，状态管理器跳过用量请求；
+/// - 没有周期窗口 → 四类提醒里只会有「用尽 / 余额回升」（余额型 provider 的既有口径）；
+/// - 金额按响应里的 currency 展示（国内账户是 CNY）。
+public final class DeepSeekBillingProvider: BillingProvider {
+    public let id = "deepseek"
+    public let displayName = "DeepSeek"
+    public let symbolName = "brain.head.profile"
+    public let supportsModelBreakdown = false
+    public let supportsTimeSeries = false
+    /// 只有余额接口
+    public let supportsUsage = false
+    /// 官方未公布该端点限流：5 分钟起刷，少打接口
+    public let minimumRefreshInterval: TimeInterval = 300
+    public let credentialHint = "DeepSeek API Key（platform.deepseek.com 创建）"
+    public var credentialPageURL: URL? { URL(string: "https://platform.deepseek.com/api_keys") }
+    /// 环境变量回退键：厂商原生变量名（`export DEEPSEEK_API_KEY=…` 直接可用）
+    ///
+    /// 装饰器（BillingProviderInstance）如今的解析规则是
+    /// 「实例显式配置 → provider 声明的原生名 → BILLING_<ID>_API_KEY」，
+    /// 所以这里声明原生名会真正生效；通用键 `BILLING_DEEPSEEK_API_KEY`
+    /// 仍排在候选表里，老脚本写法继续兼容。
+    public var environmentCredentialKey: String { "DEEPSEEK_API_KEY" }
+
+    /// 站点地址（测试注入本地回环地址）
+    public static let defaultBaseURL = URL(string: "https://api.deepseek.com")!
+    /// 余额接口路径
+    static let balancePath = "/user/balance"
+
+    private let baseURL: URL
+    private let transport: any HTTPTransport
+    private let logger: LoggingService
+
+    public init(baseURL: URL = DeepSeekBillingProvider.defaultBaseURL,
+                transport: any HTTPTransport = URLSessionHTTPTransport.shared,
+                logger: LoggingService = AppContext.shared.logger) {
+        self.baseURL = baseURL
+        self.transport = transport
+        self.logger = logger
+    }
+
+    // MARK: - BillingProvider
+
+    public func fetchBalance(credential: String) async throws -> BillingBalance {
+        let token = BillingCredentialNormalizer.token(credential)
+        guard !token.isEmpty else { throw BillingError.missingCredential }
+        let url = try BillingHTTPMapper.url(base: baseURL, path: Self.balancePath)
+        let endpoint = BillingEndpoint.get(url: url,
+                                           headers: ["Authorization": "Bearer " + token],
+                                           userAgent: HTTPTransportDefaults.userAgent,
+                                           label: displayName,
+                                           status: DeepSeekBillingDecoding.mapHTTPError)
+        let data = try await transport.send(endpoint)
+        do {
+            return try DeepSeekBillingDecoding.decodeBalance(from: data)
+        } catch {
+            logger.warning("DeepSeek 余额响应解析失败（接口可能已变更）：" + describe(error))
+            throw error
+        }
+    }
+
+    /// 只有余额接口，不提供用量明细
+    public func fetchUsage(range: BillingRange, credential: String) async throws -> BillingUsage {
+        throw BillingError.invalidRequest("DeepSeek 不提供用量明细")
+    }
+
+    private func describe(_ error: Error) -> String {
+        (error as? BillingError)?.userMessage ?? error.localizedDescription
+    }
+}

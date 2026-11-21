@@ -9,14 +9,7 @@ import Foundation
 /// （76412 → "76,412"）。最多保留 6 位小数，仅用于消掉浮点运算噪声
 /// （如 3.74 / 100 * 100 → 3.7399999…，比值换算后显示仍应是 3.74）。
 public func formatExactNumber(_ value: Double) -> String {
-    let formatter = NumberFormatter()
-    formatter.numberStyle = .decimal
-    formatter.locale = Locale(identifier: "en_US")
-    formatter.groupingSeparator = ","
-    formatter.usesGroupingSeparator = true
-    formatter.minimumFractionDigits = 0
-    formatter.maximumFractionDigits = maxExactFractionDigits
-    return formatter.string(from: NSNumber(value: value)) ?? String(value)
+    GroupedNumberFormatting.exact(value, maxFractionDigits: maxExactFractionDigits)
 }
 
 /// 原值小数位上限 — 只用于消除浮点噪声，不改变服务端返回值本身的有效位数
@@ -78,6 +71,8 @@ public func formatTokenCount(_ value: Int) -> String {
 /// 用途：无障碍朗读、日志摘要、明细等「需要精确值」的位置。
 /// 额度卡里的大号数字请用 `formatPercentCompact`（原值最多 6 位小数会把版式撑坏）。
 public func formatPercent(_ fraction: Double) -> String {
+    // NaN 保持改造前的文本 "NaN%"：手写分组实现会输出 "nan"，与 NumberFormatter 口径不同
+    if fraction.isNaN { return "NaN%" }
     let clamped = min(max(fraction, 0), 1)
     return formatExactNumber(clamped * 100) + "%"
 }
@@ -112,11 +107,7 @@ public func formatPercentCompact(_ fraction: Double?) -> String {
 func formatPercentCompact(_ fraction: Double) -> String {
     guard fraction.isFinite else { return billingUnavailablePlaceholder }
     let clamped = min(max(fraction, 0), 1)
-    let percent = clamped * 100
-    var text = String(format: "%.2f", percent)
-    while text.contains("."), text.hasSuffix("0") { text.removeLast() }
-    if text.hasSuffix(".") { text.removeLast() }
-    return text + "%"
+    return GroupedNumberFormatting.trimmedDecimal(clamped * 100, decimals: 2) + "%"
 }
 
 /// 分桶时间标签

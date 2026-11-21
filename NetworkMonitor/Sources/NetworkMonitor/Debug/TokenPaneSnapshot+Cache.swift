@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 缓存屏三档范围取证（仅 DEBUG，从 TokenPaneSnapshot 拆出：单文件体积门禁）

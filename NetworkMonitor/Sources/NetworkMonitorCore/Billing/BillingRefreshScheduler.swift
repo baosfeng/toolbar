@@ -24,6 +24,9 @@ public enum BillingRefreshScheduler {
 
     /// 本次是否该发起刷新
     ///
+    /// 判定本身复用 Core 的 `MinimumIntervalGate`（未到期拒绝、不推进窗口）；时钟被改回时
+    /// 闸门按「放行一次并重置」处理——宁可多刷一次，也不让一次改时间把额度刷新永久卡死。
+    ///
     /// - Parameters:
     ///   - now: 当前时刻
     ///   - lastAttempt: 上次发起刷新的时刻（nil = 从未刷新）
@@ -32,7 +35,8 @@ public enum BillingRefreshScheduler {
     public static func isDue(now: Date, lastAttempt: Date?,
                              providerMinimum: TimeInterval, force: Bool) -> Bool {
         if force { return true }
-        guard let lastAttempt else { return true }
-        return now.timeIntervalSince(lastAttempt) >= interval(providerMinimum: providerMinimum)
+        var gate = MinimumIntervalGate(interval: interval(providerMinimum: providerMinimum),
+                                       lastRunAt: lastAttempt)
+        return gate.shouldRun(now: now)
     }
 }

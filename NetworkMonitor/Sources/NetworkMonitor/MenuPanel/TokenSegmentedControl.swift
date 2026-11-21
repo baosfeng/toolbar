@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - 小型分段控件
 

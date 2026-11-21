@@ -39,17 +39,18 @@ public final class OpencodeGoBillingProvider: BillingProvider {
     static let rateLimitedStatus = "rate-limited"
 
     private let baseURL: URL
-    /// 统一传输层（URLSession 由构造参数注入，便于测试指向本地回环）
+    /// 统一传输层（由构造参数注入，便于测试替换成替身或指向本地回环）
     private let transport: any HTTPTransport
     /// 当前时刻（旧形态 resetInSec 是相对秒数，需要基准时刻换算出绝对时刻）
     private let now: @Sendable () -> Date
 
+    /// - Parameter logger: 保留签名兼容；出网日志由注入的 transport 输出
     public init(baseURL: URL = OpencodeGoBillingProvider.defaultBaseURL,
-                session: URLSession = .shared,
+                transport: any HTTPTransport = URLSessionHTTPTransport.shared,
                 logger: LoggingService = AppContext.shared.logger,
                 now: @escaping @Sendable () -> Date = { Date() }) {
         self.baseURL = baseURL
-        self.transport = URLSessionHTTPTransport(session: session, logger: logger)
+        self.transport = transport
         self.now = now
     }
 
@@ -146,23 +147,13 @@ public final class OpencodeGoBillingProvider: BillingProvider {
     }
 
     /// HTTP 状态码 → BillingError（纯函数，供测试直接验证映射）
+    ///
+    /// 401 = Key 无效 / 过期（官方体 `AuthError`）、403 = Key 有效但没有 Go 订阅
+    /// （把官方话术翻成能直接照做的中文），其余口径全仓共用。
     public static func mapHTTPError(statusCode: Int, retryAfter: TimeInterval?,
                                     message: String?) -> BillingError {
-        switch statusCode {
-        case 400:
-            return .invalidRequest(message)
-        case 401:
-            // Key 无效 / 过期（官方体：{"type":"error","error":{"type":"AuthError",...}}）
-            return .unauthorized
-        case 403:
-            // Key 有效但没有 Go 订阅：把官方话术翻成用户能直接照做的中文
-            return .forbidden(noSubscriptionMessage)
-        case 429:
-            return .rateLimited(retryAfter: retryAfter)
-        case 500...599:
-            return .serviceUnavailable(message)
-        default:
-            return .invalidResponse("HTTP \(statusCode)")
-        }
+        BillingHTTPErrorMapper.map(
+            statusCode: statusCode, retryAfter: retryAfter, message: message,
+            forbidden: .fixed(noSubscriptionMessage))
     }
 }

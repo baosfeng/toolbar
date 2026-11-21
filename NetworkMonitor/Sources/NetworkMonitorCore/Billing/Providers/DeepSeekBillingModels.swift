@@ -80,6 +80,6 @@ public enum DeepSeekBillingDecoding {
                                     message: String?) -> BillingError {
         BillingHTTPErrorMapper.map(statusCode: statusCode, retryAfter: retryAfter,
                                    message: message,
-                                   forbiddenMessage: "该 API Key 无权读取余额")
+                                   forbidden: .fixed("该 API Key 无权读取余额"))
     }
 }

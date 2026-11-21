@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorDesign
 
 // MARK: - Token 页样式（对 PaneCardStyle 的转发）
 

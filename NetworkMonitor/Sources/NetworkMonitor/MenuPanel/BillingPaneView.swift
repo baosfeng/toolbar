@@ -1,5 +1,7 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
+import NetworkMonitorFeatureBilling
 import NetworkMonitorUI
 
 // MARK: - 额度页（聚合视图 · 与 Token 页同族）
