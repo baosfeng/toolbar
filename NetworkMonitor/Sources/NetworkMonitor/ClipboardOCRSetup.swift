@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 
 // MARK: - 应用协调器（图片文字识别装配）
 

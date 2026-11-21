@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 import NetworkMonitorUI
 
 // MARK: - 系统权限中心

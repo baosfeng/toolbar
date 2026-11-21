@@ -12,7 +12,7 @@ import NetworkMonitorCore
 /// 两种模式共用同一条流水线：changeCount 判定 → 访问权限判定 → 忽略判定 → 哈希 → 落盘 → onCapture。
 /// 落库与事件通知由调用方（组合根）在 onCapture 回调里完成，采集器不直接触碰仓储。
 @MainActor
-final class PasteboardWatcher: ClipboardCaptureService {
+public final class PasteboardWatcher: ClipboardCaptureService {
 
     /// 活跃档间隔（最快档；实际间隔由 `ClipboardPollSchedule` 逐次计算，本常量供测试与既有断言使用）
     static let pollInterval: TimeInterval = ClipboardPollSchedule.activeInterval
@@ -20,7 +20,8 @@ final class PasteboardWatcher: ClipboardCaptureService {
     /// 剪贴板变更的分布式通知名（只作提前唤醒；changeCount 仍是唯一准入闸门）
     static let pasteboardChangedNotification = Notification.Name("com.apple.pasteboard.changed")
 
-    let preferences: ClipboardPreferences   // 放宽为 internal：暂停扩展（ClipboardPauseControl）要读写暂停偏好
+    /// 偏好端口（不依赖 App 的具体偏好类）：暂停扩展在同 target 内读写暂停键
+    let preferences: any ClipboardCapturePreferences
     /// internal：图片后台结算在 PasteboardWatcher+Images.swift（跨文件访问，同目录内无其他调用方）
     let logger: LoggingService
     /// 放宽为 internal：PasteboardWatcher+Images.swift 的解析逻辑要读
@@ -35,14 +36,15 @@ final class PasteboardWatcher: ClipboardCaptureService {
     /// 上次读到的 changeCount；初值取哨兵值，避免在初始化阶段读取剪贴板（探针未覆盖的路径不做多余访问）
     private var lastChangeCount = Int.min
 
-    private(set) var isRunning = false
-    var onStateChange: ((ClipboardCaptureState) -> Void)?
-    var onCapture: ((ClipboardDraft) -> Void)?
+    public private(set) var isRunning = false
+    public var onStateChange: ((ClipboardCaptureState) -> Void)?
+    public var onCapture: ((ClipboardDraft) -> Void)?
 
-    init(preferences: ClipboardPreferences,
-         logger: LoggingService = AppContext.shared.logger,
-         pasteboard: NSPasteboard = .general,
-         activityMonitor: UserActivityMonitor? = nil) {
+    /// 日志一律由调用方显式注入（功能层不取 AppContext.shared）
+    public init(preferences: any ClipboardCapturePreferences,
+                logger: LoggingService,
+                pasteboard: NSPasteboard = .general,
+                activityMonitor: UserActivityMonitor? = nil) {
         self.preferences = preferences
         self.logger = logger
         self.pasteboard = pasteboard
@@ -51,7 +53,7 @@ final class PasteboardWatcher: ClipboardCaptureService {
 
     // MARK: ClipboardCaptureService
 
-    func start() {
+    public func start() {
         guard !isRunning else { return }
         // 暂停中不重启轮询（恢复走 resume()）：启动时偏好为暂停，据此保持暂停态并明确上报
         guard !isPaused else { onStateChange?(.paused); return }
@@ -72,7 +74,7 @@ final class PasteboardWatcher: ClipboardCaptureService {
                    + "–" + Self.secondsText(ClipboardPollSchedule.idleInterval) + "s）")
     }
 
-    func stop() {
+    public func stop() {
         // 先落 isRunning = false：重排决策依赖它，迟到的一次性 Timer 不会再排下一次
         let wasRunning = isRunning
         isRunning = false
@@ -153,7 +155,7 @@ final class PasteboardWatcher: ClipboardCaptureService {
     }
 
     /// 立即采集一次（分支 A 的面板打开 / 手动采集按钮；与轮询同一条流水线，无新内容时静默返回）
-    func captureNow() {
+    public func captureNow() {
         capture()
     }
 

@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 
 // MARK: - 应用协调器（采集落库编排）
 

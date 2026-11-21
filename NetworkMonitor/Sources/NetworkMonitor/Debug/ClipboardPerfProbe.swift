@@ -2,6 +2,7 @@
 import AppKit
 import Darwin
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 import NetworkMonitorUI
 
 // MARK: - 剪贴板面板性能取证（仅 DEBUG）
@@ -214,7 +215,7 @@ enum ClipboardPerfProbe {
         pasteboardItem.setData(data, forType: .png)
         pasteboard.writeObjects([pasteboardItem])
 
-        let watcher = PasteboardWatcher(preferences: ClipboardPreferences(), pasteboard: pasteboard)
+        let watcher = PasteboardWatcher(preferences: ClipboardPreferences(), logger: AppContext.shared.logger, pasteboard: pasteboard)
         var draft: ClipboardDraft?
         var callbackSeconds: Double = 0
         let start = CFAbsoluteTimeGetCurrent()

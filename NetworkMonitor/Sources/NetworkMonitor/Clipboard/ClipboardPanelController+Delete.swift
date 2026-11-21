@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 
 // MARK: - 删除二次确认与右键菜单指令（从面板控制器拆出，守住单文件体积上限）
 

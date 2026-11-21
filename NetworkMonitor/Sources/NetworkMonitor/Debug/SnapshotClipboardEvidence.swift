@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 
 // MARK: - 剪贴板快照取证：图片卡首帧占位 → 缩略图就绪 → 删除确认提示
 

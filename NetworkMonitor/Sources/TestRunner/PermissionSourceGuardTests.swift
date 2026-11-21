@@ -10,7 +10,7 @@ import Foundation
 
 /// 一处豁免：某个文件被允许直接调用系统权限 API
 struct PermissionSourceExemption {
-    /// 相对 Sources/NetworkMonitor/ 的路径（与扫描输出同口径）
+    /// 相对 Sources/ 的路径，形如 <target>/文件.swift（与扫描输出同口径）
     let path: String
     /// 为什么豁免 —— 写给下一个要加调用点的人看，不写「历史原因」
     let reason: String
@@ -55,18 +55,18 @@ enum PermissionSourceGuard {
     /// 能就必须转发（PasteStackController.probeAccessibility 就是范本）。
     static let whitelist: [PermissionSourceExemption] = [
         PermissionSourceExemption(
-            path: "Permissions/SystemPermissionCenter.swift",
+            path: "NetworkMonitor/Permissions/SystemPermissionCenter.swift",
             reason: "唯一读取点：五类权限的静默读取与显式请求都在这里，别处一律读它发布的快照"),
         PermissionSourceExemption(
-            path: "Clipboard/ClipboardPaster.swift",
+            path: "NetworkMonitorFeatureClipboard/ClipboardPaster.swift",
             reason: "运行期即时判据：合成 ⌘V 之前必须知道此刻能不能投递事件，"
                   + "不能等一次快照刷新——否则会谎报「已粘贴」而事件被系统丢弃"),
         PermissionSourceExemption(
-            path: "Snip/ScreenCaptureService.swift",
+            path: "NetworkMonitor/Snip/ScreenCaptureService.swift",
             reason: "抓屏能力探测：preflight / request 是实际抓屏路径自身的前置条件，"
                   + "结果经 isAuthorized() 交给中心读取，不另存一份状态"),
         PermissionSourceExemption(
-            path: "Clipboard/PasteStackController.swift",
+            path: "NetworkMonitorFeatureClipboard/PasteStackController.swift",
             reason: "转发：probeAccessibility() 是该 API 的唯一实现，"
                   + "SystemPermissionCenter 只转发它，两处各写一份选项字典必然分叉"),
     ]
@@ -201,19 +201,20 @@ enum PermissionSourceGuard {
 
     // MARK: 真实源码树
 
-    /// 源码根 = <repo>/NetworkMonitor/Sources/NetworkMonitor
+    /// 源码根 = <repo>/NetworkMonitor/Sources（扫全部 target，路径带 target 前缀）
     ///
-    /// 不依赖运行期工作目录：测试可能从仓库根、NetworkMonitor/ 或任意目录启动，
-    /// 用 #filePath（编译期写死的本文件绝对路径）逐级回退最稳。
+    /// 扫全部 target：调用点随服务层拆分落到功能 target（ClipboardPaster 等已在
+    /// NetworkMonitorFeatureClipboard），只扫 App 会让白名单项「0 次使用」而悄悄失效。
+    /// 用 #filePath 逐级回退，不依赖运行期工作目录。
     static func sourceRoot(swiftFilePath: String = #filePath) -> URL? {
         let fileURL = URL(fileURLWithPath: swiftFilePath)
         // 本文件位于 Sources/TestRunner/，上跳两级即 Sources/
         let sourcesDir = fileURL.deletingLastPathComponent().deletingLastPathComponent()
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let candidates = [
-            sourcesDir.appendingPathComponent("NetworkMonitor"),
-            cwd.appendingPathComponent("Sources/NetworkMonitor"),
-            cwd.appendingPathComponent("NetworkMonitor/Sources/NetworkMonitor"),
+            sourcesDir,
+            cwd.appendingPathComponent("Sources"),
+            cwd.appendingPathComponent("NetworkMonitor/Sources"),
         ]
         return candidates.first { url in
             var isDirectory: ObjCBool = false
@@ -278,9 +279,9 @@ func runPermissionSourceGuardTests() {
     let c = CGPreflightScreenCaptureAccess()
     """
     assertEqual(PermissionSourceGuard.report(
-                    sources: ["Clipboard/ClipboardPaster.swift": inWhitelist],
+                    sources: ["NetworkMonitorFeatureClipboard/ClipboardPaster.swift": inWhitelist],
                     whitelist: PermissionSourceGuard.whitelist),
-                .compliant(usageByPath: ["Clipboard/ClipboardPaster.swift": 3]),
+                .compliant(usageByPath: ["NetworkMonitorFeatureClipboard/ClipboardPaster.swift": 3]),
                 "白名单内命中放行并按文件计数")
 
     // MARK: 纯判定：白名单外命中给出文件与行号
@@ -316,13 +317,15 @@ func runPermissionSourceGuardTests() {
 
     // MARK: 真实源码树扫描
     guard let root = PermissionSourceGuard.sourceRoot() else {
-        print("❌ 找不到源码根 Sources/NetworkMonitor（#filePath 反推失败）")
+        print("❌ 找不到源码根 Sources（#filePath 反推失败）")
         exit(1)
     }
     let sources = PermissionSourceGuard.loadSources(root: root)
     assertEqual(sources.isEmpty, false, "源码树非空（否则守卫形同虚设）")
+    // TestRunner 排除：它的源码字符串夹具在字符串里嵌引号，会骗过扫描器
+    let productSources = sources.filter { !$0.key.hasPrefix("TestRunner/") }
 
-    switch PermissionSourceGuard.report(sources: sources,
+    switch PermissionSourceGuard.report(sources: productSources,
                                         whitelist: PermissionSourceGuard.whitelist) {
     case .compliant(let usage):
         // 白名单每一项都必须真的还在用这套 API：某一项变成 0 说明名单已过期，

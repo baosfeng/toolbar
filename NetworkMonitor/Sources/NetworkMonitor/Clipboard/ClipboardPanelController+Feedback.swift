@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 
 // MARK: - 面板操作反馈（音效 + 触觉）
 

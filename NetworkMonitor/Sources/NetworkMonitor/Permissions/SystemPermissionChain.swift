@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 import NetworkMonitorUI
 
 // MARK: - 权限链路

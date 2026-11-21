@@ -6,7 +6,7 @@ import NetworkMonitorCore
 // MARK: - 粘贴结果
 
 /// 粘贴结果 — 面板据此给出提示（降级路径必须让用户知道发生了什么）
-enum ClipboardPasteOutcome: Equatable {
+public enum ClipboardPasteOutcome: Equatable {
     /// 已写入剪贴板并合成 ⌘V
     case pasted
     /// 仅写入剪贴板，需要用户手动粘贴（附中文原因）
@@ -15,7 +15,7 @@ enum ClipboardPasteOutcome: Equatable {
     case failed(String)
 
     /// 面向用户的提示文案
-    var message: String {
+    public var message: String {
         switch self {
         case .pasted: return ""
         case .copiedOnly(let reason): return reason
@@ -31,7 +31,7 @@ enum ClipboardPasteOutcome: Equatable {
 /// 自激标记类型名取自 ClipboardPasteboardType.internalMarker，
 /// 采集侧 PasteboardWatcher 依赖同一常量做忽略判定（大小写敏感，禁止改写）。
 @MainActor
-final class PasteboardWriter: ClipboardWriter {
+public final class PasteboardWriter: ClipboardWriter {
 
     private let logger: LoggingService
     /// 内部写入窗口嵌套计数（begin/end 必须配对，嵌套时取最深一层）
@@ -41,14 +41,15 @@ final class PasteboardWriter: ClipboardWriter {
         NSPasteboard.PasteboardType(ClipboardPasteboardType.internalMarker)
     }
 
-    init(logger: LoggingService = AppContext.shared.logger) {
+    /// 日志一律由调用方显式注入（功能层不取 AppContext.shared）
+    public init(logger: LoggingService) {
         self.logger = logger
     }
 
     // MARK: ClipboardWriter
 
     @discardableResult
-    func write(_ item: ClipboardItem, asPlainText: Bool) -> Bool {
+    public func write(_ item: ClipboardItem, asPlainText: Bool) -> Bool {
         if asPlainText { return writeText(item.text ?? item.preview) }
         switch item.kind {
         case .image:
@@ -65,13 +66,13 @@ final class PasteboardWriter: ClipboardWriter {
     }
 
     @discardableResult
-    func writeText(_ text: String) -> Bool {
+    public func writeText(_ text: String) -> Bool {
         let pasteboardItem = NSPasteboardItem()
         pasteboardItem.setString(text, forType: .string)
         return write([pasteboardItem])
     }
 
-    func beginInternalWrite() {
+    public func beginInternalWrite() {
         internalWriteDepth += 1
     }
 
@@ -79,7 +80,7 @@ final class PasteboardWriter: ClipboardWriter {
     ///
     /// 不主动清除已写入的自激标记：用户下一次复制会由系统整体替换剪贴板内容，标记自然消失；
     /// 主动改写现存剪贴板反而可能破坏用户数据。
-    func endInternalWrite() {
+    public func endInternalWrite() {
         internalWriteDepth = max(0, internalWriteDepth - 1)
     }
 
@@ -167,7 +168,7 @@ final class PasteboardWriter: ClipboardWriter {
 /// 核心矛盾：面板要能打字就必须是 key window，此状态下合成的 ⌘V 会落回面板自身。
 /// 解法：唤起面板时（面板尚未成为 key window）同步记录 frontmost 为目标 App，回车时不再取 frontmost。
 @MainActor
-final class ClipboardPaster {
+public final class ClipboardPaster {
 
     /// 写入剪贴板 → 合成 ⌘V 之间的固定延迟（设计规格第 7 节：80ms）
     private static let synthesizeDelay: TimeInterval = 0.08
@@ -175,22 +176,23 @@ final class ClipboardPaster {
     private static let keyCodeV: CGKeyCode = 9
 
     private let writer: any ClipboardWriter
-    private let preferences: ClipboardPreferences
+    private let preferences: any ClipboardCapturePreferences
     private let logger: LoggingService
 
     /// 本次唤起记录的目标 App bundleID（未识别到时为 nil，降级为仅复制）
-    private(set) var targetBundleID: String?
+    public private(set) var targetBundleID: String?
 
-    init(writer: any ClipboardWriter,
-         preferences: ClipboardPreferences,
-         logger: LoggingService = AppContext.shared.logger) {
+    /// 日志一律由调用方显式注入（功能层不取 AppContext.shared）
+    public init(writer: any ClipboardWriter,
+                preferences: any ClipboardCapturePreferences,
+                logger: LoggingService) {
         self.writer = writer
         self.preferences = preferences
         self.logger = logger
     }
 
     /// 是否已识别到可粘贴的目标 App
-    var hasTargetApplication: Bool { targetBundleID != nil }
+    public var hasTargetApplication: Bool { targetBundleID != nil }
 
     // MARK: 目标 App 记忆
 
@@ -201,7 +203,7 @@ final class ClipboardPaster {
     /// 若把本调用挪进动画完成回调、DispatchQueue.main.async 或 NSAnimationContext 的 completionHandler，
     /// 取到的 frontmost 只会是本 App，粘贴将永远落回自己 —— 禁止后移到任何异步路径。
     @discardableResult
-    func recordTargetApplication() -> String? {
+    public func recordTargetApplication() -> String? {
         let ownBundleID = Bundle.main.bundleIdentifier
         if let frontmost = NSWorkspace.shared.frontmostApplication,
            frontmost.bundleIdentifier != ownBundleID {
@@ -228,9 +230,9 @@ final class ClipboardPaster {
     /// 调用前必须已收起面板让出 key（由 ClipboardPanelController 先 orderOut 再调用）。
     /// 时序：写剪贴板（先打自激标记）→ 延迟 80ms → 合成 ⌘V；自激标记不主动清除，
     /// 由用户下一次复制整体替换剪贴板内容时自然消失（理由见 PasteboardWriter.endInternalWrite）。
-    func paste(_ item: ClipboardItem,
-               asPlainText: Bool,
-               completion: (@MainActor (ClipboardPasteOutcome) -> Void)? = nil) {
+    public func paste(_ item: ClipboardItem,
+                      asPlainText: Bool,
+                      completion: (@MainActor (ClipboardPasteOutcome) -> Void)? = nil) {
         guard let bundleID = targetBundleID else {
             let outcome: ClipboardPasteOutcome = writer.write(item, asPlainText: asPlainText)
                 ? .copiedOnly("未识别到目标应用，内容已复制，请手动粘贴")
@@ -263,13 +265,13 @@ final class ClipboardPaster {
 
     /// 仅复制，不粘贴（对应 ⌘↵）
     @discardableResult
-    func copyOnly(_ item: ClipboardItem, asPlainText: Bool = false) -> ClipboardPasteOutcome {
+    public func copyOnly(_ item: ClipboardItem, asPlainText: Bool = false) -> ClipboardPasteOutcome {
         writer.write(item, asPlainText: asPlainText) ? .copiedOnly("已复制到剪贴板") : .failed("写入剪贴板失败")
     }
 
     /// 把条目内容写入系统剪贴板（Paste Stack 推进用，不打合成按键）
     @discardableResult
-    func writeToPasteboard(_ item: ClipboardItem, asPlainText: Bool = false) -> Bool {
+    public func writeToPasteboard(_ item: ClipboardItem, asPlainText: Bool = false) -> Bool {
         writer.write(item, asPlainText: asPlainText)
     }
 

@@ -9,7 +9,7 @@ import NetworkMonitorCore
 /// 1. 只有 `kind == .image` 的条目会碰文件系统：大量文本条目时零 IO
 /// 2. 每个文件的删除各自 do/catch，失败只 `logger.warning`，不回滚 DB、不抛给 UI
 /// 3. 孤儿清扫只在启动后跑一次，不在采集 / 轮询路径上
-enum ClipboardImageGC {
+public enum ClipboardImageGC {
 
     /// 回收一次删除操作涉及的图片文件
     /// - Parameters:
@@ -17,7 +17,7 @@ enum ClipboardImageGC {
     ///   - logger: 日志
     /// - Returns: 实际删除的文件数
     @discardableResult
-    static func reclaim(items: [ClipboardItem], logger: LoggingService) -> Int {
+    public static func reclaim(items: [ClipboardItem], logger: LoggingService) -> Int {
         let images = items.filter { $0.isImage }
         guard !images.isEmpty else { return 0 }
         // 同哈希换扩展名只在「记录仍存在」时才需要保留副本；记录已删则整组回收
@@ -38,7 +38,7 @@ enum ClipboardImageGC {
 
     /// 删除单条并回收其图片
     @discardableResult
-    static func delete(repository: any ClipboardRepository, id: UUID, logger: LoggingService) -> Bool {
+    public static func delete(repository: any ClipboardRepository, id: UUID, logger: LoggingService) -> Bool {
         let doomed = repository.deleteClipboardItem(id: id)
         guard let doomed else { return false }
         reclaim(items: [doomed], logger: logger)
@@ -48,7 +48,7 @@ enum ClipboardImageGC {
     /// 清空历史（保留收藏）并回收被删条目的图片
     /// - Returns: 实际删除条数
     @discardableResult
-    static func clear(repository: any ClipboardRepository, keepingPinned: Bool,
+    public static func clear(repository: any ClipboardRepository, keepingPinned: Bool,
                       logger: LoggingService) -> Int {
         let removed = repository.clearClipboardItems(keepingPinned: keepingPinned)
         reclaim(items: removed, logger: logger)
@@ -64,7 +64,7 @@ enum ClipboardImageGC {
     ///
     /// - Returns: 实际删除条数（两轮合计）
     @discardableResult
-    static func prune(repository: any ClipboardRepository, maxItems: Int, retentionDays: Int,
+    public static func prune(repository: any ClipboardRepository, maxItems: Int, retentionDays: Int,
                       maxBytes: UInt64 = ClipboardCapacityUsage.unlimited,
                       logger: LoggingService) -> Int {
         let outcome = ClipboardLimitPruner.prune(repository: repository,
@@ -83,7 +83,7 @@ enum ClipboardImageGC {
     /// 只做容量超限清理（启动清理入口用它，避免在冷启动上重跑按条数 / 保留天数两项）
     /// - Returns: 实际删除条数
     @discardableResult
-    static func pruneOverCapacity(repository: any ClipboardRepository, maxBytes: UInt64,
+    public static func pruneOverCapacity(repository: any ClipboardRepository, maxBytes: UInt64,
                                   logger: LoggingService) -> Int {
         let byBytes = ClipboardLimitPruner.pruneOverCapacity(
             repository: repository, maxBytes: maxBytes,
@@ -95,7 +95,7 @@ enum ClipboardImageGC {
     }
 
     /// 当前剪贴板总占用字节（正文 + 图片原图；口径见 `ClipboardCapacityUsage`）
-    static func capacityBytes(repository: any ClipboardRepository) -> UInt64 {
+    public static func capacityBytes(repository: any ClipboardRepository) -> UInt64 {
         guard let capacity = repository as? any ClipboardCapacityPruneRepository else { return 0 }
         return capacity.clipboardCapacityBytes(imageByteCount: ClipboardCapacityUsage.fileByteCount(atPath:))
     }
@@ -113,7 +113,7 @@ enum ClipboardImageGC {
     ///   - maxBytes: 容量上限（0 = 不限）
     ///   - logger: 日志
     ///   - delay: 延迟秒数（≤ 0 立即执行）
-    static func sweepOrphansAfterLaunch(repository: any ClipboardRepository,
+    public static func sweepOrphansAfterLaunch(repository: any ClipboardRepository,
                                         maxBytes: UInt64 = ClipboardCapacityUsage.unlimited,
                                         logger: LoggingService,
                                         delay: TimeInterval = 5) {

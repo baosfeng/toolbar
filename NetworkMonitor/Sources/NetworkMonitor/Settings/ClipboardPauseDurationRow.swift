@@ -1,5 +1,5 @@
 import AppKit
-import NetworkMonitorUI
+import NetworkMonitorCore
 
 // MARK: - 定时暂停时长选择
 

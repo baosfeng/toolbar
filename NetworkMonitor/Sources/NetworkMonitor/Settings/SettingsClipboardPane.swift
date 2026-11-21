@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorDesign
+import NetworkMonitorFeatureClipboard
 import NetworkMonitorUI
 
 // MARK: - 剪贴板设置页（识别开关见 SettingsClipboardOCRRow.swift）

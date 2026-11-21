@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorDesign
+import NetworkMonitorFeatureClipboard
 import NetworkMonitorFeatureFeedback
 import NetworkMonitorUI
 

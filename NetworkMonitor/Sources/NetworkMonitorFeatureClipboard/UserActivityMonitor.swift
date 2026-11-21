@@ -10,7 +10,7 @@ import CoreGraphics
 /// 只拿「距最近一次输入事件过了多少秒」这一个时间差。
 /// App 前台状态由 NSWorkspace 的应用激活 / 退场通知维护，避免每次 tick 再查 frontmostApplication。
 @MainActor
-final class UserActivityMonitor {
+public final class UserActivityMonitor {
 
     /// 距最近一次用户输入（键盘 / 鼠标 / 滚轮 / 触控板等 bundled 事件）的秒数
     ///

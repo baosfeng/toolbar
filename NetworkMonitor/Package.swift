@@ -65,6 +65,18 @@ let package = Package(
                 .linkedFramework("CoreWLAN")
             ]
         ),
+        // 剪贴板服务层（采集 / 粘贴 / 粘贴栈 / 图片落盘与回收 / 缩略图解码 / OCR 调度）：只依赖 Core。
+        // 允许 import AppKit —— 采集与写回绕不开 NSPasteboard / NSRunningApplication，
+        // 与 NetworkMonitorFeatureFeedback 同类；合成 ⌘V 与辅助功能判定另链接 ApplicationServices。
+        // 单独成 target 是为了让「采集准入 / 粘贴降级 / 图片回收 / 缩略图重试」能被 TestRunner 直接断言。
+        .target(
+            name: "NetworkMonitorFeatureClipboard",
+            dependencies: ["NetworkMonitorCore"],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("ApplicationServices")
+            ]
+        ),
         .executableTarget(
             name: "NetworkMonitor",
             dependencies: [
@@ -74,7 +86,8 @@ let package = Package(
                 "NetworkMonitorFeatureBilling",
                 "NetworkMonitorFeatureFeedback",
                 "NetworkMonitorFeatureDiagnostics",
-                "NetworkMonitorFeatureSystemMetrics"
+                "NetworkMonitorFeatureSystemMetrics",
+                "NetworkMonitorFeatureClipboard"
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -97,7 +110,8 @@ let package = Package(
                 "NetworkMonitorFeatureBilling",
                 "NetworkMonitorFeatureFeedback",
                 "NetworkMonitorFeatureDiagnostics",
-                "NetworkMonitorFeatureSystemMetrics"
+                "NetworkMonitorFeatureSystemMetrics",
+                "NetworkMonitorFeatureClipboard"
             ]
         ),
         // UI 自动化 CLI（nmcli）：纯系统框架直连目标进程做程序化验收，
