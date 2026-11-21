@@ -1,52 +1,38 @@
-import AppKit
 import Darwin
-import ServiceManagement
-import CoreWLAN
-import NetworkMonitorCore
+import Foundation
+
 
 // MARK: - Network Speed Monitor
 
 @MainActor
-final class NetworkSpeedMonitor: @preconcurrency NetworkMonitoringService {
+public final class NetworkSpeedMonitor: @preconcurrency NetworkMonitoringService {
     private var previousData: [String: (rx: UInt64, tx: UInt64)] = [:]
     private var previousTimestamp: Date = Date()
 
-    private(set) var downloadSpeed: Double = 0
-    private(set) var uploadSpeed: Double = 0
-    private(set) var totalRx: UInt64
-    private(set) var totalTx: UInt64
+    public private(set) var downloadSpeed: Double = 0
+    public private(set) var uploadSpeed: Double = 0
+    public private(set) var totalRx: UInt64
+    public private(set) var totalTx: UInt64
 
-    init(totalRx: UInt64 = 0, totalTx: UInt64 = 0) {
+    public init(totalRx: UInt64 = 0, totalTx: UInt64 = 0) {
         self.totalRx = totalRx
         self.totalTx = totalTx
     }
 
-    func poll() {
+    public func poll() {
         let current = readInterfaceBytes()
         let now = Date()
         let elapsed = now.timeIntervalSince(previousTimestamp)
         guard elapsed > 0 else { return }
 
-        var totalRxDiff: UInt64 = 0
-        var totalTxDiff: UInt64 = 0
+        // 差分口径抽在 NetworkSpeedDelta（纯函数，边界有断言）：首帧不计、计数回退按当前值兜底、网卡消失丢弃
+        let delta = NetworkSpeedDelta.compute(previous: previousData, current: current)
+        totalRx &+= delta.rx
+        totalTx &+= delta.tx
+        previousData = current
 
-        for (iface, (rx, tx)) in current {
-            if let prev = previousData[iface] {
-                let rxDiff = rx >= prev.rx ? rx - prev.rx : rx
-                let txDiff = tx >= prev.tx ? tx - prev.tx : tx
-                totalRxDiff &+= rxDiff
-                totalTxDiff &+= txDiff
-                totalRx &+= rxDiff
-                totalTx &+= txDiff
-            }
-            previousData[iface] = (rx, tx)
-        }
-
-        let currentIfaces = Set(current.keys)
-        previousData = previousData.filter { currentIfaces.contains($0.key) }
-
-        downloadSpeed = Double(totalRxDiff) / elapsed
-        uploadSpeed = Double(totalTxDiff) / elapsed
+        downloadSpeed = Double(delta.rx) / elapsed
+        uploadSpeed = Double(delta.tx) / elapsed
         previousTimestamp = now
     }
 
@@ -76,9 +62,12 @@ final class NetworkSpeedMonitor: @preconcurrency NetworkMonitoringService {
 // MARK: - Per-Process Network Monitor
 
 @MainActor
-final class ProcessNetworkMonitor: @preconcurrency ProcessNetworkMonitoringService {
+public final class ProcessNetworkMonitor: @preconcurrency ProcessNetworkMonitoringService {
+    /// App 组合根跨模块构造（默认 init 是 internal，跨 target 不可见）
+    public init() {}
+
     private var previous: [Int32: (UInt64, UInt64)] = [:]
-    private(set) var processSpeeds: [ProcessNetUsage] = []
+    public private(set) var processSpeeds: [ProcessNetUsage] = []
     private var lastUpdateTime: Date?
 
     /// 采样节流 — nettop 单次采样约 1 秒，3 秒间隔避免频繁 fork 子进程
@@ -86,7 +75,7 @@ final class ProcessNetworkMonitor: @preconcurrency ProcessNetworkMonitoringServi
     /// 后台采样队列 — nettop 子进程在此队列执行，不阻塞主线程
     private let workQueue = DispatchQueue(label: "com.networkmonitor.process-poll", qos: .utility)
 
-    func poll() {
+    public func poll() {
         // 节流：主线程每秒调用，但真正采样最多每 3 秒一次
         guard pollGate.shouldRun() else { return }
 
