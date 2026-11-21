@@ -88,6 +88,24 @@ func runFormattingTests() {
     assertEqual(ByteFormatting.fullDecimal(2_500_000_000), "2.5 GB", "GB 级一位小数")
     assertEqual(ByteFormatting.fullDecimal(12_345), "12 KB", "KB 级取整")
 
+    // MARK: 字节：手写定点的舍入语义与非有限值
+
+    // 这三个原语由手写定点小数接管（复刻 printf 对精确二进制值的正确舍入），
+    // 下面钉住三类最容易被手写实现改掉的行为：半偶舍入、非有限值、极端量级回退。
+    assertEqual(ByteFormatting.shortDecimal(2_500), "2K", "2.5 半偶舍到 2（printf 是半偶，不是半上）")
+    assertEqual(ByteFormatting.shortDecimal(999.5), "1000B", "999.5 半偶进位到 1000，仍留在 B 档")
+    assertEqual(ByteFormatting.shortDecimal(-0.0), "0B", "负零取绝对值后是 0")
+    assertEqual(ByteFormatting.shortDecimal(.nan), "nanB", "NaN 沿用 printf 文案，不崩")
+    assertEqual(ByteFormatting.shortDecimal(.infinity), "infG", "+∞ 落在 G 档并输出 inf")
+    assertEqual(ByteFormatting.shortDecimal(1e300), String(format: "%.1fG", 1e300 / 1_000_000_000),
+                "极端量级回退到 printf，文本不变")
+
+    assertEqual(ByteFormatting.binary(2.5), "2 B", "2.5 半偶舍到 2")
+    assertEqual(ByteFormatting.binary(1.5), "2 B", "1.5 半偶舍到 2")
+    assertEqual(ByteFormatting.binary(0.4), "0 B", "小数容量取整到 0")
+    assertEqual(ByteFormatting.binary(1_023.9), "1024 B", "B 档取整后可以显示 1024，不抢跑进 KB")
+    assertEqual(ByteFormatting.binaryRate(1_536.5), "1.5 KB/s", "速率同样走手写定点")
+
     // MARK: 千分位与定点小数
 
     assertEqual(GroupedNumberFormatting.integer(76_412), "76,412", "千分位")
