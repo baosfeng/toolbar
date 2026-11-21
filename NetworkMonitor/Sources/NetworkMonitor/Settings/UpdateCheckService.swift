@@ -132,9 +132,11 @@ final class UpdateCheckService {
         notifyInstall()
         Task {
             do {
-                _ = try await installer.install(release, architecture) { [weak self] phase in
+                // 外层 Task 已经强持有本服务直到安装结束，进度闭包里再弱捕获没有意义，
+                // 反而与外层强捕获不一致（#ImplicitStrongCapture），这里统一强捕获
+                _ = try await installer.install(release, architecture) { phase in
                     Task { @MainActor in
-                        self?.apply(phase)
+                        self.apply(phase)
                     }
                 }
                 installState = UpdateInstallState(stage: .readyToRelaunch)

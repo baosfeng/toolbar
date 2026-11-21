@@ -256,7 +256,7 @@ enum PinDragProbe {
     // MARK: - 事件投递
 
     /// 一条完整的按下 → 分步拖动 → 松开
-    private static func postDrag(from start: CGPoint, delta: CGSize) {
+    nonisolated private static func postDrag(from start: CGPoint, delta: CGSize) {
         let startCG = cgPoint(start)
         moveMouse(to: startCG)
         sleepMilliseconds(120)
@@ -276,17 +276,17 @@ enum PinDragProbe {
              button: .left)
     }
 
-    private static func moveMouse(to point: CGPoint) {
+    nonisolated private static func moveMouse(to point: CGPoint) {
         CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
                 mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
     }
 
-    private static func post(type: CGEventType, at point: CGPoint, button: CGMouseButton) {
+    nonisolated private static func post(type: CGEventType, at point: CGPoint, button: CGMouseButton) {
         CGEvent(mouseEventSource: nil, mouseType: type,
                 mouseCursorPosition: point, mouseButton: button)?.post(tap: .cghidEventTap)
     }
 
-    private static func sleepMilliseconds(_ value: UInt32) {
+    nonisolated private static func sleepMilliseconds(_ value: UInt32) {
         usleep(value * 1000)
     }
 
@@ -301,7 +301,7 @@ enum PinDragProbe {
     }
 
     /// AppKit（左下原点）→ CG 全局（左上原点）
-    private static func cgPoint(_ point: CGPoint) -> CGPoint {
+    nonisolated private static func cgPoint(_ point: CGPoint) -> CGPoint {
         let height = NSScreen.screens.first?.frame.height ?? 0
         return CGPoint(x: point.x, y: height - point.y)
     }

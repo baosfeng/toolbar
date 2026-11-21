@@ -306,7 +306,7 @@ extension ClipboardPanelController {
     /// 构造失败（图片原图已丢、文件已移走、文本为空）给一句中文提示，不静默。
     @discardableResult
     func togglePreview() -> Bool {
-        if let previewWindow {
+        if previewWindow != nil {
             closePreview()
             return true
         }
