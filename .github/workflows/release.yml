@@ -28,9 +28,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # arm64 / x86_64 都跑 macOS 26 镜像：只有它的默认 Xcode 是 26.6（Swift 6.3+），
+          # arm64 / x86_64 都跑 macOS 26 镜像：只有它的默认 Xcode 是 26.6（内置 Swift 6.3.3），
           # 才满足 swift-tools-version: 6.3；macos-15 系默认仍是 Xcode 16.4（Swift 6.1），
-          # 会在 swift build 第一步就报「using Swift tools version 6.3.0 but the installed version is 6.1.0」
+          # 会在 swift build 第一步就报「using Swift tools version 6.3.0 but the installed version is 6.1.0」。
+          # 默认带 Swift 6.4 的 xcode-27 镜像同样不能用：它只有 arm64（无 Intel 变体）且仍是 preview，
+          # 详见 docs/开发指南/构建与测试.md「CI 工具链」
           - arch: arm64
             runner: macos-26
           - arch: x86_64

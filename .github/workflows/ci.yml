@@ -39,6 +39,11 @@ jobs:
 
       # 工具链展示与版本校验收在 .github/actions/setup-build 里，release 复用同一份；
       # CI 无 tag、无证书，两项都走默认空值跳过
+      #
+      # 工具链下限（minimum-swift-version，默认 6.4）只告警不失败：本矩阵两个 runner 都属于
+      # macos-26 系，默认 Xcode 26.6 只内置 Swift 6.3；唯一默认带 Swift 6.4 的 xcode-27 是
+      # arm64-only 的 preview 镜像，切过去 x86_64 这一行无处可跑。镜像 → Xcode → Swift 对照表、
+      # 出处与将来的切换清单见 docs/开发指南/构建与测试.md「CI 工具链」
       - name: Setup build
         uses: ./.github/actions/setup-build
 

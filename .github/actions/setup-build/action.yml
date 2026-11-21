@@ -20,18 +20,67 @@ inputs:
     description: 临时钥匙串密码
     required: false
     default: ""
+  # 期望的工具链下限：实测低于它只打 ::warning:: 不失败。
+  # 当前没有任何 GA 镜像默认带 Swift 6.4（见「Show toolchain」注释与 docs/开发指南/构建与测试.md），
+  # 让这一步 fail 会把每次 CI 与发版都立刻变红，而变红的 CI 拦不住任何东西。留空 = 只打印版本不做比对
+  minimum-swift-version:
+    description: 期望的 Swift 工具链最低版本（如 6.4）；实测低于它只告警不失败，留空则跳过比对
+    required: false
+    default: "6.4"
 
 runs:
   using: composite
   steps:
     # 工具链版本在日志里显式可见：swift-tools-version 是 6.3，
     # runner 默认 Xcode 低于 26 时会在 swift build 第一步直接报「installed version is 6.1.0」
+    #
+    # 下限比对只告警不失败（minimum-swift-version，默认 6.4）。2026-11-21 查证的镜像事实：
+    #   macos-26 / macos-26-intel 默认 Xcode 26.6 → 内置 Swift 6.3（当前 CI 与发版的实际工具链）
+    #   xcode-27（arm64-only、preview 镜像）默认 Xcode 27.1 → Swift 6.4
+    # 也就是说：唯一带 6.4 的镜像既没有 Intel 变体、又还是 preview，切过去 x86_64 job 无处可跑。
+    # 因此这里只把差距写进日志（::warning::），构建仍用镜像自带工具链。
+    # 镜像 → Xcode → Swift 对照表、出处与切换清单：docs/开发指南/构建与测试.md「CI 工具链」
     - name: Show toolchain
       shell: bash
+      env:
+        MINIMUM_SWIFT: ${{ inputs.minimum-swift-version }}
       run: |
         swift --version
         xcodebuild -version || true
         uname -m
+        echo "image: ${ImageOS:-未提供} ${ImageVersion:-未提供}"
+
+        if [ -z "${MINIMUM_SWIFT}" ]; then
+          echo "minimum-swift-version 未设置，跳过工具链下限比对"
+          exit 0
+        fi
+
+        # 「Apple Swift version 6.3.3 (swiftlang-...)」里取 6.3.3；解析不到按「无法判定」告警，
+        # 不因为解析失败把整条流水线判红（这一步的职责是让差距可见，不是拦截）
+        version_line=$(swift --version 2>&1 | grep -E 'Swift version' || true)
+        actual=$(printf '%s\n' "${version_line}" | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p' | sed -n '1p')
+        if [ -z "${actual}" ]; then
+          echo "::warning::无法从 swift --version 解析版本号（期望 ≥ ${MINIMUM_SWIFT}），跳过比对"
+          exit 0
+        fi
+
+        # 逐段按数值比较：字符串比较会把 6.3 判成大于 6.10；
+        # 段数不同（6.4 vs 6.4.3）按缺段补 0
+        verdict=$(awk -v a="${actual}" -v b="${MINIMUM_SWIFT}" 'BEGIN{
+          na = split(a, x, "\\."); nb = split(b, y, "\\.")
+          for (i = 1; i <= 4; i++) {
+            ai = (i <= na ? x[i] : 0) + 0
+            bi = (i <= nb ? y[i] : 0) + 0
+            if (ai > bi) { print "ge"; exit }
+            if (ai < bi) { print "lt"; exit }
+          }
+          print "ge"
+        }')
+        if [ "${verdict}" = "ge" ]; then
+          echo "工具链 ${actual} 满足下限 ${MINIMUM_SWIFT}"
+        else
+          echo "::warning::工具链 ${actual} 低于期望下限 ${MINIMUM_SWIFT}：本 job 用的是镜像自带工具链，6.4-only 语法（如 SE-0521 的 some/any 可选类型、SE-0522 的 @diagnose）在这里编不过，不要让它进主分支"
+        fi
 
     - name: Import signing certificate
       if: inputs.certificate-base64 != ''
