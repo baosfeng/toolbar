@@ -9,13 +9,20 @@ import Foundation
 public enum BillingHTTPMapper {
 
     /// 拼请求地址 —— 失败文案与改造前一致（provider 各自原来都写了两句中文）
-    public static func url(base: URL, path: String, query: [(String, String)] = []) throws -> URL {
+    ///
+    /// - Note: 用 typed throws（SE-0413）把错误域收到 `BillingError`。上游 `HTTPURLBuilder.url`
+    ///   已声明封闭的 `Failure`，所以这里的 `switch` 是穷举的——原来兜底的 `catch`（猜它是
+    ///   「请求地址无效」）已删掉，新增失败种类时编译器会直接要求补分支。
+    public static func url(base: URL, path: String, query: [(String, String)] = []) throws(BillingError) -> URL {
         do {
             return try HTTPURLBuilder.url(base: base, path: path, query: query)
-        } catch HTTPURLBuilder.Failure.invalidBase {
-            throw BillingError.invalidRequest("无效的 provider 地址")
         } catch {
-            throw BillingError.invalidRequest("无效的请求地址")
+            switch error {
+            case .invalidBase:
+                throw BillingError.invalidRequest("无效的 provider 地址")
+            case .invalidURL:
+                throw BillingError.invalidRequest("无效的请求地址")
+            }
         }
     }
 

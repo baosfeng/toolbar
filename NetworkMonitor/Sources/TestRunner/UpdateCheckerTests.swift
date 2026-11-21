@@ -60,8 +60,8 @@ func runUpdateCheckerTests() {
 
     var badTagError: UpdateCheckError?
     do { _ = try GitHubUpdateChecker.release(fromJSON: Data(#"{}"#.utf8)) }
-    catch let error as UpdateCheckError { badTagError = error }
-    catch { badTagError = nil }
+    // typed throws（SE-0413）：错误类型已是 UpdateCheckError，不必再 as 强转、也没有兜底分支
+    catch { badTagError = error }
     assertEqual(badTagError, .invalidResponse("缺少 tag_name"), "解析失败有明确错误类型")
 
     // MARK: 错误 → 界面原因
