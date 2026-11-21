@@ -4,13 +4,16 @@ import NetworkMonitorUI
 
 // MARK: - 按键桥（系统层按键 → 纯逻辑口径，从主类拆出守住门禁）
 
+/// 归属：截图服务层（NetworkMonitorFeatureSnip）。这里唯一的职责是把 AppKit / CGEvent 的
+/// 修饰键位与字符解码翻译成 NetworkMonitorUI 的纯逻辑口径（`SnipKeyCommandResolver`），
+/// 让覆盖层视图与 CGEventTap 回调共用同一份判据，不必各自写一份位运算。
 extension SnipKeyCommandResolver.Modifiers {
 
     /// 把 AppKit 的修饰键集合转成纯逻辑口径
     ///
     /// 只保留会改变覆盖层语义的四个修饰键：⌘ 与 ⌘⇧ 组合决定复制 / 保存 / 撤销，
     /// 其余（CapsLock、Fn 等）与截图无关，丢掉能避免解析分支被无意义组合淹没。
-    init(nsEventFlags flags: NSEvent.ModifierFlags) {
+    public init(nsEventFlags flags: NSEvent.ModifierFlags) {
         self.init(command: flags.contains(.command),
                   shift: flags.contains(.shift),
                   control: flags.contains(.control),
@@ -21,7 +24,7 @@ extension SnipKeyCommandResolver.Modifiers {
     ///
     /// 回调跑在事件 tap 线程，不能在那里构造 NSEvent（AppKit 对象只在主线程安全），
     /// 因此直接从 CGEventFlags 取位。
-    init(cgEventFlags flags: CGEventFlags) {
+    public init(cgEventFlags flags: CGEventFlags) {
         self.init(command: flags.contains(.maskCommand),
                   shift: flags.contains(.maskShift),
                   control: flags.contains(.maskControl),
@@ -31,10 +34,11 @@ extension SnipKeyCommandResolver.Modifiers {
 
 // MARK: - CGEvent 字符解码
 
-enum SnipCGEventCharacters {
+/// CGEvent → 字符（字母键受键盘布局影响，必须由系统解码，不能硬编码键码）
+public enum SnipCGEventCharacters {
 
     /// 取按键对应的字符（字母键受键盘布局影响，必须由系统解码，不能硬编码键码）
-    static func text(of event: CGEvent) -> String? {
+    public static func text(of event: CGEvent) -> String? {
         var buffer = [UniChar](repeating: 0, count: 8)
         var length = 0
         event.keyboardGetUnicodeString(maxStringLength: buffer.count,

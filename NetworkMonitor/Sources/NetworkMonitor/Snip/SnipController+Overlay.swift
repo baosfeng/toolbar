@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureSnip
 
 // MARK: - 覆盖层生命周期与前台协调（从编排主类拆出，守住单文件门禁）
 

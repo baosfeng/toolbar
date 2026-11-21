@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureSnip
 
 // MARK: - 剪贴板贴图（从编排主类拆出，守住单文件门禁）
 

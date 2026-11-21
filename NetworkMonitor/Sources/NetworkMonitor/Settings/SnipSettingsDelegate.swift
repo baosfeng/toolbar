@@ -1,5 +1,7 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
+import NetworkMonitorFeatureSnip
 
 // MARK: - 截图设置委托
 

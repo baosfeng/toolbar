@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorFeatureClipboard
+import NetworkMonitorUI
 
 // MARK: - 应用协调器（剪贴板设置页回调）
 

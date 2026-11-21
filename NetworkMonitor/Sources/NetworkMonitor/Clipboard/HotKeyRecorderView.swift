@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 快捷键录制控件
 

@@ -1,4 +1,6 @@
 import NetworkMonitorFeatureClipboard
+import NetworkMonitorUI
+import NetworkMonitorCore
 
 // MARK: - 偏好聚合类适配服务层端口
 

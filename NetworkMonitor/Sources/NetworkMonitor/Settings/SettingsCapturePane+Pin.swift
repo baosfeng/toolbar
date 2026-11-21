@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureSnip
 
 // MARK: - 贴图内容源与恢复池设置行
 

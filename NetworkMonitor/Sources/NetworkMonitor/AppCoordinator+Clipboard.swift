@@ -2,6 +2,7 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorFeatureClipboard
 import NetworkMonitorFeatureFeedback
+import NetworkMonitorUI
 
 // MARK: - 应用协调器（剪贴板与流量持久化装配）
 

@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorDesign
+import NetworkMonitorFeatureSnip
 
 // MARK: - 保存卡（自动保存 / 输出格式 / JPEG 质量 / 快速保存目录）
 

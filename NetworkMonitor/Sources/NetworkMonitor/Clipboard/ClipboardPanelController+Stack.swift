@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - Paste Stack 动作与首次引导（从面板控制器拆出，守住单文件体积上限）
 
