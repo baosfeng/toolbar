@@ -12,7 +12,7 @@ description: 本项目（toolbar / 一览）专属编码规范：架构原则、
 - Swift 6.3（swiftLanguageModes: [.v6]），SwiftPM **十一**目标：
   - `NetworkMonitorCore`（库，**禁止 import AppKit**）— 领域协议、数据库、统计、模型、事件分发、格式化
   - `NetworkMonitorUI`（库，与 AppKit / Core 都无关）— 只放展示纯逻辑（Hero 派生、单位排版等），让 TestRunner 能直接断言 UI 口径而不必 import 可执行 target
-  - `NetworkMonitorDesign`（库，允许 AppKit）— 设计系统：卡片令牌 / 页头页脚骨架 / 主题转译 / 动效令牌 / 自绘组件库
+  - `NetworkMonitorDesign`（库，允许 AppKit）— 设计系统：卡片令牌 / 页头页脚骨架 / 主题转译 / 动效令牌 / 自绘组件库。**访问级一律用 `package`（同包内可见），不用 `public`**——它是包内共享库、没有外部消费者；`package` 让「谁能看见」由编译器表达，将来真拆包时改回 `public` 是一次显式操作
   - `NetworkMonitorFeatureBilling`（库，**禁止 import AppKit**）— 额度服务层：provider 实现 / 状态管理器 / 快照 / 提醒；让 TestRunner 能直接断言额度业务逻辑
   - `NetworkMonitorFeatureFeedback`（库，**允许 AppKit**：NSSound / NSHapticFeedbackManager）— 操作反馈层：音效端口 / 触觉映射 / 成对出口 `ClipboardFeedback`；只依赖 Core，让 TestRunner 直接断言 cue 转发与档位映射
   - `NetworkMonitorFeatureDiagnostics`（库，**允许 AppKit**：NSEvent 本地监听）— 诊断层：主线程看门狗 + 心跳现场 `MainThreadHeartbeat`；只依赖 Core（复用 `MainThreadWatchdogPolicy`），停顿判定可被 TestRunner 直接断言

@@ -12,7 +12,7 @@ import NetworkMonitorUI
 /// 缓存键说明：palette 着色图在**绘制时**才按当前外观解析（实测同一张配置图在浅 / 深外观下绘制结果不同），
 /// 因此键只需 (符号名, 点尺寸, 颜色描述)，跨外观复用不会串色；模板图上色的结果按图标对象 + 着色缓存。
 @MainActor
-public enum DrawnSymbolRun {
+package enum DrawnSymbolRun {
 
     /// 缓存上限（超过即整体清空：符号种类个位数，不做 LRU）
     private static let cacheLimit = 64
@@ -37,7 +37,7 @@ public enum DrawnSymbolRun {
     ///   - name: 符号名
     ///   - color: 着色（写进 palette，绘制时按当前外观解析）
     ///   - pointSize: 点尺寸
-    public static func symbol(named name: String, color: NSColor, pointSize: CGFloat) -> NSImage? {
+    package static func symbol(named name: String, color: NSColor, pointSize: CGFloat) -> NSImage? {
         let key = DrawnSymbolCacheKey.symbol(name: name, pointSize: pointSize,
                                              colorDescription: color.description)
         if let hit = symbolCache[key] { return hit }
@@ -92,7 +92,7 @@ public enum DrawnSymbolRun {
     ///
     /// 不缩放：符号图自带留白，放大铺满方框会让字形偏粗一档（改造前 `NSImageView`
     /// 的 `.scaleProportionallyUpOrDown` 在 12pt 符号上也是 1:1，实测星形 9×9）。
-    public static func drawNative(_ image: NSImage, in rect: CGRect) {
+    package static func drawNative(_ image: NSImage, in rect: CGRect) {
         guard rect.width > 0, rect.height > 0 else { return }
         let size = image.size
         image.draw(in: CGRect(x: rect.midX - size.width / 2,

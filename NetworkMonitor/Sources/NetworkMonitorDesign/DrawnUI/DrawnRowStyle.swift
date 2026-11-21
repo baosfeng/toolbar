@@ -12,7 +12,7 @@ import NetworkMonitorUI
 ///
 /// 列宽分配走 `DrawnRowLayout.metrics`（纯逻辑，已断言），本类型只负责按算好的矩形画。
 @MainActor
-public struct DrawnSingleRowStyle {
+package struct DrawnSingleRowStyle {
 
     /// 行内左右内边距
     var horizontalInset: CGFloat = PaneCardStyle.cardPaddingX
@@ -35,7 +35,7 @@ public struct DrawnSingleRowStyle {
     /// 行名固定列宽（nil = 按文字实际宽度占位）
     var fixedTitleWidth: CGFloat?
 
-    public init(horizontalInset: CGFloat = PaneCardStyle.cardPaddingX,
+    package init(horizontalInset: CGFloat = PaneCardStyle.cardPaddingX,
                 elementGap: CGFloat = 6,
                 titleFont: NSFont = PaneCardStyle.rowNameFont,
                 valueFont: NSFont = PaneCardStyle.rowValueFont,
@@ -62,7 +62,7 @@ public struct DrawnSingleRowStyle {
     ///   - row: 行规格
     ///   - rect: 行矩形（flipped 坐标）
     ///   - leadingWidth: 行名左侧固定占用宽度（图标列；0 = 无），它之后再吃一个间距
-    public func draw(_ row: DrawnRowSpec, in rect: CGRect, leadingWidth: CGFloat = 0) {
+    package func draw(_ row: DrawnRowSpec, in rect: CGRect, leadingWidth: CGFloat = 0) {
         let titleRun = DrawnTextRun(string: row.title, font: titleFont, color: titleColor)
         let valueRun = DrawnTextRun(
             string: row.value,

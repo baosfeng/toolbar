@@ -145,15 +145,15 @@ final class DrawnTextMeasurer {
 ///
 /// 自绘组件只持有这个值类型（约几十字节），不再为每段文字建 `NSTextField`。
 @MainActor
-public struct DrawnTextRun {
+package struct DrawnTextRun {
 
     var string: String
-    public var font: NSFont
+    package var font: NSFont
     var color: NSColor
     /// 超宽时是否截断（false 时按实测宽度溢出绘制，用于不介意压边的场景）
     var truncates: Bool = true
 
-    public init(string: String, font: NSFont, color: NSColor, truncates: Bool = true) {
+    package init(string: String, font: NSFont, color: NSColor, truncates: Bool = true) {
         self.string = string
         self.font = font
         self.color = color
@@ -161,25 +161,25 @@ public struct DrawnTextRun {
     }
 
     /// 实测宽度（走缓存）
-    public func width(limit: CGFloat = .greatestFiniteMagnitude) -> CGFloat {
+    package func width(limit: CGFloat = .greatestFiniteMagnitude) -> CGFloat {
         DrawnTextMeasurer.shared.width(string: string, font: font, limit: limit)
     }
 
     /// 实测行高（走缓存）
-    public var lineHeight: CGFloat { DrawnTextMeasurer.shared.lineHeight(font: font) }
+    package var lineHeight: CGFloat { DrawnTextMeasurer.shared.lineHeight(font: font) }
 
     /// 排版宽度（0.5pt 网格）—— 相邻两件的距离按它算才不漂半个像素（与 AppKit 标签同源）
-    public var layoutWidth: CGFloat { DrawnTextMeasurer.shared.layoutWidth(string: string, font: font) }
+    package var layoutWidth: CGFloat { DrawnTextMeasurer.shared.layoutWidth(string: string, font: font) }
 
     /// 行框高度（= AppKit 标签的 frame 高）
-    public var labelHeight: CGFloat { DrawnTextMeasurer.shared.labelHeight(font: font) }
+    package var labelHeight: CGFloat { DrawnTextMeasurer.shared.labelHeight(font: font) }
 
     /// 精确尺寸（与 `NSString.size(withAttributes:)` 同源，不取整）
-    public var exactSize: CGSize { DrawnTextMeasurer.shared.exactSize(string: string, font: font) }
+    package var exactSize: CGSize { DrawnTextMeasurer.shared.exactSize(string: string, font: font) }
 
     /// 按「左上角」绘制 —— 与 `NSString.draw(at:withAttributes:)` 同一段 API，
     /// 用于改造前用点坐标定位的单行文字（meta 行里的 ⌘N / 时间），逐像素不变。
-    public func draw(at point: CGPoint) {
+    package func draw(at point: CGPoint) {
         guard !string.isEmpty else { return }
         NSAttributedString(string: string, attributes: [
             .font: font,
@@ -191,7 +191,7 @@ public struct DrawnTextRun {
     ///
     /// 与 draw(in:) 的区别只在 y 的取法：这里直接用 rect.minY，
     /// 因此调用方按「标签 frame」摆好 rect 就能逐像素对上原生标签。
-    public func draw(topIn rect: CGRect, alignment: NSTextAlignment = .left) {
+    package func draw(topIn rect: CGRect, alignment: NSTextAlignment = .left) {
         guard !string.isEmpty, rect.width > 0 else { return }
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment
@@ -211,7 +211,7 @@ public struct DrawnTextRun {
     ///
     /// 用于大小字号混排（如额度格的 19pt 数值 + 9.5pt 单位）：两者共用一条基线，
     /// 视觉上才是「95 %」而不是「95 悬空的 %」。
-    public func draw(baselineAt baselineY: CGFloat, x: CGFloat, width: CGFloat, alignment: NSTextAlignment = .left) {
+    package func draw(baselineAt baselineY: CGFloat, x: CGFloat, width: CGFloat, alignment: NSTextAlignment = .left) {
         guard !string.isEmpty, width > 0 else { return }
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment
@@ -229,7 +229,7 @@ public struct DrawnTextRun {
     }
 
     /// 把文字画在 rect 里：垂直居中，水平按 `alignment`
-    public func draw(in rect: CGRect, alignment: NSTextAlignment = .left) {
+    package func draw(in rect: CGRect, alignment: NSTextAlignment = .left) {
         guard !string.isEmpty, rect.width > 0 else { return }
         let available = max(rect.width, 1)
         let h = lineHeight

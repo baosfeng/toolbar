@@ -5,7 +5,7 @@ import NetworkMonitorUI
 
 /// 读数条里的一段 —— 值类型，只描述「这一段是什么」
 @MainActor
-public enum DrawnReadoutPiece {
+package enum DrawnReadoutPiece {
     /// 一段文字（自带字体与颜色）
     case text(DrawnTextRun)
     /// 圆角色块（图例色点 / 线形色块 / 压力徽标）
@@ -81,7 +81,7 @@ public enum DrawnReadoutPiece {
 /// 分两级间距的理由与改造前一致：同一枚图例里「色块—数值」贴得近（2pt），
 /// 相邻两枚之间拉开（8pt）；状态带同理（组内 3pt、组间 8pt）。
 @MainActor
-public struct DrawnReadoutRun {
+package struct DrawnReadoutRun {
 
     /// 各组（组内从左到右）
     var groups: [[DrawnReadoutPiece]] = []
@@ -90,7 +90,7 @@ public struct DrawnReadoutRun {
     /// 组间间距
     var groupGap: CGFloat = 8
 
-    public init(groups: [[DrawnReadoutPiece]] = [], innerGap: CGFloat = 3, groupGap: CGFloat = 8) {
+    package init(groups: [[DrawnReadoutPiece]] = [], innerGap: CGFloat = 3, groupGap: CGFloat = 8) {
         self.groups = groups
         self.innerGap = innerGap
         self.groupGap = groupGap
@@ -104,7 +104,7 @@ public struct DrawnReadoutRun {
     }
 
     /// 整条宽
-    public var width: CGFloat {
+    package var width: CGFloat {
         SystemCardLayout.readoutWidth(groups: layoutGroups, innerGap: innerGap, groupGap: groupGap)
     }
 
@@ -112,12 +112,12 @@ public struct DrawnReadoutRun {
     var height: CGFloat { SystemCardLayout.readoutHeight(groups: layoutGroups) }
 
     /// 读屏文案（文字段按顺序拼接）
-    public var accessibilityText: String {
+    package var accessibilityText: String {
         groups.flatMap { $0 }.compactMap { $0.accessibilityText }.joined(separator: " ")
     }
 
     /// 从左边界 x 起、以 centerY 为行中心画完整条
-    public func draw(at x: CGFloat, centerY: CGFloat) {
+    package func draw(at x: CGFloat, centerY: CGFloat) {
         let offsets = SystemCardLayout.readoutOffsets(groups: layoutGroups,
                                                       innerGap: innerGap,
                                                       groupGap: groupGap)

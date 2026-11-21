@@ -12,12 +12,12 @@ import QuartzCore
 ///
 /// 成本：只有正在过渡的那张卡有 Timer（60fps，0.12–0.22s），静止时 timer 为 nil。
 @MainActor
-public final class DrawnBlend {
+package final class DrawnBlend {
 
     /// 当前值（绘制侧直接读）
-    public private(set) var value: CGFloat = 0
+    package private(set) var value: CGFloat = 0
 
-    public init() {}
+    package init() {}
 
     /// 插值帧间隔（60fps；过渡最长 0.22s，最多 13 帧）
     private static let frameInterval: TimeInterval = 1.0 / 60.0
@@ -34,7 +34,7 @@ public final class DrawnBlend {
     ///   - target: 目标值
     ///   - duration: 时长（默认 `MotionKit.durations.state`；0 = 直接落终态）
     ///   - onChange: 每帧回调（一般只置 `needsDisplay = true`）
-    public func animate(to target: CGFloat, duration: TimeInterval = MotionKit.durations.state,
+    package func animate(to target: CGFloat, duration: TimeInterval = MotionKit.durations.state,
                  onChange: ((CGFloat) -> Void)? = nil) {
         self.onChange = onChange
         let start = value
@@ -57,7 +57,7 @@ public final class DrawnBlend {
     }
 
     /// 直接落值（内容复用 / 布局复位时用，不播过渡）
-    public func set(_ newValue: CGFloat) {
+    package func set(_ newValue: CGFloat) {
         stopTimer()
         value = newValue
     }

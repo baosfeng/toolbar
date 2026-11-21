@@ -10,12 +10,12 @@ import NetworkMonitorUI
 /// 令牌一律转发 `PaneCardStyle`（换主题只改 `ThemeCatalog`，这里一行色值都不写），
 /// 因此自绘组件与现有 AppKit 组件共用同一套设计语言与主题。
 @MainActor
-public enum DrawnInk {
+package enum DrawnInk {
 
     // MARK: 几何
 
     /// 圆角矩形路径（统一走这里，避免各处各写一套 cornerWidth）
-    public static func roundedPath(_ rect: CGRect, radius: CGFloat) -> CGPath {
+    package static func roundedPath(_ rect: CGRect, radius: CGFloat) -> CGPath {
         CGPath(roundedRect: rect,
                cornerWidth: min(radius, rect.height / 2),
                cornerHeight: min(radius, rect.height / 2),
@@ -103,7 +103,7 @@ public enum DrawnInk {
     }
 
     /// 圆角底块（卡片 / 选中行 / 状态带）
-    public static func fill(_ rect: CGRect, radius: CGFloat, color: NSColor) {
+    package static func fill(_ rect: CGRect, radius: CGFloat, color: NSColor) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.addPath(roundedPath(rect, radius: radius))
         ctx.setFillColor(color.cgColor)
@@ -126,7 +126,7 @@ public enum DrawnInk {
     /// 弧用 NSBezierPath 画（角度语义 0=右、90=上、顺时针），与改造前 SystemRingView /
     /// SystemBatteryRingView 用的是同一段 API；在 flipped 视图里先局部翻正，
     /// 两种坐标系画出的圆环才能逐像素一致（实测换成 CGContext 弧会有 1–4 级抗锯齿差）。
-    public static func ring(in rect: CGRect, fraction: Double, lineWidth: CGFloat,
+    package static func ring(in rect: CGRect, fraction: Double, lineWidth: CGFloat,
                      color: NSColor, track: NSColor) {
         guard rect.width > 0, rect.height > 0 else { return }
         let radius = max(1, (min(rect.width, rect.height) - lineWidth) / 2)
@@ -173,7 +173,7 @@ public enum DrawnInk {
     /// 位图绘制同样要用它：文本绘制自己会翻正，`NSImage.draw(in:from:operation:fraction:)` 不会，
     /// 卡片缩略图与详情区缩略图都靠这一处翻正（镜像轴取值由 `DrawnUnflip` 给出，不另写一套）。
     /// internal 而非 private：剪贴板卡片（`ClipboardCardView+Resources.swift`）跨文件复用。
-    public static func withUnflippedIfNeeded(around rect: CGRect, _ body: () -> Void) {
+    package static func withUnflippedIfNeeded(around rect: CGRect, _ body: () -> Void) {
         let flipped = NSGraphicsContext.current?.isFlipped == true
         guard let transform = DrawnUnflip.transform(around: rect, contextIsFlipped: flipped),
               let ctx = NSGraphicsContext.current?.cgContext else {

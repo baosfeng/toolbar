@@ -8,7 +8,7 @@ import NetworkMonitorUI
 /// 为什么阴影不在卡片自己的 `draw` 里：视图绘制被 bounds 裁切、画不到卡外；
 /// 而卡片自身 backing layer 的阴影在离屏快照（`cacheDisplay`）路径里不参与合成。
 /// 在容器按同一个圆角矩形画阴影，既能溢出卡片，又不多一个视图（见 docs/踩坑/运行时/离屏快照里投影要靠像素差自证.md）。
-public struct DrawnCardShadow {
+package struct DrawnCardShadow {
 
     /// 卡片圆角（阴影形状与卡片同圆角）
     var radius: CGFloat
@@ -25,7 +25,7 @@ public struct DrawnCardShadow {
     /// 绘制内容的填充色（阴影按它的 alpha 调制）
     var fillColor: NSColor = .black
 
-    public init(radius: CGFloat,
+    package init(radius: CGFloat,
                 opacity: CGFloat,
                 contentAlpha: CGFloat,
                 blur: CGFloat,
@@ -47,7 +47,7 @@ public struct DrawnCardShadow {
     ///   - rect: 卡片矩形（容器坐标）
     ///   - ctx: 当前绘图上下文
     ///   - bounds: 容器 bounds —— 卡片内区域被 even-odd 挖空，不会被阴影重复加深
-    public func draw(around rect: CGRect, in ctx: CGContext, clippingTo bounds: CGRect) {
+    package func draw(around rect: CGRect, in ctx: CGContext, clippingTo bounds: CGRect) {
         guard rect.width > 0, rect.height > 0, contentAlpha > 0.001 else { return }
         let shapeRect = DrawnShadowMath.shapeRect(for: rect, inset: inset)
         let shape = NSBezierPath(roundedRect: shapeRect, xRadius: radius, yRadius: radius)

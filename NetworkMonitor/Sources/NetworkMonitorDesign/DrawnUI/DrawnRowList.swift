@@ -18,12 +18,12 @@ import NetworkMonitorUI
 /// - 两行式：色点 + 行名 + 右侧两列，副文本整行，底部整行微条（Token 排行屏）。
 /// 绘制实现在 `DrawnRowList+Drawing.swift`，本文件只管数据、几何、交互与无障碍。
 @MainActor
-public final class DrawnRowList: NSView {
+package final class DrawnRowList: NSView {
 
     // MARK: - 数据
 
     /// 要画的行（值类型，变更即重绘）
-    public var rows: [DrawnRowSpec] = [] {
+    package var rows: [DrawnRowSpec] = [] {
         didSet {
             guard rows != oldValue else { return }
             if let focusedIndex, focusedIndex >= rows.count { self.focusedIndex = nil }
@@ -37,85 +37,85 @@ public final class DrawnRowList: NSView {
 
     // MARK: - 几何
 
-    public var rowHeight: CGFloat = PaneCardStyle.rowHeight {
+    package var rowHeight: CGFloat = PaneCardStyle.rowHeight {
         didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
     }
     /// 行间空隙
-    public var rowSpacing: CGFloat = 0 {
+    package var rowSpacing: CGFloat = 0 {
         didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
     }
     /// 行内左右内边距
-    public var horizontalInset: CGFloat = PaneCardStyle.cardPaddingX {
+    package var horizontalInset: CGFloat = PaneCardStyle.cardPaddingX {
         didSet { needsDisplay = true }
     }
     /// 名称 / 进度条 / 数值之间的间距
-    public var elementGap: CGFloat = 6 { didSet { needsDisplay = true } }
+    package var elementGap: CGFloat = 6 { didSet { needsDisplay = true } }
     /// 行名字体（默认面板行名；系统页等更紧凑的页面按需覆盖）
-    public var titleFont: NSFont = PaneCardStyle.rowNameFont { didSet { needsDisplay = true } }
+    package var titleFont: NSFont = PaneCardStyle.rowNameFont { didSet { needsDisplay = true } }
     /// 行值字体（默认面板行值）
-    public var valueFont: NSFont = PaneCardStyle.rowValueFont { didSet { needsDisplay = true } }
+    package var valueFont: NSFont = PaneCardStyle.rowValueFont { didSet { needsDisplay = true } }
     /// 行名固定列宽（nil = 按文字实际宽度占位；非 nil 时按等宽列排布，超宽截断）
-    public var fixedTitleWidth: CGFloat? { didSet { needsDisplay = true } }
+    package var fixedTitleWidth: CGFloat? { didSet { needsDisplay = true } }
     /// 行悬停提示（返回空串则不提示）
-    public var rowToolTip: ((Int) -> String)?
+    package var rowToolTip: ((Int) -> String)?
     /// 行前图标（网络页的进程图标；返回 nil 则这一行不画图标）
-    public var rowIcon: ((Int) -> NSImage?)?
+    package var rowIcon: ((Int) -> NSImage?)?
     /// 行前图标边长（0 = 不画图标列，行名从最左开始）
-    public var iconSize: CGFloat = 0 { didSet { needsDisplay = true } }
+    package var iconSize: CGFloat = 0 { didSet { needsDisplay = true } }
     /// 模板图标的上色（nil = 原样绘制）
-    public var iconTint: NSColor? { didSet { needsDisplay = true } }
+    package var iconTint: NSColor? { didSet { needsDisplay = true } }
     /// 行前色点取色（两行式）；同一行底部微条也用它取色，保证点与条对得上
-    public var rowSwatchColor: ((Int) -> NSColor?)? { didSet { needsDisplay = true } }
+    package var rowSwatchColor: ((Int) -> NSColor?)? { didSet { needsDisplay = true } }
     /// 色点边长（6pt：与 Token 页图例色点同形）
-    public var swatchSize: CGFloat = 6 { didSet { needsDisplay = true } }
+    package var swatchSize: CGFloat = 6 { didSet { needsDisplay = true } }
     /// 副文本字体（两行式的第二行）
-    public var detailFont: NSFont = PaneCardStyle.metaFont { didSet { needsDisplay = true } }
+    package var detailFont: NSFont = PaneCardStyle.metaFont { didSet { needsDisplay = true } }
     /// 副文本颜色
-    public var detailColor: NSColor = PaneCardStyle.tertiaryText { didSet { needsDisplay = true } }
+    package var detailColor: NSColor = PaneCardStyle.tertiaryText { didSet { needsDisplay = true } }
     /// 右侧第二列字体（两行式的占比等）
-    public var secondaryFont: NSFont = PaneCardStyle.metaFont { didSet { needsDisplay = true } }
+    package var secondaryFont: NSFont = PaneCardStyle.metaFont { didSet { needsDisplay = true } }
     /// 右侧第二列颜色
-    public var secondaryColor: NSColor = PaneCardStyle.tertiaryText { didSet { needsDisplay = true } }
+    package var secondaryColor: NSColor = PaneCardStyle.tertiaryText { didSet { needsDisplay = true } }
     /// 行名颜色（默认主文字；系统页等按需覆盖）
-    public var titleColor: NSColor = PaneCardStyle.primaryText { didSet { needsDisplay = true } }
+    package var titleColor: NSColor = PaneCardStyle.primaryText { didSet { needsDisplay = true } }
     /// 进度条轨道色
-    public var trackColor: NSColor = PaneCardStyle.trackColor { didSet { needsDisplay = true } }
+    package var trackColor: NSColor = PaneCardStyle.trackColor { didSet { needsDisplay = true } }
     /// 进度条填充色（告警语气固定用警示色）
-    public var barColor: NSColor = PaneCardStyle.okColor { didSet { needsDisplay = true } }
+    package var barColor: NSColor = PaneCardStyle.okColor { didSet { needsDisplay = true } }
 
     /// 进度条可画的最小宽度（不足则整条不画）
     ///
     /// 取 36 而不是视觉最小 24：长标题把进度条挤到 24–36 时会变成一个小色块，
     /// 比「不画」更难看，宁可整条省略、把宽度还给标题。
-    public var minBarWidth: CGFloat = 60 { didSet { needsDisplay = true } }
+    package var minBarWidth: CGFloat = 60 { didSet { needsDisplay = true } }
     /// 进度条高度
-    public var barHeight: CGFloat = 5 { didSet { needsDisplay = true } }
+    package var barHeight: CGFloat = 5 { didSet { needsDisplay = true } }
 
     // MARK: - 交互
 
     /// 点击某行（下标）
-    public var onRowAction: ((Int) -> Void)?
+    package var onRowAction: ((Int) -> Void)?
     /// 键盘焦点行（nil = 无焦点）
-    public var focusedIndex: Int? {
+    package var focusedIndex: Int? {
         didSet { if focusedIndex != oldValue { needsDisplay = true } }
     }
     /// 是否绘制悬停高亮（纯展示列表可关掉）
-    public var highlightsHover = true
+    package var highlightsHover = true
 
     /// 悬停目标推进（纯状态机：进入 / 离开 / 跨行；口径在 `DrawnHoverState`）
     private var hoverState = DrawnHoverState()
     /// 悬停过渡值（0 = 常态，1 = 高亮满；只在高亮变化的那 0.12s 里有 Timer）
     /// internal：绘制实现在 DrawnRowList+Drawing.swift 里读它（Swift 扩展不能声明存储属性）
-    public let hoverBlend = DrawnBlend()
+    package let hoverBlend = DrawnBlend()
     /// 正在绘制的悬停行 —— 离开时保留到淡出结束，避免「移出即消失」；
     /// 跨文件绘制实现要读，故放宽为 internal
-    public private(set) var hoverIndex: Int?
+    package private(set) var hoverIndex: Int?
 
     // MARK: - 布局
 
-    public override var isFlipped: Bool { true }
+    package override var isFlipped: Bool { true }
 
-    public override var intrinsicContentSize: NSSize {
+    package override var intrinsicContentSize: NSSize {
         let h = DrawnRowLayout.contentHeight(rowCount: rows.count,
                                               rowHeight: rowHeight,
                                               rowSpacing: rowSpacing)
@@ -123,7 +123,7 @@ public final class DrawnRowList: NSView {
     }
 
     /// 第 index 行的矩形（flipped 坐标，自上而下）
-    public func rowRect(_ index: Int) -> CGRect {
+    package func rowRect(_ index: Int) -> CGRect {
         CGRect(x: 0,
                y: CGFloat(index) * (rowHeight + rowSpacing),
                width: bounds.width,
@@ -142,7 +142,7 @@ public final class DrawnRowList: NSView {
 
     // MARK: - 绘制入口
 
-    public override func draw(_ dirtyRect: NSRect) {
+    package override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.saveGState()
         for (index, row) in rows.enumerated() {
@@ -155,7 +155,7 @@ public final class DrawnRowList: NSView {
 
     // MARK: - 鼠标
 
-    public override func updateTrackingAreas() {
+    package override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(rect: .zero,
@@ -165,12 +165,12 @@ public final class DrawnRowList: NSView {
                                        userInfo: nil))
     }
 
-    public override func mouseMoved(with event: NSEvent) {
+    package override func mouseMoved(with event: NSEvent) {
         guard highlightsHover else { return }
         advanceHover(to: rowIndex(at: convert(event.locationInWindow, from: nil)))
     }
 
-    public override func mouseExited(with event: NSEvent) {
+    package override func mouseExited(with event: NSEvent) {
         advanceHover(to: nil)
     }
 
@@ -210,7 +210,7 @@ public final class DrawnRowList: NSView {
         needsDisplay = true
     }
 
-    public override func mouseDown(with event: NSEvent) {
+    package override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         guard let index = rowIndex(at: point), rows[index].isActionable else {
             super.mouseDown(with: event)
@@ -245,7 +245,7 @@ public final class DrawnRowList: NSView {
         return rowToolTip?(index) ?? ""
     }
 
-    public override func layout() {
+    package override func layout() {
         super.layout()
         refreshToolTipIfNeeded()
     }
@@ -272,7 +272,7 @@ public final class DrawnRowList: NSView {
                                    secondary: row.secondary, detail: row.detail)
     }
 
-    public override func accessibilityChildren() -> [Any]? {
+    package override func accessibilityChildren() -> [Any]? {
         if axElements.count != rows.count { rebuildAccessibilityElements() }
         for (index, element) in axElements.enumerated() {
             element.setAccessibilityFrame(

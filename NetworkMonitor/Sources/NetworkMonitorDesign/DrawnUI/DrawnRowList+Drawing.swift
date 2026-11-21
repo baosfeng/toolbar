@@ -207,20 +207,20 @@ extension DrawnRowList {
 
 #if DEBUG
 /// 两行式一行的度量（快照台账用：名称 / 数值的可用与所需宽度、行高）
-public struct DrawnStackedRowMetrics {
-    public let titleAvailable: CGFloat
-    public let titleNeeded: CGFloat
-    public let titleHeight: CGFloat
-    public let valueAvailable: CGFloat
-    public let valueNeeded: CGFloat
-    public let rowWidth: CGFloat
-    public let rowHeight: CGFloat
+package struct DrawnStackedRowMetrics {
+    package let titleAvailable: CGFloat
+    package let titleNeeded: CGFloat
+    package let titleHeight: CGFloat
+    package let valueAvailable: CGFloat
+    package let valueNeeded: CGFloat
+    package let rowWidth: CGFloat
+    package let rowHeight: CGFloat
 }
 
 extension DrawnRowList {
 
     /// 快照自证：两行式某一行的度量（行本身不是视图，只能从这里量）
-    public func stackedRowMetricsForSnapshot(_ index: Int) -> DrawnStackedRowMetrics? {
+    package func stackedRowMetricsForSnapshot(_ index: Int) -> DrawnStackedRowMetrics? {
         guard rows.indices.contains(index) else { return nil }
         let row = rows[index]
         let rect = rowRect(index)
@@ -249,7 +249,7 @@ extension DrawnRowList {
     }
 
     /// 快照自证：某行的悬停文案（toolTip 由 `rowToolTip` 回调提供）
-    public func rowTipForSnapshot(_ index: Int) -> String {
+    package func rowTipForSnapshot(_ index: Int) -> String {
         guard rows.indices.contains(index) else { return "" }
         return rowToolTip?(index) ?? ""
     }

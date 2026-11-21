@@ -11,13 +11,13 @@ import NetworkMonitorUI
 /// 卡头排布与系统页五卡共用 `SystemCardLayout.head()`（同一份纯口径，不再各算一遍）。
 /// 视觉令牌取自 `PaneCardStyle`：圆角 9pt、内边距 7/4、卡头 11pt 粗体、行高 28pt。
 @MainActor
-public final class DrawnCard: NSView {
+package final class DrawnCard: NSView {
 
     /// 行列表（外部往里塞 rows）
-    public let list = DrawnRowList()
+    package let list = DrawnRowList()
 
     /// 卡头标题（空串 = 不画卡头）
-    public var title: String = "" {
+    package var title: String = "" {
         didSet {
             guard title != oldValue else { return }
             needsLayout = true
@@ -26,14 +26,14 @@ public final class DrawnCard: NSView {
         }
     }
     /// 卡头右侧说明（可选，灰色等宽小字）
-    public var caption: String = "" {
+    package var caption: String = "" {
         didSet {
             guard caption != oldValue else { return }
             needsDisplay = true
         }
     }
     /// 卡片底色（默认取主题卡片底）
-    public var fillColor: NSColor = PaneCardStyle.cardFill { didSet { needsDisplay = true } }
+    package var fillColor: NSColor = PaneCardStyle.cardFill { didSet { needsDisplay = true } }
     /// 左右内边距
     var paddingX: CGFloat = PaneCardStyle.cardPaddingX { didSet { needsLayout = true } }
     /// 上下内边距
@@ -62,7 +62,7 @@ public final class DrawnCard: NSView {
     /// 卡头行高（无卡头时为 0）
     private var headHeight: CGFloat { title.isEmpty ? 0 : PaneCardStyle.cardHeadHeight }
 
-    public override var intrinsicContentSize: NSSize {
+    package override var intrinsicContentSize: NSSize {
         let listHeight = list.intrinsicContentSize.height
         let head = headHeight
         let gap = head > 0 ? headSpacing : 0
@@ -70,7 +70,7 @@ public final class DrawnCard: NSView {
                       height: paddingY * 2 + head + gap + listHeight)
     }
 
-    public override func layout() {
+    package override func layout() {
         super.layout()
         let head = headHeight
         let gap = head > 0 ? headSpacing : 0
@@ -81,9 +81,9 @@ public final class DrawnCard: NSView {
                             height: listHeight)
     }
 
-    public override var isFlipped: Bool { true }
+    package override var isFlipped: Bool { true }
 
-    public override func draw(_ dirtyRect: NSRect) {
+    package override func draw(_ dirtyRect: NSRect) {
         // 卡片底（表面层：圆角 / 填充）
         DrawnCardSurface(rect: bounds, radius: PaneCardStyle.cardRadius, fill: fillColor).draw()
         guard !title.isEmpty else { return }
