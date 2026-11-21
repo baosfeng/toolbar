@@ -1,6 +1,8 @@
 import AppKit
 import Carbon
 import NetworkMonitorCore
+import NetworkMonitorFeatureSnip
+import NetworkMonitorUI
 
 // MARK: - 热键注册（从编排主类拆出，守住单文件门禁）
 

@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureSnip
 
 // MARK: - OCR 文字识别（选区 → 文字）
 

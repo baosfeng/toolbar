@@ -1,5 +1,6 @@
 import Foundation
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 剪贴板设置事件回调
 

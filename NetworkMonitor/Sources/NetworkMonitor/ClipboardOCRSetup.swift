@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorFeatureClipboard
+import NetworkMonitorFeatureSnip
 
 // MARK: - 应用协调器（图片文字识别装配）
 
@@ -13,7 +14,7 @@ extension AppCoordinator {
 
     /// 装配识别调度器并安排启动补扫
     func setupClipboardOCR(database: any AppDatabase, preferences: ClipboardPreferences) {
-        let ocr = ClipboardOCRCoordinator(recognizer: VisionTextRecognizer(), repository: database,
+        let ocr = ClipboardOCRCoordinator(recognizer: VisionTextRecognizer(logger: logger), repository: database,
                                           preferences: preferences, logger: logger)
         clipboardOCR = ocr
         schedulePendingOCRScan(ocr, repository: database)

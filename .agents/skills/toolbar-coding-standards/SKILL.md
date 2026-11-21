@@ -9,16 +9,18 @@ description: 本项目（toolbar / 一览）专属编码规范：架构原则、
 
 ## 项目速览
 
-- Swift 6.3（swiftLanguageModes: [.v6]），SwiftPM **十一**目标：
+- Swift 6.3（swiftLanguageModes: [.v6]），SwiftPM **十三**目标：
   - `NetworkMonitorCore`（库，**禁止 import AppKit**）— 领域协议、数据库、统计、模型、事件分发、格式化
-  - `NetworkMonitorUI`（库，与 AppKit / Core 都无关）— 只放展示纯逻辑（Hero 派生、单位排版等），让 TestRunner 能直接断言 UI 口径而不必 import 可执行 target
+  - `NetworkMonitorUI`（库，不 import AppKit；链接 Carbon 只取键码常量）— 只放展示纯逻辑（Hero 派生、单位排版、键位解析、组合键展示 `HotKeyCombo`），让 TestRunner 能直接断言 UI 口径而不必 import 可执行 target
   - `NetworkMonitorDesign`（库，允许 AppKit）— 设计系统：卡片令牌 / 页头页脚骨架 / 主题转译 / 动效令牌 / 自绘组件库。**访问级一律用 `package`（同包内可见），不用 `public`**——它是包内共享库、没有外部消费者；`package` 让「谁能看见」由编译器表达，将来真拆包时改回 `public` 是一次显式操作
   - `NetworkMonitorFeatureBilling`（库，**禁止 import AppKit**）— 额度服务层：provider 实现 / 状态管理器 / 快照 / 提醒；让 TestRunner 能直接断言额度业务逻辑
   - `NetworkMonitorFeatureFeedback`（库，**允许 AppKit**：NSSound / NSHapticFeedbackManager）— 操作反馈层：音效端口 / 触觉映射 / 成对出口 `ClipboardFeedback`；只依赖 Core，让 TestRunner 直接断言 cue 转发与档位映射
   - `NetworkMonitorFeatureDiagnostics`（库，**允许 AppKit**：NSEvent 本地监听）— 诊断层：主线程看门狗 + 心跳现场 `MainThreadHeartbeat`；只依赖 Core（复用 `MainThreadWatchdogPolicy`），停顿判定可被 TestRunner 直接断言
   - `NetworkMonitorFeatureSystemMetrics`（库，**禁止 import AppKit**，链接 IOKit / CoreWLAN）— 系统监控服务层：CPU / GPU / 内存 / 磁盘 / 温度 / 电池 / 进程 / Wi-Fi 链路采样器 + `SystemMonitor` 调度与 5 秒慢节拍；只依赖 Core（logger 由调用方注入、不设默认值），差分口径可被 TestRunner 直接断言
   - `NetworkMonitorFeatureClipboard`（库，**允许 AppKit**：NSPasteboard / NSRunningApplication，按需链接 ApplicationServices）— 剪贴板服务层：采集 / 粘贴（含合成 ⌘V）/ 粘贴栈 / 图片落盘与回收 / 缩略图解码 / OCR 调度；只依赖 Core（logger 与偏好、缩略图缓存都走端口注入），采集准入与粘贴栈状态机可被 TestRunner 直接断言
-  - `NetworkMonitor`（可执行）— UI、事件分发、监控实现（AppKit 仅限允许名单：本目标 + Design / Feedback / Diagnostics / Clipboard）
+  - `NetworkMonitorFeatureSnip`（库，**允许 AppKit / CoreGraphics / Vision / ScreenCaptureKit**）— 截图服务层：抓屏三档降级 / 写盘 / 写剪贴板（1MB 预算选档）/ OCR / 多命令热键注册表 / 截图热键偏好 / 偏好键；依赖 Core + UI（体积预算与键位口径在 UI），logger 与 storage 由调用方注入。**覆盖层 / 工具条 / 贴图窗 UI 与 NSApp 前台协调仍留在 App**
+  - `NetworkMonitorFeatureSmoothScroll`（库，**允许 AppKit / CoreGraphics**）— 可选模块「鼠标滚轮平滑」：`.cgSessionEventTap` 接管 + 帧驱动，`fail-open` 四道闸；只依赖 Core（曲线与拆分口径在 Core）
+  - `NetworkMonitor`（可执行）— UI、事件分发、监控实现（AppKit 仅限允许名单：本目标 + Design / Feedback / Diagnostics / Clipboard / Snip）
   - `TestRunner`（可执行）— 手写断言测试（本机无 Xcode SDK，不用 XCTest）
   - `nmcli`（可执行）— UI 自动化 CLI：给菜单栏 app 做程序化验收，用法见 `docs/开发指南/UI-自动化-CLI.md`
 - 构建：`cd NetworkMonitor && swift build --disable-sandbox --build-system native`（本机只有 Command Line Tools，默认后端初始化即失败，统一追加该参数）

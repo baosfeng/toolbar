@@ -1,5 +1,7 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureSnip
+import NetworkMonitorUI
 
 // MARK: - 截图与贴图装配（从组合根拆出，守住单文件门禁）
 

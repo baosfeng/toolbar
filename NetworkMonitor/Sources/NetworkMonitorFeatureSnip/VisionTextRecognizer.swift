@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import NetworkMonitorCore
 import Vision
@@ -11,17 +12,20 @@ import Vision
 /// 语言：开启 automaticallyDetectsLanguage（macOS 13+）并给出中英候选，
 /// 中英混排的界面截图不需要用户先选语言。
 /// 可跨线程共享：内部只有注入的日志器与不可变语言表，每次识别各建一个 VNImageRequestHandler。
-final class VisionTextRecognizer: SnipTextRecognizing, @unchecked Sendable {
+///
+/// 归属：截图服务层（NetworkMonitorFeatureSnip）。输入是 Core 的 `SnipTextRecognitionImage`
+/// （CGImage 载体），不认 NSImage / NSView —— 覆盖层那一侧只负责把选区裁成图。
+public final class VisionTextRecognizer: SnipTextRecognizing, @unchecked Sendable {
 
-    private let logger: LoggingService
+    private let logger: any LoggingService
     /// 语言候选：自动检测开启时作为先验，检测不可用时仍能识别中英
     private let languages = ["zh-Hans", "en-US"]
 
-    init(logger: LoggingService = AppContext.shared.logger) {
+    public init(logger: any LoggingService) {
         self.logger = logger
     }
 
-    func recognize(in image: SnipTextRecognitionImage) async throws -> [SnipTextLine] {
+    public func recognize(in image: SnipTextRecognitionImage) async throws -> [SnipTextLine] {
         let lines = Self.recognizeLines(in: image.image, languages: languages)
         switch lines {
         case .success(let value):
@@ -33,8 +37,8 @@ final class VisionTextRecognizer: SnipTextRecognizing, @unchecked Sendable {
     }
 
     /// 同步识别 —— 与 Vision 的同步 API 一一对应，便于单独验证与日志
-    static func recognizeLines(in image: CGImage,
-                               languages: [String]) -> Result<[SnipTextLine], SnipTextRecognitionError> {
+    public static func recognizeLines(in image: CGImage,
+                                      languages: [String]) -> Result<[SnipTextLine], SnipTextRecognitionError> {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true

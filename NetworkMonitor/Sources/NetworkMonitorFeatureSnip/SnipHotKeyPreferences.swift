@@ -1,6 +1,6 @@
-import AppKit
 import Carbon
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 截图快捷键偏好
 
@@ -8,7 +8,7 @@ import NetworkMonitorCore
 ///
 /// 与剪贴板的 `panelToggleHotKey` 共用同一套 `HotKeyCombo` 编码（keyCode + modifiers）；
 /// 未设置时按默认组合键回落。
-enum SnipHotKeyAction: String, CaseIterable {
+public enum SnipHotKeyAction: String, CaseIterable {
     case screenshot
     case pin
     case delayedScreenshot
@@ -16,7 +16,7 @@ enum SnipHotKeyAction: String, CaseIterable {
     case settings
     case whiteboard
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .screenshot: return "截图"
         case .pin: return "贴图"
@@ -27,7 +27,7 @@ enum SnipHotKeyAction: String, CaseIterable {
         }
     }
 
-    var defaultCombo: HotKeyCombo {
+    public var defaultCombo: HotKeyCombo {
         switch self {
         // 默认一律带修饰键：无修饰键的单功能键（F1/F3）在 macOS 27 会与系统媒体键
         // 抢同一通道，注册成功但经常不投递按键（实测连按 3 次只到 1 次）
@@ -46,16 +46,19 @@ enum SnipHotKeyAction: String, CaseIterable {
     }
 
     /// 键码存储键（键名规则收敛在 Core 的 SnipHotKeyKeyNames，读写与测试同源）
-    var keyCodeKey: String { SnipHotKeyKeyNames.keyCodeKey(actionRawValue: rawValue) }
+    public var keyCodeKey: String { SnipHotKeyKeyNames.keyCodeKey(actionRawValue: rawValue) }
     /// 修饰键掩码存储键
-    var modifiersKey: String { SnipHotKeyKeyNames.modifiersKey(actionRawValue: rawValue) }
+    public var modifiersKey: String { SnipHotKeyKeyNames.modifiersKey(actionRawValue: rawValue) }
 }
 
 /// 可测试的偏好读写层（不强依赖 concrete storage）
-final class SnipHotKeyPreferences {
+///
+/// 归属：截图服务层（NetworkMonitorFeatureSnip）。存储由调用方注入（不取 AppContext.shared.storage），
+/// 判定口径全在 Core 的 `SnipHotKeyComboResolver`（纯函数），这里只做委托与回写。
+public final class SnipHotKeyPreferences {
     private let storage: any KeyValueStorage
 
-    init(storage: any KeyValueStorage = AppContext.shared.storage) {
+    public init(storage: any KeyValueStorage) {
         self.storage = storage
     }
 
@@ -76,7 +79,7 @@ final class SnipHotKeyPreferences {
     ///    只有命中旧默认值白名单（`didMigrate`）才回写一次，因为那是把历史默认值换成新默认值，
     ///    属于迁移而不是「补一个默认值」。真正的「写回」只发生在注册成功之后
     ///    （`registerSnipHotKey` 写回实际注册成功的组合），那是真实生效值，不是读路径产物。
-    func combo(for action: SnipHotKeyAction) -> HotKeyCombo {
+    public func combo(for action: SnipHotKeyAction) -> HotKeyCombo {
         let fallback = SnipHotKeyComboValue(keyCode: action.defaultCombo.keyCode,
                                             modifiers: action.defaultCombo.modifiers)
         let resolution = SnipHotKeyComboResolver.resolve(storage: storage,
@@ -90,7 +93,7 @@ final class SnipHotKeyPreferences {
         return combo
     }
 
-    func setCombo(_ combo: HotKeyCombo, for action: SnipHotKeyAction) {
+    public func setCombo(_ combo: HotKeyCombo, for action: SnipHotKeyAction) {
         storage.set(Int(combo.keyCode), forKey: action.keyCodeKey)
         storage.set(Int(combo.modifiers), forKey: action.modifiersKey)
     }

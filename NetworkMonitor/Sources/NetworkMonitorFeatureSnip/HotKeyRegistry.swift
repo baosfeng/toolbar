@@ -1,6 +1,6 @@
-import AppKit
 import Carbon
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 多命令热键注册表
 
@@ -8,10 +8,14 @@ import NetworkMonitorCore
 ///
 /// 与剪贴板的 GlobalHotKeyCenter 分开：后者只有一个注册位，这里按 id 管理任意条，
 /// 两者共用 Carbon 事件通道但签名不同，互不干扰。
+///
+/// 归属：截图服务层（NetworkMonitorFeatureSnip）。只被截图编排使用（注册 / 重录 / 注销），
+/// 与剪贴板热键不共用实例；日志由调用方注入。
 @MainActor
-final class HotKeyRegistry {
+public final class HotKeyRegistry {
 
-    enum RegisterResult: Equatable {
+    /// 注册结果（调用方据此给出冲突提示，禁止静默失败）
+    public enum RegisterResult: Equatable {
         case success(id: UInt32)
         /// 组合键被占用
         case conflict
@@ -22,20 +26,20 @@ final class HotKeyRegistry {
     /// Carbon 事件签名（'MONS'），与剪贴板热键的 'MONH' 区分
     private static let signature: OSType = 0x4D4F4E53
 
-    private let logger: LoggingService
+    private let logger: any LoggingService
     private var nextID: UInt32 = 1
     private var actions: [UInt32: () -> Void] = [:]
     private var references: [UInt32: EventHotKeyRef] = [:]
     private var eventHandlerRef: EventHandlerRef?
 
-    init(logger: LoggingService = AppContext.shared.logger) {
+    public init(logger: any LoggingService) {
         self.logger = logger
     }
 
     // MARK: - 注册与注销
 
     @discardableResult
-    func register(_ combo: HotKeyCombo, action: @escaping () -> Void) -> RegisterResult {
+    public func register(_ combo: HotKeyCombo, action: @escaping () -> Void) -> RegisterResult {
         installHandlerIfNeeded()
         let id = nextID
         nextID += 1
@@ -56,14 +60,14 @@ final class HotKeyRegistry {
         return .success(id: id)
     }
 
-    func unregister(_ id: UInt32) {
+    public func unregister(_ id: UInt32) {
         if let reference = references.removeValue(forKey: id) {
             UnregisterEventHotKey(reference)
         }
         actions.removeValue(forKey: id)
     }
 
-    func unregisterAll() {
+    public func unregisterAll() {
         for reference in references.values {
             UnregisterEventHotKey(reference)
         }

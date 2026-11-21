@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorUI
+import NetworkMonitorFeatureSnip
 
 // MARK: - 导出与落盘（从编排主类拆出，守住单文件门禁）
 

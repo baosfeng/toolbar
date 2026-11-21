@@ -62,7 +62,7 @@ enum PermissionSourceGuard {
             reason: "运行期即时判据：合成 ⌘V 之前必须知道此刻能不能投递事件，"
                   + "不能等一次快照刷新——否则会谎报「已粘贴」而事件被系统丢弃"),
         PermissionSourceExemption(
-            path: "NetworkMonitor/Snip/ScreenCaptureService.swift",
+            path: "NetworkMonitorFeatureSnip/ScreenCaptureService.swift",
             reason: "抓屏能力探测：preflight / request 是实际抓屏路径自身的前置条件，"
                   + "结果经 isAuthorized() 交给中心读取，不另存一份状态"),
         PermissionSourceExemption(

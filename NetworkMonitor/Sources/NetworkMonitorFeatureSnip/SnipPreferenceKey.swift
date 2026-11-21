@@ -5,7 +5,7 @@ import Foundation
 /// 截图 / 贴图偏好键名 — 从已下线的 `SnipSettingsWindow` 迁出
 ///
 /// 保留 `public` 与既有键值：这些键已被写入用户偏好，改名会让老设置全部失效。
-/// SnipController 与该设置页共用同一份定义。
+/// 截图编排（App）与该设置页共用同一份定义，现在两边都 import 这个功能层。
 public enum SnipPreferenceKey {
     public static let autoSaveAfterCopy = "snip.autoSaveAfterCopy"
     /// 贴图默认透明度的键不在这里：PinDefaultAlphaPreferenceKey.pinDefaultAlpha（Core，与钳制规则同处，消费方共用）

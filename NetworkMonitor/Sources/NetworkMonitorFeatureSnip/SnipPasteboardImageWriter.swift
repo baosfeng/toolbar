@@ -19,17 +19,19 @@ import NetworkMonitorUI
 ///
 /// 不再写 TIFF 伴随表示：LZW 压缩后它与 PNG 同量级（1x 实测 0.77MB），多一份既推高
 /// 剪贴板占用又不解决兼容（`public.png` / `public.jpeg` 是系统与绝大多数 App 的通用入口）。
-@MainActor
-enum SnipPasteboardImageWriter {
+///
+/// 归属：截图服务层（NetworkMonitorFeatureSnip）。体积预算口径在 NetworkMonitorUI
+/// （纯判据、TestRunner 直接断言），编码器在 Core，这里只负责「选档 + 装载体 + 写板」。
+public enum SnipPasteboardImageWriter {
 
     /// JPEG 兜底档的质量（文字截图可接受，照片级画面明显优于再降分辨率）
-    static let lossyQuality = 0.85
+    public static let lossyQuality = 0.85
 
     /// 写入剪贴板（先清空）；返回是否写入成功
     @discardableResult
-    static func write(_ image: CGImage,
-                      to pasteboard: NSPasteboard = .general,
-                      logger: LoggingService = AppContext.shared.logger) -> Bool {
+    public static func write(_ image: CGImage,
+                             to pasteboard: NSPasteboard = .general,
+                             logger: any LoggingService) -> Bool {
         guard let item = makeItem(for: image, logger: logger) else { return false }
         pasteboard.clearContents()
         guard pasteboard.writeObjects([item]) else {
@@ -40,8 +42,8 @@ enum SnipPasteboardImageWriter {
     }
 
     /// 构造剪贴板载体（按体积预算选档位）
-    static func makeItem(for image: CGImage,
-                         logger: LoggingService = AppContext.shared.logger) -> NSPasteboardItem? {
+    public static func makeItem(for image: CGImage,
+                                logger: any LoggingService) -> NSPasteboardItem? {
         // 1x = 屏幕点数分辨率：最长边减半（Retina 的 2x 图正好回到点数像素）
         let pointSizeImage = ClipboardImageDecoder.thumbnail(
             from: image,

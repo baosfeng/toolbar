@@ -7,19 +7,22 @@ import ScreenCaptureKit
 
 /// 屏幕捕获 — 按系统版本三档实现：26+ 用 SCScreenshotConfiguration，15.2+ 用按矩形抓取，
 /// 14.0+ 回落到 SCContentFilter + 手动像素尺寸。全部路径都要求屏幕录制权限。
+///
+/// 归属：截图服务层（NetworkMonitorFeatureSnip）。这里只有「系统 API → Core 值类型」的翻译，
+/// 不碰任何覆盖层 / 工具条 / 设置页类型；日志由调用方注入（不取 AppContext.shared）。
 @MainActor
-final class ScreenCaptureService: SnipCaptureServicing {
+public final class ScreenCaptureService: SnipCaptureServicing {
 
     /// 日志（捕获路径降级时记录被跳过的路径与原因）
-    private let logger: LoggingService
+    private let logger: any LoggingService
 
-    init(logger: LoggingService = AppContext.shared.logger) {
+    public init(logger: any LoggingService) {
         self.logger = logger
     }
 
     // MARK: - 屏幕与权限
 
-    func screens() -> [SnipDisplay] {
+    public func screens() -> [SnipDisplay] {
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         return NSScreen.screens.compactMap { screen in
             guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
@@ -48,7 +51,7 @@ final class ScreenCaptureService: SnipCaptureServicing {
     }
 
     /// 静默检查（不弹系统框、不把应用登记进清单）
-    func isAuthorized() -> Bool {
+    public func isAuthorized() -> Bool {
         CGPreflightScreenCaptureAccess()
     }
 
@@ -59,7 +62,7 @@ final class ScreenCaptureService: SnipCaptureServicing {
     /// 列进「隐私与安全性 → 屏幕录制」（这正是用户说的「不支持把我们的 app 放进去」）。
     /// 因此启动阶段只 preflight，请求只挂在用户显式点击的路径上。
     @discardableResult
-    func requestAuthorization() -> Bool {
+    public func requestAuthorization() -> Bool {
         let granted = CGRequestScreenCaptureAccess()
         logger.info("屏幕录制授权请求：本次读数 \(granted ? "已授权" : "未授权（需用户在系统设置勾选后重启 app）")")
         return granted
@@ -78,7 +81,7 @@ final class ScreenCaptureService: SnipCaptureServicing {
     ///
     /// 时序：本方法在 presentOverlays 里先于覆盖层创建调用，此刻屏幕上还没有自家覆盖层，
     /// 所以这份列表天然不含覆盖层；覆盖层自身是 screenSaver（1000），也不在白名单内。
-    func windowInfos() -> [SnipWindowInfo] {
+    public func windowInfos() -> [SnipWindowInfo] {
         guard isAuthorized() else { return [] }
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
@@ -107,7 +110,7 @@ final class ScreenCaptureService: SnipCaptureServicing {
 
     // MARK: - 捕获入口
 
-    func captureAllDisplays(includeCursor: Bool) async throws -> [SnipCapturedImage] {
+    public func captureAllDisplays(includeCursor: Bool) async throws -> [SnipCapturedImage] {
         guard isAuthorized() else { throw SnipCaptureError.permissionDenied }
         let displays = screens()
         guard !displays.isEmpty else { throw SnipCaptureError.noDisplays }
@@ -119,7 +122,7 @@ final class ScreenCaptureService: SnipCaptureServicing {
         return results
     }
 
-    func capture(display: SnipDisplay, includeCursor: Bool) async throws -> SnipCapturedImage {
+    public func capture(display: SnipDisplay, includeCursor: Bool) async throws -> SnipCapturedImage {
         guard isAuthorized() else { throw SnipCaptureError.permissionDenied }
         // 需要指针时只有 filter 路径能控制 showsCursor，直接走 14+ 实现
         guard !includeCursor else {

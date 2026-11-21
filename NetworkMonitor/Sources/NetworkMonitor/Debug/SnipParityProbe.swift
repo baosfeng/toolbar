@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureSnip
 
 // MARK: - 截图补差取证（仅 DEBUG）
 
@@ -52,7 +53,7 @@ enum SnipParityProbe {
         let payload = SnipTextRecognitionImage(image: image)
         Task { @MainActor in
             do {
-                let lines = try await VisionTextRecognizer().recognize(in: payload)
+                let lines = try await VisionTextRecognizer(logger: AppContext.shared.logger).recognize(in: payload)
                 let text = SnipTextRecognition.plainText(from: lines)
                 print("ocr probe: \(lines.count) 行 / \(text.count) 字")
                 print("ocr probe: 前 3 行 =", SnipTextRecognition.acceptedLines(lines).prefix(3))

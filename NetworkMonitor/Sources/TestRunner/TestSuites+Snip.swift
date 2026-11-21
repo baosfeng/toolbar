@@ -55,4 +55,5 @@ func runSnipSuites() {
     runPinMenuOrderTests()
     runPinDefaultAlphaTests()  // 贴图默认透明度：设置页写入 → 新贴图窗生效（缺键 1 / 越界钳制）
     runPinDragSessionTests()
+    runSnipFeatureBoundaryTests()  // 截图服务层拆成 NetworkMonitorFeatureSnip：端口注入 / 写盘与选档 / 热键归一化 / 源码边界
 }

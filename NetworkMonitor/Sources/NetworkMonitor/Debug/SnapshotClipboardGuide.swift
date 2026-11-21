@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 剪贴板首次引导态与快捷键帮助浮层取证（仅 DEBUG）
 

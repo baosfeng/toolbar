@@ -13,9 +13,14 @@ let package = Package(
         ),
         // 与 AppKit / Core 都无关的展示纯逻辑（Hero 派生、单位排版等），
         // 让 TestRunner 能直接断言 UI 口径而不必 import 可执行 target。
+        // 展示纯逻辑（Hero 派生、单位排版、键位解析、组合键展示等）。另链接 Carbon：
+        // 组合键展示要读 kVK_* / cmdKey 这些键码常量；Core 不依赖 Carbon，这段只能落在 UI。
         .target(
             name: "NetworkMonitorUI",
-            dependencies: ["NetworkMonitorCore"]
+            dependencies: ["NetworkMonitorCore"],
+            linkerSettings: [
+                .linkedFramework("Carbon")
+            ]
         ),
         // 设计系统（渲染基础层）：卡片令牌 / 页头页脚骨架 / 主题转译 / 动效令牌 / 自绘组件库。
         // 单独成 target 是为了让「设计系统」不再寄生在 MenuPanel 页面目录里，
@@ -89,6 +94,23 @@ let package = Package(
                 .linkedFramework("QuartzCore")
             ]
         ),
+        // 截图服务层（抓屏 / 写盘 / 写剪贴板 / OCR / 截图热键 / 偏好键）：依赖 Core + UI。
+        // 允许 import AppKit（NSScreen / NSPasteboard / NSEvent）与 CoreGraphics / Vision /
+        // ScreenCaptureKit / Carbon —— 这些是「系统 API → Core 值类型」翻译绕不开的。
+        // 单独成 target 是为了让「写盘格式与尺寸、剪贴板选档、热键偏好归一化、按键翻译」
+        // 能被 TestRunner 直接断言（App 是可执行 target，测不了）；
+        // 覆盖层 / 工具条 / 贴图窗这些 UI 一律留在 App。
+        .target(
+            name: "NetworkMonitorFeatureSnip",
+            dependencies: ["NetworkMonitorCore", "NetworkMonitorUI"],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("CoreGraphics"),
+                .linkedFramework("Carbon"),
+                .linkedFramework("Vision"),
+                .linkedFramework("ScreenCaptureKit")
+            ]
+        ),
         .executableTarget(
             name: "NetworkMonitor",
             dependencies: [
@@ -96,6 +118,7 @@ let package = Package(
                 "NetworkMonitorUI",
                 "NetworkMonitorDesign",
                 "NetworkMonitorFeatureBilling",
+                "NetworkMonitorFeatureSnip",
                 "NetworkMonitorFeatureFeedback",
                 "NetworkMonitorFeatureDiagnostics",
                 "NetworkMonitorFeatureSystemMetrics",
@@ -125,7 +148,8 @@ let package = Package(
                 "NetworkMonitorFeatureDiagnostics",
                 "NetworkMonitorFeatureSystemMetrics",
                 "NetworkMonitorFeatureClipboard",
-                "NetworkMonitorFeatureSmoothScroll"
+                "NetworkMonitorFeatureSmoothScroll",
+                "NetworkMonitorFeatureSnip"
             ]
         ),
         // UI 自动化 CLI（nmcli）：纯系统框架直连目标进程做程序化验收，

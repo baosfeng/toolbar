@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import NetworkMonitorCore
 import NetworkMonitorUI
+import NetworkMonitorFeatureSnip
 
 // MARK: - 覆盖层键盘（从编排主类拆出，守住单文件门禁）
 

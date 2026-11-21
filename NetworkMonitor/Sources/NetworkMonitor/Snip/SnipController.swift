@@ -1,6 +1,8 @@
 import AppKit
 import Carbon
 import NetworkMonitorCore
+import NetworkMonitorFeatureSnip
+import NetworkMonitorUI
 
 // MARK: - 截图编排
 
@@ -80,16 +82,20 @@ final class SnipController: SnipOverlayViewDelegate {
     /// 放宽为 internal：热键扩展文件要用
     static let delayedSnipDelay: UInt64 = 3_000_000_000
 
-    init(captureService: any SnipCaptureServicing = ScreenCaptureService(),
+    /// - Parameters:
+    ///   - captureService / hotKeys / textRecognizer: 传 nil 用默认实现，并把同一个 logger 注入进去。
+    ///     服务层（NetworkMonitorFeatureSnip）不接受默认 logger —— 那里禁止取 AppContext.shared，
+    ///     日志只能由组合根显式传入，默认实现在这里装配。
+    init(captureService: (any SnipCaptureServicing)? = nil,
          pinWindows: PinWindowController = PinWindowController(),
-         hotKeys: HotKeyRegistry = HotKeyRegistry(),
-         textRecognizer: any SnipTextRecognizing = VisionTextRecognizer(),
+         hotKeys: HotKeyRegistry? = nil,
+         textRecognizer: (any SnipTextRecognizing)? = nil,
          storage: KeyValueStorage = AppContext.shared.storage,
          logger: LoggingService = AppContext.shared.logger) {
-        self.captureService = captureService
+        self.captureService = captureService ?? ScreenCaptureService(logger: logger)
         self.pinWindows = pinWindows
-        self.hotKeys = hotKeys
-        self.textRecognizer = textRecognizer
+        self.hotKeys = hotKeys ?? HotKeyRegistry(logger: logger)
+        self.textRecognizer = textRecognizer ?? VisionTextRecognizer(logger: logger)
         self.storage = storage
         self.hotKeyPreferences = SnipHotKeyPreferences(storage: storage)
         self.logger = logger

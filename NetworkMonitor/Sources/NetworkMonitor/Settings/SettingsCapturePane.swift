@@ -2,6 +2,7 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorDesign
 import NetworkMonitorUI
+import NetworkMonitorFeatureSnip
 
 // MARK: - 截图与贴图设置页
 
