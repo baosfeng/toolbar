@@ -68,7 +68,7 @@ enum Capture {
             throw CLIError("screencapture 失败（exit \(status)）：\(arguments.joined(separator: " "))")
         }
         let bytes = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int) ?? 0
-        return ShotResult(path: path, width: size.width, height: size.height, bytes: bytes ?? 0, mode: mode)
+        return ShotResult(path: path, width: size.width, height: size.height, bytes: bytes, mode: mode)
     }
 
     private static func run(_ launchPath: String, _ arguments: [String]) -> Int32 {

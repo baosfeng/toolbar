@@ -38,7 +38,6 @@ extension ClipboardCardView {
         var titleRight = titleRect.maxX - (shortcut == nil ? 0 : Self.starSize + Self.metaGap)
         if shortcut != nil { titleRight = titleRect.maxX - Self.starSize - Self.metaGap }
         let titleText = ClipboardFooterText.title(for: item)
-        let title = DrawnTextRun(string: titleText, font: Self.footerTitleFont, color: PaneCardStyle.primaryText)
         DrawnTextBlock(string: titleText,
                        font: Self.footerTitleFont,
                        color: PaneCardStyle.primaryText,

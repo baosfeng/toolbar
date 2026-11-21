@@ -174,7 +174,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         // 帮助浮层与预览浮层都不跨次留存：收起面板时一并关掉
         content.hideShortcutHelp(); closePreview()
         clearDeleteConfirmHint()
-        collapseMultiSelectionIfNeeded()   // 多选不跨次留存：收回到焦点单条，下次打开仍停在上次那条
+        _ = collapseMultiSelectionIfNeeded()   // 多选不跨次留存：收回到焦点单条，下次打开仍停在上次那条（返回值只有 Esc 路径关心）
         // 收起后不再需要缩略图：丢弃在途回调（已入队任务允许跑完，缓存与磁盘文件不删）
         ClipboardThumbnailLoader.shared.cancelAll()
         // animated=false 不套动效：立即 orderOut 让出 key（粘贴路径依赖这一点）

@@ -55,7 +55,7 @@ enum Scenario {
         let visibleTabs = PanelGeometry.visibleTabNames(of: target)
         for (index, name) in visibleTabs.enumerated() {
             try recorder.step("切到「\(name)」tab") {
-                guard let panel = PanelGeometry.panel(of: target) else {
+                guard PanelGeometry.panel(of: target) != nil else {
                     throw CLIError("切页前面板消失了")
                 }
                 guard PanelGeometry.selectTab(target, index: index) else {
