@@ -20,25 +20,25 @@ func runAppAssemblyTests() {
     }
     assertEqual(startOrder, AppAssemblyPlan.legacyStartOrder,
                 "拓扑执行顺序与改造前手写顺序逐项相同（同层按声明序稳定）")
-    assertEqual(startOrder.count, 18, "阶段数量（数据库 … 启动清理）")
+    assertEqual(startOrder.count, 19, "阶段数量（数据库 … 鼠标滚轮平滑滚动）")
 
     // MARK: 等价性：逐行对照改造前手写顺序（硬编码期望，不读实现里的同一份常量）
 
     let expectedOrder = [
         "数据库", "网络监控", "流量追踪", "通知与音效", "剪贴板", "截图", "系统权限",
         "局域网互传", "额度", "更新检查", "设置窗口", "屏幕活动", "Token 统计", "系统监控",
-        "菜单栏", "定时落盘", "自动更新检查", "启动清理",
+        "菜单栏", "定时落盘", "自动更新检查", "启动清理", "鼠标滚轮平滑滚动",
     ]
     for (index, name) in expectedOrder.enumerated() {
         assertEqual(startOrder[index], name, "第 \(index + 1) 阶段")
     }
 
-    // MARK: 停止顺序 = 启动顺序的逆序裁剪（带 teardown 的五个阶段）
+    // MARK: 停止顺序 = 启动顺序的逆序裁剪（带 teardown 的六个阶段）
 
     assertEqual(AppAssemblyPlan.resolvedTeardownOrder(startOrder), AppAssemblyPlan.legacyTeardownOrder,
                 "停止顺序与改造前 stop() 手写逆序逐项相同")
     assertEqual(AppAssemblyPlan.resolvedTeardownOrder(startOrder),
-                ["定时落盘", "屏幕活动", "局域网互传", "剪贴板", "数据库"],
+                ["鼠标滚轮平滑滚动", "定时落盘", "屏幕活动", "局域网互传", "剪贴板", "数据库"],
                 "停止顺序硬编码对照")
 
     // MARK: 乱序输入 → 按依赖执行

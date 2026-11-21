@@ -18,6 +18,8 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
     private let launchAtStartup: LaunchAtStartupService
     private let alertPreferences: BillingAlertPreferences
     private let unitPreferences: NumberUnitPreferences
+    /// 鼠标滚轮平滑设置卡（可选模块，默认关闭；写偏好即热生效）
+    private let smoothScrollCard: SettingsSmoothScrollCard
     /// 面板展开收起通知行（放宽为 internal：DEBUG 快照要按协议取到它）
     let notificationCard: SettingsNotificationEventCard
     private let launchRow = SettingsRowView(title: "开机自启动",
@@ -56,14 +58,23 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
     /// 快捷模板分段标题（与内部名一一对应）
     static let templateTitles = ["默认", "性能", "Token", "网络", "全部"]
 
+    /// - Parameters:
+    ///   - smoothScrollStateText: 引擎当前状态说明（组合根注入；读不到时按关闭态显示）
+    ///   - onSmoothScrollChange: 写平滑偏好之后的回调（组合根让引擎热生效）
     init(launchAtStartup: LaunchAtStartupService = LaunchAtStartupService(),
          alertPreferences: BillingAlertPreferences = BillingAlertPreferences(),
          unitPreferences: NumberUnitPreferences = NumberUnitPreferences(),
          storage: any KeyValueStorage = AppContext.shared.storage,
+         smoothScrollStateText: @escaping () -> String = { "未启用" },
+         onSmoothScrollChange: @escaping () -> Void = {},
          notificationContext: SettingsNotificationEventContext) {
         self.launchAtStartup = launchAtStartup
         self.alertPreferences = alertPreferences
         self.unitPreferences = unitPreferences
+        self.smoothScrollCard = SettingsSmoothScrollCard(
+            settings: SmoothScrollSettings(storage: storage),
+            stateText: smoothScrollStateText,
+            onChange: onSmoothScrollChange)
         self.notificationCard = SettingsNotificationEventCard(events: [.panelToggle],
                                                               context: notificationContext)
         self.storage = storage
@@ -103,6 +114,7 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         page.addCard(launchCard, sectionTitle: "启动")
         page.addCard(alertCard, sectionTitle: "额度提醒")
         page.addCard(unitCard, sectionTitle: "显示")
+        page.addCard(smoothScrollCard.card, sectionTitle: "鼠标滚轮")
         page.addCard(notificationCard.card, sectionTitle: "通知与音效")
 
         buildOrderableCards()
@@ -124,9 +136,17 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         let styleIndex = NumberUnitStyle.allCases.firstIndex(of: style) ?? 0
         unitControl.selectItem(at: styleIndex)
         unitRow.update(subtitle: style.detailText)
+        smoothScrollCard.refresh()
         notificationCard.refresh()
         refreshOrderableControls()
     }
+
+#if DEBUG
+    /// 取证：鼠标滚轮平滑卡的控件态与偏好真值（离屏快照看不出勾选态）
+    func debugLogSmoothScrollStates(_ tag: String) {
+        smoothScrollCard.debugLogStates(tag)
+    }
+#endif
 
     // MARK: - 动作
 

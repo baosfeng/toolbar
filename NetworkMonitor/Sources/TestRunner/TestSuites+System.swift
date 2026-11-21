@@ -29,4 +29,6 @@ func runSystemSuites() {
     runProcessDisplayNameTests()
     runMainThreadWatchdogPolicyTests()
     runSystemMetricsFeatureBoundaryTests()
+    runSmoothScrollTests()
+    runSmoothScrollFeatureBoundaryTests()
 }

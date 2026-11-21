@@ -30,6 +30,12 @@ extension AppCoordinator {
             return SettingsGeneralPane(
                 launchAtStartup: LaunchAtStartupService(logger: AppContext.shared.logger),
                 alertPreferences: BillingAlertPreferences(storage: AppContext.shared.storage),
+                smoothScrollStateText: { [weak self] in
+                    self?.scrollSmoothingStateText ?? "未启用"
+                },
+                onSmoothScrollChange: { [weak self] in
+                    self?.applyScrollSmoothingPreferences()
+                },
                 notificationContext: self.settingsNotificationContext)
         })
         modules.register(SettingsModule(section: .appearance) {

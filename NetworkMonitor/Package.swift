@@ -65,6 +65,18 @@ let package = Package(
                 .linkedFramework("CoreWLAN")
             ]
         ),
+        // 输入体验层（鼠标滚轮平滑）：允许 import AppKit / CoreGraphics（事件 tap 与显示帧驱动），
+        // 只依赖 Core。单独成 target 是为了让「识别判据 / tap 健康度 / 曲线与拆分」能被 TestRunner
+        // 直接断言（App 是可执行 target，测不了），也把「会碰全局输入路径」的代码收在一个 target 里。
+        .target(
+            name: "NetworkMonitorFeatureSmoothScroll",
+            dependencies: ["NetworkMonitorCore"],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("CoreGraphics"),
+                .linkedFramework("QuartzCore")
+            ]
+        ),
         .executableTarget(
             name: "NetworkMonitor",
             dependencies: [
@@ -74,7 +86,8 @@ let package = Package(
                 "NetworkMonitorFeatureBilling",
                 "NetworkMonitorFeatureFeedback",
                 "NetworkMonitorFeatureDiagnostics",
-                "NetworkMonitorFeatureSystemMetrics"
+                "NetworkMonitorFeatureSystemMetrics",
+                "NetworkMonitorFeatureSmoothScroll"
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -97,7 +110,8 @@ let package = Package(
                 "NetworkMonitorFeatureBilling",
                 "NetworkMonitorFeatureFeedback",
                 "NetworkMonitorFeatureDiagnostics",
-                "NetworkMonitorFeatureSystemMetrics"
+                "NetworkMonitorFeatureSystemMetrics",
+                "NetworkMonitorFeatureSmoothScroll"
             ]
         ),
         // UI 自动化 CLI（nmcli）：纯系统框架直连目标进程做程序化验收，

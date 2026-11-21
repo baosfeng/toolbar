@@ -21,7 +21,8 @@ extension AppCoordinator {
          clipboardStage, snipStage, permissionsStage, transferStage,
          billingStage, updateCheckStage, settingsStage, screenActivityStage,
          tokenStage, systemMonitorStage, menuBarStage,
-         trafficPersistenceStage, autoUpdateCheckStage, launchCleanupStage]
+         trafficPersistenceStage, autoUpdateCheckStage, launchCleanupStage,
+         smoothScrollStage]
     }
 
     // MARK: - 基础设施与网络

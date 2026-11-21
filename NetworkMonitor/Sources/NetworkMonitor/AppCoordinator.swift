@@ -2,6 +2,7 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorFeatureBilling
 import NetworkMonitorFeatureFeedback
+import NetworkMonitorFeatureSmoothScroll
 
 // MARK: - 应用协调器
 
@@ -80,6 +81,9 @@ public final class AppCoordinator {
     /// 系统权限链路（三类权限的唯一读取与请求入口；设置页与面板页脚共用同一份快照）
     /// 放宽为 internal：权限接线扩展与设置页工厂要用
     var permissionChain: (any SystemPermissionProviding)?
+    /// 鼠标滚轮平滑引擎（可选模块，默认关闭；关着时实例存在但状态为 idle）
+    // 放宽为 internal：装配阶段与设置页（热生效 / 状态说明）跨文件读写
+    var scrollSmoothingEngine: ScrollSmoothingEngine?
     /// 局域网互传面板控制器
     // 放宽为 internal：AppCoordinator+Transfer 装配扩展要写
     var transferController: TransferController?
