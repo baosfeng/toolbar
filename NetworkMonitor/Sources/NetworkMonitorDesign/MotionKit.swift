@@ -29,7 +29,7 @@ public enum MotionKit {
         public let stagger: TimeInterval
 
         /// 设计规格冻结的默认取值
-        public static let standard = Durations(state: 0.12, expand: 0.34,
+        static let standard = Durations(state: 0.12, expand: 0.34,
                                         overlay: 0.22, close: 0.15, stagger: 0.024)
     }
 
@@ -40,7 +40,7 @@ public enum MotionKit {
     /// 当前渲染档是否允许播放动效
     ///
     /// 与系统的「减弱动态效果」是**或**的关系：任一路要求降级，动效就落终态。
-    public private(set) static var tierAllowsMotion = true
+    private(set) static var tierAllowsMotion = true
 
     /// 按渲染档更新动效参数（切档时由 `RenderTierCoordinator` 调用）
     ///
@@ -185,7 +185,7 @@ public enum MotionKit {
     }
 
     /// 弹入：缩放 0.7 → 1.15 → 1（收藏星 / 栈角标这类小元素出现）
-    public static func popIn(_ view: NSView) {
+    static func popIn(_ view: NSView) {
         view.wantsLayer = true
         view.alphaValue = 1
         guard isEnabled, let layer = view.layer else { return }
@@ -203,12 +203,12 @@ public enum MotionKit {
     }
 
     /// 松开：恢复 1.0
-    public static func release(_ view: NSView) {
+    static func release(_ view: NSView) {
         applyScale(view, to: 1, key: "motion.release")
     }
 
     /// 失败：横向抖动 ±4pt 三次（动效关闭时不抖）
-    public static func shake(_ view: NSView) {
+    static func shake(_ view: NSView) {
         guard isEnabled else { return }
         view.wantsLayer = true
         guard let layer = view.layer else { return }
@@ -225,7 +225,7 @@ public enum MotionKit {
     ///   - layer: 目标图层（描边层 / 底色层 / 缩略图层）
     ///   - duration: 过渡时长，默认状态档 0.12s；传 0 表示直接落终态
     ///   - opacity: 目标不透明度；nil 表示按当前值反向切换（真·交叉切换）
-    public static func crossFade(layer: CALayer, duration: TimeInterval = durations.state,
+    static func crossFade(layer: CALayer, duration: TimeInterval = durations.state,
                           to opacity: Float? = nil) {
         let target = opacity ?? (layer.opacity > 0.5 ? 0 : 1)
         guard isEnabled, duration > 0 else {
@@ -253,7 +253,7 @@ public enum MotionKit {
     ///   - view: 目标视图
     ///   - duration: 过渡时长，默认状态档 0.12s；传 0 表示直接落终态
     ///   - alpha: 目标不透明度
-    public static func crossFade(view: NSView, duration: TimeInterval = durations.state, to alpha: CGFloat) {
+    static func crossFade(view: NSView, duration: TimeInterval = durations.state, to alpha: CGFloat) {
         view.wantsLayer = true
         guard isEnabled, duration > 0 else {
             view.alphaValue = alpha
@@ -283,7 +283,7 @@ public enum MotionKit {
     ///
     /// - Parameter progress: 线性进度 0…1
     /// - Returns: 曲线上的值 0…1
-    public static func easedOut(_ progress: CGFloat) -> CGFloat {
+    static func easedOut(_ progress: CGFloat) -> CGFloat {
         let x = min(max(progress, 0), 1)
         // 控制点 (0,0) (0,0) (0.58,1) (1,1)：x(u) = 1.74u² − 0.74u³，y(u) = 3u² − 2u³
         var u = x

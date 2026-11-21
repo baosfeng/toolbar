@@ -133,7 +133,7 @@ public final class DrawnRowList: NSView {
     /// 某点落在哪一行（落在行间空隙返回 nil）
     ///
     /// 纯口径在 `DrawnHitRegions.bandIndex`（含边缘 / 空隙 / 越界的边界行为由 TestRunner 钉住）。
-    public func rowIndex(at point: NSPoint) -> Int? {
+    func rowIndex(at point: NSPoint) -> Int? {
         DrawnHitRegions.bandIndex(at: point,
                                   bandHeight: rowHeight,
                                   step: rowHeight + rowSpacing,
@@ -237,7 +237,7 @@ public final class DrawnRowList: NSView {
         toolTipBounds = bounds
     }
 
-    @objc public func view(_ view: NSView,
+    @objc func view(_ view: NSView,
                     stringForToolTip tag: NSView.ToolTipTag,
                     point: NSPoint,
                     userData data: UnsafeMutableRawPointer?) -> String {

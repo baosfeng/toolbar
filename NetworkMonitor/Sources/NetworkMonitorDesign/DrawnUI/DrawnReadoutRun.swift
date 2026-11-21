@@ -20,7 +20,7 @@ public enum DrawnReadoutPiece {
               color: NSColor, track: NSColor)
 
     /// 这一段占的宽（文字段用 0.5pt 网格的排版宽，与 AppKit 标签对齐矩形同源）
-    public var width: CGFloat {
+    var width: CGFloat {
         switch self {
         case .text(let run): return run.layoutWidth
         case .swatch(_, let width, _, _): return width
@@ -31,7 +31,7 @@ public enum DrawnReadoutPiece {
     }
 
     /// 这一段占的高（决定整条行高；文字段用行框高，与标签 frame 同源）
-    public var height: CGFloat {
+    var height: CGFloat {
         switch self {
         case .text(let run): return run.labelHeight
         case .swatch(_, _, let height, _): return height
@@ -42,13 +42,13 @@ public enum DrawnReadoutPiece {
     }
 
     /// 读屏文案（图形段不读，只有文字段出声）
-    public var accessibilityText: String? {
+    var accessibilityText: String? {
         if case .text(let run) = self { return run.string }
         return nil
     }
 
     /// 按「左边界 + 行中心」画自己
-    public func draw(at x: CGFloat, centerY: CGFloat) {
+    func draw(at x: CGFloat, centerY: CGFloat) {
         switch self {
         case .text(let run):
             run.draw(topIn: CGRect(x: x, y: centerY - run.labelHeight / 2,
@@ -84,11 +84,11 @@ public enum DrawnReadoutPiece {
 public struct DrawnReadoutRun {
 
     /// 各组（组内从左到右）
-    public var groups: [[DrawnReadoutPiece]] = []
+    var groups: [[DrawnReadoutPiece]] = []
     /// 组内间距
-    public var innerGap: CGFloat = 3
+    var innerGap: CGFloat = 3
     /// 组间间距
-    public var groupGap: CGFloat = 8
+    var groupGap: CGFloat = 8
 
     public init(groups: [[DrawnReadoutPiece]] = [], innerGap: CGFloat = 3, groupGap: CGFloat = 8) {
         self.groups = groups
@@ -109,7 +109,7 @@ public struct DrawnReadoutRun {
     }
 
     /// 整条行高
-    public var height: CGFloat { SystemCardLayout.readoutHeight(groups: layoutGroups) }
+    var height: CGFloat { SystemCardLayout.readoutHeight(groups: layoutGroups) }
 
     /// 读屏文案（文字段按顺序拼接）
     public var accessibilityText: String {

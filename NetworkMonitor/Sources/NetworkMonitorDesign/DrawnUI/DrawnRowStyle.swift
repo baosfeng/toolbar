@@ -15,25 +15,25 @@ import NetworkMonitorUI
 public struct DrawnSingleRowStyle {
 
     /// 行内左右内边距
-    public var horizontalInset: CGFloat = PaneCardStyle.cardPaddingX
+    var horizontalInset: CGFloat = PaneCardStyle.cardPaddingX
     /// 名称 / 进度条 / 数值之间的间距
-    public var elementGap: CGFloat = 6
+    var elementGap: CGFloat = 6
     /// 行名字体
-    public var titleFont: NSFont = PaneCardStyle.rowNameFont
+    var titleFont: NSFont = PaneCardStyle.rowNameFont
     /// 行值字体（强调行换粗体）
-    public var valueFont: NSFont = PaneCardStyle.rowValueFont
+    var valueFont: NSFont = PaneCardStyle.rowValueFont
     /// 行名颜色
-    public var titleColor: NSColor = PaneCardStyle.primaryText
+    var titleColor: NSColor = PaneCardStyle.primaryText
     /// 进度条轨道色
-    public var trackColor: NSColor = PaneCardStyle.trackColor
+    var trackColor: NSColor = PaneCardStyle.trackColor
     /// 进度条填充色
-    public var barColor: NSColor = PaneCardStyle.okColor
+    var barColor: NSColor = PaneCardStyle.okColor
     /// 进度条高度
-    public var barHeight: CGFloat = 5
+    var barHeight: CGFloat = 5
     /// 进度条可画的最小宽度（不足则整条不画）
-    public var minBarWidth: CGFloat = 60
+    var minBarWidth: CGFloat = 60
     /// 行名固定列宽（nil = 按文字实际宽度占位）
-    public var fixedTitleWidth: CGFloat?
+    var fixedTitleWidth: CGFloat?
 
     public init(horizontalInset: CGFloat = PaneCardStyle.cardPaddingX,
                 elementGap: CGFloat = 6,

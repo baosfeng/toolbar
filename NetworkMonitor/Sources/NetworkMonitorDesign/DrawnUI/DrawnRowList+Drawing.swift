@@ -9,21 +9,21 @@ import NetworkMonitorUI
 /// 拆法按职责而不是按类型：本文件只管「把一行画出来」，
 /// 数据、几何、鼠标与无障碍仍在主文件。跨文件要读的成员已在主文件放宽为 internal 并注明原因。
 /// 两行式第一行的列几何 — 绘制与快照度量共用同一份计算，避免「量的是一套、画的是另一套」
-public struct DrawnStackedHeadMetrics {
-    public let titleX: CGFloat
-    public let titleWidth: CGFloat
+struct DrawnStackedHeadMetrics {
+    let titleX: CGFloat
+    let titleWidth: CGFloat
     /// 行名完整显示所需宽度（> titleWidth 即截断）
-    public let titleNeeded: CGFloat
-    public let valueWidth: CGFloat
-    public let secondaryWidth: CGFloat
-    public let titleH: CGFloat
-    public let detailH: CGFloat
+    let titleNeeded: CGFloat
+    let valueWidth: CGFloat
+    let secondaryWidth: CGFloat
+    let titleH: CGFloat
+    let detailH: CGFloat
 }
 
 extension DrawnRowList {
 
     /// 画一行：有副文本走两行式，否则单行式
-    public func drawRow(_ row: DrawnRowSpec, index: Int, in rect: CGRect) {
+    func drawRow(_ row: DrawnRowSpec, index: Int, in rect: CGRect) {
         // 悬停底：整层不透明度由过渡值给（静止在 0 时整层不画，与改造前的静态帧逐像素一致）
         if highlightsHover, hoverIndex == index, hoverBlend.value > 0.001 {
             DrawnCardSurface(rect: rect.insetBy(dx: 0, dy: 1), radius: 4,
@@ -146,10 +146,10 @@ extension DrawnRowList {
     // MARK: 两行式几何（绘制与快照度量共用）
 
     /// 两行式的行间文字间距
-    public static let stackedLineGap: CGFloat = 2
+    static let stackedLineGap: CGFloat = 2
 
     /// 两行式的内容区（左右内边距之内）
-    public func stackedContentRect(in rect: CGRect) -> CGRect {
+    func stackedContentRect(in rect: CGRect) -> CGRect {
         CGRect(x: rect.minX + horizontalInset,
                y: rect.minY,
                width: max(rect.width - horizontalInset * 2, 0),
@@ -157,12 +157,12 @@ extension DrawnRowList {
     }
 
     /// 内容块（主行 + 副行 + 微条）的顶边：整体在行内垂直居中
-    public func stackedTop(_ head: DrawnStackedHeadMetrics, in content: CGRect) -> CGFloat {
+    func stackedTop(_ head: DrawnStackedHeadMetrics, in content: CGRect) -> CGFloat {
         let blockH = head.titleH + Self.stackedLineGap + head.detailH + Self.stackedLineGap + barHeight
         return content.midY - blockH / 2
     }
     /// 两行式第一行的列宽：次列贴最右、值次之、行名吃剩余（放不下就截断）
-    public func stackedHeadMetrics(_ row: DrawnRowSpec, in content: CGRect) -> DrawnStackedHeadMetrics {
+    func stackedHeadMetrics(_ row: DrawnRowSpec, in content: CGRect) -> DrawnStackedHeadMetrics {
         let titleRun = DrawnTextRun(string: row.title, font: titleFont, color: titleColor)
         let valueRun = DrawnTextRun(string: row.value,
                                     font: row.tone == .strong ? PaneCardStyle.rowValueStrongFont : valueFont,

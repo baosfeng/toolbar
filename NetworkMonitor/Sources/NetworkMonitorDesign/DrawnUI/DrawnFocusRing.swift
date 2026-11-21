@@ -16,7 +16,7 @@ public enum DrawnFocusRing {
     /// - Parameters:
     ///   - rect: 行矩形（flipped 坐标）
     ///   - color: 环色（默认取系统强调色）
-    public static func drawRow(in rect: CGRect, color: NSColor = .controlAccentColor) {
+    static func drawRow(in rect: CGRect, color: NSColor = .controlAccentColor) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.addPath(DrawnInk.roundedPath(DrawnFocusRingMath.rowRect(for: rect), radius: 4))
         ctx.setStrokeColor(color.cgColor)

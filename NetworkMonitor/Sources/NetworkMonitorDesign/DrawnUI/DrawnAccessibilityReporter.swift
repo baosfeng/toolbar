@@ -9,7 +9,7 @@ import AppKit
 public final class DrawnRowAccessibilityElement: NSAccessibilityElement {
 
     /// 元素被按下时执行的动作（nil = 只读元素）
-    public var activate: (() -> Void)?
+    var activate: (() -> Void)?
 
     public override func accessibilityPerformPress() -> Bool {
         guard let activate else { return false }

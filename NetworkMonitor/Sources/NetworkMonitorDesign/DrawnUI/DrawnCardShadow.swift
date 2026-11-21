@@ -11,19 +11,19 @@ import NetworkMonitorUI
 public struct DrawnCardShadow {
 
     /// 卡片圆角（阴影形状与卡片同圆角）
-    public var radius: CGFloat
+    var radius: CGFloat
     /// 设计给定的阴影不透明度（= 改造前 CALayer.shadowOpacity）
-    public var opacity: CGFloat
+    var opacity: CGFloat
     /// 绘制内容的 alpha —— 阴影强度按内容 alpha 调制，故反算回「内容之上」的等效不透明度
-    public var contentAlpha: CGFloat
+    var contentAlpha: CGFloat
     /// CGContext 的模糊核尺度（= 可见扩散半径 × 2，CALayer.shadowRadius 与 CG blur 约 2 倍关系）
-    public var blur: CGFloat
+    var blur: CGFloat
     /// 阴影偏移（翻转坐标：正值向下）
-    public var offset: CGSize = CGSize(width: 0, height: 1)
+    var offset: CGSize = CGSize(width: 0, height: 1)
     /// 阴影形状相对卡片矩形的内缩（露出的描边被裁掉时用 0.5）
-    public var inset: CGFloat = 0.5
+    var inset: CGFloat = 0.5
     /// 绘制内容的填充色（阴影按它的 alpha 调制）
-    public var fillColor: NSColor = .black
+    var fillColor: NSColor = .black
 
     public init(radius: CGFloat,
                 opacity: CGFloat,

@@ -16,17 +16,17 @@ import NetworkMonitorUI
 public struct DrawnCardSurface {
 
     /// 表面矩形（需要内缩描边时由调用方先行 `insetBy`）
-    public var rect: CGRect
+    var rect: CGRect
     /// 圆角半径
-    public var radius: CGFloat
+    var radius: CGFloat
     /// 填充色（nil = 只描边）
-    public var fill: NSColor?
+    var fill: NSColor?
     /// 描边色（nil = 不描边）
-    public var stroke: NSColor?
+    var stroke: NSColor?
     /// 描边线宽
-    public var lineWidth: CGFloat = 0
+    var lineWidth: CGFloat = 0
     /// 整层不透明度（过渡值：1 = 常态；≤ 0.001 时整层不画）
-    public var alpha: CGFloat = 1
+    var alpha: CGFloat = 1
 
     public init(rect: CGRect,
          radius: CGFloat,
