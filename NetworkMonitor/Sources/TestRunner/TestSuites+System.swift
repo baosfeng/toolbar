@@ -28,4 +28,5 @@ func runSystemSuites() {
     runSystemCardLayoutTests()
     runProcessDisplayNameTests()
     runMainThreadWatchdogPolicyTests()
+    runSystemMetricsFeatureBoundaryTests()
 }

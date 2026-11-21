@@ -6,7 +6,8 @@ import NetworkMonitorCore
 // MARK: - 磁盘采样
 
 /// 磁盘采样 — 容量用 statfs，读写速率用 IOBlockStorageDriver 的 Statistics 差分
-enum SystemDiskSampler {
+/// 公开面只有 throughput（跨 target 断言差分 / 配对口径）；capacity / transfers 属内部实现细节。
+public enum SystemDiskSampler {
 
     /// 根卷容量
     ///
@@ -75,9 +76,9 @@ enum SystemDiskSampler {
     /// - 只累加两次都存在的 entryID；某实例消失（拔盘）不计入；
     /// - 累计值倒退（换盘 / 计数器重置）按 0 增量处理，不产生负速率；
     /// - 繁忙度 =（读 + 写服务时间，纳秒 → 秒）/ elapsed，clamp 到 0...1。
-    static func throughput(previous: DiskTransferTable?,
-                           current: DiskTransferTable,
-                           elapsed: TimeInterval) -> DiskThroughput? {
+    public static func throughput(previous: DiskTransferTable?,
+                                  current: DiskTransferTable,
+                                  elapsed: TimeInterval) -> DiskThroughput? {
         SystemMetricsCalculations.diskThroughput(previous: previous,
                                                  current: current,
                                                  elapsed: elapsed)
