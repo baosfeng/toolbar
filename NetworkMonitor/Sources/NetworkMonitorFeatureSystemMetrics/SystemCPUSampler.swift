@@ -8,7 +8,8 @@ import NetworkMonitorCore
 ///
 /// 口径：每核利用率 = (user + system + nice) / (user + system + idle + nice) 的增量比；
 /// 总利用率 = 所有核忙时增量之和 / 所有核全部增量之和（与主机 HOST_CPU_LOAD_INFO 口径一致，实测差 < 0.3pp）。
-enum SystemCPUSampler {
+/// 公开面只有 snapshot（跨 target 断言差分口径）；readTicks / coreCounts 属本目标内部实现细节。
+public enum SystemCPUSampler {
 
     /// 读取每核累计 tick（每核 4 个槽位，顺序同 CPU_STATE_* 常量）
     static func readTicks() -> [UInt32]? {
@@ -36,8 +37,8 @@ enum SystemCPUSampler {
     ///
     /// 差分与边界口径全部由 Core 的 SystemMetricsCalculations.cpuUsage 承担（可测试），
     /// 这里只做「基线缺失 → nil」的判断与快照封装。
-    static func snapshot(previous: CPUTickBaseline?, current: [UInt32],
-                         coreCounts: (performance: Int, efficiency: Int)) -> CPUSnapshot? {
+    public static func snapshot(previous: CPUTickBaseline?, current: [UInt32],
+                                coreCounts: (performance: Int, efficiency: Int)) -> CPUSnapshot? {
         guard let baseline = previous,
               let sample = SystemMetricsCalculations.cpuUsage(previous: baseline.ticks,
                                                               current: current) else {

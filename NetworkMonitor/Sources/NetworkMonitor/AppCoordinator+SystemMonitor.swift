@@ -1,5 +1,7 @@
 import AppKit
 import NetworkMonitorCore
+// 采样服务已拆成独立 target：这里要拿到具体类型 SystemMonitor 的构造器（logger 必须显式传）
+import NetworkMonitorFeatureSystemMetrics
 
 // MARK: - 应用协调器（系统监控装配）
 

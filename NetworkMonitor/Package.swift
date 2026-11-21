@@ -52,6 +52,19 @@ let package = Package(
                 .linkedFramework("AppKit")
             ]
         ),
+        // 系统监控服务层（CPU / GPU / 内存 / 磁盘 / 温度 / Wi-Fi 链路采样）：只依赖 Core，不碰 AppKit。
+        // 单独成 target 是为了让采样口径与「慢节拍闸门」能被 TestRunner 直接断言
+        // （App 是可执行 target，测试够不着那里的类型）。
+        .target(
+            name: "NetworkMonitorFeatureSystemMetrics",
+            dependencies: ["NetworkMonitorCore"],
+            linkerSettings: [
+                // 免 root 采样：IOAccelerator / IOBlockStorageDriver 统计 / IOReport 功耗 / IOHID 温度
+                .linkedFramework("IOKit"),
+                // Wi-Fi 链路（RSSI / 信道 / 速率）
+                .linkedFramework("CoreWLAN")
+            ]
+        ),
         .executableTarget(
             name: "NetworkMonitor",
             dependencies: [
@@ -60,7 +73,8 @@ let package = Package(
                 "NetworkMonitorDesign",
                 "NetworkMonitorFeatureBilling",
                 "NetworkMonitorFeatureFeedback",
-                "NetworkMonitorFeatureDiagnostics"
+                "NetworkMonitorFeatureDiagnostics",
+                "NetworkMonitorFeatureSystemMetrics"
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -82,7 +96,8 @@ let package = Package(
                 "NetworkMonitorUI",
                 "NetworkMonitorFeatureBilling",
                 "NetworkMonitorFeatureFeedback",
-                "NetworkMonitorFeatureDiagnostics"
+                "NetworkMonitorFeatureDiagnostics",
+                "NetworkMonitorFeatureSystemMetrics"
             ]
         ),
         // UI 自动化 CLI（nmcli）：纯系统框架直连目标进程做程序化验收，

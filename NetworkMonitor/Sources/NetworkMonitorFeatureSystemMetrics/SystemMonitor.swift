@@ -17,12 +17,15 @@ import NetworkMonitorCore
 ///
 /// 只有一个定时器：负载 / 进程 Top-N / GPU 功耗 / 电池属「5 秒档」，
 /// 由 poll() 按上次慢采时间判断是否本帧顺带采集（见 SystemMonitor+SlowMetrics.swift）。
+/// 迁到独立 target `NetworkMonitorFeatureSystemMetrics` 后，对外只公开 App / TestRunner 真用到的面：
+/// 构造器（logger 由调用方显式注入，不再默认取 AppContext）、协议要求的 snapshot / poll，
+/// 以及慢节拍闸门这条纯函数口径。start / stop 只在本目标内用，保持 internal。
 @MainActor
-final class SystemMonitor: @preconcurrency SystemMonitoringService {
+public final class SystemMonitor: @preconcurrency SystemMonitoringService {
 
     // MARK: - 对外状态
 
-    private(set) var snapshot: SystemMetricsSnapshot?
+    public private(set) var snapshot: SystemMetricsSnapshot?
 
     // MARK: - 依赖与配置
 
@@ -58,8 +61,10 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
 
     // MARK: - 初始化
 
-    init(interval: TimeInterval = SystemMonitorPreferences.defaultSampleInterval,
-         logger: any LoggingService = AppContext.shared.logger) {
+    /// - Parameter logger: 日志出口，由调用方注入。不设默认值：本目标不依赖 App 层的 AppContext，
+    ///   留默认值等于让「服务层偷取全局单例」这层污染悄悄回来。
+    public init(interval: TimeInterval = SystemMonitorPreferences.defaultSampleInterval,
+                logger: any LoggingService) {
         self.interval = max(interval, SystemMonitorPreferences.minimumSampleInterval)
         self.logger = logger
         self.coreCounts = SystemCPUSampler.coreCounts()
@@ -89,7 +94,7 @@ final class SystemMonitor: @preconcurrency SystemMonitoringService {
 
     // MARK: - 采样
 
-    func poll() {
+    public func poll() {
         guard !isSampling else { return }
         isSampling = true
 
