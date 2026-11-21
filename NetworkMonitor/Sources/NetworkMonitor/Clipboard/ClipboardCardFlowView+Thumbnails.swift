@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 
 // MARK: - 卡片流缩略图接线（从 ClipboardCardFlowView 拆出，守住单文件体积上限）
 

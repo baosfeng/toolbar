@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 import NetworkMonitorFeatureFeedback
 
 // MARK: - 应用协调器（剪贴板与流量持久化装配）
@@ -41,18 +42,18 @@ extension AppCoordinator {
         // 音效与触觉已在 setupNotificationAndFeedback 里按统一偏好装配，
         // 这里只做引用：偏好改完立即生效（播放器每次调用现读配置）。
 
-        let writer = PasteboardWriter()
-        let paster = ClipboardPaster(writer: writer, preferences: preferences)
+        let writer = PasteboardWriter(logger: logger)
+        let paster = ClipboardPaster(writer: writer, preferences: preferences, logger: logger)
         clipboardPaster = paster
 
-        let watcher = PasteboardWatcher(preferences: preferences)
+        let watcher = PasteboardWatcher(preferences: preferences, logger: logger)
         clipboardWatcher = watcher
         // 落库与事件发布由组合根在回调里完成（Core 采集器不触碰仓储）
         watcher.onCapture = { [weak self] draft in self?.persistClipboardDraft(draft) }
         watcher.onStateChange = { [weak self] state in self?.handleCaptureState(state) }
         watcher.start()
 
-        let stack = PasteStackController(repository: database, writer: writer)
+        let stack = PasteStackController(repository: database, writer: writer, logger: logger)
         clipboardStack = stack
         stack.start()
 

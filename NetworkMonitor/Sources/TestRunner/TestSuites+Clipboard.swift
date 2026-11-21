@@ -58,6 +58,7 @@ func runClipboardSuites() {
     runClipboardThumbnailGateTests()
     runClipboardThumbnailRetryPolicyTests()
     runClipboardThumbnailDecodeTests()
+    runClipboardFeatureBoundaryTests()  // 服务层跨 target 边界（端口注入 / 粘贴栈状态机 / 源码边界）
     runClipboardDeleteConfirmTests()
     runClipboardOCRTests()
     runClipboardPreviewTests()

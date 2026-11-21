@@ -6,19 +6,16 @@ import NetworkMonitorCore
 /// 剪贴板缩略图的后台解码入口（增量规格 2.2 / 第三批 A2）
 ///
 /// 线程模型：
-/// - `request` 只允许主线程调用（卡片资源是无状态的纯查询路径，共享实例即可，不进组合根）；
+/// - `request` 只允许主线程调用（卡片资源是无状态的纯查询路径，组合根建一个实例共用即可）；
 /// - 解码在 `.utility` 后台队列（ImageIO 降采样，不展开原图位图）；
-/// - 回来后才碰 AppKit / 缓存 / 通知：写 `ClipboardCardView.thumbnailCache`、调 completion、发 `AppEvents.clipboardThumbnailReady`。
+/// - 回来后才碰 AppKit / 缓存 / 通知：写注入的缩略图缓存端口、调 completion、发 `AppEvents.clipboardThumbnailReady`。
 ///
 /// 两处判定各归其位：
 /// - `ClipboardThumbnailLoadGate`（Core）：并发 3 + 在途去重；未通过时不入队、不回调；
 /// - `ClipboardThumbnailRetryPolicy`（Core）：失败冷却 30s + 最多 3 次的上限，到期自动重新请求，
 ///   一个坏文件不会再让该哈希整个会话停在占位符号。
 @MainActor
-final class ClipboardThumbnailLoader {
-
-    /// 共享实例
-    static let shared = ClipboardThumbnailLoader()
+public final class ClipboardThumbnailLoader {
 
     /// 后台解码队列（.utility，避免与界面主线程抢资源）
     private let queue = DispatchQueue(label: "com.networkmonitor.clipboard.thumbnails", qos: .utility)
@@ -48,9 +45,13 @@ final class ClipboardThumbnailLoader {
     private let maxPixelEdge = ClipboardImagePolicy.thumbnailMaxEdge
 
     private let logger: LoggingService
+    /// 缩略图内存缓存（端口注入：真实实现是 App 层卡片视图那份 NSCache 的薄适配器）
+    private let cache: any ClipboardThumbnailCaching
 
-    init(logger: LoggingService = AppContext.shared.logger) {
+    /// 日志与缓存都由调用方显式注入（功能层不取 AppContext.shared）
+    public init(logger: LoggingService, cache: any ClipboardThumbnailCaching) {
         self.logger = logger
+        self.cache = cache
     }
 
     // MARK: 对外接口
@@ -60,11 +61,11 @@ final class ClipboardThumbnailLoader {
     ///   - contentHash: 内容哈希（闸门与缓存键）
     ///   - imagePath: 原图路径（缩略图文件缺失时用它在后台补生成）
     ///   - completion: 解码完成回调（缓存命中时同步回调；未命中且闸门拒绝时不回调）
-    func request(contentHash: String, imagePath: String?, completion: ((NSImage) -> Void)? = nil) {
+    public func request(contentHash: String, imagePath: String?, completion: ((NSImage) -> Void)? = nil) {
         let hash = contentHash.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !hash.isEmpty else { return }
         // 缓存命中：直接主线程回调，不占闸门
-        if let cached = ClipboardCardView.thumbnailCache.object(forKey: hash as NSString) {
+        if let cached = cache.thumbnail(forKey: hash) {
             completion?(cached)
             return
         }
@@ -90,7 +91,7 @@ final class ClipboardThumbnailLoader {
     ///
     /// 失败记录**不清**：冷却与终态是会话级状态，面板开合不该让一个坏文件重新走满 3 次重试；
     /// 面板重开时的请求仍由 `shouldRetry` 判定（冷却已过就重试，终态则不再尝试）。
-    func cancelAll() {
+    public func cancelAll() {
         gate.reset()
         retryWorkItem?.cancel()
         retryWorkItem = nil
@@ -225,7 +226,7 @@ final class ClipboardThumbnailLoader {
         pendingRetries.removeValue(forKey: hash)
         let image = NSImage(cgImage: decoded.image,
                             size: NSSize(width: decoded.image.width, height: decoded.image.height))
-        ClipboardCardView.thumbnailCache.setObject(image, forKey: hash as NSString, cost: decoded.cost)
+        cache.store(image, forKey: hash, cost: decoded.cost)
         box?.handler(image)
         AppEvents.postClipboardThumbnailReady(contentHash: hash)
     }

@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorFeatureClipboard
 import NetworkMonitorUI
 
 // MARK: - 多选动作（选中变换 / 全选 / 清空 / 批量删除）

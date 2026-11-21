@@ -1,5 +1,5 @@
 import AppKit
-import NetworkMonitorUI
+import NetworkMonitorCore
 
 // MARK: - 暂停采集行
 

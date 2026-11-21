@@ -1,6 +1,5 @@
 import AppKit
 import NetworkMonitorCore
-import NetworkMonitorUI
 
 // MARK: - 状态栏右键菜单
 

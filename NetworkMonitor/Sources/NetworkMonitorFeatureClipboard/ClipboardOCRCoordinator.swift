@@ -16,14 +16,14 @@ import NetworkMonitorCore
 /// - `ClipboardOCRLoadGate`（Core）：并发 2 + 在途去重；
 /// - `ClipboardOCRRetryPolicy`（Core）：失败冷却 60s + 最多 2 次，达上限写空结果转终态。
 @MainActor
-final class ClipboardOCRCoordinator {
+public final class ClipboardOCRCoordinator {
 
     /// 识别器（协议注入：App 里是 VisionTextRecognizer）
     private let recognizer: any SnipTextRecognizing
     /// 结果回写（独立协议：只写 ocr_text 一列）
     private let repository: any ClipboardOCRRepository
     /// 开关真源（每次调度现读，关掉后新条目立即不再识别）
-    private let preferences: ClipboardPreferences
+    private let preferences: any ClipboardOCRPreferences
     private let logger: LoggingService
 
     /// 并发与在途去重闸门
@@ -33,10 +33,11 @@ final class ClipboardOCRCoordinator {
     /// 世代号：`cancelAll` 递增后，之前入队的任务回调一律丢弃
     private var generation = 0
 
-    init(recognizer: any SnipTextRecognizing,
-         repository: any ClipboardOCRRepository,
-         preferences: ClipboardPreferences,
-         logger: LoggingService = AppContext.shared.logger) {
+    /// 日志一律由调用方显式注入（功能层不取 AppContext.shared）
+    public init(recognizer: any SnipTextRecognizing,
+                repository: any ClipboardOCRRepository,
+                preferences: any ClipboardOCRPreferences,
+                logger: LoggingService) {
         self.recognizer = recognizer
         self.repository = repository
         self.preferences = preferences
@@ -46,7 +47,7 @@ final class ClipboardOCRCoordinator {
     // MARK: 对外接口
 
     /// 请求识别一条（采集落库后调用；不满足条件时静默返回，不占闸门）
-    func schedule(_ item: ClipboardItem) {
+    public func schedule(_ item: ClipboardItem) {
         guard ClipboardOCRPolicy.shouldRecognize(item, enabled: preferences.imageOCRRecognizeEnabled) else { return }
         guard let imagePath = item.imagePath, !imagePath.isEmpty else { return }
         let key = item.id.uuidString
@@ -69,7 +70,7 @@ final class ClipboardOCRCoordinator {
     /// 启动时补扫：库里仍有「未识别」的图片条目（上次退出时排到一半的）重新入队
     ///
     /// 只处理调用方给的当前条目集合，不做全表扫描（条数本来就由 maxItems 兜住）。
-    func schedulePending(from items: [ClipboardItem]) {
+    public func schedulePending(from items: [ClipboardItem]) {
         guard preferences.imageOCRRecognizeEnabled else { return }
         for item in items where ClipboardOCRPolicy.shouldRecognize(item, enabled: true) {
             schedule(item)
@@ -77,7 +78,7 @@ final class ClipboardOCRCoordinator {
     }
 
     /// 退出前丢弃在途回调（已入队的任务允许跑完，但结果不再写库）
-    func cancelAll() {
+    public func cancelAll() {
         gate.reset()
         generation &+= 1
     }

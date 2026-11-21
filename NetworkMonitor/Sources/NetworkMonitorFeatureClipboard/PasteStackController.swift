@@ -10,7 +10,7 @@ import NetworkMonitorCore
 /// 事件拦截的回调一旦超时会被系统禁用，并阻塞全系统的键盘输入。
 /// 全局 monitor 不改写事件、不阻塞；代价是无法拦截目标 App 原生 ⌘V，属规格第 14 节已知取舍。
 @MainActor
-final class PasteStackController {
+public final class PasteStackController {
 
     private let repository: any ClipboardRepository
     private let writer: any ClipboardWriter
@@ -25,20 +25,21 @@ final class PasteStackController {
     private var insertedTotal = 0
 
     /// 辅助功能权限（无权限时全局 monitor 静默不回调，必须显式暴露状态，不得静默失败）
-    private(set) var accessibilityGranted = false
+    public private(set) var accessibilityGranted = false
     /// 状态变化回调（栈进度 / 权限状态变化）
-    var onStateChange: (() -> Void)?
+    public var onStateChange: (() -> Void)?
     /// 请求辅助功能权限（组合根接到权限中心；本控制器不再自己拼系统设置深链）
-    var onRequestAccessibility: (() -> Void)?
+    public var onRequestAccessibility: (() -> Void)?
     /// 栈推进回调（仅「⌘V 贴出队首」时触发；入栈 / 重载 / 清空不触发）
     ///
     /// 与 onStateChange 分开的原因：后者被入栈、重载、清空共用，
     /// 触觉反馈只该在真正推进（队首被贴出）时打一次，否则每次打开面板都会被震一下。
-    var onAdvance: (() -> Void)?
+    public var onAdvance: (() -> Void)?
 
-    init(repository: any ClipboardRepository,
-         writer: any ClipboardWriter,
-         logger: LoggingService = AppContext.shared.logger) {
+    /// 日志一律由调用方显式注入（功能层不取 AppContext.shared）
+    public init(repository: any ClipboardRepository,
+                writer: any ClipboardWriter,
+                logger: LoggingService) {
         self.repository = repository
         self.writer = writer
         self.logger = logger
@@ -46,28 +47,32 @@ final class PasteStackController {
 
     // MARK: 生命周期
 
-    func start() {
+    public func start() {
         syncAccessibility(Self.probeAccessibility())
         reloadStack()
     }
 
-    func stop() {
+    /// 停止全局监听（组合根退出 / 边界测试收尾都要能主动收口）
+    public func stop() {
         removeMonitor()
     }
 
     // MARK: 状态读取（视图只读）
 
+    // 放宽为 public：面板读 remainingCount / stackTotal，跨 target 边界测试断言 orderedIDs /
+    // contains(id:) —— 「顺序即粘贴顺序」正是把这层抽成独立 target 的理由之一。
+
     /// 队首到队尾的条目 id
-    var orderedIDs: [UUID] { positions }
+    public var orderedIDs: [UUID] { positions }
     /// 剩余条数
-    var remainingCount: Int { positions.count }
+    public var remainingCount: Int { positions.count }
     /// 累计入栈条数（分母）
-    var stackTotal: Int { max(insertedTotal, positions.count) }
+    public var stackTotal: Int { max(insertedTotal, positions.count) }
     /// 是否在栈内
-    func contains(id: UUID) -> Bool { positions.contains(id) }
+    public func contains(id: UUID) -> Bool { positions.contains(id) }
 
     /// 从数据库重新读取栈状态（面板打开时调用，保证视图与库一致）
-    func reloadStack() {
+    public func reloadStack() {
         let stackItems = repository.fetchClipboardStack()
         positions = stackItems.map(\.id)
         itemsByID = Dictionary(stackItems.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -80,7 +85,7 @@ final class PasteStackController {
     /// 入栈：追加到队尾并重新编号
     /// - Returns: 是否成功（无辅助功能权限时拒绝入栈，由调用方给出文案）
     @discardableResult
-    func push(id: UUID) -> Bool {
+    public func push(id: UUID) -> Bool {
         guard accessibilityGranted else {
             logger.warning("Paste Stack 入栈被拒绝：缺少辅助功能权限")
             return false
@@ -93,7 +98,7 @@ final class PasteStackController {
     }
 
     /// 清空整栈（对应 ⌘⇧S）
-    func removeAll() {
+    public func removeAll() {
         guard !positions.isEmpty else { return }
         positions.removeAll()
         itemsByID.removeAll()
@@ -105,7 +110,7 @@ final class PasteStackController {
     ///
     /// 无法拦截改写目标 App 的原生 ⌘V（规格第 14 节已知取舍）：
     /// 这里把队首内容写入系统剪贴板，由同一按键触发的原生粘贴读取。
-    func advanceOnPaste() {
+    public func advanceOnPaste() {
         guard let id = positions.first else { return }
         let item = itemsByID[id] ?? repository.fetchClipboardItem(id: id)
         positions.removeFirst()
@@ -124,7 +129,7 @@ final class PasteStackController {
     ///
     /// 唯一读取入口：`SystemPermissionCenter` 与设置页都走这里，不各写一份 API 调用与选项字典。
     /// 命名常量 kAXTrustedCheckOptionPrompt 在 Swift 6 下是可变全局量，改用其文档字面值。
-    nonisolated static func probeAccessibility() -> Bool {
+    nonisolated public static func probeAccessibility() -> Bool {
         AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": false] as CFDictionary)
     }
 
@@ -133,7 +138,7 @@ final class PasteStackController {
     /// 为什么需要外部驱动：用户去系统设置勾上后回到应用，全局 monitor 不会自己长出来——
     /// 旧实现只在 `start()` 读一次，授权后必须重启应用才能用 Paste Stack。
     @discardableResult
-    func syncAccessibility(_ granted: Bool) -> Bool {
+    public func syncAccessibility(_ granted: Bool) -> Bool {
         let changed = granted != accessibilityGranted
         accessibilityGranted = granted
         if granted {
@@ -156,7 +161,7 @@ final class PasteStackController {
     ///
     /// 具体动作（登记 + 深链）不在本控制器：面板只持有 `onRequestAccessibility`，
     /// 由组合根接到 `SystemPermissionCenter.request(.accessibility)` —— 深链只在那里拼一次。
-    func requestAccessibilityPermission() {
+    public func requestAccessibilityPermission() {
         onRequestAccessibility?()
     }
 

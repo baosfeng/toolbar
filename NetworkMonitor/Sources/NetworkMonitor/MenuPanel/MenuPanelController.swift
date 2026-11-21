@@ -2,6 +2,7 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorDesign
 import NetworkMonitorFeatureBilling
+import NetworkMonitorFeatureClipboard
 import NetworkMonitorFeatureDiagnostics
 import NetworkMonitorUI
 

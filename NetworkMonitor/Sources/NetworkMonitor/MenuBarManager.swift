@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorFeatureBilling
+import NetworkMonitorFeatureClipboard
 import NetworkMonitorUI
 
 // MARK: - Menu Bar Manager

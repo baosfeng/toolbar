@@ -1,24 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorUI
-
-// MARK: - 采集模式
-
-/// 剪贴板采集模式（对应设计规格第 6 节的两个分支）
-enum ClipboardCaptureMode: String, Sendable {
-    /// 分支 B：后台 500ms 轮询 + 变更即读（当前默认；探针结论出来后只改默认值）
-    case polling
-    /// 分支 A：不轮询，仅在打开面板 / 点击「采集当前剪贴板」时读取一次
-    case onDemand
-
-    /// 中文描述（设置窗展示）
-    var label: String {
-        switch self {
-        case .polling: return "后台轮询"
-        case .onDemand: return "按需采集"
-        }
-    }
-}
+import NetworkMonitorFeatureClipboard
 
 // MARK: - 面板位置策略
 
