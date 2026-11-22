@@ -53,6 +53,41 @@ func runSnipSizeTests() {
     let moved = SnipAspectLock.lockedResize(handle: .move, origin: origin, dx: 10, dy: 20)
     assertEqual(moved, origin.offsetBy(dx: 10, dy: 20), "移动不改变尺寸")
 
+    // 尺寸标签文案：ASCII 空格 + 小写 x（等宽字体下比 U+00D7 稳，读数不抖）
+    assertEqual(SnipPanelLabelText.size(width: 548, height: 286), "548 x 286", "尺寸标签文案用 ASCII x")
+    assertEqual(SnipPanelLabelText.size(width: 12.4, height: 10.6), "12 x 11", "宽高各自四舍五入到整数")
+
+    // 指向三角：三点夹在标签与选区之间，且不越出选区水平范围
+    let selection = CGRect(x: 100, y: 100, width: 200, height: 120)
+    let above = CGRect(x: 100, y: 70, width: 80, height: 20)  // 标签在选区上方
+    let downPoints = SnipPanelLabelText.sizeLabelArrowPoints(pointingDown: true,
+                                                            labelFrame: above,
+                                                            selection: selection)
+    assertEqual(downPoints.count, 3, "三角是三点")
+    assertEqual(downPoints[0], CGPoint(x: 140, y: 100), "顶点咬住选区上边界（标签中线处）")
+    assertEqual(downPoints[1].y, 96, "底边在顶点上方 4pt（朝下）")
+    assertEqual(downPoints[2].x - downPoints[1].x, 12, "底边宽 12pt = 4pt 高的 3 倍")
+    for point in downPoints {
+        assertEqual(point.y >= above.maxY && point.y <= selection.minY, true, "三角落在标签与选区之间")
+        assertEqual(point.x >= selection.minX && point.x <= selection.maxX, true, "三角不越出选区水平范围")
+    }
+
+    // 标签翻进选区内部时三角改朝上，顶点仍咬住选区上边界
+    let insideLabel = CGRect(x: 100, y: 104, width: 80, height: 20)
+    let upPoints = SnipPanelLabelText.sizeLabelArrowPoints(pointingDown: false,
+                                                          labelFrame: insideLabel,
+                                                          selection: selection)
+    assertEqual(upPoints[0], CGPoint(x: 140, y: 100), "翻面后顶点不变")
+    assertEqual(upPoints[1].y, 104, "底边在顶点下方 4pt（朝上）")
+    assertEqual(upPoints[1].y, insideLabel.minY, "朝上时底边贴着标签上沿，不压标签")
+
+    // 小选区：三角不比选区宽
+    let narrow = CGRect(x: 100, y: 100, width: 4, height: 40)
+    let narrowPoints = SnipPanelLabelText.sizeLabelArrowPoints(pointingDown: true,
+                                                              labelFrame: CGRect(x: 90, y: 70, width: 60, height: 20),
+                                                              selection: narrow)
+    assertEqual(narrowPoints[2].x - narrowPoints[1].x, 4, "三角宽夹到选区宽度")
+
     // 状态机：锁定比例调整
     var state = SnipSelectionState()
     state.select(origin)

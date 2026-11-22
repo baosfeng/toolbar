@@ -113,8 +113,7 @@ extension SnipToolBarView {
 
     /// 常驻标签：图标下方 9.5pt 文字，超宽自动压缩（不换行，免得行高漂移）
     private func drawPersistentLabel(for item: SnipBarItem, in rect: CGRect) {
-        let text = labelText(for: item)
-        guard !text.isEmpty else { return }
+        guard let text = labelText(for: item), !text.isEmpty else { return }
         var attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 9.5, weight: .regular),
             .foregroundColor: NSColor.white.withAlphaComponent(0.62),
@@ -169,14 +168,15 @@ extension SnipToolBarView {
         }
     }
 
-    /// 常驻标签文案：工具用中文名，颜色 / 线宽直接写当前值，动作写标题
-    func labelText(for item: SnipBarItem) -> String {
+    /// 常驻标签文案：工具用中文名，颜色 / 线宽直接写当前值。
+    /// 动作按钮返回 nil：标题已由 `drawAction` 画在按钮正中，再补一份 9.5pt 标签就是重影（26 → 34pt 后落点更近，肉眼可见两份「取消」）；返 nil 而非空串，类型上就没有这条通路。
+    func labelText(for item: SnipBarItem) -> String? {
         switch item {
         case .tool(let tool): return tool.displayName
         case .more: return "更多"
         case .color: return SnipAnnotationColorNaming.name(for: style.color)
         case .width: return "线宽 \(Int(style.lineWidth.rounded()))"
-        case .action(let action): return action.title
+        case .action: return nil
         }
     }
 

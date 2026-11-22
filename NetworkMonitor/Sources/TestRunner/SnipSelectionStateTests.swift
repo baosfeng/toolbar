@@ -41,6 +41,19 @@ func runSnipSelectionStateTests() {
     assertEqual(state.hitTest(CGPoint(x: 60, y: 70), handleSize: 8), .move, "命中内部为移动")
     assertEqual(state.hitTest(CGPoint(x: 500, y: 500), handleSize: 8) == nil, true, "选区外不命中")
 
+    // 小选区不画锚点，也不该留下「看不见却还能拖」的把手：只剩内部移动
+    var small = SnipSelectionState()
+    small.select(CGRect(x: 10, y: 20, width: 12, height: 10))
+    assertEqual(small.hitTest(CGPoint(x: 10, y: 20), handleSize: 8), .move, "小选区角上不再命中左上角把手")
+    assertEqual(small.hitTest(CGPoint(x: 16, y: 20), handleSize: 8), .move, "小选区上边中点不再命中上边把手")
+    assertEqual(small.hitTest(CGPoint(x: 500, y: 500), handleSize: 8) == nil, true, "小选区外仍不命中")
+    assertEqual(SelectionGeometry.shouldShowHandles(for: small.rect, handleSize: 8), false,
+                "命中口径与绘制同源（这里为不画）")
+
+    // 大选区照旧：角 / 边把手可用
+    assertEqual(SelectionGeometry.shouldShowHandles(for: state.rect, handleSize: 8), true,
+                "100×100 选区画锚点，把手照旧可拖")
+
     // 调整：右下角拖大
     state.beginAdjust(.bottomRight, at: CGPoint(x: 110, y: 120))
     state.adjust(to: CGPoint(x: 160, y: 170))

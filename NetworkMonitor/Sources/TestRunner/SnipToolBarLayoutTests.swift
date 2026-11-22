@@ -41,6 +41,17 @@ func runSnipToolBarLayoutTests() {
     assertEqual(plan.actionRects.first?.width, SnipToolBarLayout.actionWidth, "动作按钮宽")
     assertEqual(plan.actionRects.first?.height, SnipToolBarLayout.actionHeight, "动作按钮高")
 
+    // 常驻标签档：动作按钮 26 → 34，与同排 42pt 的格子视觉齐平（12pt 文字上下各留 8pt）
+    assertEqual(SnipToolBarLayout.metrics(for: .always).action.height,
+                SnipToolBarLayout.labeledActionHeight, "常驻标签档动作按钮用 labeledActionHeight")
+    assertEqual(SnipToolBarLayout.metrics(for: .always).action.height, 34, "常驻标签档动作按钮高 34pt")
+    for mode in [SnipToolBarLabelMode.iconOnly, .hover] {
+        assertEqual(SnipToolBarLayout.metrics(for: mode).action.height, SnipToolBarLayout.actionHeight,
+                    "仅图标 / 悬停档动作按钮高度不变（26pt）")
+    }
+    assertEqual(SnipToolBarLayout.labeledActionHeight > SnipToolBarLayout.actionHeight, true,
+                "常驻标签档比另两档更高，不是把 actionHeight 本身改掉")
+
     // 垂直居中：每类按钮的竖直中线都落在工具条中线
     let midY = SnipToolBarLayout.height / 2
     for rect in plan.toolRects + plan.colorRects + plan.widthRects + plan.actionRects {

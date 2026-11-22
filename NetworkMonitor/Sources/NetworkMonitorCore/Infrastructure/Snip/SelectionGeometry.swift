@@ -48,6 +48,17 @@ public enum SelectionGeometry {
                height: frame.height)
     }
 
+    /// 该选区要不要画八个调整锚点
+    ///
+    /// 锚点 8pt，边长不足 5 个锚点（40pt）时四角与四边的白块会连成一片，
+    /// 把小选区的像素整片盖住（12×10 这类选区尤其明显）。任一边过小就只留边框。
+    ///
+    /// 绘制与命中判定必须读同一个函数：只隐藏不拦截会出现「看不见但能拖的把手」。
+    public static func shouldShowHandles(for rect: CGRect, handleSize: CGFloat) -> Bool {
+        guard handleSize > 0 else { return false }
+        return min(rect.width, rect.height) >= handleSize * 5
+    }
+
     /// 选区在指定屏幕捕获图中的像素矩形；跨屏时只取与该屏的交叠部分
     ///
     /// 缩放比以「捕获图实际像素尺寸 ÷ 屏幕点尺寸」为准，不采信 display.pixelSize：

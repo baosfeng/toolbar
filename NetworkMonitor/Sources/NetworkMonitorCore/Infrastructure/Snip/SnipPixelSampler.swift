@@ -36,6 +36,40 @@ public struct SnipPixelColor: Equatable, Sendable {
             case .rgb: return color.rgbString
             }
         }
+
+        /// 下一个格式（Shift 切换用）：两种格式环形互切，按多少次都不会卡住
+        public var next: DisplayFormat {
+            switch self {
+            case .hex: return .rgb
+            case .rgb: return .hex
+            }
+        }
+
+        /// 格式名 —— 挂在色值行尾，屏幕上能看见「现在是什么格式」
+        ///
+        /// 切换格式此前只改内部状态、屏上毫无反馈，用户不知道 Shift 生效了没有。
+        public var hintText: String {
+            switch self {
+            case .hex: return "Hex"
+            case .rgb: return "RGB"
+            }
+        }
+    }
+}
+
+// MARK: - 放大镜信息条文案
+
+/// 放大镜下方信息条的文案 —— 上行坐标、下行色值（先定位再取值）
+public enum SnipMagnifierLabelText {
+
+    /// 坐标行，形如「(1161, 282)」
+    public static func coordinate(x: Int, y: Int) -> String {
+        "(\(x), \(y))"
+    }
+
+    /// 色值行，形如「#F58C24 · Hex」——行尾格式名就是 Shift 切换的可见反馈
+    public static func colorText(_ color: SnipPixelColor, format: SnipPixelColor.DisplayFormat) -> String {
+        format.text(for: color) + " · " + format.hintText
     }
 }
 

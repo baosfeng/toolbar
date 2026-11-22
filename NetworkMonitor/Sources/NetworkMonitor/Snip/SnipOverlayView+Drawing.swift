@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorCore
 
 // MARK: - 绘制（从主类拆出，守住单文件 500 行 / 15 KiB 门禁）
 
@@ -20,8 +21,14 @@ extension SnipOverlayView {
         context.restoreGState()
     }
 
+    /// 八个调整锚点（8pt 白块 + 蓝描边）
+    ///
+    /// 任一边不足 5 个锚点宽（40pt）时不画：12×10 这类小选区上 8pt 白块会连成一片，
+    /// 把要取的像素整片盖住。判定与命中测试同源（`SelectionGeometry.shouldShowHandles`），
+    /// 所以不会留下「看不见却还能拖」的把手。
     func drawHandles(_ rect: CGRect, in context: CGContext) {
         let size = Self.handleSize
+        guard SelectionGeometry.shouldShowHandles(for: rect, handleSize: size) else { return }
         let centers = [
             CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.midX, y: rect.minY),
             CGPoint(x: rect.maxX, y: rect.minY), CGPoint(x: rect.minX, y: rect.midY),
@@ -38,16 +45,28 @@ extension SnipOverlayView {
         }
     }
 
+    /// 尺寸标签：`宽 x 高` 深色胶囊 + 指向选区的小三角
+    ///
+    /// 默认贴在选区上方、三角朝下指向选区；选区贴到屏幕上沿放不下时翻进选区内部、三角朝上。
+    /// 三角画在胶囊矩形**之外**：`sizeLabelFrame` 是「点它就进尺寸输入」的命中区，
+    /// 把三角算进去等于让用户点三角也弹输入框。
     func drawSizeLabel(_ rect: CGRect) {
-        let text = "\(Int(rect.width.rounded())) × \(Int(rect.height.rounded()))"
+        let arrowHeight: CGFloat = 4
+        let text = SnipPanelLabelText.size(width: rect.width, height: rect.height)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
             .foregroundColor: NSColor.white
         ]
         let size = (text as NSString).size(withAttributes: attributes)
         let padding = NSSize(width: 6, height: 3)
-        var origin = CGPoint(x: rect.minX, y: rect.minY - size.height - padding.height * 2 - 4)
-        if origin.y < 0 { origin.y = rect.minY + 4 }
+        var pointingDown = true
+        var origin = CGPoint(x: rect.minX,
+                             y: rect.minY - size.height - padding.height * 2 - arrowHeight)
+        if origin.y < arrowHeight {
+            // 屏幕顶部放不下：翻进选区内部，三角改成朝上，仍然咬住选区上边界
+            origin.y = rect.minY + arrowHeight
+            pointingDown = false
+        }
         let background = CGRect(x: origin.x, y: origin.y,
                                 width: size.width + padding.width * 2,
                                 height: size.height + padding.height * 2)
@@ -56,6 +75,19 @@ extension SnipOverlayView {
         NSBezierPath(roundedRect: background, xRadius: 3, yRadius: 3).fill()
         (text as NSString).draw(at: CGPoint(x: origin.x + padding.width, y: origin.y + padding.height),
                                 withAttributes: attributes)
+
+        let arrow = SnipPanelLabelText.sizeLabelArrowPoints(pointingDown: pointingDown,
+                                                            labelFrame: background,
+                                                            selection: rect,
+                                                            height: arrowHeight)
+        guard arrow.count == 3 else { return }
+        let path = NSBezierPath()
+        path.move(to: arrow[0])
+        path.line(to: arrow[1])
+        path.line(to: arrow[2])
+        path.close()
+        NSColor.black.withAlphaComponent(0.7).setFill()
+        path.fill()
     }
 
     func drawCrosshair(in context: CGContext) {
@@ -72,68 +104,18 @@ extension SnipOverlayView {
 
     // MARK: - 放大镜
 
-    /// 放大镜边长与采样跨度（点）
-    static let magnifierSide: CGFloat = 120
-    static let magnifierSpan: CGFloat = 15
-
-    /// 在鼠标旁绘制像素放大镜：网格 + 中心像素框 + 坐标与色值
+    /// 在鼠标旁绘制像素放大镜（网格 / 中心像素框 / 坐标与色值两行信息条）
+    ///
+    /// 绘制细节与放大镜自己的常量都在 `SnipMagnifierDrawing`：这里只做一次状态搬运，
+    /// 绘制扩展不再因为放大镜长身体。
     func drawMagnifier(in context: CGContext) {
-        guard let sampler else { return }
-        let side = Self.magnifierSide
-        let margin: CGFloat = 18
-        var origin = CGPoint(x: pointer.x + margin, y: pointer.y + margin)
-        if origin.x + side > bounds.width { origin.x = pointer.x - margin - side }
-        if origin.y + side > bounds.height { origin.y = pointer.y - margin - side }
-        origin.x = min(max(origin.x, 0), max(bounds.width - side, 0))
-        origin.y = min(max(origin.y, 0), max(bounds.height - side, 0))
-
-        let scale = CGFloat(screenshot.width) / max(bounds.width, 1)
-        let span = Self.magnifierSpan
-        let centerX = (pointer.x * scale).rounded()
-        let centerY = (pointer.y * scale).rounded()
-        let srcRect = CGRect(x: centerX - (span * scale) / 2,
-                             y: centerY - (span * scale) / 2,
-                             width: span * scale,
-                             height: span * scale)
-        guard let subImage = screenshot.cropping(to: srcRect) else { return }
-
-        context.saveGState()
-        context.setFillColor(NSColor.black.withAlphaComponent(0.85).cgColor)
-        context.fill(CGRect(x: origin.x - 2, y: origin.y - 2, width: side + 4, height: side + 4))
-        context.restoreGState()
-
-        context.saveGState()
-        context.translateBy(x: 0, y: 2 * origin.y + side)
-        context.scaleBy(x: 1, y: -1)
-        context.draw(subImage, in: CGRect(x: origin.x, y: origin.y, width: side, height: side))
-        context.restoreGState()
-
-        let cells = Int(span)
-        let cell = side / CGFloat(cells)
-        context.setStrokeColor(NSColor.white.withAlphaComponent(0.18).cgColor)
-        context.setLineWidth(0.5)
-        for index in 0...cells {
-            let offset = CGFloat(index) * cell
-            context.move(to: CGPoint(x: origin.x + offset, y: origin.y))
-            context.addLine(to: CGPoint(x: origin.x + offset, y: origin.y + side))
-            context.move(to: CGPoint(x: origin.x, y: origin.y + offset))
-            context.addLine(to: CGPoint(x: origin.x + side, y: origin.y + offset))
-        }
-        context.strokePath()
-
-        let centerCell = CGPoint(x: origin.x + side / 2 - cell / 2,
-                                 y: origin.y + side / 2 - cell / 2)
-        context.setStrokeColor(NSColor.systemRed.cgColor)
-        context.setLineWidth(1.2)
-        context.stroke(CGRect(x: centerCell.x, y: centerCell.y, width: cell, height: cell))
-
-        let globalX = Int((pointer.x + displayOrigin.x).rounded())
-        let globalY = Int((pointer.y + displayOrigin.y).rounded())
-        var detail = "(\(globalX), \(globalY))"
-        if let color = sampler.color(atPixel: CGPoint(x: centerX, y: centerY)) {
-            detail += "  " + colorFormat.text(for: color)
-        }
-        drawLabel(detail, at: CGPoint(x: origin.x, y: origin.y + side + 4))
+        SnipMagnifierDrawing.draw(in: context, state: SnipMagnifierDrawing.State(
+            screenshot: screenshot,
+            sampler: sampler,
+            pointer: pointer,
+            bounds: bounds,
+            displayOrigin: displayOrigin,
+            colorFormat: colorFormat))
     }
 
 }
