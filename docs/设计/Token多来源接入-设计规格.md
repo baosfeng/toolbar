@@ -145,10 +145,14 @@ $CODEX_HOME（默认 ~/.codex）/
 **位置**
 
 ```text
-$GEMINI_CLI_HOME/.gemini（默认 ~/.gemini）/ tmp/<项目 slug>/chats/session-<UTC>-<8位>.jsonl
+$GEMINI_CLI_HOME/.gemini（默认 ~/.gemini）/ tmp/<桶>/chats/session-<YYYY-MM-DDTHH-MM>-<sessionId 前8位>.jsonl
+                                              /chats/<parentId>/<sessionId>.jsonl          ← 子 agent
 ```
 
-旧版是 `session-*.json`（整份 JSON），且旧桶名是 project root 的 sha256（迁移时会复制，可能双份）。
+- 文件名时间戳是**分钟精度**（`ISO.slice(0,16)`，冒号换 `-`），冲突时还会插序号 → **不要按段数/秒级解析**。
+- **桶名不是固定格式**：现桶名是项目目录 slug（`slugify(basename)`，冲突加 `-N`），sha256 是**旧桶**（迁移会整目录搬迁）→ 必须扫 `tmp/*/chats` 全部桶。
+- **子 agent 会话在 `chats/<parentId>/<sessionId>.jsonl`**（无 `session-` 前缀，容易漏）→ 发现层递归一层。
+- 旧版是 `session-*.json`（整份 JSON）→ 两种后缀都要收。
 
 **字段表**（`tokens` 为归一化名，源码映射见括号）
 
@@ -177,7 +181,9 @@ VS Code 侧另有一套 delta journal（`kind:0` 设根对象、`kind:1` 按路�
 
 ### 2.5 OpenCode
 
-**位置**：`~/.local/share/opencode/opencode.db`（SQLite WAL，**只读打开**：`mode=ro` + `PRAGMA query_only`，CLI 可能正持有它）
+**位置**（三级优先，实现在 `OpenCodePath`）：`OPENCODE_DB`（当作 db 文件）> `$XDG_DATA_HOME/opencode/opencode.db` > `~/.local/share/opencode/opencode.db`；主库不存在时取同目录 mtime 最新的 `opencode-<channel>.db` 并在诊断里写明用了哪个。SQLite WAL，**只读打开**（`mode=ro` + `PRAGMA query_only`，CLI 可能正持有它）
+
+**表名有两代**（上游已迁 `anomalyco/opencode`）：v1 = `session`/`message`/`part`；v2 = `session_v2`/`session_message`/`session_part`（后者主键 `(message_id, ordinal)`、**无 id 列**）→ 读库前先嗅探 `sqlite_master`，只走一条路径。
 
 **相关表/字段**
 
@@ -221,6 +227,28 @@ VS Code 侧另有一套 delta journal（`kind:0` 设根对象、`kind:1` 按路�
 ### 2.8 Cursor（不可接入，仅记录原因）
 
 本地三处都不含逐轮 token：`agent-transcripts/*.jsonl` 只有消息与工具调用；`bubbleId.tokenCount` 当前版本恒 0；`composerData.promptTokenBreakdown.totalUsedTokens` 只是某次上下文占用，不能按天求和；缓存命中恒 0。真实值只在服务端（`export-usage-events-csv`）且需 Cookie/钥匙串解密。**结论：Token 页不出现 Cursor**；它的额度继续在额度页。
+
+## 2.9 上游源码核实（2026-11-22 补做）
+
+实现完成后按「不能只信第三方解析器文档」的要求，回头核了各家上游源码。**6 处我们原本会算错或漏算**，已按源码修正：
+
+| 来源 | 源码事实 | 原实现的后果 |
+|------|----------|--------------|
+| Codex | 冷会话（mtime > 7 天）会被改名成 `*.jsonl.zst`（`rollout/src/compression.rs`，`MIN_ROLLOUT_AGE=7*24*3600`） | **旧会话整段漏扫**（只匹配 `.jsonl`） |
+| Codex | 新增 `RolloutItem::TokenUsageRecord`（`type="token_usage_record"`），每响应一行、带 `response_id`，上游注释明确「not accumulated, estimated, or replayed」 | 逐请求用量缺失；与 `token_count` 并存时会**双算** |
+| Codex | `TokenUsage` 有 `cache_write_input_tokens`；rollout `type` 已扩到 13 种 | cacheWrite 恒 0；新 type 被当坏行 |
+| Zed | 旧库 `version<0.3.0` 的 `request_token_usage` 是 **`Vec<TokenUsage>` 按消息下标**，不是 map（`legacy_thread.rs`） | 老库逐请求全丢、请求数=0 |
+| Copilot | 闭源，但从官方 npm 产物 `@github/copilot-darwin-arm64` 内嵌 JS 解出**第一手 DDL**：`assistant_usage_events` 里 `input_tokens/output_tokens/cache_read_tokens/cache_write_tokens/reasoning_tokens` **各自独立成列**，`created_at TEXT DEFAULT (datetime('now'))`（UTC），`UNIQUE(session_id,event_id)`，路径受 `COPILOT_HOME` 覆盖 | reasoning 被并进 output（虚增）；`datetime('now')` 文本时间解析不了；没走 `COPILOT_HOME` |
+| Gemini / OpenCode | Gemini 桶名已是项目 slug（sha256 是旧桶，会迁移）、子 agent 在 `chats/<parentId>/<sessionId>.jsonl`、消息合并不止 `$set`（还有 `$patch`/`$rewindTo`）；OpenCode 上游迁到 `anomalyco/opencode`，v2 表名整套改成 `session_v2`/`session_message`/`session_part`（后者主键 `(message_id, ordinal)`、无 id 列），且 **part 里也有 tokens** | 子 agent 会话漏扫；只认 v1 表名的库读不出数据；若改读 part 会与 message **双计** |
+
+修正后的口径补充：
+
+- **Copilot 的 `reasoning_tokens` 不并入 output**（与 OpenAI 的 `completion_tokens` 含 reasoning 相反，上游是分列）——所以 Copilot 的 output 会比「并入版」小，这是对的。
+- **OpenCode 只读 message 层、不读 part**（session 的累加列正是从 part 聚合来的，两层都读会双计）；compaction 消息也带用量，不能因 role 非 assistant 就丢。
+- **Codex 的 `cached_input_tokens` 是 `input_tokens` 子集**这条原判断正确（源码 `non_cached_input = (input - cached).max(0)`），`reasoning_output_tokens` 也已含在 output 里（fixture `total = input + output` 佐证）。
+- **Cursor**：仍不可接（§2.8），与源码核实无关。
+
+证据强度：Claude Code 无源码可查（闭源），依据仍是社区实现 + 反推的 transcript 结构；Codex / Zed / Gemini / OpenCode 为**源码证实**；Copilot 为**官方发布物内的第一手 DDL**（闭源但非第三方转述）。
 
 ## 3 Token tab 的来源切换
 
