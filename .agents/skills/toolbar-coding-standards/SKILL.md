@@ -25,7 +25,8 @@ description: 本项目（toolbar / 一览）专属编码规范：架构原则、
   - `nmcli`（可执行）— UI 自动化 CLI：给菜单栏 app 做程序化验收，用法见 `docs/开发指南/UI-自动化-CLI.md`
 - 构建：`cd NetworkMonitor && swift build --disable-sandbox --build-system native`（本机只有 Command Line Tools，默认后端初始化即失败，统一追加该参数）
 - 测试：`cd NetworkMonitor && swift run --disable-sandbox --build-system native TestRunner`（须显示「🎉 所有测试通过！」）
-- 打包：`cd NetworkMonitor && ./Scripts/build-app.sh`（部署到 /Applications 并自动启动）
+- 打包：`cd NetworkMonitor && ./Scripts/build-app.sh`（部署到 /Applications 并自动启动）；
+  发版预览用 `UNIVERSAL=1 MAKE_DMG=1 ./Scripts/build-app.sh release`（universal 包 + `dist/Yilan-<版本>.dmg`）
 
 ## 必读文档（操作前）
 
@@ -182,9 +183,15 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
 
 ## 版本号管理
 
-- 语义化版本 `主.次.修订`；版本号定义在 `Info.plist` 与 `build-app.sh`
+- 语义化版本 `主.次.修订`；**唯一真源是 `NetworkMonitor/version.env`**（`VERSION` / `BUILD`）：
+  `build-app.sh` 把两个值注入 Info.plist，`release.sh` 改这个文件，CI 的 `Version matches tag`
+  也读它。不要再去 plist 模板里写字面量，也不要手改 `AGENTS.md` 的版本行（它是派生台账，
+  由 `release.sh` 同步）
 - 小改动（bug 修复/文档）→ 修订号 +1；新功能 → 次版本 +1；破坏性变更 → 主版本 +1
-- 发版流程：全部测试通过 → 更新版本号 → 编译验证 → 提交 → `git tag vX.Y.Z`
+- 发版流程：全部测试通过 → `Scripts/release.sh <版本>`（门禁 → CI 闸门 → bump → 提交 → 打 tag
+  → 跟 Release → 核对 dmg / SHA256SUMS / update.json 三个资产）
+- 产物是**单一 universal `.dmg`**（不再发 zip：zip 解压出来的包名会带架构后缀）；发版矩阵先各出
+  单架构包再合并，zstd / libzstd 这类 Homebrew 二进制必须在各自架构的机器上打出来才能双架构
 
 ## 代码查询规范
 
