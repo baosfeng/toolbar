@@ -46,6 +46,34 @@
   逐相位打印 `policy` 与 `dockItems`，任一采样点不是 `.accessory` 或 Dock 条目变多即 exit 1。
   `NM_SNIP_DOCK_PROBE=wait` 改为等外部真实按键取消；`=keys` 额外自证方向键真的改了选区。
 
+## 历史残留：修好之后 Dock 里仍有一条「一览」
+
+改完上面这些，**运行中的图标**不会再出现，但 2026-11 用户仍反馈「Dock 里有一览」。
+查下来是另一回事：Dock 的**「最近应用」区**里挂着一条历史记录，与 `.accessory` 无关。
+
+- 记录位置：`~/Library/Preferences/com.apple.dock.plist` 的 `recent-apps`（本次实测 `[0]` 就是
+  `com.bsfeng.yilan`，`tile-data.file-label = 一览`）。Dock 的 AX 列表里它排在
+  「系统设置 / OpenIDEA」之后、废纸篓之前 —— 也就是最近应用那一段。
+- 为什么会进去：`recent-apps` 记的是**通过 LaunchServices 启动过**的应用（`open`、Finder 双击、
+  登录项拉起），跟 `LSUIElement` 毫无关系。1.28 及更早截图时切 `.regular`，那段时间把它登记了进去。
+- **后续不会再涨**（实测）：`open -n /Applications/一览.app` 起第二个实例后，
+  `recent-apps` 的条数、顺序、GUID（`4053037509`）**一个都没变** ——
+  纯 `.accessory` 的启动不会登记进最近应用。
+- **存量不会自己消失**：它不是运行态图标，是一个 plist 记录，登录 / Dock 重启都不会清掉。
+  要清就得动一次：`defaults delete com.apple.dock recent-apps && killall Dock`
+  （会顺带清掉其他 app 的最近记录；系统会重新积累，不必备份）。
+- macOS 没有 per-app 的「别把我放进最近应用」开关，只有全局的
+  `defaults write com.apple.dock show-recents -bool false`。
+
+### 怎么区分两种「Dock 里的一览」
+
+| 判据 | 运行中泄漏（本文上半部分） | 最近应用残留（本节） |
+|------|--------------------------|---------------------|
+| `lsappinfo` 的 `ApplicationType` | 泄漏瞬间是 `Foreground` | 始终 `UIElement` |
+| Dock AX 项 `AXIsApplicationRunning` | `1` | `0` |
+| 是否会在操作时闪现 | 会（截图 / 另存为 / 启动） | 不会，一直静挂在那里 |
+| 处置 | 改代码，别切 `.regular` | 清一次 `recent-apps` |
+
 ## 已知限制
 
 - 「Dock 图标是否出现」只能在真实登录会话里验：锁屏 / 无头环境没有 WindowServer，也读不到 Dock AX。
