@@ -1,5 +1,16 @@
 name: Release
 
+# 发版产物只有三个文件：
+#   Yilan-<版本>.dmg     —— universal（arm64 + x86_64 双架构），挂载后是「一览.app」
+#   SHA256SUMS.txt       —— dmg 的校验和（shasum -a 256 -c 可验）
+#   update.json          —— 自动更新器的静态更新通道（见 Scripts/make-update-manifest.py）
+#
+# 为什么不再发 zip：zip 解压出来是构建目录里的包名「一览-arm64.app」，用户拖进
+# 「应用程序」后包名就带上了架构后缀 —— 这正是用户反馈的问题。主流 macOS 项目
+# （Stats / IINA / Rectangle）都只发一个不带架构后缀的 dmg。
+#
+# 为什么发版要两台 runner：随包携带的 zstd / libzstd 是 Homebrew 二进制（单架构），
+# 必须在各自的架构机器上打出来，再合并成 universal；单机合并拼不出双架构。
 on:
   push:
     tags:
@@ -7,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "要发布或重发的 tag（如 v1.20.0）"
+        description: "要发布或重发的 tag（如 v1.30.0）"
         required: true
 
 permissions:
@@ -28,7 +39,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # arm64 / x86_64 都跑 macOS 26 镜像：只有它的默认 Xcode 是 26.6（内置 Swift 6.3.3），
+          # 两个架构都跑 macOS 26 镜像：只有它的默认 Xcode 是 26.6（内置 Swift 6.3.3），
           # 才满足 swift-tools-version: 6.3；macos-15 系默认仍是 Xcode 16.4（Swift 6.1），
           # 会在 swift build 第一步就报「using Swift tools version 6.3.0 but the installed version is 6.1.0」。
           # 默认带 Swift 6.4 的 xcode-27 镜像同样不能用：它只有 arm64（无 Intel 变体）且仍是 preview，
@@ -44,7 +55,7 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      # 工具链展示 / 证书导入 / tag 与 plist 版本校验，与 ci.yml 共用同一份实现。
+      # 工具链展示 / 证书导入 / tag 与 version.env 版本校验，与 ci.yml 共用同一份实现。
       # 签名证书 secret 未配置时 setup-build 自动跳过导入，build-app.sh 回落 ad-hoc 签名
       - name: Setup build
         uses: ./.github/actions/setup-build
@@ -56,8 +67,7 @@ jobs:
 
       # 缓存编译产物：build-app.sh 的产物目录同样是 .build/<arch>-apple-macosx/release。
       # key 带 rel- 前缀与 CI 的 native 后端分开，避免两套后端共用同一份增量状态；
-      # 缓存未命中仍能完整构建（fail-closed），架构自证（lipo）照旧在打包后执行；
-      # release 配置的产物在同一个目录下（.build/<arch>-apple-macosx/release），命中缓存后同样减少重编时间
+      # 缓存未命中仍能完整构建（fail-closed），架构自证（lipo）照旧在打包后执行
       - name: Cache SwiftPM build
         uses: actions/cache@v4
         with:
@@ -88,26 +98,114 @@ jobs:
         working-directory: NetworkMonitor
         run: codesign -dv --verbose=2 "dist/一览-${{ matrix.arch }}.app" 2>&1 | head -8
 
-      - name: Zip app bundle
-        working-directory: NetworkMonitor
-        run: |
-          # zip 名用 URL 友好的 Yilan-<arch>.app.zip：资产名进下载链接时不会被百分号编码，
-          # 解压出来仍是「一览.app」（--keepParent 保留包目录名）
-          ditto -c -k --keepParent "dist/一览-${{ matrix.arch }}.app" \
-            "dist/Yilan-${{ matrix.arch }}.app.zip"
+      # 中间传递用 tar.gz 而不是 upload-artifact 直接传目录：
+      # tar 能可靠保住可执行位与符号链接（解包后 lipo 与 codesign 都依赖它们）
+      - name: Archive app bundle for hand-off
+        working-directory: NetworkMonitor/dist
+        run: tar -czf "yilan-${{ matrix.arch }}.tar.gz" "一览-${{ matrix.arch }}.app"
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Yilan-${{ matrix.arch }}
-          path: NetworkMonitor/dist/Yilan-${{ matrix.arch }}.app.zip
+          name: yilan-${{ matrix.arch }}
+          path: NetworkMonitor/dist/yilan-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+  universal:
+    name: Universal dmg
+    needs: package
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # 合并会破坏两个单架构包已有的签名，必须重新签 —— 所以这里也要导入证书
+      - name: Setup build
+        uses: ./.github/actions/setup-build
+        with:
+          tag: ${{ inputs.tag || github.ref_name }}
+          certificate-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.P12_PASSWORD }}
+          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
+
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # 合并 + 重新签名 + 打 dmg（与本地预览共用同一支脚本，签名实现见 lib-signing.sh）
+      - name: Merge to universal and build dmg
+        env:
+          SIGN_IDENTITY: ${{ secrets.SIGNING_IDENTITY || 'NetworkMonitor Local Signing' }}
+        run: |
+          set -euo pipefail
+          # shellcheck source=NetworkMonitor/version.env
+          source NetworkMonitor/version.env
+          mkdir -p dist
+          tar -xzf artifacts/yilan-arm64/yilan-arm64.tar.gz -C dist
+          tar -xzf artifacts/yilan-x86_64/yilan-x86_64.tar.gz -C dist
+          bash NetworkMonitor/Scripts/make-universal-app.sh \
+            --arm64 "$PWD/dist/一览-arm64.app" \
+            --x86_64 "$PWD/dist/一览-x86_64.app" \
+            --out "$PWD/dist/一览.app" \
+            --dmg "$PWD/dist/Yilan-${VERSION}.dmg"
+
+      # 合并自证：主可执行文件与随包资源都必须是双架构
+      # （zstd / libzstd 单架构时 Intel 用户的 Token 页会静默降级，不能放过）
+      - name: Verify universal architecture
+        run: |
+          set -euo pipefail
+          BIN="dist/一览.app/Contents/MacOS/一览"
+          lipo -info "$BIN"
+          lipo -info "$BIN" | grep -q arm64
+          lipo -info "$BIN" | grep -q x86_64
+          for nested in dist/一览.app/Contents/Resources/*.dylib dist/一览.app/Contents/Resources/zstd; do
+            [ -f "$nested" ] || continue
+            echo "--- $nested"
+            lipo -info "$nested"
+            lipo -info "$nested" | grep -q arm64 || { echo "缺少 arm64 切片：$nested" >&2; exit 1; }
+            lipo -info "$nested" | grep -q x86_64 || { echo "缺少 x86_64 切片：$nested" >&2; exit 1; }
+          done
+
+      # 挂载自证：dmg 真能被系统挂上、里面真有「一览.app」、版本号对得上。
+      # 这一步失败比用户下载后发现「打不开」便宜得多
+      - name: Verify dmg
+        run: |
+          set -euo pipefail
+          source NetworkMonitor/version.env
+          dmg="dist/Yilan-${VERSION}.dmg"
+          mountpoint="$(mktemp -d)/mnt"
+          mkdir -p "$mountpoint"
+          hdiutil attach -nobrowse -readonly -noautoopen -quiet -mountpoint "$mountpoint" "$dmg"
+          trap 'hdiutil detach "$mountpoint" -quiet >/dev/null 2>&1 || true' EXIT
+          test -d "$mountpoint/一览.app" || { echo "dmg 里没有「一览.app」" >&2; exit 1; }
+          test -L "$mountpoint/Applications" || { echo "dmg 里缺少「应用程序」快捷方式" >&2; exit 1; }
+          actual=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+            "$mountpoint/一览.app/Contents/Info.plist")
+          echo "dmg 内版本：$actual（期望 ${VERSION}）"
+          [ "$actual" = "${VERSION}" ] || { echo "dmg 内版本与 tag 不一致" >&2; exit 1; }
+
+      - name: Checksums
+        working-directory: dist
+        run: shasum -a 256 Yilan-*.dmg > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yilan-release
+          path: |
+            dist/Yilan-*.dmg
+            dist/SHA256SUMS.txt
           if-no-files-found: error
 
   publish:
     name: Publish release
-    needs: package
+    needs: universal
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       # release notes 要逐条列出 prev..tag 的提交，需要完整历史与 tag 才能算出上一个 v* tag
       - name: Checkout
@@ -117,22 +215,18 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      # 两个架构各自上传 artifact，这里一次性取回再建 release：
-      # 让矩阵里的 job 各自 softprops/action-gh-release 会并发建同一个 release，撞 422
-      - name: Download packaged artifacts
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
+          name: yilan-release
           path: artifacts
-          pattern: Yilan-*
-          merge-multiple: true
 
       - name: List assets
         run: ls -lh artifacts
 
-      # 先由脚本产出逐条明细（按 conventional 前缀分组），再用 body_path 作为 release 正文。
-      # 脚本自身在无 git 环境时会输出可用文案并 exit 0；真失败也只打 ::warning 不阻断发布
+      # 先用脚本产出逐条明细（按 conventional 前缀分组），再据此生成更新通道清单。
       # 生成器回归先跑：v1.27.0 的正文是发出去才发现「链接 404 + 逐条点不动 + 页脚多一个假贡献者」，
-      # 那时改已发布的正文要额外一次 PATCH。这一道红了就别发，比发完再补便宜得多
+      # 那时改已发布的正文要额外一次 PATCH。这一道红了就别发
       - name: Release notes regression
         run: bash NetworkMonitor/Scripts/test-release-notes.sh
 
@@ -142,7 +236,7 @@ jobs:
         run: |
           set -uo pipefail
           notes_file="release-notes.md"
-          printf '%s\n\n' '**下载**：`Yilan-arm64.app.zip` 面向 Apple Silicon，`Yilan-x86_64.app.zip` 面向 Intel；两个 zip 解压后都是「一览.app」。' > "$notes_file"
+          printf '%s\n\n' '**下载**：唯一产物 `Yilan-<版本>.dmg` 是 universal 包（Apple Silicon 与 Intel 同一份），挂载后把「一览」拖进「应用程序」即可。应用为本地签名（未公证），首次打开请右键「打开」。' > "$notes_file"
           if bash NetworkMonitor/Scripts/generate-release-notes.sh --tag "$TAG" >> "$notes_file"; then
             echo "::notice::release notes 已由脚本生成"
           else
@@ -156,12 +250,32 @@ jobs:
           cat "$notes_file"
           echo "----------------------------"
 
+      # update.json 与发布说明必须同源：用户看到的「新版本说明」就是 Release 正文那段，
+      # 更新器读到的也是这段，正文改一次两边一起变
+      - name: Generate update manifest
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          dmg="$(ls artifacts/Yilan-*.dmg | head -1)"
+          python3 NetworkMonitor/Scripts/make-update-manifest.py \
+            --tag "$TAG" \
+            --dmg "$dmg" \
+            --notes-file release-notes.md \
+            --out artifacts/update.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --min-system-from NetworkMonitor/Package.swift
+          cat artifacts/update.json
+
       # generate_release_notes 已关闭：官方自动生成只有一行 Full Changelog，与本脚本末尾的完整变更链接重复；
       # 逐条明细由脚本统一口径（中文分组 + 短 hash），避免正文里出现两套说明
       - name: Create or update release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          name: 一览 ${{ inputs.tag || github.ref_name }} · Apple Silicon + Intel 双架构
+          name: 一览 ${{ inputs.tag || github.ref_name }} · Apple Silicon + Intel 通用包
           body_path: release-notes.md
-          files: artifacts/*.zip
+          files: |
+            artifacts/*.dmg
+            artifacts/SHA256SUMS.txt
+            artifacts/update.json

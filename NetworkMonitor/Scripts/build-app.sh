@@ -2,10 +2,17 @@
 # 一键构建 + 打包 App（含 macMonitor 本机监控功能）
 # Usage: ./Scripts/build-app.sh [debug|release]
 #
-# 架构：默认按本机架构构建；发版时用 ARCH=arm64|x86_64 指定（GitHub Actions 双架构矩阵就是这条通路），
-# 此时产物名为 <APP_BUNDLE_NAME>-<arch>.app，且不会部署到 /Applications。
-# 需要本机一次出两个架构时用 BOTH_ARCH=1：两个架构各用独立 scratch 并行构建，产物同样是
-# dist/<APP_BUNDLE_NAME>-arm64.app 与 dist/<APP_BUNDLE_NAME>-x86_64.app（与 ARCH 模式的产物名一致）。
+# 架构（三种模式，产物名就是「用户下载到的东西」，别再让包名带架构后缀）：
+# - 默认：按本机架构构建，产物 dist/<APP_BUNDLE_NAME>.app，构建完部署到 /Applications；
+# - ARCH=arm64|x86_64：指定架构构建，产物 dist/<APP_BUNDLE_NAME>-<arch>.app，不部署
+#   （只用于交叉验证与排查，CI 的测试矩阵走这条）；
+# - UNIVERSAL=1：**发版标准路径**。两个架构各用独立 scratch 并行构建，再用 lipo 合并成
+#   一个 dist/<APP_BUNDLE_NAME>.app（单包双架构）。主流 macOS 开源项目都只发这一种包，
+#   用户不需要判断自己是什么芯片。
+#
+# 发版产物：UNIVERSAL=1 MAKE_DMG=1 在 universal 包之上再产出 dist/Yilan-<版本>.dmg
+# （挂载后是「一览.app」+ 拖到「应用程序」的快捷方式；不再发 zip——zip 解压出来的包名
+# 会带上架构后缀，用户看到的就成了「一览-arm64.app」）。
 #
 # 注意：下面两条构建命令都追加了 --build-system 参数（取值 native）。本机只装了 Command Line Tools
 # （无 Xcode.app），默认的 swiftbuild/XCBuild 后端在 session 初始化阶段就会失败
@@ -17,6 +24,13 @@ set -e
 
 cd "$(dirname "$0")/.."
 BUILD_MODE="${1:-debug}"
+
+# 版本号唯一真源：NetworkMonitor/version.env（VERSION / BUILD）。
+# 缺文件直接失败：猜一个默认版本会让包内版本与 tag 对不上，更新器校验当场拒绝安装。
+[ -f version.env ] || { echo "❌ 缺少 version.env（版本号唯一真源）" >&2; exit 1; }
+# shellcheck source=../version.env
+. ./version.env
+[ -n "${VERSION:-}" ] && [ -n "${BUILD:-}" ] || { echo "❌ version.env 里缺少 VERSION 或 BUILD" >&2; exit 1; }
 
 # 构建产物名（SwiftPM target 名，.build/<triple>/<config>/NetworkMonitor）——
 # **只决定构建产物路径，不再是包内可执行名**：target / 模块名保持不变（改它会连锁影响
@@ -240,9 +254,9 @@ package_app() {
     <key>CFBundleDisplayName</key>
     <string>${APP_DISPLAY_NAME}</string>
     <key>CFBundleVersion</key>
-    <string>22</string>
+    <string>${BUILD}</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.29.0</string>
+    <string>${VERSION}</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSUIElement</key>
@@ -257,101 +271,25 @@ PLIST
 }
 
 
-# 3. 签名
-# 证书名可通过 SIGN_IDENTITY 覆盖（CI 用 Secrets 传入同一张自签名证书）；
-# 未找到证书时回落 ad-hoc（身份随 cdhash 变化，权限需重新授权）。
-SIGN_IDENTITY="${SIGN_IDENTITY:-NetworkMonitor Local Signing}"
-SIGN_ENTITLEMENTS="${SIGN_ENTITLEMENTS:-}"
+# 3. 签名 —— 实现见 Scripts/lib-signing.sh（构建脚本与 universal 合并脚本共用一份，
+# 两处各写一套签名逻辑迟早漂移，而 TCC 授权靠的正是稳定的签名身份）
+# shellcheck source=lib-signing.sh
+. "$(dirname "$0")/lib-signing.sh"
 
-# 校验签名是否落在稳定身份上：ad-hoc 签名的 designated requirement 是 cdhash，
-# 每次构建都变，TCC 授权（屏幕录制 / 辅助功能 / 本地网络）会被当成另一个应用。
-assert_stable_signature() {
-    local target="$1"
-    local requirement
-    requirement=$(codesign -d -r- "$target" 2>&1 || true)
-    if printf '%s' "$requirement" | grep -q "cdhash"; then
-        echo "      ❌ 签名是 ad-hoc（designated requirement 依赖 cdhash），重建后权限会失效" >&2
-        return 1
-    fi
-    echo "      签名要求：$(printf '%s' "$requirement" | tail -1 | sed "s/^designated => //")"
-}
-
-# 签单个对象（Mach-O 或 bundle）。identifier 为空表示保留对象自身标识（嵌套项用）。
-sign_object() {
-    local target="$1"
-    local identifier="${2:-}"
-    local args=(--force)
-    if [ -n "$identifier" ]; then
-        args+=(--identifier "$identifier")
-    fi
-    if [ -n "${SIGN_ENTITLEMENTS}" ] && [ -f "${SIGN_ENTITLEMENTS}" ]; then
-        args+=(--entitlements "${SIGN_ENTITLEMENTS}")
-    fi
-    local output
-    if [ "$USE_SIGNING_CERT" = "1" ]; then
-        if ! output=$(codesign "${args[@]}" --sign "${SIGN_IDENTITY}" "$target" 2>&1); then
-            echo "      ❌ 证书签名失败（$target）：${output}" >&2
-            echo "      可用身份：$(security find-identity -v -p codesigning 2>/dev/null | tail -5)" >&2
-            return 1
-        fi
-        if [ -n "$output" ]; then printf '%s
-' "$output" | tail -2; fi
-    else
-        if ! output=$(codesign "${args[@]}" --sign - "$target" 2>&1); then
-            echo "      ❌ ad-hoc 签名失败（$target）：${output}" >&2
-            return 1
-        fi
-    fi
-}
-
-# 逐层签名：由内到外，先签嵌套 bundle / Mach-O，再签可执行文件，最后签包体。
-# 去掉 --deep 的原因：--deep 会在签包体时隐式重签嵌套项（Apple 不推荐，行为不透明），
-# 逐层签更快，且嵌套项被单独改过时能当场发现。包内没有嵌套项时等价于签两次（exe + 包体）。
-sign_app() {
-    local target="$1"
-    # 证书是否存在只判定一次（逐层签会签多次，避免每次都扫钥匙串）
-    if security find-identity -v -p codesigning 2>/dev/null | grep -q "${SIGN_IDENTITY}"; then
-        USE_SIGNING_CERT=1
-    else
-        USE_SIGNING_CERT=0
-    fi
-
-    local nested
-    nested=$(find "$target/Contents" -depth \
-        \( -name "*.framework" -o -name "*.dylib" -o -name "*.bundle" -o -name "*.app" -o -name "*.xpc" \) 2>/dev/null || true)
-    if [ -n "$nested" ]; then
-        while IFS= read -r item; do
-            [ -n "$item" ] || continue
-            echo "      签署嵌套项：${item#$target/}"
-            sign_object "$item"
-        done <<< "$nested"
-    fi
-
-    # 主可执行文件：固定标识符（$APP_BUNDLE_ID）是 TCC 授权稳定的关键
-    local exe="$target/Contents/MacOS/${APP_EXECUTABLE_NAME}"
-    if [ -f "$exe" ]; then
-        sign_object "$exe" "$APP_BUNDLE_ID"
-    fi
-
-    # 包体
-    sign_object "$target" "$APP_BUNDLE_ID"
-
-    if [ "$USE_SIGNING_CERT" = "1" ]; then
-        echo "      使用证书：${SIGN_IDENTITY}"
-        assert_stable_signature "$target"
-    else
-        echo "      ⚠️  未找到证书 ${SIGN_IDENTITY}，回落 ad-hoc（每次构建权限会重新询问）"
-    fi
-}
-
-# 3.1 可选：BOTH_ARCH=1 并行构建两个架构
-# - 两个架构各用独立 scratch（.build-<arch>），避免争同一个 build.db；
-# - 构建 + 打包并行跑，签名等两个构建都成功后串行执行（并发签名的钥匙串访问会互相打断）；
+# 3.1 发版预览：UNIVERSAL=1 → 两个架构并行构建，交给 make-universal-app.sh 合并
+#
+# 本机一次出两个架构只适合**预览**：随包携带的 zstd / libzstd 是当前机器上的 Homebrew
+# 二进制（单架构），单机合并拼不出双架构，Intel 机器上会退化成「缺工具」。
+# 正式发布走 CI：matrix 两台 runner 各打一个单架构包，再由同一支脚本合并（见 release.yml）。
+#
+# - 两个架构各用独立 scratch（.build-<arch>），避免两个 swift build 争同一个 build.db；
+# - 构建 + 打包并行跑；合并与签名交给 make-universal-app.sh（与 CI 共用一份实现）；
 # - 任一架构失败即整脚本非 0 退出（fail-closed），并把失败日志尾部打出来；
-# - 并行模式一律不部署到 /Applications（产物是交叉架构包，本机跑不起来）。
-if [ "${BOTH_ARCH:-0}" = "1" ]; then
+# - 该路径一律不部署到 /Applications：发版产物交给 dmg，本机日常部署仍走默认路径；
+# - BOTH_ARCH=1 是旧名字，按 UNIVERSAL=1 处理（产物名已统一，不再带架构后缀）。
+if [ "${UNIVERSAL:-${BOTH_ARCH:-0}}" = "1" ]; then
     if [ -n "$TARGET_ARCH" ]; then
-        echo "❌ BOTH_ARCH=1 与 ARCH=${TARGET_ARCH} 互斥：并行模式自己决定两个架构" >&2
+        echo "❌ UNIVERSAL=1 与 ARCH=${TARGET_ARCH} 互斥：universal 自己决定两个架构" >&2
         exit 1
     fi
     PARALLEL_ARCHS=(arm64 x86_64)
@@ -363,7 +301,7 @@ if [ "${BOTH_ARCH:-0}" = "1" ]; then
         PARALLEL_LOGS+=("$log")
         (
             swift_build "$arch" ".build-${arch}"
-            package_app "dist/${APP_BUNDLE_NAME}-${arch}.app" "$(binary_path_for "$arch" ".build-${arch}")"
+            package_app "dist/.universal-${arch}/${APP_BUNDLE_NAME}.app" "$(binary_path_for "$arch" ".build-${arch}")"
         ) > "$log" 2>&1 &
         PARALLEL_PIDS+=("$!")
     done
@@ -385,14 +323,20 @@ if [ "${BOTH_ARCH:-0}" = "1" ]; then
         exit 1
     fi
 
-    for arch in "${PARALLEL_ARCHS[@]}"; do
-        echo ""
-        echo "🔏 签署 dist/${APP_BUNDLE_NAME}-${arch}.app ..."
-        sign_app "dist/${APP_BUNDLE_NAME}-${arch}.app"
-    done
+    MERGE_ARGS=(--arm64 "dist/.universal-arm64/${APP_BUNDLE_NAME}.app"
+                --x86_64 "dist/.universal-x86_64/${APP_BUNDLE_NAME}.app"
+                --out "dist/${APP_BUNDLE_NAME}.app")
+    # bash 3.2（macOS 自带）在 set -u 下展开空数组会报 unbound，故分两支写
+    if [ "${MAKE_DMG:-0}" = "1" ]; then
+        bash Scripts/make-universal-app.sh "${MERGE_ARGS[@]}" --dmg "dist/Yilan-${VERSION}.dmg"
+    else
+        bash Scripts/make-universal-app.sh "${MERGE_ARGS[@]}"
+    fi
+
+    rm -rf dist/.universal-arm64 dist/.universal-x86_64
 
     echo ""
-    echo "📦 已生成 dist/${APP_BUNDLE_NAME}-arm64.app 与 dist/${APP_BUNDLE_NAME}-x86_64.app（并行模式不部署到 /Applications）"
+    echo "📦 已生成 dist/${APP_BUNDLE_NAME}.app（universal，未部署到 /Applications）"
     exit 0
 fi
 
@@ -411,7 +355,7 @@ fi
 if [ "${SKIP_INSTALL:-0}" = "1" ]; then
     echo ""
     echo "🔏 签署 ${APP_DIR} ..."
-    sign_app "$APP_DIR"
+    sign_app_bundle "$APP_DIR"
     echo "📦 已生成 ${APP_DIR}（SKIP_INSTALL=1，跳过部署到 /Applications）"
     exit 0
 fi
@@ -507,7 +451,7 @@ echo "   ✅ 已复制到 ${INSTALL_PATH}"
 # 不指定 --identifier 时系统会生成「NetworkMonitor-<hash>」临时标识，每次构建都变，
 # 导致 macOS 把 App 当成新应用，本地网络权限每次重新部署都失效（表现为 UDP errno 65）。
 echo "   🔏 签名（固定标识符 + 固定证书）..."
-sign_app "$INSTALL_PATH"
+sign_app_bundle "$INSTALL_PATH"
 
 # 打开应用
 echo "   🚀 正在启动 ${APP_BUNDLE_NAME}.app..."

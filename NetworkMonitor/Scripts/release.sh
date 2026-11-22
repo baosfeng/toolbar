@@ -6,9 +6,15 @@
 # 全都因此没能发布。把人记的事交给脚本，并在动手前先过 CI 闸门。
 #
 # 用法：
-#   Scripts/release.sh 1.28.0                # 真发版
-#   Scripts/release.sh 1.28.0 --dry-run      # 只做检查，不改任何文件
-#   Scripts/release.sh 1.28.0 --skip-ci-gate # 跳过 CI 闸门（不推荐）
+#   Scripts/release.sh 1.30.0                # 真发版
+#   Scripts/release.sh 1.30.0 --dry-run      # 只做检查，不改任何文件
+#   Scripts/release.sh 1.30.0 --skip-ci-gate # 跳过 CI 闸门（不推荐）
+#
+# 发版产物（由 .github/workflows/release.yml 产出，只有一个安装包）：
+#   Yilan-<版本>.dmg —— universal（arm64 + x86_64），挂载后是「一览.app」
+#   SHA256SUMS.txt   —— dmg 校验和
+#   update.json      —— 自动更新器的静态更新通道
+# 版本号只在 NetworkMonitor/version.env 改（本脚本自动改），不要再手改别处。
 
 set -euo pipefail
 
@@ -18,7 +24,9 @@ BRANCH="main"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd)"
-PLIST_SOURCE="$PROJECT_DIR/Scripts/build-app.sh"
+# 版本号唯一真源：NetworkMonitor/version.env（build-app.sh 也从这里读）
+VERSION_FILE="$PROJECT_DIR/version.env"
+# 文档台账里的版本号是派生值，与 version.env 一起改（漏改只会让文档过时，不影响产物）
 AGENTS_FILE="$REPO_ROOT/AGENTS.md"
 
 VERSION=""
@@ -48,8 +56,10 @@ cd "$REPO_ROOT"
 [ "$(git rev-parse --abbrev-ref HEAD)" = "$BRANCH" ] || fail "发版必须在 $BRANCH 上"
 
 say "2/6 检查版本号"
-old_version=$(grep -A1 "<key>CFBundleShortVersionString</key>" "$PLIST_SOURCE" | sed -n "s/.*<string>\(.*\)<\/string>.*/\1/p" | head -1)
-old_build=$(grep -A1 "<key>CFBundleVersion</key>" "$PLIST_SOURCE" | sed -n "s/.*<string>\(.*\)<\/string>.*/\1/p" | head -1)
+[ -f "$VERSION_FILE" ] || fail "缺少 NetworkMonitor/version.env（版本号唯一真源）"
+old_version=$(sed -n "s/^VERSION=//p" "$VERSION_FILE" | head -1)
+old_build=$(sed -n "s/^BUILD=//p" "$VERSION_FILE" | head -1)
+case "$old_build" in ""|*[!0-9]*) fail "version.env 的 BUILD 必须是整数，读到：${old_build:-空}" ;; esac
 new_build=$((old_build + 1))
 say "   当前 ${old_version}（构建号 ${old_build}）→ 目标 ${VERSION}（构建号 ${new_build}）"
 [ "$old_version" = "$VERSION" ] && fail "版本号已经是 ${VERSION}"
@@ -101,21 +111,19 @@ fi
 
 say "5/6 改版本号"
 if [ "$DRY_RUN" = "0" ]; then
-    python3 - "$PLIST_SOURCE" "$AGENTS_FILE" "$VERSION" "$new_build" << PYEOF
+    python3 - "$VERSION_FILE" "$AGENTS_FILE" "$VERSION" "$new_build" << PYEOF
 import re, sys
-plist, agents, version, build = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-s = open(plist).read()
-s = re.sub(r"(<key>CFBundleShortVersionString</key>\s*<string>)[^<]*(</string>)",
-           lambda m: m.group(1) + version + m.group(2), s, count=1)
-s = re.sub(r"(<key>CFBundleVersion</key>\s*<string>)[^<]*(</string>)",
-           lambda m: m.group(1) + build + m.group(2), s, count=1)
-open(plist, "w").write(s)
+ver_file, agents, version, build = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+s = open(ver_file).read()
+s = re.sub(r"(?m)^VERSION=.*$", "VERSION=" + version, s)
+s = re.sub(r"(?m)^BUILD=.*$", "BUILD=" + build, s)
+open(ver_file, "w").write(s)
 a = open(agents).read()
 a = re.sub(r"(- \*\*版本:\*\* )[0-9.]+", lambda m: m.group(1) + version, a, count=1)
 open(agents, "w").write(a)
-print("   plist 与 AGENTS.md 已更新")
+print("   version.env 与 AGENTS.md 已更新")
 PYEOF
-    git add "$PLIST_SOURCE" "$AGENTS_FILE"
+    git add "$VERSION_FILE" "$AGENTS_FILE"
     # 变量紧跟全角标点必须写 ${var}：多字节首字节会被当成变量名一部分，
     # macOS 自带 bash 下静默、CI / set -u 环境直接 unbound（本条实测踩过一次，发版中断在提交前）
     git commit -q -m "chore: 版本号升到 ${VERSION}（构建号 ${new_build}）"
@@ -144,7 +152,16 @@ for _ in $(seq 1 40); do
     line=$(ghops actions list "$REPO" --limit 5 2>/dev/null | grep "Release.*\[$TAG\]" | head -1 || true)
     say "   $line"
     case "$line" in
-        *completed/success*) say "✅ 发布完成：https://github.com/$REPO/releases/tag/$TAG"; say "   记得同步 docs/发版记录.md 台账"; exit 0 ;;
+        *completed/success*)
+            say "   校验发布资产…"
+            assets=$(ghops api GET "/repos/$REPO/releases/tags/$TAG" 2>/dev/null | tr "," "\n" | grep '"name"' || true)
+            for need in "Yilan-${VERSION}.dmg" "SHA256SUMS.txt" "update.json"; do
+                printf "%s" "$assets" | grep -q "\"${need}\"" || fail "发布里缺少资产 ${need}（发版没走完，别当成功）"
+            done
+            say "   ✅ 资产齐全：Yilan-${VERSION}.dmg / SHA256SUMS.txt / update.json"
+            say "✅ 发布完成：https://github.com/$REPO/releases/tag/$TAG"
+            say "   记得同步 docs/发版记录.md 台账"
+            exit 0 ;;
         *completed/failure*) fail "Release 失败，见 https://github.com/$REPO/actions/runs/$run_id" ;;
     esac
     sleep 20
