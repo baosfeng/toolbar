@@ -14,6 +14,24 @@ func runSnipPixelTests() {
     assertEqual(SnipPixelColor.DisplayFormat.hex.text(for: red), "#FF0000", "格式枚举 hex")
     assertEqual(SnipPixelColor.DisplayFormat.rgb.text(for: red), "RGB(255, 0, 0)", "格式枚举 rgb")
 
+    // Shift 切换是环形：两种格式互切，按多少次都不会卡住
+    assertEqual(SnipPixelColor.DisplayFormat.hex.next, .rgb, "hex 切到 rgb")
+    assertEqual(SnipPixelColor.DisplayFormat.rgb.next, .hex, "rgb 切回 hex")
+    assertEqual(SnipPixelColor.DisplayFormat.hex.next.next, .hex, "连按两次回到原格式")
+
+    // 格式名非空且与取值不同：它是行尾的「现在是什么格式」提示，不能与色值文字撞脸
+    for format in [SnipPixelColor.DisplayFormat.hex, .rgb] {
+        assertEqual(format.hintText.isEmpty, false, "格式名非空")
+        assertEqual(format.hintText == format.text(for: red), false, "格式名与色值文字不同")
+    }
+    assertEqual(SnipPixelColor.DisplayFormat.hex.hintText, "Hex", "hex 的格式名")
+    assertEqual(SnipPixelColor.DisplayFormat.rgb.hintText, "RGB", "rgb 的格式名")
+
+    // 放大镜两行信息条：上行坐标、下行色值 + 格式名（先定位再取值）
+    assertEqual(SnipMagnifierLabelText.coordinate(x: 1161, y: 282), "(1161, 282)", "坐标行文案")
+    assertEqual(SnipMagnifierLabelText.colorText(red, format: .hex), "#FF0000 · Hex", "色值行带 hex 格式名")
+    assertEqual(SnipMagnifierLabelText.colorText(red, format: .rgb), "RGB(255, 0, 0) · RGB", "色值行带 rgb 格式名")
+
     // 造一张 2x2 图：左上红、右上绿、左下蓝、右下白
     // 直接给字节，避免用 CGContext 绘制时 sRGB → deviceRGB 的色彩转换把纯色弄脏
     let width = 2, height = 2

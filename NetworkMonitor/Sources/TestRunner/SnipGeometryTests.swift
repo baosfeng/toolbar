@@ -68,6 +68,18 @@ func runSnipGeometryTests() {
                                             imageSize: CGSize(width: 2880, height: 1800)),
                 CGRect(x: 2800, y: 1600, width: 80, height: 200), "越界部分被裁到图像内")
 
+    // 锚点显隐：任一边不足 40pt（= 8pt 锚点 × 5）时不画，否则白块会连成一片盖住像素
+    assertEqual(SelectionGeometry.shouldShowHandles(for: CGRect(x: 0, y: 0, width: 41, height: 41),
+                                                handleSize: 8), true, "41×41 仍画锚点")
+    assertEqual(SelectionGeometry.shouldShowHandles(for: CGRect(x: 0, y: 0, width: 40, height: 40),
+                                                handleSize: 8), true, "正好 40pt 仍画锚点（阈值含等号）")
+    assertEqual(SelectionGeometry.shouldShowHandles(for: CGRect(x: 0, y: 0, width: 39, height: 100),
+                                                handleSize: 8), false, "宽不足 40pt 隐藏锚点")
+    assertEqual(SelectionGeometry.shouldShowHandles(for: CGRect(x: 0, y: 0, width: 200, height: 39),
+                                                handleSize: 8), false, "高不足 40pt 隐藏锚点")
+    assertEqual(SelectionGeometry.shouldShowHandles(for: CGRect(x: 0, y: 0, width: 12, height: 10),
+                                                handleSize: 8), false, "12×10 小选区不画锚点")
+
     // 缩放比以捕获图实际像素为准，不采信 SnipDisplay.pixelSize
     //
     // 回归背景（实测 macOS 27 的 2x 屏）：CGDisplayPixelsWide 返回的是点数 1512 而非像素 3024，

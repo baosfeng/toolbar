@@ -220,22 +220,9 @@ extension SnipOverlayView {
         drawLabel(label, at: CGPoint(x: local.minX + 4, y: local.minY + 4))
     }
 
-    /// 左上角小标签（黑底白字）
-    /// 放宽为 internal：绘制扩展文件（放大镜）也要用
+    /// 左上角小标签（黑底白字）——画法在 `SnipLabelDrawing`，悬停窗口名与放大镜信息条共用一份
     func drawLabel(_ text: String, at point: CGPoint) {
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
-            .foregroundColor: NSColor.white
-        ]
-        let size = (text as NSString).size(withAttributes: attributes)
-        let padding = NSSize(width: 5, height: 2)
-        let background = CGRect(x: point.x, y: point.y,
-                                width: size.width + padding.width * 2,
-                                height: size.height + padding.height * 2)
-        NSColor.black.withAlphaComponent(0.75).setFill()
-        NSBezierPath(roundedRect: background, xRadius: 3, yRadius: 3).fill()
-        (text as NSString).draw(at: CGPoint(x: point.x + padding.width, y: point.y + padding.height),
-                                withAttributes: attributes)
+        SnipLabelDrawing.draw(text, at: point)
     }
 
     /// 换一张截图（切换指针显示时由编排方重新捕获后回灌）

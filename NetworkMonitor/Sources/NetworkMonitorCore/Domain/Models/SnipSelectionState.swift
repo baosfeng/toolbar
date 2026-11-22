@@ -129,8 +129,14 @@ public struct SnipSelectionState: Equatable, Sendable {
     // MARK: - 命中判定
 
     /// 命中把手 — 角优先，其次边，最后内部移动；未成立时返回 nil
+    ///
+    /// 选区太小时绘制层不画锚点（`SelectionGeometry.shouldShowHandles`），
+    /// 命中判定必须读同一个函数，否则会出现「看不见却还能拖」的把手。
     public func hitTest(_ point: CGPoint, handleSize: CGFloat) -> Handle? {
         guard phase == .selected, rect.width > 0, rect.height > 0 else { return nil }
+        guard SelectionGeometry.shouldShowHandles(for: rect, handleSize: handleSize) else {
+            return rect.contains(point) ? .move : nil
+        }
         let half = handleSize / 2
         let corners: [(Handle, CGPoint)] = [
             (.topLeft, CGPoint(x: rect.minX, y: rect.minY)),

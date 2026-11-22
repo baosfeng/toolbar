@@ -33,6 +33,10 @@ public enum SnipToolBarLayout {
     /// 动作按钮尺寸
     public static let actionWidth: CGFloat = 56
     public static let actionHeight: CGFloat = 26
+    /// 常驻标签档的动作按钮高度：与同排 42pt 的格子比齐（12pt 文字上下各留 8pt）
+    ///
+    /// 独立常量而不是改 actionHeight：仅图标 / 悬停档的动作按钮必须保持 26pt 原样。
+    public static let labeledActionHeight: CGFloat = 34
     public static let actionGap: CGFloat = 6
     /// 组间分隔线高度占可视条高的比例（上下各留 17.5%，两档条高观感一致）
     public static let dividerHeightRatio: CGFloat = 0.65
@@ -110,7 +114,7 @@ public enum SnipToolBarLayout {
         tool: CGSize(width: 46, height: 42),
         color: CGSize(width: 40, height: 42),
         width: CGSize(width: 40, height: 42),
-        action: CGSize(width: actionWidth, height: actionHeight))
+        action: CGSize(width: actionWidth, height: labeledActionHeight))
 
     /// 按文字提示档取尺寸：仅图标 / 悬停都是 40pt 条高，常驻标签才是 50pt
     public static func metrics(for mode: SnipToolBarLabelMode) -> Metrics {

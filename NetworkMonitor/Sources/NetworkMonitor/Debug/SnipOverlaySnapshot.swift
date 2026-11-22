@@ -26,11 +26,21 @@ enum SnipOverlaySnapshot {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             renderToFile(at: directory.appendingPathComponent("overlay-idle.png"), phase: .idle)
             renderToFile(at: directory.appendingPathComponent("overlay-selected.png"), phase: .selected)
+            renderToFile(at: directory.appendingPathComponent("overlay-small-selection.png"),
+                         phase: .smallSelection)
+            renderToFile(at: directory.appendingPathComponent("overlay-top-label.png"), phase: .topLabel)
             NSApp.terminate(nil)
         }
     }
 
-    private enum Phase { case idle, selected }
+    private enum Phase {
+        case idle
+        case selected
+        /// 12×10 小选区：锚点应自动隐藏、只剩蓝色边框（A6 取证）
+        case smallSelection
+        /// 选区贴住画布上沿：尺寸标签翻进选区内部、三角改朝上（A4 取证）
+        case topLabel
+    }
 
     /// 取证用的工具条配置：与默认配置一致（悬停提示档），保证图面对应真实默认外观
     private static func toolbarConfiguration() -> SnipToolBarConfiguration {
@@ -66,6 +76,12 @@ enum SnipOverlaySnapshot {
                                                    end: CGPoint(x: 280, y: 430),
                                                    text: "标注随截图一起复制",
                                                    style: SnipAnnotationStyle(color: .green, lineWidth: 3)))
+        case .smallSelection:
+            view.debugApplySelection(CGRect(x: 400, y: 300, width: 12, height: 10))
+            // 放大镜同时画出：双行信息条（坐标 / 色值 + 格式名）就在这张图上核对
+            view.debugHover(atLocalPoint: CGPoint(x: 430, y: 340))
+        case .topLabel:
+            view.debugApplySelection(CGRect(x: 220, y: 0, width: 560, height: 200))
         }
 
         let container = SnapshotBackdropView(frame: NSRect(origin: .zero, size: canvasSize))
