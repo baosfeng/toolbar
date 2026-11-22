@@ -30,6 +30,10 @@ extension MenuPanelView {
             // 先取已装配实例：未装配页没有二级页，也不会因为读属性被建出来
             if currentTab == .system, let system = systemPaneIfLoaded, system.isShowingDetail {
                 system.showOverview()
+            } else if currentTab == .credits, let billing = billingPaneIfLoaded,
+                      billing.isShowingDetail {
+                // 额度页二级页：Esc 先回主表，再按一次才收起面板（与系统 / Token 页同语义）
+                billing.showOverview()
             } else if currentTab == .token, let token = tokenPaneIfLoaded, token.isShowingDetail {
                 // Token 二级页原先没有 Esc 分支：按 Esc 直接把面板收起，
                 // 再打开时 detailKind 已被 applyState 复位，页面上下文丢失

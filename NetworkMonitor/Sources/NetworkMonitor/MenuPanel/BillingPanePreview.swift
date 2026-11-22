@@ -5,203 +5,219 @@ import NetworkMonitorFeatureBilling
 
 // MARK: - 额度页快照示意数据（仅 DEBUG）
 
-/// 额度页示意数据 — 供快照自证使用，release 构建完全不包含本文件
+/// 额度页示意数据 —— 供快照自证使用，release 构建完全不包含本文件
 ///
-/// 从 `BillingPaneView.swift` 拆出（原文件因 DEBUG 快照数据超 15 KiB 规范上限）。
-/// 五种形态：未配置 / 查询失败 / 遗留计划 / Open Design / OpenCode Go，字段与真实 provider 返回一致。
+/// 数据与原型 F1 一致：6 家（3 用量型 + 3 余额型），用量型两家两窗口、一家两窗口且已用尽，
+/// 余额型覆盖「正常金额 / 另一种币种 / 无限制」三种形态，图表带 7 天与 30 天的真实分桶。
 extension BillingPaneView {
 
     /// 快照自证专用（仅 DEBUG）：注入示意数据，不影响真实运行
     ///
     /// - Parameters:
-    ///   - configured: false 时渲染「配置凭据」态
-    ///   - errorMessage: 非空时渲染错误条（保留余额与用量数据）
-    ///   - legacyLimits: 注入遗留计划百分比限额（原型 D 状态）
-    ///   - legacyUsage: 注入「只有请求数、无金额/token」的用量（遗留计划真实返回形态）
-    ///   - openDesign: 改用 Open Design 形态（credits 限额明细、无时间序列）
-    ///   - opencodeGo: 追加 OpenCode Go 形态（三窗口、只查额度、其中一个窗口已限流）
+    ///   - configured: 预留位（数据层已过滤未配置 provider，这里恒为可见）
+    ///   - errorMessage: 非空时第一家渲染错误态（保留上次成功数据 + 错误条）
+    ///   - legacyUsage: 注入「只有请求数、无金额 / token」的用量（遗留计划真实返回形态）
+    ///   - openDesign: 追加 Open Design 两家（同名不同实例）
+    ///   - opencodeGo: 追加 OpenCode Go（三窗口，验证三列布局）
+    ///   - empty: 0 个可见 provider → 空态
+    ///   - singleProvider: 只留第一家（单 provider 密度）
     func injectPreview(configured: Bool = true, errorMessage: String? = nil,
                        legacyUsage: Bool = false, openDesign: Bool = false,
                        opencodeGo: Bool = false, empty: Bool = false,
                        singleProvider: Bool = false) {
         let now = SnapshotClock.now
-        // 数据层已过滤未配置 provider：这里构造的都是「可见」provider
-        let ollama = Self.previewProvider(openDesign: false)
         if empty {
-            // 0 个可见 provider → 空态 + 「去设置配置」
             update(BillingMonitor.Snapshot(states: []))
             return
         }
         var states: [BillingMonitor.ProviderState] = [
-            BillingMonitor.ProviderState(
-                descriptor: ollama,
-                range: .last24Hours,
-                isConfigured: true,
-                balance: Self.previewOllamaBalance(now: now, legacy: legacyUsage && !openDesign),
-                usage: Self.previewOllamaUsage(endingAt: now, legacyOnly: legacyUsage),
-                lastUpdated: now,
-                isLoading: false,
-                errorMessage: errorMessage),
-            // Open Design：无金额维度、额度是两条 credits 窗口、服务端不分桶
-            BillingMonitor.ProviderState(
-                descriptor: Self.previewProvider(openDesign: true),
-                range: .last24Hours,
-                isConfigured: true,
-                balance: Self.previewOpenDesignBalance(now: now),
-                usage: Self.previewOpenDesignUsage(endingAt: now),
-                lastUpdated: now,
-                isLoading: false,
-                errorMessage: nil),
+            Self.previewState(id: "ollama", name: "Ollama", symbol: "cloud",
+                              balance: Self.previewOllamaBalance(now: now),
+                              usage: Self.previewUsage(endingAt: now, legacyOnly: legacyUsage,
+                                                       requests: [412, 508, 623, 470, 561, 644, 539]),
+                              error: errorMessage, now: now),
         ]
-        // openDesign == false 时不追加 Open Design 卡（避免与「只显示 1 个 provider」混淆）
-        if empty { states = [] }
+        if openDesign && !singleProvider {
+            states.append(Self.previewState(id: "open-design", name: "Open Design", symbol: "paintpalette",
+                                            balance: Self.previewOpenDesignBalance(now: now),
+                                            usage: Self.previewUsage(endingAt: now, legacyOnly: false,
+                                                                     requests: [380, 470, 590, 640, 720, 800, 690]),
+                                            error: nil, now: now))
+            // 同名不同实例：展示名带 (home)，验证「一行一家」不会把两个实例看成重复
+            states.append(Self.previewState(id: "open-design::home", name: "Open Design",
+                                            symbol: "paintpalette",
+                                            balance: Self.previewFullBalance(now: now),
+                                            usage: Self.previewUsage(endingAt: now, legacyOnly: false,
+                                                                     requests: [120, 140, 90, 60, 20, 4, 0]),
+                                            error: nil, now: now, instanceLabel: "home"))
+        }
         if opencodeGo && !singleProvider {
-            states.append(Self.previewOpencodeGoState(now: now))
+            states.append(Self.previewState(id: "opencode-go", name: "OpenCode Go", symbol: "terminal",
+                                            balance: Self.previewOpencodeGoBalance(now: now),
+                                            usage: nil, error: nil, now: now))
         }
-        // 默认档只留 Ollama；Open Design 仅 openDesign 档追加（数据层契约下它必须已配置才可见）
-        if !openDesign {
-            states.removeAll { $0.descriptor.id == "open-design" }
+        if !singleProvider {
+            // 余额型三家：金额 / 另一币种 / 无限制
+            states.append(Self.previewBalanceState(id: "deepseek", name: "DeepSeek",
+                                                   symbol: "sparkles", amount: 36.74,
+                                                   currency: "CNY", now: now))
+            states.append(Self.previewBalanceState(id: "moonshot", name: "Moonshot",
+                                                   symbol: "moon", amount: 88.50,
+                                                   currency: "CNY", now: now))
+            states.append(Self.previewBalanceState(id: "openrouter", name: "OpenRouter",
+                                                   symbol: "arrow.triangle.branch",
+                                                   amount: nil, currency: "USD", now: now))
         }
-        if singleProvider { states = [states[0]] }
         update(BillingMonitor.Snapshot(states: states))
-        // 快照默认不展开（收起态是首屏主形态）；展开态由 captureCreditsExpanded 单独取景
+        // 首屏默认在主表（二级页由 captureCreditsExpanded 单独取景）
         expandForPreview(nil)
+        logRowHeights()
     }
 
-    /// 示意 provider 描述符（字段与真实注册表一致，保证页头与文案走同一路径）
-    private static func previewProvider(openDesign: Bool) -> BillingMonitor.ProviderDescriptor {
-        openDesign
-            ? BillingMonitor.ProviderDescriptor(
-                id: "open-design", displayName: "Open Design", symbolName: "paintpalette",
-                credentialHint: "Open Design session token", supportsModelBreakdown: true,
-                supportsTimeSeries: false, credentialPageURL: URL(string: "https://open-design.ai/"))
-            : BillingMonitor.ProviderDescriptor(
-                id: "ollama", displayName: "Ollama", symbolName: "cloud",
-                credentialHint: "Ollama API Key", supportsModelBreakdown: true,
-                credentialPageURL: URL(string: "https://ollama.com/settings/keys"))
+    /// 行高台账（DEBUG）：验收要看「四行等高」，靠肉眼估不准
+    ///
+    /// 写进快照目录的 credits-row-heights.txt（GUI 进程的 stdout 抓不到，
+    /// 而 info 日志有字符预算），内容形如：ollama=34.0 open-design=34.0 …
+    private func logRowHeights() {
+        let heights = tableView.snapshotRowHeights()
+        let text = heights.map { $0.id + "=" + String(format: "%.1f", $0.height) }
+            .joined(separator: " ")
+        guard let directory = ProcessInfo.processInfo.environment["NM_SNAPSHOT_DIR"],
+              !directory.isEmpty else { return }
+        let url = URL(fileURLWithPath: directory, isDirectory: true)
+            .appendingPathComponent("credits-row-heights.txt")
+        try? text.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    /// Ollama 示意余额：正常态带内含额度，遗留态只有已购余额 + 百分比限额
-    private static func previewOllamaBalance(now: Date, legacy: Bool) -> BillingBalance {
-        guard !legacy else {
-            return BillingBalance(purchasedUSD: 25, percentLimits: [
-                BillingPercentLimit(id: "session", title: "会话", remainingFraction: 0.75,
-                                    resetsAt: now.addingTimeInterval(-3_600)),
-                BillingPercentLimit(id: "weekly", title: "每周", remainingFraction: 0.40,
-                                    resetsAt: now.addingTimeInterval(3 * 86_400))])
-        }
-        let period = BillingPeriod(start: now.addingTimeInterval(-12 * 86_400),
-                                   end: now.addingTimeInterval(18 * 86_400))
-        // 真实 Ollama 同时返回金额与两条百分比限额，聚合块只取后者做双列
-        return BillingBalance(included: BillingIncludedBalance(remainingUSD: 72.50,
-                                                              allowanceUSD: 100, period: period),
-                              purchasedUSD: 25,
-                              percentLimits: [
-                                BillingPercentLimit(id: "session", title: "会话",
-                                                    remainingFraction: 0.95,
-                                                    resetsAt: now.addingTimeInterval(2 * 3_600)),
-                                BillingPercentLimit(id: "weekly", title: "每周",
-                                                    remainingFraction: 0.42,
-                                                    resetsAt: now.addingTimeInterval(3 * 86_400))])
-    }
+    // MARK: - 状态构造
 
-    /// Open Design 示意余额：5 小时与每周两个 credits 窗口（字段与真实接口一致）
-    private static func previewOpenDesignBalance(now: Date) -> BillingBalance {
-        BillingBalance(percentLimits: [
-            BillingPercentLimit(id: "session", title: "5 小时",
-                                remainingFraction: 1 - 157 / 50_000,
-                                resetsAt: now.addingTimeInterval(2 * 3_600),
-                                usedAmount: 157, limitAmount: 50_000, unitLabel: "credits"),
-            BillingPercentLimit(id: "weekly", title: "每周",
-                                remainingFraction: 1 - 76_412 / 150_000,
-                                resetsAt: now.addingTimeInterval(4 * 86_400),
-                                usedAmount: 76_412, limitAmount: 150_000, unitLabel: "credits")])
-    }
-
-    /// OpenCode Go 示意状态：5 小时 / 每周 / 每月三窗口，只查额度（没有用量接口）
-    private static func previewOpencodeGoState(now: Date) -> BillingMonitor.ProviderState {
+    private static func previewState(id: String, name: String, symbol: String,
+                                     balance: BillingBalance?, usage: BillingUsage?,
+                                     error: String?, now: Date,
+                                     instanceLabel: String? = nil) -> BillingMonitor.ProviderState {
         BillingMonitor.ProviderState(
             descriptor: BillingMonitor.ProviderDescriptor(
-                id: "opencode-go", displayName: "OpenCode Go", symbolName: "terminal",
-                credentialHint: "OpenCode Go API Key", supportsModelBreakdown: false,
-                supportsUsage: false, supportsTimeSeries: false,
-                credentialPageURL: URL(string: "https://opencode.ai/")),
-            range: .last24Hours,
+                id: id, instanceLabel: instanceLabel,
+                displayName: instanceLabel.map { name + " (" + $0 + ")" } ?? name,
+                symbolName: symbol,
+                credentialHint: name + " API Key", supportsModelBreakdown: true),
+            range: .last7Days,
             isConfigured: true,
-            balance: Self.previewOpencodeGoBalance(now: now),
-            // 没有用量接口：快照里也没有 usage，块内不出现摘要行与展开箭头
+            balance: balance,
+            usage: usage,
+            lastUpdated: now,
+            isLoading: false,
+            errorMessage: error)
+    }
+
+    private static func previewBalanceState(id: String, name: String, symbol: String,
+                                            amount: Double?, currency: String,
+                                            now: Date) -> BillingMonitor.ProviderState {
+        BillingMonitor.ProviderState(
+            descriptor: BillingMonitor.ProviderDescriptor(
+                id: id, displayName: name, symbolName: symbol,
+                credentialHint: name + " API Key", supportsModelBreakdown: false,
+                supportsUsage: false, supportsTimeSeries: false),
+            range: .last7Days,
+            isConfigured: true,
+            balance: BillingBalance(purchasedUSD: amount, currencyCode: currency),
             usage: nil,
             lastUpdated: now,
             isLoading: false,
             errorMessage: nil)
     }
 
-    /// OpenCode Go 示意余额：三个窗口，每月窗口取「已限流」角标样本（重置时间跨天）
+    // MARK: - 余额
+
+    /// Ollama 两项窗口：会话 68% / 每周 4%（限流）
+    private static func previewOllamaBalance(now: Date) -> BillingBalance {
+        BillingBalance(percentLimits: [
+            BillingPercentLimit(id: "session", title: "会话", remainingFraction: 0.6795,
+                                resetsAt: now.addingTimeInterval(3_600)),
+            BillingPercentLimit(id: "weekly", title: "每周", remainingFraction: 0.0421,
+                                resetsAt: now.addingTimeInterval(2 * 86_400), badge: "已限流"),
+        ])
+    }
+
+    /// Open Design 两项窗口：5 小时 63% / 每周 27%
+    private static func previewOpenDesignBalance(now: Date) -> BillingBalance {
+        BillingBalance(percentLimits: [
+            BillingPercentLimit(id: "session", title: "5 小时", remainingFraction: 0.6326,
+                                resetsAt: now.addingTimeInterval(2 * 3_600),
+                                usedAmount: 18_370, limitAmount: 50_000, unitLabel: "credits"),
+            BillingPercentLimit(id: "weekly", title: "每周", remainingFraction: 0.2739,
+                                resetsAt: now.addingTimeInterval(4 * 86_400),
+                                usedAmount: 108_915, limitAmount: 150_000, unitLabel: "credits"),
+        ])
+    }
+
+    /// 满额实例（原型里 Open Design (home) 两窗口都是 100%）
+    ///
+    /// 危险档配色由 Ollama 每周 4.21% / OpenCode Go 每月 0% 覆盖，这里不必再造一个全零样本；
+    /// 全零态若出现在真实数据里，判据（BillingCellLayout.level）与配色都已单测守住。
+    private static func previewFullBalance(now: Date) -> BillingBalance {
+        BillingBalance(percentLimits: [
+            BillingPercentLimit(id: "session", title: "5 小时", remainingFraction: 1,
+                                resetsAt: now.addingTimeInterval(2 * 3_600)),
+            BillingPercentLimit(id: "weekly", title: "每周", remainingFraction: 1,
+                                resetsAt: now.addingTimeInterval(6 * 86_400)),
+        ])
+    }
+
+    /// OpenCode Go 三窗口（验证三列布局；每月窗口已用尽）
     private static func previewOpencodeGoBalance(now: Date) -> BillingBalance {
         BillingBalance(percentLimits: [
             BillingPercentLimit(id: "window:rolling", title: "5 小时", remainingFraction: 0.62,
                                 resetsAt: now.addingTimeInterval(2 * 3_600)),
             BillingPercentLimit(id: "window:weekly", title: "每周", remainingFraction: 0.48,
                                 resetsAt: now.addingTimeInterval(4 * 86_400)),
-            // 已限流：剩余按 0 处理（让阈值预警生效），角标在三列窄格里独占一行
             BillingPercentLimit(id: "window:monthly", title: "每月", remainingFraction: 0,
                                 resetsAt: now.addingTimeInterval(18 * 86_400), badge: "已限流"),
         ])
     }
 
-    /// Open Design 示意用量：有指标与按模型 token，但没有分桶（服务端不分桶）
-    private static func previewOpenDesignUsage(endingAt now: Date) -> BillingUsage {
-        BillingUsage(range: .last24Hours, granularity: .hour,
-                     start: now.addingTimeInterval(-24 * 3_600), end: now,
-                     totals: BillingMetrics(requestCount: 1_284, inputTokens: 168_400_000,
-                                            cachedInputTokens: 42_000_000, outputTokens: 5_600_000),
-                     buckets: [],
-                     groups: [Self.previewModel("claude-sonnet-4-5", 912, 121_000_000, 30_000_000,
-                                                3_900_000),
-                              Self.previewModel("gpt-5-codex", 372, 47_400_000, 12_000_000,
-                                                1_700_000)])
-    }
+    // MARK: - 用量
 
-    /// Ollama 24 小时示意用量：25 个小时桶（稀疏写法只列非零桶）+ 2 个模型
+    /// 7 天用量（含 24h / 30d 三个范围，页级分段切档时图表立即有数据）
     ///
-    /// - Parameter legacyOnly: 遗留计划真实返回只有 request_count（无金额 / token / 模型分组）
-    private static func previewOllamaUsage(endingAt now: Date, legacyOnly: Bool) -> BillingUsage {
+    /// - Parameter requests: 7 天每天的请求数（顺序 = 最早到今天）
+    private static func previewUsage(endingAt now: Date, legacyOnly: Bool,
+                                     requests: [Int]) -> BillingUsage {
         let calendar = Calendar.current
-        let end = calendar.date(from: calendar.dateComponents([.year, .month, .day, .hour],
-                                                             from: now)) ?? now
-        let start = end.addingTimeInterval(-24 * 3_600)
-        // 非零桶：遗留态按请求数、正常态按金额（其余小时为 0）
-        let counts = [4: 120, 10: 860, 21: 2_400, 22: 6_300, 23: 8_200, 24: 3_400]
-        let amounts: [Int: Double] = [10: 0.0052, 22: 0.0088, 23: 0.0042, 24: 0.0032]
-        let buckets = (0..<25).map { index -> BillingBucket in
-            let begin = start.addingTimeInterval(Double(index) * 3_600)
-            let usd = legacyOnly ? nil : amounts[index]
-            let requests = legacyOnly ? (counts[index] ?? 0) : (usd == nil ? 0 : 1)
-            return BillingBucket(start: begin, end: begin.addingTimeInterval(3_600),
-                                 isPartial: index == 24,
-                                 metrics: BillingMetrics(requestCount: requests, usageUSD: usd))
+        let today = calendar.startOfDay(for: now)
+        let start = calendar.date(byAdding: .day, value: -(requests.count - 1), to: today) ?? today
+        let dayBuckets = requests.enumerated().map { index, count -> BillingBucket in
+            let begin = calendar.date(byAdding: .day, value: index, to: start) ?? start
+            return BillingBucket(start: begin,
+                                 end: calendar.date(byAdding: .day, value: 1, to: begin) ?? begin,
+                                 isPartial: index == requests.count - 1,
+                                 metrics: BillingMetrics(requestCount: legacyOnly ? count : max(count / 7, 1),
+                                                         usageUSD: legacyOnly ? nil : Double(count) / 90_000))
         }
-        let totals = legacyOnly
-            ? BillingMetrics(requestCount: 26_118)
-            : BillingMetrics(requestCount: 15, usageUSD: 0.01718, inputTokens: 106_000,
-                             cachedInputTokens: 46_000, outputTokens: 13_600)
-        let groups = legacyOnly
-            ? []
-            : [Self.previewModel("glm-5.3-flash", 12, usd: 0.0132),
-               Self.previewModel("gpt-oss:120b", 3, usd: 0.0040)]
-        return BillingUsage(range: .last24Hours, granularity: .hour, start: start,
-                            end: end.addingTimeInterval(3_600), totals: totals,
-                            buckets: buckets, groups: groups)
-    }
-
-    /// 模型分组简写（请求数 / token 三项 / 可选金额）
-    private static func previewModel(_ name: String, _ requests: Int, _ input: Int = 0,
-                                     _ cached: Int = 0, _ output: Int = 0,
-                                     usd: Double? = nil) -> BillingGroup {
-        BillingGroup(name: name, metrics: BillingMetrics(requestCount: requests, usageUSD: usd,
-                                                         inputTokens: input,
-                                                         cachedInputTokens: cached,
-                                                         outputTokens: output))
+        let total = requests.reduce(0, +)
+        let groups: [BillingGroup] = legacyOnly ? [] : [
+            BillingGroup(name: "deepseek-chat",
+                         metrics: BillingMetrics(requestCount: total * 4 / 10,
+                                                 usageUSD: 0.42, inputTokens: 12_040_000, outputTokens: 1_200_000)),
+            BillingGroup(name: "kimi-k2",
+                         metrics: BillingMetrics(requestCount: total * 26 / 100,
+                                                 usageUSD: 0.26, inputTokens: 8_060_000, outputTokens: 900_000)),
+            BillingGroup(name: "glm-5",
+                         metrics: BillingMetrics(requestCount: total * 18 / 100,
+                                                 usageUSD: 0.18, inputTokens: 5_120_000, outputTokens: 600_000)),
+            BillingGroup(name: "qwen3-coder",
+                         metrics: BillingMetrics(requestCount: total * 9 / 100,
+                                                 usageUSD: 0.09, inputTokens: 2_600_000, outputTokens: 300_000)),
+            BillingGroup(name: "其他模型",
+                         metrics: BillingMetrics(requestCount: total * 7 / 100,
+                                                 usageUSD: 0.07, inputTokens: 1_970_000, outputTokens: 200_000)),
+        ]
+        let week = BillingUsage(range: .last7Days, granularity: .day, start: start,
+                            end: now, totals: BillingMetrics(requestCount: total,
+                                                             usageUSD: legacyOnly ? nil : 1.02, inputTokens: 30_000_000,
+                                                             cachedInputTokens: 8_000_000, outputTokens: 3_200_000),
+                            buckets: dayBuckets, groups: groups)
+        return week
     }
 }
 #endif

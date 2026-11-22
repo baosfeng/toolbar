@@ -10,10 +10,9 @@ Discovery/UdpDiscoveryService 425 2
 DrawnUI/DrawnRowList 540 2
 Harness/HarnessMultiSourceScanner 338 2
 Harness/HarnessUsageService 362 2
-MenuPanel/BillingPaneSections 313 2
-MenuPanel/BillingProviderBlockView 304 2
-MenuPanel/MenuPanelController 948 7
-MenuPanel/MenuPanelView 830 7
+MenuPanel/BillingDetailPaneView 326 2
+MenuPanel/MenuPanelController 947 7
+MenuPanel/MenuPanelView 834 7
 MenuPanel/NetworkPaneView 561 3
 MenuPanel/SystemDetailPaneView 831 6
 MenuPanel/SystemPaneView 622 4
@@ -42,6 +41,6 @@ Settings/SettingsWindow 583 3
 Snip/SnipController 1279 7
 Snip/SnipOverlayView 1425 8
 Snip/SnipToolBarView 446 3
-TestRunner/TestSuites 378 8
+TestRunner/TestSuites 380 8
 Token/TokenDerive 705 4
 Transfer/TransferController 383 2

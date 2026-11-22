@@ -26,18 +26,4 @@ public enum BillingCellLayout {
         if fraction < 0.5 { return .warn }
         return .normal
     }
-
-    /// 角标文案：同行时带分隔符（“已限流 ·”），窄格或没有重置时间时原样
-    public static func badgeText(_ badge: String?, hasReset: Bool, compact: Bool) -> String? {
-        guard let badge else { return nil }
-        return (compact || !hasReset) ? badge : badge + " ·"
-    }
-
-    /// 角标行的行数（0 = 整行不画）
-    public static func footerLineCount(hasBadge: Bool, hasReset: Bool, compact: Bool) -> Int {
-        if compact {
-            return (hasBadge ? 1 : 0) + (hasReset ? 1 : 0)
-        }
-        return (hasBadge || hasReset) ? 1 : 0
-    }
 }
