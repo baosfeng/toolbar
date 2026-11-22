@@ -31,6 +31,9 @@ dist/
 ehthumbs.db
 reasonix.toml
 
+# 本地验收证据（截图 / 面板巡览记录，单次验证产物不入库）
+.verify/
+
 # codebase-memory 知识图谱缓存（工具自动生成）
 .codebase-memory/
 
