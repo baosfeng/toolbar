@@ -36,7 +36,8 @@ func runSnipSuites() {
     runSnipHotKeyPreferencesTests()
     runSnipDockIconPolicyTests()
     runSnipPasteboardImageBudgetTests()  // 复制到剪贴板的体积预算（1MB：2x PNG → 1x PNG → JPEG 兜底）
-    runSnipToolBarLayoutTests()
+    runSnipToolBarLayoutTests()  // 布局与分隔线比例
+    runSnipBarToneTests()  // 选中 / 悬停 / 常态三档明度 + 两级选中语言 + 当前色圆点恒带环
     runSnipToolBarConfigurationTests()
     runSnipToolBarOrderTests()
     runSnipKeyCommandTests()

@@ -158,12 +158,12 @@ final class SnipToolPanelView: NSView {
         for (index, rect) in itemRects.enumerated() {
             let isSelected = index == selectedIndex
             let isHovered = index == hoveredIndex && labelMode.showsHoverBubble
-            if isSelected || isHovered {
-                NSColor.white.withAlphaComponent(isSelected ? 0.22 : 0.14).setFill()
-                NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
-            }
+            // 二级面板用另一套选中语言：浅底不变 + 强调色描边，与一级工具条的整格反白区分开
+            SnipBarDrawing.drawSelection(isSelected: isSelected, isHovered: isHovered,
+                                         in: rect,
+                                         style: SnipBarTone.selectionStyle(forPanel: true))
             drawItem(at: index, in: rect, isSelected: isSelected,
-                     alpha: isSelected ? 1 : (isHovered ? 0.95 : 0.72))
+                     alpha: SnipBarTone.iconAlpha(isSelected: isSelected, isHovered: isHovered))
             if labelMode.showsPersistentLabel {
                 drawPersistentLabel(at: index, in: rect)
             }
@@ -183,7 +183,9 @@ final class SnipToolPanelView: NSView {
             SnipBarDrawing.drawTool(tools[index], in: iconRect, alpha: alpha,
                                     inset: labelMode.showsPersistentLabel ? 1 : 6)
         case .colors(let colors) where colors.indices.contains(index):
-            SnipBarDrawing.drawColorDot(colors[index], in: iconRect, isSelected: isSelected)
+            // 面板里的色点是一组可选项：只有真正选中的那一枚带环
+            SnipBarDrawing.drawColorDot(colors[index], in: iconRect,
+                                        isSelected: SnipBarTone.colorDotRingVisible(isCurrentColor: isSelected))
         case .widths(let widths) where widths.indices.contains(index):
             SnipBarDrawing.drawWidth(widths[index], in: iconRect, isSelected: isSelected)
         case .styles(let widths, let dashes, let alphas):

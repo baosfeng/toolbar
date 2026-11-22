@@ -23,13 +23,13 @@ extension SnipToolBarView {
         for (index, entry) in itemRects.enumerated() {
             let isSelected = isSelected(entry.item)
             let isHovered = index == hoveredIndex && configuration.labelMode.showsHoverBubble
-            // 悬停提亮：与选中态同色但更淡，提示「这里可以点」而不是「已选中」
-            if isSelected || isHovered {
-                NSColor.white.withAlphaComponent(isSelected ? 0.22 : 0.14).setFill()
-                NSBezierPath(roundedRect: entry.rect, xRadius: 6, yRadius: 6).fill()
-            }
+            // 三档明度（选中 / 悬停 / 常态）与选中语言都由 SnipBarTone 统一给出：
+            // 一级走整格反白且选中图标纯白，悬停只作轻提示，两者差值 ≥0.15 才分得清
+            SnipBarDrawing.drawSelection(isSelected: isSelected, isHovered: isHovered,
+                                         in: entry.rect,
+                                         style: SnipBarTone.selectionStyle(forPanel: false))
             drawItem(entry.item, in: entry.rect, isSelected: isSelected,
-                     alpha: isSelected ? 1 : (isHovered ? 0.95 : 0.72))
+                     alpha: SnipBarTone.iconAlpha(isSelected: isSelected, isHovered: isHovered))
         }
 
         for x in dividerXs {
@@ -73,7 +73,9 @@ extension SnipToolBarView {
                                       inset: configuration.labelMode.showsPersistentLabel ? 3 : 9)
             }
         case .color:
-            SnipBarDrawing.drawColorDot(style.color, in: colorDotRect(in: rect), isSelected: false)
+            // 一级工具条只有「当前色」这一枚色点：恒带白环，一眼看出这是现在的颜色、点它能换
+            SnipBarDrawing.drawColorDot(style.color, in: colorDotRect(in: rect),
+                                        isSelected: SnipBarTone.colorDotRingVisible(isCurrentColor: true))
         case .width:
             let widthRect = configuration.labelMode.showsPersistentLabel
                 ? CGRect(x: rect.midX - 12, y: rect.minY + 12, width: 24, height: 24)
@@ -198,11 +200,13 @@ extension SnipToolBarView {
 
     private func drawSeparator(at x: CGFloat, in context: CGContext) {
         guard x > 0 else { return }
+        // 高度按可视条高的固定比例（65%）：40pt / 50pt 两档观感一致，不再把常驻标签档压到标签上
+        let inset = SnipToolBarLayout.dividerInset(forHeight: barHeight)
         context.saveGState()
         context.setStrokeColor(NSColor.white.withAlphaComponent(0.18).cgColor)
         context.setLineWidth(1)
-        context.move(to: CGPoint(x: x, y: barOriginY + 9))
-        context.addLine(to: CGPoint(x: x, y: barOriginY + barHeight - 9))
+        context.move(to: CGPoint(x: x, y: barOriginY + inset))
+        context.addLine(to: CGPoint(x: x, y: barOriginY + barHeight - inset))
         context.strokePath()
         context.restoreGState()
     }

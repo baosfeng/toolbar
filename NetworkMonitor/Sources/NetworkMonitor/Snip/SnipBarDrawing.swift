@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 工具条基础绘制
 
@@ -34,6 +35,37 @@ enum SnipBarDrawing {
         }
         image.draw(in: rect.insetBy(dx: inset, dy: inset), from: .zero,
                    operation: .sourceOver, fraction: alpha)
+    }
+
+    /// 画格底 —— 选中 / 悬停两套选中语言的唯一落地处
+    ///
+    /// - 一级工具条（`.fill`）：整格反白，三档明度由 `SnipBarTone` 给出；
+    /// - 二级面板（`.stroke`）：底只做同格调（选中 0.10 / 悬停 0.13），选中感交给
+    ///   1.5pt 强调色描边 —— 与一级的整格反白区分开，两层选择才不会撞脸。
+    ///
+    /// 强调色直接用系统 `controlAccentColor`：主题 `.accent` 角色
+    /// （`ThemeStyle` 的 `.systemAccent`）解析出来就是它，不另建令牌。
+    static func drawSelection(isSelected: Bool,
+                              isHovered: Bool,
+                              in rect: CGRect,
+                              style: SnipBarTone.SnipBarSelectionStyle) {
+        guard isSelected || isHovered else { return }
+        let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
+        switch style {
+        case .fill:
+            guard let fill = SnipBarTone.fillAlpha(isSelected: isSelected, isHovered: isHovered) else { return }
+            NSColor.white.withAlphaComponent(fill).setFill()
+            path.fill()
+        case .stroke:
+            NSColor.white.withAlphaComponent(isSelected
+                ? SnipBarTone.panelSelectedFillAlpha
+                : SnipBarTone.hoverFillAlpha).setFill()
+            path.fill()
+            guard isSelected else { return }
+            NSColor.controlAccentColor.setStroke()
+            path.lineWidth = SnipBarTone.selectionStrokeWidth
+            path.stroke()
+        }
     }
 
     /// 画一个颜色圆点（选中时加白色描边环）

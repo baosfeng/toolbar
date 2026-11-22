@@ -130,5 +130,27 @@ func runSnipToolBarLayoutTests() {
     }
     assertEqual(SnipTool.primary, [.rectangle, .arrow, .text, .mosaic], "常驻工具是最高频的四个")
 
+    // MARK: 分隔线高度按条高比例（A8）
+
+    // 分隔线统一占可视条高的 65%（上下各留 17.5%）：
+    // 旧写法是固定 9pt 内缩 —— 40pt 条里只有 55%、50pt 常驻标签档里 64%，
+    // 两档观感不一致，后者还顶到 9.5pt 标签上。
+    assertEqual(SnipToolBarLayout.dividerHeightRatio, 0.65, "分隔线占可视条高的 65%")
+    let compactInset = SnipToolBarLayout.dividerInset(forHeight: SnipToolBarLayout.height)
+    assertEqual(abs(compactInset - 7) < 0.0001, true, "40pt 条内缩 7pt（实测 \(compactInset)）")
+    let labeledInset = SnipToolBarLayout.dividerInset(forHeight: SnipToolBarLayout.labeledMetrics.height)
+    assertEqual(abs(labeledInset - 8.75) < 0.0001, true, "50pt 常驻标签档内缩 8.75pt（实测 \(labeledInset)）")
+    // 比例关系：上下内缩之和 + 线高 = 条高，且两档线高都占 65%
+    for height in [SnipToolBarLayout.height, SnipToolBarLayout.labeledMetrics.height, CGFloat(30), 64] {
+        let inset = SnipToolBarLayout.dividerInset(forHeight: height)
+        assertEqual(abs(2 * inset + height * SnipToolBarLayout.dividerHeightRatio - height) < 0.0001, true,
+                    "\(height)pt 条：上下内缩 + 线高 = 条高")
+        assertEqual(abs((height - 2 * inset) / height - SnipToolBarLayout.dividerHeightRatio) < 0.0001, true,
+                    "\(height)pt 条的线高严格是 65%")
+        // 线高居中：上下内缩相等，分隔线不会偏向一端
+        assertEqual(abs((height / 2 - inset) - (height - (height / 2 + inset))) < 0.0001, true,
+                    "\(height)pt 条：分隔线上下留白相等")
+    }
+
     print("✅ 截图工具条布局测试通过")
 }

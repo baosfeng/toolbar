@@ -10,6 +10,7 @@ import NetworkMonitorUI
 /// 触发方式：`NM_SNIP_TOOLBAR_SNAPSHOT_DIR=/tmp/nm-snip-toolbar <可执行>`
 /// 产物：
 /// - `toolbar-hover-tool.png`：悬停档，悬停在「箭头」上（气泡 + 提亮）
+/// - `toolbar-tone-compare.png`：同一屏内「选中格 vs 悬停格 vs 常态格」三档并排（三档明度取证）
 /// - `toolbar-hover-color.png`：悬停档，悬停在颜色圆点
 /// - `toolbar-labels.png`：常驻标签档（条高 50pt，图标下带中文名）
 /// - `toolbar-icononly.png`：仅图标档（老外观）
@@ -36,6 +37,9 @@ enum SnipToolBarSnapshot {
 
             renderBar(.standard, hover: .tool(.arrow),
                       to: directory.appendingPathComponent("toolbar-hover-tool.png"))
+            // 选中（箭头）与悬停（文字）分居两格：一张图就能比出三档明度差
+            renderBar(.standard, hover: .tool(.text),
+                      to: directory.appendingPathComponent("toolbar-tone-compare.png"))
             renderBar(.standard, hover: .color,
                       to: directory.appendingPathComponent("toolbar-hover-color.png"))
             renderBar(SnipToolBarConfiguration(labelMode: .always), hover: nil,
@@ -50,7 +54,8 @@ enum SnipToolBarSnapshot {
 
             renderPanel(.tools(SnipTool.overflow), hoverIndex: 0,
                         to: directory.appendingPathComponent("panel-tools.png"))
-            renderPanel(.colors(SnipToolBarView.colors), hoverIndex: 1,
+            // 选中第一枚色点、悬停第三枚：面板选中走强调色描边（二级选中语言取证）
+            renderPanel(.colors(SnipToolBarView.colors), selectedIndex: 0, hoverIndex: 2,
                         to: directory.appendingPathComponent("panel-colors.png"))
             renderPanel(.styles(widths: SnipToolBarView.widths,
                                 dashes: SnipToolBarView.dashes,
@@ -99,9 +104,10 @@ enum SnipToolBarSnapshot {
     /// 渲染一张二级面板（带一个悬停项，取证文字气泡）
     private static func renderPanel(_ content: SnipPanelContent,
                                     labelMode: SnipToolBarLabelMode = .hover,
+                                    selectedIndex: Int? = nil,
                                     hoverIndex: Int? = nil,
                                     to url: URL) {
-        let panel = SnipToolPanelView(content: content, selectedIndex: nil, labelMode: labelMode)
+        let panel = SnipToolPanelView(content: content, selectedIndex: selectedIndex, labelMode: labelMode)
         if let hoverIndex { panel.debugHover(index: hoverIndex) }
         guard let appearance = NSAppearance(named: .darkAqua) else { return }
         let size = content.size(labelMode: labelMode)

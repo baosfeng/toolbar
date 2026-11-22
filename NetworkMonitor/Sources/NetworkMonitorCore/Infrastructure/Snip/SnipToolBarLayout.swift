@@ -34,6 +34,8 @@ public enum SnipToolBarLayout {
     public static let actionWidth: CGFloat = 56
     public static let actionHeight: CGFloat = 26
     public static let actionGap: CGFloat = 6
+    /// 组间分隔线高度占可视条高的比例（上下各留 17.5%，两档条高观感一致）
+    public static let dividerHeightRatio: CGFloat = 0.65
     /// 悬停气泡占用的上方高度（气泡画在这里，不占工具条可视区）
     public static let bubbleSpace: CGFloat = 28
     /// 气泡自身高度
@@ -118,6 +120,14 @@ public enum SnipToolBarLayout {
     /// 该档下工具条的可视高度
     public static func barHeight(for mode: SnipToolBarLabelMode) -> CGFloat {
         metrics(for: mode).height
+    }
+
+    /// 分隔线在条内上下各内缩多少（= 条高 × (1 − 比例) / 2）
+    ///
+    /// 早期写法是固定的 9pt 内缩：40pt 条里只占 55%、50pt 常驻标签档里占 64%，
+    /// 两档观感不一致，后者还顶到 9.5pt 标签。按比例算后两档都是 65%。
+    public static func dividerInset(forHeight height: CGFloat) -> CGFloat {
+        max(height * (1 - dividerHeightRatio) / 2, 0)
     }
 
     /// 该档下工具条视图的完整高度（悬停档要把气泡空间算进去）
