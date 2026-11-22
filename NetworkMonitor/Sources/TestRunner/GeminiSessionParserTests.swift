@@ -26,6 +26,25 @@ private let geminiWholeJSON = """
 {"id":"a3","timestamp":"2026-01-05T11:00:10.000Z","tokens":null}]}
 """
 
+
+/// 新补丁形态：$patch 只改已有消息、$rewindTo 截断、同 id 再 append 后者胜
+private let geminiPatchJSONL = """
+{"sessionId":"g-2",".project_root":"/tmp/gemini-patch","model":"gemini-2.5-pro"}
+{"id":"p1","timestamp":"2026-01-05T10:00:00.000Z","tokens":{"promptTokenCount":100,"candidatesTokenCount":10}}
+{"id":"p2","timestamp":"2026-01-05T10:00:10.000Z","tokens":{"promptTokenCount":200,"candidatesTokenCount":20}}
+{"id":"p3","timestamp":"2026-01-05T10:00:20.000Z","tokens":{"promptTokenCount":300,"candidatesTokenCount":30}}
+{"$patch":{"id":"p1","content":[{"text":"x"}]}}
+{"$rewindTo":"p3"}
+{"id":"p3","timestamp":"2026-01-05T10:01:00.000Z","tokens":{"promptTokenCount":400,"candidatesTokenCount":40}}
+"""
+
+/// recordMessageTokens 回填形态：先 append 一条 tokens=null 的同 id 记录，再 append 带 tokens 的
+private let geminiBackfillJSONL = """
+{"sessionId":"g-3",".project_root":"/tmp/gemini-backfill","model":"gemini-2.5-pro"}
+{"id":"b1","timestamp":"2026-01-05T10:00:00.000Z","type":"gemini","tokens":null}
+{"id":"b1","timestamp":"2026-01-05T10:00:00.000Z","type":"gemini","tokens":{"promptTokenCount":100,"cachedContentTokenCount":40,"candidatesTokenCount":5,"thoughtsTokenCount":7}}
+"""
+
 func runGeminiSessionParserTests() {
     print("🧪 Testing Gemini 会话解析（JSONL / 整份 JSON / 去重 / tokens=null）...")
 
@@ -85,6 +104,24 @@ func runGeminiSessionParserTests() {
     let empty = GeminiSessionParser.parse(text: "")
     assertEqual(empty.events.count, 0, "空内容：零事件")
     assertEqual(empty.malformedLineCount, 0, "空内容：空行不算坏行")
+
+    // MARK: $patch / $rewindTo / 同 id 再 append（新版 append-only 记录）
+    let patched = GeminiSessionParser.parse(text: geminiPatchJSONL)
+    assertEqual(patched.events.count, 3, "$rewindTo：截断后重生成的 p3 只留最新一条，共 3 条事件")
+    assertEqual(patched.usage.uncachedInput, 700, "截断：uncached 100+200+400=700（被截断的 300 不计）")
+    assertEqual(patched.usage.output, 70, "截断：output 10+20+40=70（被截断的 30 不计）")
+    assertEqual(patched.requestCount, 3, "截断：请求数 3")
+    assertEqual(patched.skippedLineCount, 2, "截断与重放各计 skipped=1")
+    assertEqual(patched.ignoredLineCount, 2, "元信息行与无用量影响的 $patch 计 ignored")
+    assertEqual(patched.events.map(\.tsMs).last, 1_767_607_260_000, "重生成的 p3 用新时间戳")
+
+    let backfill = GeminiSessionParser.parse(text: geminiBackfillJSONL)
+    assertEqual(backfill.events.count, 1, "回填：同 id 再 append 只留一条事件")
+    assertEqual(backfill.usage, HarnessTokenUsage(uncachedInput: 60, output: 12, cacheRead: 40,
+                                                  cacheWrite: 0, requestCount: 1),
+                "回填：后者胜 —— uncached 60 / output 5+7=12 / cacheRead 40")
+    assertEqual(backfill.skippedLineCount, 0, "回填：首条 tokens=null 未计入用量，重复 id 不重复计请求")
+    assertEqual(backfill.ignoredLineCount, 2, "回填：元信息行 + tokens=null 各计 ignored")
 
     print("✅ Gemini 会话解析 works")
 }

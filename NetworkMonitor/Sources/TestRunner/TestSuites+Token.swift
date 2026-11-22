@@ -46,4 +46,10 @@ func runTokenSuites() {
     runZedThreadParserTests()
     runOpenCodeMessageParserTests()
     runCopilotUsageParserTests()
+    // 上游源码核实后修掉的缺陷：逐条防复发回归（漏扫 / 双算 / 口径错）
+    runCodexSourceRegressionTests()
+    runZedLegacyThreadTests()
+    runCopilotUsageRegressionTests()
+    runGeminiSessionRegressionTests()
+    runOpenCodeSourceRegressionTests()
 }

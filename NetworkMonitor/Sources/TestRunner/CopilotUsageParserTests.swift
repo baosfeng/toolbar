@@ -3,12 +3,12 @@ import NetworkMonitorCore
 
 // MARK: - Copilot CLI 用量解析（设计规格 §2.4 / §7）
 //
-// 覆盖：`input - cache_read` 的 cache-inclusive 口径、reasoning 有独立列才加、
+// 覆盖：`input - cache_read` 的 cache-inclusive 口径、reasoning 分列不并进 output、
 // 无 reasoning 列时视为已含、三种时间形态（ISO8601 文本 / unix 秒 / unix 毫秒）、
 // 非用量行归 ignored、缺时间归 malformed、整库只读读取、三种降级。
 // 行 fixture 用「列名 → 值」字典自造，不依赖真实 session-store.db。
 
-/// 表实际列名集合（含 reasoning_tokens，故 reasoning 单列加进 output）
+/// 表实际列名集合（含 reasoning_tokens；上游与 output 分列，故不并进 output）
 private let copilotColumns: Set<String> = [
     "id", "created_at", "input_tokens", "output_tokens",
     "cache_read_tokens", "cache_write_tokens", "reasoning_tokens", "model", "session_id",
@@ -54,10 +54,10 @@ func runCopilotUsageParserTests() {
     // MARK: 单行：cache-inclusive + reasoning 单列
     if case .usage(let first) = CopilotUsageParser.parse(row: copilotISO8601Row,
                                                         tableColumns: copilotColumns) {
-        assertEqual(first.usage, HarnessTokenUsage(uncachedInput: 800, output: 600,
+        assertEqual(first.usage, HarnessTokenUsage(uncachedInput: 800, output: 500,
                                                    cacheRead: 400, cacheWrite: 30,
                                                    requestCount: 1),
-                    "单行：input - cache_read = 800，output 500 + reasoning 100 = 600")
+                    "单行：input - cache_read = 800，output 500（reasoning 100 不进四桶）")
         assertEqual(first.source, TokenSourceID.copilot, "单行：来源标识")
         assertEqual(first.provider, "github-copilot", "单行：provider 常量")
         assertEqual(first.model, "gpt-4.1", "单行：模型列")
@@ -75,15 +75,15 @@ func runCopilotUsageParserTests() {
     ]
     if case .usage(let folded) = CopilotUsageParser.parse(row: noReasoningRow,
                                                           tableColumns: noReasoningColumns) {
-        assertEqual(folded.usage.output, 700, "无 reasoning 列：output 视为已含（不再加 100）")
+        assertEqual(folded.usage.output, 700, "无 reasoning 列：output 原样")
         assertEqual(folded.usage.uncachedInput, 800, "无 reasoning 列：uncached 照常")
     } else {
         assertEqual(false, true, "无 reasoning 列：应解析为 usage")
     }
-    // 同样一行但表里确有 reasoning 列 → 单列相加
+    // 同样一行但表里确有 reasoning 列 → 仍不相加（上游 output 不含 reasoning）
     if case .usage(let separated) = CopilotUsageParser.parse(row: noReasoningRow,
                                                              tableColumns: copilotColumns) {
-        assertEqual(separated.usage.output, 800, "有 reasoning 列：output + reasoning")
+        assertEqual(separated.usage.output, 700, "有 reasoning 列：不并进 output")
     } else {
         assertEqual(false, true, "有 reasoning 列：应解析为 usage")
     }
@@ -104,21 +104,21 @@ func runCopilotUsageParserTests() {
     let report = CopilotUsageParser.parse(rows: rows, tableColumns: copilotColumns)
     assertEqual(report.source, TokenSourceID.copilot, "整表：来源标识")
     assertEqual(report.events.count, 3, "整表：三行用量行")
-    assertEqual(report.usage, HarnessTokenUsage(uncachedInput: 1500, output: 850,
+    assertEqual(report.usage, HarnessTokenUsage(uncachedInput: 1500, output: 750,
                                                 cacheRead: 700, cacheWrite: 30, requestCount: 3),
-                "整表：四桶合计 1500 / 850 / 700 / 30")
+                "整表：四桶合计 1500 / 750 / 700 / 30")
     assertEqual(report.requestCount, 3, "整表：requests=3")
     assertEqual(report.malformedLineCount, 1, "整表：缺时间行记 malformed")
     assertEqual(report.ignoredLineCount, 0, "整表：无 ignored")
     assertEqual(report.skippedLineCount, 0, "整表：一次请求一行，无 skipped")
     assertEqual(report.events.map(\.usage),
-                [HarnessTokenUsage(uncachedInput: 800, output: 600, cacheRead: 400,
+                [HarnessTokenUsage(uncachedInput: 800, output: 500, cacheRead: 400,
                                    cacheWrite: 30, requestCount: 1),
                  HarnessTokenUsage(uncachedInput: 600, output: 200, cacheRead: 300,
                                    cacheWrite: 0, requestCount: 1),
                  HarnessTokenUsage(uncachedInput: 100, output: 50, cacheRead: 0,
                                    cacheWrite: 0, requestCount: 1)],
-                "整表：三行分别为 [800,600,400,30] / [600,200,300,0] / [100,50,0,0]")
+                "整表：三行分别为 [800,500,400,30] / [600,200,300,0] / [100,50,0,0]")
     assertEqual(report.events.map(\.tsMs),
                 [1_767_607_200_000, 1_767_585_600_000, 1_767_585_660_000],
                 "整表：ISO8601 / unix 秒 / unix 毫秒三种时间形态都归一为毫秒")
@@ -162,7 +162,7 @@ func runCopilotUsageParserTests() {
     let read = CopilotUsageParser.read(databaseAt: dbPath)
     assertEqual(read.isAvailable, true, "整库：可读")
     assertEqual(read.events.count, 3, "整库：三行事件")
-    assertEqual(read.usage, HarnessTokenUsage(uncachedInput: 1500, output: 850,
+    assertEqual(read.usage, HarnessTokenUsage(uncachedInput: 1500, output: 750,
                                               cacheRead: 700, cacheWrite: 30, requestCount: 3),
                 "整库：四桶与请求数与整表入口一致")
     assertEqual(read.malformedRowCount, 0, "整库：三行都合法")
@@ -192,6 +192,70 @@ func runCopilotUsageParserTests() {
     } else {
         assertEqual("tableMissing", String(describing: noTable.unavailable), "降级：缺表原因分类")
     }
+
+    // MARK: 新场景 1：datetime('now') 文本时间（空格分隔、无时区 → 按 UTC 解释）
+    if case .usage(let sqliteText) = CopilotUsageParser.parse(
+        row: ["session_id": "s-2", "event_id": "ev-9", "model": "gpt-5",
+              "input_tokens": 1000, "cache_read_tokens": 200, "output_tokens": 100,
+              "created_at": "2026-11-22 06:12:00"],
+        tableColumns: copilotColumns) {
+        assertEqual(sqliteText.tsMs, 1_795_327_920_000, "时间：datetime('now') 文本按 UTC 解释")
+        assertEqual(sqliteText.usage, HarnessTokenUsage(uncachedInput: 800, output: 100,
+                                                       cacheRead: 200, cacheWrite: 0, requestCount: 1),
+                    "时间：uncached 800 / output 100 / cacheRead 200")
+    } else {
+        assertEqual(false, true, "时间：datetime('now') 文本应解析为 usage")
+    }
+
+    // MARK: 新场景 2：(session_id, event_id) 去重；event_id 为 NULL 的老行按行 id 兜底
+    let dedupeRows: [[String: Any]] = [
+        ["session_id": "s-3", "event_id": "dup", "input_tokens": 100, "output_tokens": 10,
+         "created_at": "2026-11-22 06:12:00"],
+        ["session_id": "s-3", "event_id": "dup", "input_tokens": 100, "output_tokens": 10,
+         "created_at": "2026-11-22 06:12:00"],
+        ["session_id": "s-4", "event_id": "dup", "input_tokens": 50, "output_tokens": 5,
+         "created_at": "2026-11-22 06:12:00"],
+        ["session_id": "s-5", "event_id": NSNull(), "id": 41, "input_tokens": 30,
+         "output_tokens": 3, "created_at": "2026-11-22 06:12:00"],
+        ["session_id": "s-5", "event_id": NSNull(), "id": 42, "input_tokens": 30,
+         "output_tokens": 3, "created_at": "2026-11-22 06:12:00"],
+    ]
+    let dedupe = CopilotUsageParser.parse(rows: dedupeRows)
+    assertEqual(dedupe.events.count, 4, "去重：同键合并后 4 行（NULL event_id 按行 id 各留一条）")
+    assertEqual(dedupe.skippedLineCount, 1, "去重：重复键计 skipped=1")
+    assertEqual(dedupe.usage.uncachedInput, 210, "去重：uncached 100+50+30+30=210")
+
+    // MARK: 新场景 3：整库路径同样去重（rowid 别名兜底 NULL event_id；DEFAULT datetime('now'))
+    let dedupePath = tokenSourceTempDatabasePath("copilot-dedupe")
+    defer { try? FileManager.default.removeItem(atPath: dedupePath) }
+    if tokenSourceMakeSQLite(at: dedupePath, statements: [
+        "CREATE TABLE assistant_usage_events (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            + "session_id TEXT, event_id TEXT, model TEXT, input_tokens INTEGER, "
+            + "output_tokens INTEGER, cache_read_tokens INTEGER, cache_write_tokens INTEGER, "
+            + "reasoning_tokens INTEGER, created_at TEXT DEFAULT (datetime('now')));",
+        "INSERT INTO assistant_usage_events (session_id, event_id, input_tokens, output_tokens) "
+            + "VALUES ('s-6','dup',100,10), ('s-6','dup',100,10), ('s-6',NULL,40,4), ('s-6',NULL,40,4);",
+    ]) {
+        let dedupeRead = CopilotUsageParser.read(databaseAt: dedupePath)
+        assertEqual(dedupeRead.events.count, 3,
+                    "整库去重：同 event_id 只留一条，NULL event_id 两行按 rowid 各留")
+        assertEqual(dedupeRead.skippedRowCount, 1, "整库去重：重复计 skipped=1")
+        assertEqual(dedupeRead.malformedRowCount, 0, "整库去重：DEFAULT datetime('now') 全部可解析")
+    } else {
+        assertEqual(false, true, "整库去重：fixture 建库失败")
+    }
+
+    // MARK: 新场景 4：COPILOT_HOME 优先，其次 ~/.copilot
+    let envRoots = TokenSourceID.copilot.defaultRoots(
+        homeDirectory: URL(fileURLWithPath: "/Users/fixture"),
+        environment: ["COPILOT_HOME": "/tmp/copilot-home"])
+    assertEqual(envRoots.map(\.path), ["/tmp/copilot-home/session-store.db"],
+                "路径：COPILOT_HOME 生效")
+    let plainRoots = TokenSourceID.copilot.defaultRoots(
+        homeDirectory: URL(fileURLWithPath: "/Users/fixture"), environment: [:])
+    assertEqual(plainRoots.map(\.path), ["/Users/fixture/.copilot/session-store.db"],
+                "路径：无环境变量回落 ~/.copilot")
+    assertEqual(TokenSourceID.copilot.environmentKey, "COPILOT_HOME", "路径：环境变量键")
 
     print("✅ Copilot 解析 works")
 }
