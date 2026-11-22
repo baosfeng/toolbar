@@ -86,7 +86,7 @@ public enum UpdatePackageKind: String, Equatable, Sendable {
 /// 从发布里定位要下载的安装包 —— 名字 + 下载地址都有才算可用
 public enum UpdatePackageLocator {
 
-    /// 清单通道优先，旧发布回退按架构选 zip
+    /// 清单通道优先；清单不可用（回退 API）时按「dmg 优先，再按架构选旧 zip」取包
     public static func target(for release: UpdateRelease,
                               architecture: UpdateArchitecture) throws -> UpdatePackageTarget {
         if let artifact = release.artifact {
@@ -94,6 +94,12 @@ public enum UpdatePackageLocator {
                                        url: artifact.url,
                                        sha256: artifact.sha256,
                                        byteCount: artifact.byteCount)
+        }
+        // 回退路径也要认 dmg：1.30 起的发布只上传 dmg，此时 API 资产列表里根本没有 zip。
+        // 不处理这一条，清单上传失败的那次发布就会报「缺少 Yilan-arm64.app.zip」而装不上
+        if let dmg = release.assets.first(where: { $0.name.lowercased().hasSuffix(".dmg") }),
+           let url = dmg.downloadURL {
+            return UpdatePackageTarget(name: dmg.name, url: url, sha256: dmg.sha256)
         }
         guard let name = UpdateAssetSelector.select(from: release.assetNames,
                                                     architecture: architecture) else {
@@ -104,7 +110,7 @@ public enum UpdatePackageLocator {
               let url = asset.downloadURL else {
             throw UpdateInstallError.assetUnavailable(name)
         }
-        return UpdatePackageTarget(name: name, url: url)
+        return UpdatePackageTarget(name: name, url: url, sha256: asset.sha256)
     }
 }
 

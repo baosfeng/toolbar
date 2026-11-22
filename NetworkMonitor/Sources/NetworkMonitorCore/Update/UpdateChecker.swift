@@ -44,14 +44,27 @@ public struct UpdateRelease: Equatable, Sendable {
 /// 名字与下载地址是分开的两件事：资产名决定「选哪个架构」，
 /// 地址可以是 `browser_download_url` 或镜像地址，所以两者都留。
 public struct UpdateAsset: Equatable, Sendable {
-    /// 资产名（`Yilan-arm64.app.zip`）
+    /// 资产名（Yilan-1.30.0.dmg / 旧发布的 Yilan-arm64.app.zip）
     public let name: String
     /// 下载地址（缺地址时视为不可用）
     public let downloadURL: URL?
+    /// GitHub 给出的内容校验和（形如 `sha256:<hex>`；早期资产没有这一列）
+    ///
+    /// 有了它，API 回退路径（清单不可用时）也能做完整性校验，
+    /// 不用退化成「只验包内版本号」。
+    public let digest: String?
 
-    public init(name: String, downloadURL: URL?) {
+    public init(name: String, downloadURL: URL?, digest: String? = nil) {
         self.name = name
         self.downloadURL = downloadURL
+        self.digest = digest
+    }
+
+    /// 归一化后的 SHA-256（只认 sha256 摘要；其它算法 / 缺失 → nil）
+    public var sha256: String? {
+        guard let digest, digest.lowercased().hasPrefix("sha256:") else { return nil }
+        let hex = String(digest.dropFirst("sha256:".count))
+        return hex.isEmpty ? nil : hex.lowercased()
     }
 }
 
@@ -237,10 +250,12 @@ public final class GitHubUpdateChecker: UpdateChecking {
     private struct AssetPayload: Decodable {
         let name: String?
         let browserDownloadURL: String?
+        let digest: String?
 
         enum CodingKeys: String, CodingKey {
             case name
             case browserDownloadURL = "browser_download_url"
+            case digest
         }
     }
 
@@ -264,7 +279,9 @@ public final class GitHubUpdateChecker: UpdateChecking {
         }
         let assets = (payload.assets ?? []).compactMap { asset -> UpdateAsset? in
             guard let name = asset.name, !name.isEmpty else { return nil }
-            return UpdateAsset(name: name, downloadURL: asset.browserDownloadURL.flatMap { URL(string: $0) })
+            return UpdateAsset(name: name,
+                               downloadURL: asset.browserDownloadURL.flatMap { URL(string: $0) },
+                               digest: asset.digest)
         }
         return UpdateRelease(tagName: tag,
                              htmlURL: payload.htmlURL.flatMap { URL(string: $0) },

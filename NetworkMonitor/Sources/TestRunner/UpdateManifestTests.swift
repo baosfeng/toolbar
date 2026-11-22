@@ -139,6 +139,20 @@ private func testBundleTargetSelection() {
     assertEqual(legacyTarget?.name, "Yilan-x86_64.app.zip", "旧发布按架构挑包")
     assertEqual(legacyTarget?.sha256, nil, "旧发布没有校验和（跳过完整性校验）")
 
+    // 清单不可用回退 API、且发布只有 dmg：必须也能装
+    // （否则 update.json 上传失败的那次发布，所有人都卡在「缺少 Yilan-arm64.app.zip」）
+    let dmgOnly = UpdateRelease(tagName: "v1.30.0", htmlURL: nil, notes: "", publishedAt: nil,
+                                assets: [UpdateAsset(name: "Yilan-1.30.0.dmg",
+                                                     downloadURL: URL(string: "https://example.com/a.dmg"),
+                                                     digest: "sha256:ABC123")])
+    let dmgTarget = try? UpdatePackageLocator.target(for: dmgOnly, architecture: .x86_64)
+    assertEqual(dmgTarget?.name, "Yilan-1.30.0.dmg", "回退路径也认 dmg（不按架构挑）")
+    assertEqual(dmgTarget?.sha256, "abc123", "API 的 digest 归一化成小写 hex 后当校验和")
+
+    // 只认 sha256 摘要：其它算法宁可当「没有校验和」，也不误判成内容不符
+    assertEqual(UpdateAsset(name: "x", downloadURL: nil, digest: "md5:abc").sha256, nil,
+                "非 sha256 摘要不当作校验和")
+
     // 旧发布 + 缺本机架构包 → 明确报 assetMissing，不静默装错架构
     let armOnly = UpdateRelease(tagName: "v1.29.0", htmlURL: nil, notes: "", publishedAt: nil,
                                 assets: [UpdateAsset(name: "Yilan-arm64.app.zip",
