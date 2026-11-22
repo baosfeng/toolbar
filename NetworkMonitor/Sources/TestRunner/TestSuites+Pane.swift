@@ -40,6 +40,7 @@ func runPaneSuites() {
     runPanelRefreshPolicyTests()
     // 高度重算的两道闸门（签名 / 三档节流 / force 穿透）
     runPanelContentSizingTests()
+    runPanelAnchorTests()  // 面板锚点贴状态项右边缘，不随按钮宽度漂移
     runAppearancePreferencesTests()
     runSettingsThemeTests()
 }

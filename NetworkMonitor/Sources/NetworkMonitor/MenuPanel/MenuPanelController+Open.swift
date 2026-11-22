@@ -33,6 +33,8 @@ extension MenuPanelController {
         refreshAll()
         PanelOpenProbe.mark("03 popover.show")
         popover.show(relativeTo: rect, of: view, preferredEdge: .minY)
+        // 挂上「窗口被挪动就按状态项右边缘纠正」的观察者（见 PanelWindowPin 的说明）
+        PanelWindowPin.attach(to: popover, anchorView: view, logger: logger)
         PanelOpenProbe.mark("04 updateContentSize(force)")
         updateContentSize(force: true)
         PanelOpenProbe.mark("05 makeFirstResponder")
@@ -72,6 +74,8 @@ extension MenuPanelController {
     func close() {
         guard popover.isShown else { return }
         popover.performClose(nil)
+        // 窗口即将销毁：摘掉横向钉住的两条观察者（下次展开由 show 重新挂）
+        PanelWindowPin.detach()
     }
 
     /// 是否已展开

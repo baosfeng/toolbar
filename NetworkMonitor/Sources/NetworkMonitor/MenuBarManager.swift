@@ -177,7 +177,7 @@ final class MenuBarManager: NSObject {
     /// 展开 / 收起面板（状态栏点击与 DEBUG 取证扩展共用这一条路径，故放宽为 internal）
     @objc func togglePanel() {
         guard let button = statusItem.button else { return }
-        panel.toggle(relativeTo: button.bounds, of: button)
+        panel.toggle(relativeTo: PanelAnchor.rect(for: button.bounds), of: button)
     }
 
     // MARK: - 预热
@@ -197,7 +197,7 @@ final class MenuBarManager: NSObject {
     /// 预热面板（内部保证只做一次、已展开时跳过）
     func prewarmPanel() {
         guard let button = statusItem.button else { return }
-        panel.prewarmPanelIfNeeded(relativeTo: button.bounds, of: button)
+        panel.prewarmPanelIfNeeded(relativeTo: PanelAnchor.rect(for: button.bounds), of: button)
     }
 
     // MARK: - 定时器
