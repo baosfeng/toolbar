@@ -43,6 +43,10 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         case .copy: confirm()
         case .save: requestSave(quick: false)
         case .pin: requestPin()
+        // 撤销 / 重做与键盘 ⌘Z / ⌘Y 走同一条实现（performUndo / performRedo），
+        // 不在工具条上复制第二份栈操作
+        case .undo: performUndo()
+        case .redo: performRedo()
         }
     }
 

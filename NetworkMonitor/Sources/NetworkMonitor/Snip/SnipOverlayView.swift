@@ -76,8 +76,11 @@ final class SnipOverlayView: NSView {
     var debugPointerFrozen = false
     /// 当前标注工具；nil 表示仍在操作选区
     var activeTool: SnipTool?
-    /// 已完成的标注
-    var annotationStack = SnipAnnotationStack()
+    /// 已完成的标注（栈一变就把「能不能撤销 / 重做」灌给工具条：加 / 删 / 改 /
+    /// 撤销 / 重做 / 清空全部经 mutating 调用，因此一处 didSet 即可全覆盖）
+    var annotationStack = SnipAnnotationStack() {
+        didSet { syncAnnotationAvailability() }
+    }
     /// 正在绘制的标注
     var draftAnnotation: SnipAnnotation?
     /// 后续图元使用的样式
@@ -136,13 +139,15 @@ final class SnipOverlayView: NSView {
         // 初始样式来自设置页偏好（默认颜色 / 线宽 / 线型）：
         // 早期这三个偏好全仓没有消费方，用户改「默认颜色」对新建截图完全不生效。
         currentStyle = initialStyle
-        // 工具条按设置页的配置上屏：文字提示档、组顺序、组显隐、常驻工具都在配置里
+        // 工具条按设置页的配置上屏：文字提示档、组顺序、组显隐、常驻工具与动作都在配置里
         let bar = SnipToolBarView(configuration: toolbarConfiguration)
         bar.delegate = self
         bar.updateStyle(initialStyle)
         bar.isHidden = true
         addSubview(bar)
         toolbarView = bar
+        // 首帧就按空栈置灰：撤销 / 重做在没画东西之前不该是可点的样子
+        syncAnnotationAvailability()
     }
 
     @available(*, unavailable)
@@ -240,11 +245,9 @@ final class SnipOverlayView: NSView {
         case .pin:
             requestPin()
         case .undo:
-            annotationStack.undo()
-            needsDisplay = true
+            performUndo()
         case .redo:
-            annotationStack.redo()
-            needsDisplay = true
+            performRedo()
         case .clearAnnotations:
             // 官方 ⌘⇧Z：移除所有标注，不可再恢复
             clearAllAnnotations()

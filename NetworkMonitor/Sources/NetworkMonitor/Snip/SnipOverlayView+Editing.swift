@@ -51,6 +51,29 @@ extension SnipOverlayView {
         needsDisplay = true
     }
 
+    // MARK: - 撤销 / 重做（键盘与工具条的唯一实现）
+
+    /// 撤销最后一条标注：⌘Z 与工具条「撤销」按钮共用这一份实现
+    func performUndo() {
+        guard annotationStack.canUndo else { return }
+        annotationStack.undo()
+        needsDisplay = true
+    }
+
+    /// 重做刚撤销的一条：⌘Y 与工具条「重做」按钮都走这里
+    func performRedo() {
+        guard annotationStack.canRedo else { return }
+        annotationStack.redo()
+        needsDisplay = true
+    }
+
+    /// 把标注栈的可用性灌给工具条（栈每次变化都调一次）
+    func syncAnnotationAvailability() {
+        toolbarView?.annotationAvailability = SnipBarActionAvailability(
+            canUndo: annotationStack.canUndo,
+            canRedo: annotationStack.canRedo)
+    }
+
     // MARK: - 画笔粗细
 
     /// 按档位步进画笔粗细，并回灌一级工具条与二级面板

@@ -15,8 +15,15 @@ public enum SnipToolBarPreferenceKey {
     public static let hiddenGroups = "snip.toolbar.hiddenGroups"
     /// 一级常驻工具（逗号分隔的工具名）
     public static let primaryTools = "snip.toolbar.primaryTools"
-    /// 被隐藏的动作按钮（逗号分隔的动作名）
+    /// 被隐藏的动作按钮（逗号分隔的动作名；只管默认那四项）
     public static let hiddenActions = "snip.toolbar.hiddenActions"
+    /// 已启用的扩展动作（逗号分隔的动作名，现为 undo / redo）
+    ///
+    /// 刻意与 `hiddenActions` 分开记：老配置里 `hiddenActions` 既可能是缺键、
+    /// 也可能被写成空串（四个动作全开时 persist 就写空串），两种状态无法区分
+    /// 「从没设置过」与「全都打开」。另立一个「启用了哪些扩展动作」的键，
+    /// 缺键 = 一项都没启用，于是老用户升级后工具条外观一个像素都不变。
+    public static let utilityActions = "snip.toolbar.utilityActions"
     /// 输出动作的排列顺序（逗号分隔的动作名；缺键时按 SnipBarAction.defaultOrder 回落）
     public static let actionOrder = "snip.toolbar.actionOrder"
     /// 常驻工具的排列顺序（逗号分隔的工具名；缺键时按 SnipTool.defaultOrder 回落）
@@ -61,9 +68,10 @@ public enum SnipToolBarConfigurationResolver {
     ///   - groupOrderRaw: 组顺序原始串（缺失 → allCases 顺序）
     ///   - hiddenGroupsRaw: 被隐藏组的原始串
     ///   - primaryToolsRaw: 常驻工具原始串（缺失 → SnipTool.primary）
-    ///   - hiddenActionsRaw: 被隐藏动作的原始串
+    ///   - hiddenActionsRaw: 被隐藏动作的原始串（只管默认四项：隐藏键写成空串 = 四项全开）
     ///   - actionOrderRaw: 输出动作顺序原始串（缺失 → defaultOrder，老配置外观不变）
     ///   - primaryToolOrderRaw: 常驻工具顺序原始串（缺失 → SnipTool.defaultOrder，老配置外观不变）
+    ///   - utilityActionsRaw: 已启用的扩展动作原始串（缺失 → 一项都不启用，老配置外观不变）
     public static func resolve(labelModeRaw: String?,
                                groupOrderRaw: String?,
                                hiddenGroupsRaw: String?,
@@ -71,7 +79,8 @@ public enum SnipToolBarConfigurationResolver {
                                hiddenActionsRaw: String?,
                                placementRaw: String? = nil,
                                actionOrderRaw: String? = nil,
-                               primaryToolOrderRaw: String? = nil) -> SnipToolBarConfiguration {
+                               primaryToolOrderRaw: String? = nil,
+                               utilityActionsRaw: String? = nil) -> SnipToolBarConfiguration {
         let mode = labelModeRaw.flatMap(SnipToolBarLabelMode.init(rawValue:)) ?? .hover
         let placement = placementRaw.flatMap(SnipToolBarPlacement.init(rawValue:)) ?? .auto
 
@@ -104,15 +113,23 @@ public enum SnipToolBarConfigurationResolver {
             .filter { residentTools.contains($0) }
 
         // 动作先按偏好顺序排（去未知 / 去重 / 缺项补尾），再按显隐过滤：
-        // 顺序键只决定先后，显隐仍由 hiddenActions 决定，两件事互不影响
+        // 顺序键只决定先后，显隐仍由 hiddenActions 决定，两件事互不影响。
+        //
+        // 全序认 `allOrderCases`（含撤销 / 重做），可见性分两条闸门：
+        // 老四项由 `hiddenActions` 决定（缺键 = 全开，与改动前一致）；
+        // 扩展动作（撤销 / 重做）由 `utilityActions` 决定（缺键 = 一项都不启用）。
         let hiddenActionNames = Set(SnipToolBarListCoding.decode(hiddenActionsRaw))
+        let enabledUtilityNames = Set(SnipToolBarListCoding.decode(utilityActionsRaw))
         let actionOrderNames = SettingsOrderCoding.normalize(
             SnipToolBarListCoding.decode(actionOrderRaw),
-            known: SnipBarAction.defaultOrder.map(\.rawValue),
+            known: SnipBarAction.allOrderCases.map(\.rawValue),
             defaultOrder: SnipBarAction.defaultOrder.map(\.rawValue))
         let actions = actionOrderNames
             .compactMap { SnipBarAction(rawValue: $0) }
-            .filter { !hiddenActionNames.contains($0.rawValue) }
+            .filter { action in
+                if action.isHiddenByDefault { return enabledUtilityNames.contains(action.rawValue) }
+                return !hiddenActionNames.contains(action.rawValue)
+            }
 
         return SnipToolBarConfiguration(labelMode: mode,
                                         groupOrder: order,
@@ -139,11 +156,18 @@ public enum SnipToolBarConfigurationResolver {
                     forKey: SnipToolBarPreferenceKey.hiddenGroups)
         storage.set(SnipToolBarListCoding.encode(config.primaryTools.map(\.rawValue)),
                     forKey: SnipToolBarPreferenceKey.primaryTools)
-        let hiddenActions = SnipBarAction.allCases
+        // 两个显隐键分开写：hiddenActions 只管老四项（写空串 = 四项全开，与改动前同格式），
+        // utilityActions 只记启用中的扩展动作（写空串 = 两项都关，缺键也是这个语义）。
+        let hiddenActions = SnipBarAction.defaultOrder
             .filter { !config.visibleActions.contains($0) }
             .map(\.rawValue)
         storage.set(SnipToolBarListCoding.encode(hiddenActions),
                     forKey: SnipToolBarPreferenceKey.hiddenActions)
+        let utilityActions = SnipBarAction.defaultHidden
+            .filter { config.visibleActions.contains($0) }
+            .map(\.rawValue)
+        storage.set(SnipToolBarListCoding.encode(utilityActions),
+                    forKey: SnipToolBarPreferenceKey.utilityActions)
         storage.set(config.placement.rawValue, forKey: SnipToolBarPreferenceKey.placement)
     }
 
@@ -156,6 +180,7 @@ public enum SnipToolBarConfigurationResolver {
                 hiddenActionsRaw: storage.string(forKey: SnipToolBarPreferenceKey.hiddenActions),
                 placementRaw: storage.string(forKey: SnipToolBarPreferenceKey.placement),
                 actionOrderRaw: storage.string(forKey: SnipToolBarPreferenceKey.actionOrder),
-                primaryToolOrderRaw: storage.string(forKey: SnipToolBarPreferenceKey.primaryToolOrder))
+                primaryToolOrderRaw: storage.string(forKey: SnipToolBarPreferenceKey.primaryToolOrder),
+                utilityActionsRaw: storage.string(forKey: SnipToolBarPreferenceKey.utilityActions))
     }
 }

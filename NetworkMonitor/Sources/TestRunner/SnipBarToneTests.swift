@@ -55,5 +55,21 @@ func runSnipBarToneTests() {
     assertEqual(Tone.colorDotRingVisible(isCurrentColor: true), true, "当前色带选中环")
     assertEqual(Tone.colorDotRingVisible(isCurrentColor: false), false, "未选中的色点不带环")
 
+    // ⑥ 置灰档：不可用必须明显暗于可用（工具条上「没得撤」要看得出来）
+    assertEqual(Tone.disabledActionTextAlpha < Tone.normalIconAlpha, true,
+                "置灰文字比可用常态更暗（\(Tone.disabledActionTextAlpha) < \(Tone.normalIconAlpha)）")
+    assertEqual(Tone.disabledActionTextAlpha <= 0.4, true, "置灰文字落到约 0.35 档")
+    assertEqual(Tone.disabledActionTextAlpha > 0.2, true, "置灰不等于隐形（还要认得出「撤销」两个字）")
+    assertEqual(Tone.disabledActionFillScale < 1, true, "置灰底色整体降一档")
+    assertEqual(Tone.disabledActionFillScale > 0, true, "置灰底色不归零（按钮占位仍在）")
+    // 两档取值函数：可用原样返回，不可用才降档
+    assertEqual(Tone.actionTextAlpha(1, isEnabled: true), 1, "可用时文字 alpha 原样")
+    assertEqual(Tone.actionTextAlpha(1, isEnabled: false), Tone.disabledActionTextAlpha,
+                "不可用时文字压到置灰档")
+    assertEqual(Tone.actionFillAlpha(0.16, isEnabled: true), 0.16, "可用时底色 alpha 原样")
+    assertEqual(Tone.actionFillAlpha(0.16, isEnabled: false), 0.16 * Tone.disabledActionFillScale,
+                "不可用时底色按折扣降档")
+    assertEqual(Tone.actionFillAlpha(0.16, isEnabled: false) < 0.16, true, "不可用底色确实更淡")
+
     print("✅ 工具条三档明度与选中语言测试通过")
 }

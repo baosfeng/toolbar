@@ -74,6 +74,7 @@ enum SettingsSnapshot {
         // 截图页滚动到底部：本轮新增的「识别」卡与「保存」卡（输出格式 / JPEG 质量）在首屏之外，
         // 单独出一组作为其可见性证据；版式基线仍是上面的首屏图
         captureScrolledCapture(directory: directory, settings: settings)
+        captureScrolledCaptureActions(directory: directory, settings: settings)
         captureScrolledClipboard(directory: directory, settings: settings)
         captureScrolledNotifications(directory: directory, settings: settings)
         captureNotificationCards(directory: directory, settings: settings)
@@ -114,6 +115,29 @@ enum SettingsSnapshot {
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let suffix = appearance == .aqua ? "light" : "dark"
             let url = directory.appendingPathComponent("settings-capture-cards-\(suffix).png")
+            MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
+                                     appearanceName: appearance, to: url)
+        }
+    }
+
+    /// 截图页的「输出动作」卡（撤销 / 重做两行就在这张卡里，首屏与「距底 340pt」都拍不到）
+    ///
+    /// 按卡片的真实文档坐标滚，而不是猜一个 offset：卡片行数会随动作增减变化，
+    /// 写死偏移量的取证图迟早会拍到空白处。
+    static func captureScrolledCaptureActions(directory: URL, settings: SettingsWindow?) {
+        guard let settings else { return }
+        guard let view = settings.prepareForSnapshot(.capture),
+              let pane = settings.currentPaneForSnapshot as? SettingsCapturePane,
+              let card = pane.toolBarActionCard?.card else { return }
+        let cardRect = card.convert(card.bounds, to: settings.contentContainer)
+        let viewportHeight = settings.contentScroll.contentView.bounds.height
+        let maxOffset = max(0, settings.contentContainer.bounds.height - viewportHeight)
+        let target = min(max(0, cardRect.minY - SettingsTheme.contentInset), maxOffset)
+        settings.contentScroll.contentView.scroll(to: NSPoint(x: 0, y: target))
+        settings.contentScroll.reflectScrolledClipView(settings.contentScroll.contentView)
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let suffix = appearance == .aqua ? "light" : "dark"
+            let url = directory.appendingPathComponent("settings-capture-actions-\(suffix).png")
             MenuPanelSnapshot.render(view: view, size: SettingsStyle.windowSize,
                                      appearanceName: appearance, to: url)
         }

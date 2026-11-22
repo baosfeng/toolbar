@@ -90,8 +90,8 @@ extension SettingsCapturePane {
         page.addCard(toolCard.card, sectionTitle: "常驻工具",
                      trailingAccessory: toolCard.resetButton)
 
-        // 输出动作：取消 / 复制 / 保存 / 贴图 —— 一行 = 显示开关 + 行尾上移 / 下移
-        // 顺序单独存 snip.toolbar.actionOrder（与显隐解耦），写偏好即下次截图生效
+        // 输出动作：一行 = 显示开关 + 行尾上移 / 下移；顺序单独存 snip.toolbar.actionOrder，
+        // 与显隐解耦。撤销 / 重做默认关闭（老配置外观不变），在这里主动打开才上条
         let actionCard = SettingsOrderedActionCard(
             storage: storage,
             currentConfig: { [weak self] in self?.currentToolBarConfiguration() ?? .standard },
@@ -184,7 +184,7 @@ extension SettingsCapturePane {
             let state = toolBarGroupToggles[group]?.state == .on ? "on" : "off"
             return "\(group.rawValue)=\(config.isVisible(group))/\(state)"
         }.joined(separator: " ")
-        let actionStates = SnipBarAction.allCases.map { action in
+        let actionStates = SnipBarAction.allOrderCases.map { action in
             let state = toolBarActionCard?.toggles[action]?.state == .on ? "on" : "off"
             return "\(action.rawValue)=\(config.visibleActions.contains(action))/\(state)"
         }.joined(separator: " ")

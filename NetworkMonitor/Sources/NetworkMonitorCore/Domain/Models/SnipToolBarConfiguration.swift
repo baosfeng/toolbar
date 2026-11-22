@@ -29,7 +29,7 @@ public enum SnipToolBarGroup: String, CaseIterable, Equatable, Sendable, Hashabl
         case .tools: return "矩形 / 箭头 / 文字 / 马赛克等标注入口"
         case .color: return "当前颜色入口，点开可选全部颜色"
         case .width: return "当前线宽入口，点开可调粗细 / 虚线 / 透明度"
-        case .actions: return "取消 / 复制 / 保存 / 贴图"
+        case .actions: return "取消 / 复制 / 保存 / 贴图 / 撤销 / 重做"
         }
     }
 
@@ -99,6 +99,10 @@ public enum SnipBarAction: String, CaseIterable, Equatable, Sendable, Hashable {
     case copy
     case save
     case pin
+    // 撤销 / 重做：默认不上工具条（见 defaultOrder），声明放末尾，
+    // 于是全序里它们永远排在老四项之后，缺项补尾也补在最后。
+    case undo
+    case redo
 
     public var title: String {
         switch self {
@@ -106,14 +110,30 @@ public enum SnipBarAction: String, CaseIterable, Equatable, Sendable, Hashable {
         case .copy: return "复制"
         case .save: return "保存"
         case .pin: return "贴图"
+        case .undo: return "撤销"
+        case .redo: return "重做"
         }
     }
 
-    /// 默认排列顺序 —— 与声明顺序一致
+    /// 默认显示的动作 —— 刻意**只含老四项**，不是 allCases
     ///
-    /// 偏好里没有顺序键（老配置）时按它回落：漏排序的用户看到的仍是升级前那四个位置，
-    /// 升级不改变任何人的外观。
-    public static let defaultOrder: [SnipBarAction] = allCases
+    /// 偏好里没有顺序 / 显隐键（老配置）时按它回落：漏设置的用户看到的仍是升级前那四个位置。
+    /// 撤销 / 重做不在这里：把它们并进默认集合，等于给每条老工具条凭空加两个按钮，
+    /// 违反「升级不改变外观」。它们的显隐另存 `snip.toolbar.utilityActions`
+    /// （缺键 = 都不启用），用户在设置页主动打开才上条。
+    public static let defaultOrder: [SnipBarAction] = [.cancel, .copy, .save, .pin]
+
+    /// 全部动作（老四项 + 撤销 / 重做）—— 排序卡登记行与顺序归一用
+    ///
+    /// 顺序是全序：被隐藏的动作仍留在全序里占席次，重新打开时回到原位。
+    /// 因此「可见集合」认 `defaultOrder`，「全序」必须认这一份。
+    public static let allOrderCases: [SnipBarAction] = allCases
+
+    /// 是否为「扩展动作」（撤销 / 重做）—— 显隐走独立的启用键，见 resolver
+    public var isHiddenByDefault: Bool { self == .undo || self == .redo }
+
+    /// 扩展动作全集（`snip.toolbar.utilityActions` 的合法值）
+    public static let defaultHidden: [SnipBarAction] = allOrderCases.filter(\.isHiddenByDefault)
 
     /// 强调色按钮（主动作）
     public var isPrimary: Bool { self == .copy }
@@ -125,6 +145,8 @@ public enum SnipBarAction: String, CaseIterable, Equatable, Sendable, Hashable {
         case .copy: return "⌘C"
         case .save: return "⌘S"
         case .pin: return "⌘T"
+        case .undo: return "⌘Z"
+        case .redo: return "⌘Y"
         }
     }
 }
@@ -177,6 +199,9 @@ public struct SnipToolBarConfiguration: Equatable, Sendable {
     /// 关掉的工具仍留在全序里占席次，重新打开时回到原位。
     public var primaryTools: [SnipTool]
     /// 显示的动作按钮（顺序即工具条上的排列，至少保留一个）
+    ///
+    /// 默认值取 `SnipBarAction.defaultOrder`（老四项），不是 allCases：
+    /// 撤销 / 重做要用户在设置页主动打开才出现在工具条上。
     public var visibleActions: [SnipBarAction]
     /// 工具条相对选区的位置
     public var placement: SnipToolBarPlacement
@@ -185,7 +210,7 @@ public struct SnipToolBarConfiguration: Equatable, Sendable {
                 groupOrder: [SnipToolBarGroup] = SnipToolBarGroup.allCases,
                 visibleGroups: Set<SnipToolBarGroup> = Set(SnipToolBarGroup.allCases),
                 primaryTools: [SnipTool] = SnipTool.primary,
-                visibleActions: [SnipBarAction] = SnipBarAction.allCases,
+                visibleActions: [SnipBarAction] = SnipBarAction.defaultOrder,
                 placement: SnipToolBarPlacement = .auto) {
         self.labelMode = labelMode
         self.groupOrder = groupOrder
@@ -240,7 +265,13 @@ public struct SnipToolBarConfiguration: Equatable, Sendable {
         // 全部关掉时固定回落到 copy（顺序偏好不参与这一步，仍保留四项全序）。
         var seenActions = Set<SnipBarAction>()
         let orderedActions = config.visibleActions.filter { seenActions.insert($0).inserted }
-        result.visibleActions = orderedActions.isEmpty ? [.copy] : orderedActions
+        // 撤销 / 重做是编辑动作、且栈空时还置灰，不能当唯一的出口：
+        // 只剩它们时补上「复制」，否则工具条上一个能把图交出去的按钮都没有。
+        if orderedActions.contains(where: { !$0.isHiddenByDefault }) {
+            result.visibleActions = orderedActions
+        } else {
+            result.visibleActions = orderedActions + [.copy]
+        }
         return result
     }
 

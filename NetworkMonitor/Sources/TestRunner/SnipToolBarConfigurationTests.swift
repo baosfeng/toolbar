@@ -8,12 +8,15 @@ func runSnipToolBarConfigurationTests() {
     print("🧪 Testing snip toolbar configuration...")
 
     // 默认配置：悬停提示档、四组全显示、四个高频工具常驻、四个动作按钮
+    // （撤销 / 重做是新增动作，默认不上条：默认可见集合仍是老四项）
     let standard = SnipToolBarConfiguration.standard
     assertEqual(standard.labelMode, SnipToolBarLabelMode.hover, "默认走悬停提示（对齐 Snipaste）")
     assertEqual(standard.groupOrder, SnipToolBarGroup.allCases, "默认组顺序即 allCases 顺序")
     assertEqual(standard.visibleGroups, Set(SnipToolBarGroup.allCases), "默认四组都显示")
     assertEqual(standard.primaryTools, SnipTool.primary, "默认常驻工具沿用 SnipTool.primary")
-    assertEqual(standard.visibleActions, SnipBarAction.allCases, "默认四个动作按钮全显示")
+    assertEqual(standard.visibleActions, SnipBarAction.defaultOrder, "默认仍是老四个动作按钮")
+    assertEqual(standard.visibleActions.contains(.undo), false, "撤销默认不在工具条上")
+    assertEqual(standard.visibleActions.contains(.redo), false, "重做默认不在工具条上")
     assertEqual(standard.placement, SnipToolBarPlacement.auto, "默认位置档为自动")
     assertEqual(standard.overflowTools.count, SnipTool.allCases.count - SnipTool.primary.count,
                 "溢出工具 = 全部工具减去常驻工具")
@@ -25,7 +28,7 @@ func runSnipToolBarConfigurationTests() {
     assertEqual(noColor.colorGroupCount, 0, "隐藏颜色组后颜色按钮数为 0")
     assertEqual(noColor.widthGroupCount, 0, "隐藏线宽组后线宽按钮数为 0")
     assertEqual(noColor.toolGroupCount, SnipTool.primary.count + 1, "工具组 = 常驻工具 + 更多入口")
-    assertEqual(noColor.actionGroupCount, SnipBarAction.allCases.count, "动作组按钮数不变")
+    assertEqual(noColor.actionGroupCount, SnipBarAction.defaultOrder.count, "动作组按钮数不变（仍是四个）")
 
     // 常驻工具排满十个时没有「更多」入口：工具组计数随之减少
     var allTools = standard
@@ -46,6 +49,13 @@ func runSnipToolBarConfigurationTests() {
     assertEqual(shuffledTools.primaryTools, [.text, .rectangle], "常驻工具保持配置顺序并去重")
     let shuffledActions = SnipToolBarConfiguration(visibleActions: [.cancel, .copy, .copy])
     assertEqual(shuffledActions.visibleActions, [.cancel, .copy], "动作按钮保持配置顺序并去重")
+    // 只剩撤销 / 重做（都是编辑动作、栈空时还置灰）时补上「复制」：工具条不能没有出口
+    let onlyUndoRedo = SnipToolBarConfiguration(visibleActions: [.undo, .redo])
+    assertEqual(onlyUndoRedo.visibleActions, [.undo, .redo, .copy],
+                "只剩撤销 / 重做时补上复制作为输出出口")
+    let undoPlusCopy = SnipToolBarConfiguration(visibleActions: [.undo, .copy])
+    assertEqual(undoPlusCopy.visibleActions, [.undo, .copy],
+                "已有输出动作时不再补复制")
 
     // 组顺序整理：未知组名丢弃、缺失组补到末尾、重复只留一个
     let order = SnipToolBarGroup.order(from: ["actions", "unknown", "tools", "actions"])

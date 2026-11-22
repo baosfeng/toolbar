@@ -40,6 +40,26 @@ public enum SnipBarTone {
         return isHovered ? hoverFillAlpha : nil
     }
 
+    // MARK: - 不可用（置灰）档
+
+    /// 动作按钮置灰时的文字 alpha
+    ///
+    /// 与可用态的常态图标（0.72）拉开到一半以下：截图工具条是黑底，
+    /// 0.35 是「看得见字、明显点不动」的一档，再低就认不出按钮上写的是「撤销」还是「重做」。
+    public static let disabledActionTextAlpha: CGFloat = 0.35
+    /// 动作按钮置灰时的底色折扣（可用态为 1，不可用只留四成）
+    public static let disabledActionFillScale: CGFloat = 0.4
+
+    /// 动作按钮文字 alpha：可用取常态档，不可用取置灰档
+    public static func actionTextAlpha(_ normal: CGFloat, isEnabled: Bool) -> CGFloat {
+        isEnabled ? normal : min(normal, disabledActionTextAlpha)
+    }
+
+    /// 动作按钮底色 alpha：不可用时整体降一档透明度，与可用的按钮在余光里也分得开
+    public static func actionFillAlpha(_ normal: CGFloat, isEnabled: Bool) -> CGFloat {
+        isEnabled ? normal : normal * disabledActionFillScale
+    }
+
     // MARK: - 当前色圆点
 
     /// 当前色圆点是否带选中环

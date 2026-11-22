@@ -37,7 +37,8 @@ final class SettingsOrderedActionCard {
         self.applyConfig = applyConfig
         // 排序回调只捕获局部变量：init 阶段还没有 self
         let key = SnipToolBarPreferenceKey.actionOrder
-        let ids = SnipBarAction.defaultOrder.map(\.rawValue)
+        // 排序卡登记**全部**动作（含撤销 / 重做）：顺序是全序，关掉的项也要占席次
+        let ids = SnipBarAction.allOrderCases.map(\.rawValue)
         self.ordered = SettingsOrderedCardView(orderKey: key,
                                                defaultOrder: ids,
                                                storage: storage,
@@ -57,11 +58,11 @@ final class SettingsOrderedActionCard {
 
     /// 逐动作建行（构建页面时调用一次）
     func build() {
-        for action in SnipBarAction.allCases {
+        for action in SnipBarAction.allOrderCases {
             let toggle = NSSwitch()
             toggle.target = self
             toggle.action = #selector(toggleTapped(_:))
-            toggle.tag = SnipBarAction.allCases.firstIndex(of: action) ?? 0
+            toggle.tag = SnipBarAction.allOrderCases.firstIndex(of: action) ?? 0
             toggle.setAccessibilityLabel("工具条动作：\(action.title)")
             toggles[action] = toggle
             let base = baseSubtitle(for: action)
@@ -87,14 +88,16 @@ final class SettingsOrderedActionCard {
 
     /// 只改显隐、不改顺序：新打开的动作回到它在顺序偏好里的原位
     @objc private func toggleTapped(_ sender: NSSwitch) {
-        guard SnipBarAction.allCases.indices.contains(sender.tag) else { return }
-        let action = SnipBarAction.allCases[sender.tag]
+        guard SnipBarAction.allOrderCases.indices.contains(sender.tag) else { return }
+        let action = SnipBarAction.allOrderCases[sender.tag]
         var config = currentConfig()
         var actions = config.visibleActions
         if actions.contains(action) {
-            // 至少保留一个动作按钮：全关掉以后工具条没有任何输出出口
-            guard actions.count > 1 else { sender.state = .on; return }
-            actions.removeAll { $0 == action }
+            // 至少保留一个**输出**动作：撤销 / 重做是编辑动作、且可用性还依赖标注栈，
+            // 不算出口。只剩它们时工具条上没有任何办法把图交出去，因此同样拦回。
+            let remaining = actions.filter { $0 != action }
+            guard remaining.contains(where: { !$0.isHiddenByDefault }) else { sender.state = .on; return }
+            actions = remaining
         } else {
             actions.append(action)
         }
@@ -105,6 +108,10 @@ final class SettingsOrderedActionCard {
     // MARK: - 文案
 
     private func baseSubtitle(for action: SnipBarAction) -> String {
-        action.isPrimary ? "强调色主按钮" : "快捷键 \(action.shortcutText)"
+        if action.isHiddenByDefault {
+            // 撤销 / 重做默认不上条：不写明的话用户会以为「开关是开的却没生效」
+            return "默认关闭 · 快捷键 \(action.shortcutText)"
+        }
+        return action.isPrimary ? "强调色主按钮" : "快捷键 \(action.shortcutText)"
     }
 }

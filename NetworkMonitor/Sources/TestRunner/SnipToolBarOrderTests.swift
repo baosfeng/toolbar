@@ -10,6 +10,69 @@ import NetworkMonitorCore
 func runSnipToolBarOrderTests() {
     print("🧪 Testing snip toolbar order preferences...")
 
+    // MARK: 撤销 / 重做：默认不上条（升级不改外观）
+
+    // 默认可见集合刻意不含撤销 / 重做：它们并进 defaultOrder 就等于给每条老工具条加两个按钮
+    assertEqual(SnipBarAction.defaultOrder, [.cancel, .copy, .save, .pin],
+                "默认动作顺序仍是老四项")
+    assertEqual(SnipBarAction.defaultOrder.contains(.undo), false, "defaultOrder 不含撤销")
+    assertEqual(SnipBarAction.defaultOrder.contains(.redo), false, "defaultOrder 不含重做")
+    // 枚举全量必须含它们，否则设置页不给入口、排序也登记不上
+    assertEqual(SnipBarAction.allCases.contains(.undo), true, "枚举全量含撤销")
+    assertEqual(SnipBarAction.allCases.contains(.redo), true, "枚举全量含重做")
+    assertEqual(SnipBarAction.allOrderCases, SnipBarAction.allCases, "全序 = 枚举全量")
+    assertEqual(SnipBarAction.allOrderCases.count, SnipBarAction.defaultOrder.count + 2,
+                "全序比默认可见集合多撤销 / 重做两项")
+    assertEqual(SnipBarAction.defaultHidden, [.undo, .redo], "缺键时默认隐藏的就是撤销 / 重做")
+    assertEqual(SnipBarAction.undo.isHiddenByDefault, true, "撤销归扩展动作")
+    assertEqual(SnipBarAction.redo.isHiddenByDefault, true, "重做归扩展动作")
+    assertEqual(SnipBarAction.copy.isHiddenByDefault, false, "老四项不归扩展动作")
+    assertEqual(SnipBarAction.undo.title, "撤销", "撤销标题")
+    assertEqual(SnipBarAction.redo.title, "重做", "重做标题")
+    assertEqual(SnipBarAction.undo.shortcutText, "⌘Z", "撤销快捷键文案")
+    assertEqual(SnipBarAction.redo.shortcutText, "⌘Y", "重做快捷键文案")
+    assertEqual(SnipBarAction.undo.isPrimary, false, "撤销不是强调色主按钮")
+    assertEqual(SnipBarAction.redo.isPrimary, false, "重做不是强调色主按钮")
+
+    // 缺键解析：老配置（两个显隐键都没写过）解析出来仍是原四个动作
+    let legacyActions = SnipToolBarConfigurationResolver.resolve(
+        labelModeRaw: nil, groupOrderRaw: nil, hiddenGroupsRaw: nil,
+        primaryToolsRaw: nil, hiddenActionsRaw: nil)
+    assertEqual(legacyActions.visibleActions, [.cancel, .copy, .save, .pin],
+                "hiddenActions 缺键时解析结果仍是原四个动作")
+
+    // 显隐键写空串（四个动作全开时 persist 的产物）也不算「启用撤销 / 重做」：
+    // 这就是另立 utilityActions 的原因——空串无法区分「没设置过」与「全都打开」
+    let emptyHidden = SnipToolBarConfigurationResolver.resolve(
+        labelModeRaw: nil, groupOrderRaw: nil, hiddenGroupsRaw: nil,
+        primaryToolsRaw: nil, hiddenActionsRaw: "")
+    assertEqual(emptyHidden.visibleActions, [.cancel, .copy, .save, .pin],
+                "hiddenActions 写空串时仍不带上撤销 / 重做")
+
+    // 主动启用：只启用重做时只有它多出来，且排在老四项之后
+    let redoOnly = SnipToolBarConfigurationResolver.resolve(
+        labelModeRaw: nil, groupOrderRaw: nil, hiddenGroupsRaw: nil,
+        primaryToolsRaw: nil, hiddenActionsRaw: nil,
+        utilityActionsRaw: "redo")
+    assertEqual(redoOnly.visibleActions, [.cancel, .copy, .save, .pin, .redo],
+                "启用重做后它按全序排在老四项之后")
+
+    // 两个都启用：顺序跟着 actionOrder 走（这里用缺键，回落「老四项 + 撤销 + 重做」）
+    let both = SnipToolBarConfigurationResolver.resolve(
+        labelModeRaw: nil, groupOrderRaw: nil, hiddenGroupsRaw: nil,
+        primaryToolsRaw: nil, hiddenActionsRaw: nil,
+        utilityActionsRaw: "undo,redo")
+    assertEqual(both.visibleActions, [.cancel, .copy, .save, .pin, .undo, .redo],
+                "启用撤销与重做后两者都在，且顺序稳定")
+
+    // 未知 / 老四项写进启用键：只丢该项，不会把老四项从工具条上按掉
+    let bogusUtility = SnipToolBarConfigurationResolver.resolve(
+        labelModeRaw: nil, groupOrderRaw: nil, hiddenGroupsRaw: nil,
+        primaryToolsRaw: nil, hiddenActionsRaw: nil,
+        utilityActionsRaw: "bogus,copy")
+    assertEqual(bogusUtility.visibleActions, [.cancel, .copy, .save, .pin],
+                "启用键里的未知项与老四项名一律不生效")
+
     // MARK: 输出动作顺序键
 
     // 顺序键生效：存的顺序就是工具条上的排列，缺项按 defaultOrder 补尾
@@ -131,6 +194,35 @@ func runSnipToolBarOrderTests() {
                 "恢复默认删掉常驻工具顺序键")
     assertEqual(SnipToolBarConfigurationResolver.load(storage: storage).primaryTools,
                 [.rectangle, .text], "顺序键删除后按默认全序过滤常驻集合")
+
+    // MARK: 可用性快照（撤销 / 重做随标注栈变化）
+
+    assertEqual(SnipBarActionAvailability.unavailable.isEnabled(.undo), false, "空栈：撤销不可用")
+    assertEqual(SnipBarActionAvailability.unavailable.isEnabled(.redo), false, "空栈：重做不可用")
+    for action in SnipBarAction.defaultOrder {
+        assertEqual(SnipBarActionAvailability.unavailable.isEnabled(action), true,
+                    "老四项恒可用：\(action.rawValue)")
+    }
+    let midStack = SnipBarActionAvailability(canUndo: true, canRedo: false)
+    assertEqual(midStack.isEnabled(.undo), true, "栈里有图元：撤销可用")
+    assertEqual(midStack.isEnabled(.redo), false, "刚加完还没撤：重做不可用")
+    let undone = SnipBarActionAvailability(canUndo: false, canRedo: true)
+    assertEqual(undone.isEnabled(.undo), false, "撤到空：撤销不可用")
+    assertEqual(undone.isEnabled(.redo), true, "撤到空：重做可用")
+
+    // 栈本身的口径（工具条置灰的证据来源）
+    var stack = SnipAnnotationStack()
+    assertEqual(stack.canUndo, false, "空栈不能撤销")
+    assertEqual(stack.canRedo, false, "空栈不能重做")
+    stack.add(SnipAnnotation(kind: .rectangle, start: .zero, end: CGPoint(x: 10, y: 10)))
+    assertEqual(stack.canUndo, true, "加一条后能撤销")
+    assertEqual(stack.canRedo, false, "加一条后不能重做")
+    stack.undo()
+    assertEqual(stack.canUndo, false, "撤掉唯一一条后不能再撤")
+    assertEqual(stack.canRedo, true, "撤掉唯一一条后能重做")
+
+    // 同一域的第二块断言（两个显隐键分开落盘）另成一文，守住单文件 15 KiB 门禁
+    runSnipToolBarActionPreferenceTests()
 
     print("✅ 工具条顺序偏好测试通过")
 }

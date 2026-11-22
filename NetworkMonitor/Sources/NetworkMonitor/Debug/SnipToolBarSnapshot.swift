@@ -15,6 +15,9 @@ import NetworkMonitorUI
 /// - `toolbar-labels.png`：常驻标签档（条高 50pt，图标下带中文名）
 /// - `toolbar-icononly.png`：仅图标档（老外观）
 /// - `toolbar-custom.png`：隐藏颜色 / 线宽组、常驻工具换成三个的自定义排列
+/// - `toolbar-undo-available.png`：撤销可用、重做不可用（置灰对照）
+/// - `toolbar-undo-disabled.png`：两者都不可用（空栈态）
+/// - `toolbar-undo-labels.png`：常驻标签档下的撤销 / 重做（含置灰）
 /// - `panel-*.png`：二级面板（工具 / 颜色 / 线宽）
 ///
 /// 为什么不让真机屏幕截图来核对：覆盖层跑在 screenSaver 层级、锁屏/息屏时拍不到，
@@ -52,6 +55,20 @@ enum SnipToolBarSnapshot {
                       hover: .more,
                       to: directory.appendingPathComponent("toolbar-custom.png"))
 
+            // 撤销 / 重做：可用性由标注栈决定，这里直接摆出两档取证
+            // 悬停在可用的「撤销」上：气泡只出现在能点的那一项（置灰项不弹气泡）
+            renderBar(undoRedoConfiguration(labelMode: .hover),
+                      hover: .action(.undo),
+                      availability: SnipBarActionAvailability(canUndo: true, canRedo: false),
+                      to: directory.appendingPathComponent("toolbar-undo-available.png"))
+            renderBar(undoRedoConfiguration(labelMode: .hover),
+                      hover: nil, availability: .unavailable,
+                      to: directory.appendingPathComponent("toolbar-undo-disabled.png"))
+            renderBar(undoRedoConfiguration(labelMode: .always),
+                      hover: nil, availability: SnipBarActionAvailability(canUndo: true,
+                                                                         canRedo: false),
+                      to: directory.appendingPathComponent("toolbar-undo-labels.png"))
+
             renderPanel(.tools(SnipTool.overflow), hoverIndex: 0,
                         to: directory.appendingPathComponent("panel-tools.png"))
             // 选中第一枚色点、悬停第三枚：面板选中走强调色描边（二级选中语言取证）
@@ -68,11 +85,19 @@ enum SnipToolBarSnapshot {
         }
     }
 
-    /// 渲染一张工具条：给定配置与悬停项
+    /// 带撤销 / 重做的工具条配置（排序卡默认把它们排在老四项之后）
+    private static func undoRedoConfiguration(labelMode: SnipToolBarLabelMode) -> SnipToolBarConfiguration {
+        SnipToolBarConfiguration(labelMode: labelMode,
+                                 visibleActions: SnipBarAction.defaultOrder + [.undo, .redo])
+    }
+
+    /// 渲染一张工具条：给定配置、悬停项与动作可用性
     private static func renderBar(_ configuration: SnipToolBarConfiguration,
                                   hover: SnipBarItem?,
+                                  availability: SnipBarActionAvailability = .unavailable,
                                   to url: URL) {
         let bar = SnipToolBarView(configuration: configuration)
+        bar.annotationAvailability = availability
         bar.selectedTool = .arrow
         var style = SnipAnnotationStyle()
         style.color = .red

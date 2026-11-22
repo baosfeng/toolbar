@@ -20,7 +20,7 @@ protocol SnipToolBarViewDelegate: AnyObject {
     func toolBarDidChangeTool(_ tool: SnipTool?)
     /// 切换颜色或线宽
     func toolBarDidChangeStyle(_ style: SnipAnnotationStyle)
-    /// 点击右侧动作按钮（取消 / 复制 / 保存 / 贴图）
+    /// 点击右侧动作按钮（取消 / 复制 / 保存 / 贴图 / 撤销 / 重做）
     func toolBarDidPerform(_ action: SnipBarAction)
     /// 请求在工具条上方弹出二级面板（工具 / 颜色 / 线宽）
     /// - Parameters:
@@ -60,6 +60,17 @@ final class SnipToolBarView: NSView {
 
     private(set) var style = SnipAnnotationStyle() {
         didSet { needsDisplay = true }
+    }
+
+    /// 输出动作的可用性（撤销 / 重做随标注栈变化）
+    ///
+    /// 由覆盖层在栈变化后灌进来；视图自己不去问 Core 的栈——
+    /// 视图只管画，判据来自唯一的所有者（覆盖层）。
+    var annotationAvailability = SnipBarActionAvailability.unavailable {
+        didSet {
+            guard annotationAvailability != oldValue else { return }
+            needsDisplay = true
+        }
     }
 
     /// 由覆盖层回灌样式（二级面板里选了颜色 / 线宽后一级工具条要跟着变）
@@ -131,7 +142,8 @@ final class SnipToolBarView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard let hit = item(at: point) else { return }
+        // 置灰的动作不响应点击（item(at:) 已按可用性过滤，这里再兜一层）
+        guard let hit = item(at: point), isEnabled(hit) else { return }
         switch hit {
         case .tool(let tool):
             selectedTool = (selectedTool == tool) ? nil : tool

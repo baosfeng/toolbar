@@ -82,7 +82,9 @@ extension SnipToolBarView {
                 : rect
             SnipBarDrawing.drawWidth(style.lineWidth, in: widthRect, isSelected: true)
         case .action(let action):
-            drawAction(action, in: rect, alpha: alpha)
+            // 可用性由覆盖层灌进来的栈状态决定；置灰项只降档，不隐藏（用户要能看见它存在）
+            drawAction(action, in: rect, alpha: alpha,
+                       isEnabled: annotationAvailability.isEnabled(action))
         }
     }
 
@@ -95,17 +97,24 @@ extension SnipToolBarView {
     }
 
     /// 动作按钮：强调色底 + 文字（文字本身就是最直接的描述，不再另加气泡）
-    private func drawAction(_ action: SnipBarAction, in rect: CGRect, alpha: CGFloat) {
+    ///
+    /// `isEnabled == false` 是「置灰」：底色与文字一起降档，文字压到
+    /// `SnipBarTone.disabledActionTextAlpha`（0.35）。按钮仍然占位、仍然显示标题，
+    /// 用户看得见「有个撤销按钮、现在没得撤」，而不是按钮凭空消失。
+    private func drawAction(_ action: SnipBarAction, in rect: CGRect, alpha: CGFloat, isEnabled: Bool) {
         let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
+        let fillAlpha = SnipBarTone.actionFillAlpha(action.isPrimary ? alpha : 0.16 * alpha,
+                                                    isEnabled: isEnabled)
         if action.isPrimary {
-            NSColor.controlAccentColor.withAlphaComponent(alpha).setFill()
+            NSColor.controlAccentColor.withAlphaComponent(fillAlpha).setFill()
         } else {
-            NSColor.white.withAlphaComponent(0.16 * alpha).setFill()
+            NSColor.white.withAlphaComponent(fillAlpha).setFill()
         }
         path.fill()
+        let textAlpha = SnipBarTone.actionTextAlpha(alpha, isEnabled: isEnabled)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 12, weight: .medium),
-            .foregroundColor: NSColor.white.withAlphaComponent(alpha)
+            .foregroundColor: NSColor.white.withAlphaComponent(textAlpha)
         ]
         let text = action.title as NSString
         let size = text.size(withAttributes: attributes)
