@@ -32,4 +32,13 @@ func runTokenSuites() {
     runTokenDistroTotalsTests()
     runThemeTokenTests()
     runHarnessAggregateThrottleTests()
+    // 多来源：解析器（Claude / Codex）、来源收窄与单源视图、token.* 偏好键
+    runTokenSourceClaudeParserTests()
+    runTokenSourceCodexParserTests()
+    runTokenSourceParsingBridgeTests()
+    runTokenSourceScopeTests()
+    runTokenSourcePreferenceTests()
+    // 自动监控时间口径（Core）与来源状态四档文案（UI）—— 已下沉的纯口径
+    runTokenAutoIndexScheduleTests()
+    runTokenSourceStatusTextTests()
 }

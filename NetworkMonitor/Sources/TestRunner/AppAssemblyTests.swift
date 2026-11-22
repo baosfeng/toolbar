@@ -33,12 +33,12 @@ func runAppAssemblyTests() {
         assertEqual(startOrder[index], name, "第 \(index + 1) 阶段")
     }
 
-    // MARK: 停止顺序 = 启动顺序的逆序裁剪（带 teardown 的六个阶段）
+    // MARK: 停止顺序 = 启动顺序的逆序裁剪（带 teardown 的七个阶段）
 
     assertEqual(AppAssemblyPlan.resolvedTeardownOrder(startOrder), AppAssemblyPlan.legacyTeardownOrder,
                 "停止顺序与改造前 stop() 手写逆序逐项相同")
     assertEqual(AppAssemblyPlan.resolvedTeardownOrder(startOrder),
-                ["鼠标滚轮平滑滚动", "定时落盘", "屏幕活动", "局域网互传", "剪贴板", "数据库"],
+                ["鼠标滚轮平滑滚动", "定时落盘", "Token 统计", "屏幕活动", "局域网互传", "剪贴板", "数据库"],
                 "停止顺序硬编码对照")
 
     // MARK: 乱序输入 → 按依赖执行
