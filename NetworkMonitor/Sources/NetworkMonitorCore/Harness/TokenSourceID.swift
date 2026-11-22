@@ -60,8 +60,9 @@ public enum TokenSourceID: String, Sendable, Equatable, CaseIterable, Codable {
         case .claudeCode: return "CLAUDE_CONFIG_DIR"
         case .codex: return "CODEX_HOME"
         case .gemini: return "GEMINI_CLI_HOME"
-        case .copilot: return nil
-        case .opencode: return "XDG_DATA_HOME"
+        case .copilot: return "COPILOT_HOME"
+        // OpenCode 的官方覆盖变量是「库文件路径」（不是目录），XDG 只是默认根的推导依据
+        case .opencode: return OpenCodeDatabaseLocation.environmentKey
         case .zed: return nil
         }
     }
@@ -71,6 +72,10 @@ public enum TokenSourceID: String, Sendable, Equatable, CaseIterable, Codable {
     /// 只做**路径推导**，不判断存在性与可读性 —— 那是扫描器的事，两件事分开才能让
     /// 「未安装 / 装了但没数据 / 不可读」在界面上说清。
     /// 环境变量给了就只用环境变量给出的根；没给才回落到 home 下的固定位置。
+    ///
+    /// 唯一例外是 **OpenCode**：库名可能带渠道后缀（`opencode-<channel>.db`），后缀无从推导、
+    /// 只能看目录，那一条委托给 `OpenCodeDatabaseLocation.resolve`（存在性只用于「选哪个候选」，
+    /// 不可读仍由读取器报原因）。
     public func defaultRoots(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -107,13 +112,15 @@ public enum TokenSourceID: String, Sendable, Equatable, CaseIterable, Codable {
             return [base.appendingPathComponent(".gemini", isDirectory: true)
                 .appendingPathComponent("tmp", isDirectory: true)]
         case .copilot:
-            // SQLite 源：给的是 db 文件本身，不是目录
-            return [home(homeDirectory, ".copilot").appendingPathComponent("session-store.db")]
+            // SQLite 源：给的是 db 文件本身，不是目录。
+            // 官方 JS 的 pathResolvedSessionsHome(configDir, process.env.COPILOT_HOME, homeDir)
+            // 口径 = COPILOT_HOME 优先，其次 ~/.copilot（db 始终直接落在该「sessions home」下）
+            let base = env.path("COPILOT_HOME") ?? home(homeDirectory, ".copilot")
+            return [base.appendingPathComponent(CopilotUsageParser.databaseFileName)]
         case .opencode:
-            let base = env.path("XDG_DATA_HOME")
-                ?? home(homeDirectory, ".local").appendingPathComponent("share", isDirectory: true)
-            return [base.appendingPathComponent("opencode", isDirectory: true)
-                .appendingPathComponent("opencode.db")]
+            // 三种变异（OPENCODE_DB / XDG / 渠道后缀库）的解析集中在 OpenCodeDatabaseLocation
+            return [OpenCodeDatabaseLocation.resolve(
+                homeDirectory: homeDirectory, environment: environment).url]
         case .zed:
             return [
                 home(homeDirectory, "Library")

@@ -11,6 +11,9 @@ import Foundation
 /// 一个文件内可能有多会话（按 `sessionId` 分组）：发现阶段解析一次拿到会话键，
 /// 每个会话落成一个扫描单元 `<filePath>#<sessionKey>`；扫描阶段按单元键取该会话的事件。
 /// 同一文件的多会话共用文件的 (size, mtime) 作增量判据 —— 文件变了全部单元重扫。
+///
+/// 「收哪些文件」全部归 `HarnessDocumentChatLayout`（桶名不定格式、子 agent 在
+/// `chats/<parentId>/`、旧版是 `.json`）；本类只负责「解析 → 拆单元 → 扫描」。
 public final class HarnessDocumentSourceReader: @unchecked Sendable {
 
     private let lock = NSLock()
@@ -26,51 +29,35 @@ public final class HarnessDocumentSourceReader: @unchecked Sendable {
         lock.unlock()
     }
 
-    // MARK: - 候选文件
-
-    /// 该来源的候选会话文件（`.jsonl` / `.json`，文件名以 `session` 开头）
-    ///
-    /// 同名的第二份（旧桶名是 project root 的 sha256，迁移会把同一会话复制到新桶）只取先出现的
-    /// 那一份，另一份计入 dropped —— 静默丢弃会让「为什么少了一个会话」无从查起。
-    public static func candidates(
-        roots: [URL],
-        fileManager: FileManager = .default
-    ) -> (files: [URL], dropped: Int) {
-        var files: [URL] = []
-        var dropped = 0
-        var seenNames = Set<String>()
-        for root in roots {
-            for url in sessionFiles(under: root, maxDepth: 6, fileManager: fileManager) {
-                guard seenNames.insert(url.lastPathComponent).inserted else {
-                    dropped += 1
-                    continue
-                }
-                files.append(url)
-            }
-        }
-        return (files.sorted { $0.path < $1.path }, dropped)
-    }
-
     // MARK: - 发现
 
     /// 发现该来源的全部会话扫描单元（每个文件解析一次，按会话键拆单元）
+    ///
+    /// 返回结果带按桶统计（`buckets` / `summary`）：桶名是项目目录 slug、没有固定格式，
+    /// 只报总数看不出「哪个桶一个文件都没收到」，这层计数是漏数据的唯一线索。
     public func discover(source: TokenSourceID, roots: [URL], fileManager: FileManager = .default)
-        -> (files: [HarnessSessionFile], droppedDuplicates: Int) {
-        let candidates = Self.candidates(roots: roots, fileManager: fileManager)
+        -> HarnessDocumentDiscoverResult {
+        let candidates = HarnessDocumentChatLayout.candidates(roots: roots, fileManager: fileManager)
         var files: [HarnessSessionFile] = []
-        for url in candidates.files {
-            let attributes = try? fileManager.attributesOfItem(atPath: url.path)
+        for candidate in candidates.files {
+            let attributes = try? fileManager.attributesOfItem(atPath: candidate.url.path)
             let size = (attributes?[.size] as? NSNumber)?.int64Value ?? 0
+            // 文件时间一律取磁盘 mtime：文件名里的时间戳是分钟精度、还可能带冲突序号
+            // （`session-YYYY-MM-DDTHH-MM[-N]`），段数不固定，不可作为判据解析
             let mtimeMs = Int64(((attributes?[.modificationDate] as? Date)?
                 .timeIntervalSince1970 ?? 0) * 1000)
-            let units = loadUnits(url: url, source: source)
+            let units = loadUnits(url: candidate.url, source: source)
             for unit in units {
                 files.append(HarnessSessionFile(
                     path: unit.path, sessionID: unit.sessionKey, size: size, mtimeMs: mtimeMs,
-                    members: [url.path], source: source))
+                    members: [candidate.url.path], source: source))
             }
         }
-        return (files, candidates.dropped)
+        return HarnessDocumentDiscoverResult(
+            files: files,
+            droppedDuplicates: candidates.droppedDuplicates,
+            buckets: candidates.buckets,
+            summary: candidates.summary)
     }
 
     // MARK: - 扫描
@@ -93,6 +80,8 @@ public final class HarnessDocumentSourceReader: @unchecked Sendable {
 
     /// 解析一个文件 → 会话单元（读不出来给一个坏记录单元，让失败可见而不是静默 0）
     private func loadUnits(url: URL, source: TokenSourceID) -> [TokenSourceSessionUnit] {
+        // 兜底会话键只取文件名主干：父会话是 `session-<时间>[-<序号>]`、子 agent 是
+        // `<sessionId>`，两类都只当字符串，不解析其中的时间
         let fallback = url.deletingPathExtension().lastPathComponent
         let units: [TokenSourceSessionUnit]
         if let report = GeminiSessionParser.parse(contentsOf: url) {
@@ -116,31 +105,5 @@ public final class HarnessDocumentSourceReader: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return unitsByFile[path]
-    }
-
-    /// 递归收集 `session*.jsonl` / `session*.json`（跳过隐藏项；深度上限防误扫）
-    private static func sessionFiles(
-        under root: URL,
-        maxDepth: Int,
-        fileManager: FileManager
-    ) -> [URL] {
-        guard let enumerator = fileManager.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) else { return [] }
-        var result: [URL] = []
-        for case let url as URL in enumerator {
-            let depth = url.pathComponents.count - root.pathComponents.count
-            if depth > maxDepth {
-                enumerator.skipDescendants()
-                continue
-            }
-            let name = url.lastPathComponent
-            guard name.hasPrefix("session"),
-                  url.pathExtension == "jsonl" || url.pathExtension == "json" else { continue }
-            result.append(url)
-        }
-        return result
     }
 }

@@ -127,27 +127,16 @@ public enum ZedThreadParser {
         let model = TokenSourceJSON.string(modelObject?["model"]) ?? unknownModel
         let cwd = TokenSourceJSON.string(root["project_path"])
             ?? TokenSourceJSON.string(root["cwd"]) ?? ""
-        var skipped = 0
         var events: [TokenSourceUsageEvent] = []
         var mapSum = HarnessTokenUsage.zero
-        // 字典无序 → 按键排序，保证同一份数据两次解析顺序一致
-        if let map = TokenSourceJSON.object(root["request_token_usage"]) {
-            for key in map.keys.sorted() {
-                guard let entry = TokenSourceJSON.object(map[key]) else {
-                    skipped += 1
-                    continue
-                }
-                let usage = usage(from: entry)
-                guard !usage.isZero else {
-                    skipped += 1
-                    continue
-                }
-                mapSum = mapSum.adding(usage)
-                events.append(event(usage: usage, threadID: threadID, updatedAtMs: updatedAtMs,
-                                    provider: provider, model: model, cwd: cwd))
-            }
-        } else if root["request_token_usage"] != nil {
-            skipped += 1
+        // 两种形态：0.3.0 起是「消息 id → 用量」对象，更早是「按消息下标的数组」（见 ZedThreadLegacy）
+        let collected = ZedThreadLegacy.usages(version: TokenSourceJSON.string(root["version"]),
+                                              raw: root["request_token_usage"])
+        var skipped = collected.skipped
+        for usage in collected.usages {
+            mapSum = mapSum.adding(usage)
+            events.append(event(usage: usage, threadID: threadID, updatedAtMs: updatedAtMs,
+                                provider: provider, model: model, cwd: cwd))
         }
         // 差额记录：map 覆盖不全，不补就会比累计少一大截
         // 已知偏差：本记录 requestCount 恒 0，但聚合按事件行计请求数 → 该会话请求数 +1

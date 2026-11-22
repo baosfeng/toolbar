@@ -77,9 +77,7 @@ public enum HarnessSourceDiscovery {
         let roots = roots(for: source, storage: storage, homeDirectory: homeDirectory, environment: environment)
         switch source {
         case .claudeCode: return claudeReport(roots: roots, fileManager: fileManager)
-        case .codex:
-            return HarnessSourceDiscoveryReport(files: codexFiles(roots: roots, fileManager: fileManager),
-                                                droppedDuplicateSessions: 0)
+        case .codex: return codexReport(roots: roots, fileManager: fileManager)
         case .gemini:
             let found = HarnessDocumentSourceReader().discover(source: .gemini, roots: roots,
                                                               fileManager: fileManager)
@@ -159,22 +157,40 @@ public enum HarnessSourceDiscovery {
 
     // MARK: Codex
 
-    /// Codex rollout：<root>/YYYY/MM/DD/rollout-*.jsonl
+    /// Codex rollout：`<root>/YYYY/MM/DD/rollout-<YYYY-MM-DDTHH-MM-SS>-<thread_id>[_<rollout_id>].jsonl`
     ///
-    /// sessions/ 与 archived_sessions/ 是同一会话的两处副本：按文件名去重，
-    /// 先出现的根优先（调用方给的顺序就是 sessions 在前），与设计规格 §2.2 一致。
-    private static func codexFiles(roots: [URL], fileManager: FileManager) -> [HarnessSessionFile] {
-        var files: [HarnessSessionFile] = []
-        var seenNames = Set<String>()
+    /// 两种上游形态都得收，否则会系统性漏数据：
+    /// - **冷会话会被改名成 `*.jsonl.zst`**（`rollout/src/compression.rs`：`COMPRESSED_SUFFIX = ".zst"`、
+    ///   `MIN_ROLLOUT_AGE = 7 天`）——只匹配 `.jsonl` 就丢掉 7 天前的全部旧会话；
+    /// - `sessions/` 与 `archived_sessions/`（`rollout/src/lib.rs` 的归档目录）是同一会话的两处副本。
+    ///
+    /// 去重键是「规范化文件名」（去掉 `.zst`），规则：
+    /// - 同一 rollout 两种形态并存 → **明文优先**（明文是最新副本，也省一次解压）；
+    /// - 跨根的同形态副本 → **先出现的根优先**（调用方给的顺序就是 sessions 在前＝活跃副本）。
+    /// 被丢掉的份数计入 droppedDuplicateSessions，由扫描器写日志（可观测、不静默）。
+    private static func codexReport(roots: [URL], fileManager: FileManager) -> HarnessSourceDiscoveryReport {
+        var chosen: [String: (url: URL, compressed: Bool)] = [:]
+        var keys: [String] = []
+        var dropped = 0
         for root in roots {
-            for url in jsonlFiles(under: root, maxDepth: 5, fileManager: fileManager) {
-                guard seenNames.insert(url.lastPathComponent).inserted else { continue }
-                if let file = sessionFile(at: url, source: .codex, fileManager: fileManager) {
-                    files.append(file)
+            for url in rolloutFiles(under: root, maxDepth: 5, fileManager: fileManager) {
+                let name = url.lastPathComponent
+                let key = CodexRolloutLineReader.canonicalName(name)
+                let compressed = CodexRolloutLineReader.isCompressed(name)
+                guard let existing = chosen[key] else {
+                    chosen[key] = (url, compressed)
+                    keys.append(key)
+                    continue
                 }
+                dropped += 1
+                if existing.compressed && !compressed { chosen[key] = (url, false) }
             }
         }
-        return files.sorted { $0.path < $1.path }
+        let files = keys.compactMap { key in
+            chosen[key].flatMap { sessionFile(at: $0.url, source: .codex, fileManager: fileManager) }
+        }
+        return HarnessSourceDiscoveryReport(files: files.sorted { $0.path < $1.path },
+                                            droppedDuplicateSessions: dropped)
     }
 
     // MARK: 目录遍历工具
@@ -198,8 +214,8 @@ public enum HarnessSourceDiscovery {
         entries(of: directory, fileManager: fileManager).filter(\.isDirectory).map(\.url)
     }
 
-    /// 递归收集 .jsonl（深度上限防误扫；跳过隐藏项）
-    private static func jsonlFiles(under root: URL, maxDepth: Int, fileManager: FileManager) -> [URL] {
+    /// 递归收集 rollout 文件（`.jsonl` 与冷会话的 `.jsonl.zst`；深度上限防误扫，跳过隐藏项）
+    private static func rolloutFiles(under root: URL, maxDepth: Int, fileManager: FileManager) -> [URL] {
         guard let enumerator = fileManager.enumerator(
             at: root,
             includingPropertiesForKeys: [.isRegularFileKey],
@@ -212,7 +228,7 @@ public enum HarnessSourceDiscovery {
                 enumerator.skipDescendants()
                 continue
             }
-            guard url.pathExtension == "jsonl" else { continue }
+            guard CodexRolloutLineReader.isRolloutFile(url.lastPathComponent) else { continue }
             result.append(url)
         }
         return result
@@ -229,11 +245,22 @@ public enum HarnessSourceDiscovery {
         let mtimeMs = Int64(((attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0) * 1000)
         return HarnessSessionFile(
             path: url.path,
-            sessionID: url.deletingPathExtension().lastPathComponent,
+            sessionID: sessionID(from: url),
             size: size,
             mtimeMs: mtimeMs,
             members: [url.path],
             source: source
         )
+    }
+    /// 文件名 → 会话 id：先去掉冷会话的 `.zst`，再去 `.jsonl` 扩展名
+    ///
+    /// 两种形态必须得到同一个 id：否则 rollout 被压缩后会换成新会话 id，
+    /// 与旧扫描记录对不上就把同一段历史再记一遍。
+    private static func sessionID(from url: URL) -> String {
+        let canonical = CodexRolloutLineReader.canonicalName(url.lastPathComponent)
+        guard canonical.hasSuffix(".jsonl") else {
+            return (canonical as NSString).deletingPathExtension
+        }
+        return String(canonical.dropLast(".jsonl".count))
     }
 }
