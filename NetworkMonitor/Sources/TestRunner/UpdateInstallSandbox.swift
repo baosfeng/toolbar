@@ -138,6 +138,15 @@ final class FakeFileSystem: UpdateInstallFileSystem, @unchecked Sendable {
         try "新版本".write(to: app.appendingPathComponent("bundle.txt"), atomically: true, encoding: .utf8)
     }
 
+    /// dmg 挂载替身：与 zip 走同一份「产出包」，测试不依赖 hdiutil
+    func mountDiskImage(_ image: URL, into directory: URL) throws -> URL {
+        try unzip(image, into: directory)
+        guard let app = appBundles(in: directory).first else {
+            throw UpdateInstallError.appNotFound(image.lastPathComponent)
+        }
+        return app
+    }
+
     func appBundles(in directory: URL) -> [URL] {
         let contents = (try? FileManager.default.contentsOfDirectory(at: directory,
                                                                     includingPropertiesForKeys: nil)) ?? []

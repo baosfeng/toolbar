@@ -99,11 +99,11 @@ func runUpdateInstallLogicTests() {
     assertEqual(release.assets.last?.downloadURL, nil, "缺 browser_download_url → nil")
 
     // 资产定位：名字与地址都在才算可用
-    let located = try? UpdatePackageLocator.package(for: release, architecture: .arm64)
+    let located = try? UpdatePackageLocator.target(for: release, architecture: .arm64)
     assertEqual(located?.name, "Yilan-arm64.app.zip", "定位到 arm64 包")
     assertEqual(located?.url.absoluteString, "https://example.com/a.zip", "定位包带回下载地址")
     var missing: UpdateInstallError?
-    do { _ = try UpdatePackageLocator.package(for: release, architecture: .x86_64) }
+    do { _ = try UpdatePackageLocator.target(for: release, architecture: .x86_64) }
     catch { missing = error as? UpdateInstallError }
     assertEqual(missing, .assetUnavailable("Yilan-x86_64.app.zip"), "有名字没地址 → assetUnavailable")
 

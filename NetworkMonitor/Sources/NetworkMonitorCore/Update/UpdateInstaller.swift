@@ -7,7 +7,7 @@ import Foundation
 /// 为什么 Core 自己有这一份：NetworkMonitorUI 不依赖 Core（依赖方向硬约束），
 /// 界面的 `UpdateInstallStage` 只能在自己的库里定义；App 层负责两者对表。
 public enum UpdateInstallPhase: String, Equatable, Sendable {
-    /// 正在下载 zip
+    /// 正在下载安装包（dmg 或兼容用的 zip）
     case downloading
     /// 正在校验（解压 + 结构 + 版本号）
     case verifying
@@ -55,13 +55,15 @@ public struct UpdateInstallHost: Sendable {
 /// 更新安装器 —— 下载 → 校验 → 备份 → 原子替换 → 重启，任一步失败都不动当前包
 ///
 /// 步骤与失败口径：
-/// 1. 下载本机架构 zip（失败 → downloadFailed，当前包原样保留）；
-/// 2. 解压 ＋ 结构校验 ＋ 版本校验（失败 → unpackFailed / appNotFound / versionMismatch）；
-/// 3. 目标路径判定（失败 → targetMismatch），目标目录可写判定（失败 → targetNotWritable）；
-/// 4. 备份当前包到临时目录（失败 → backupFailed）；
-/// 5. 预演替换：新包先挪进目标目录的隐藏暂存位，挪不动就是在动真格之前失败；
-/// 6. 原子替换：原包挪到同卷隐藏备份位，新包就位；失败则把原包挪回去（replaceFailed）；
-/// 7. 重启（失败 → relaunchFailed，包已替换，提示用户手动启动）。
+/// 1. 下载安装包（失败 → downloadFailed，当前包原样保留）；
+/// 2. 校验 SHA-256（清单给了才有；失败 → checksumMismatch，当前包原样保留）；
+/// 3. 展开（dmg 挂载 / zip 解压）＋ 结构校验 ＋ 版本校验
+///    （失败 → unpackFailed / appNotFound / versionMismatch）；
+/// 4. 目标路径判定（失败 → targetMismatch），目标目录可写判定（失败 → targetNotWritable）；
+/// 5. 备份当前包到临时目录（失败 → backupFailed）；
+/// 6. 预演替换：新包先挪进目标目录的隐藏暂存位，挪不动就是在动真格之前失败；
+/// 7. 原子替换：原包挪到同卷隐藏备份位，新包就位；失败则把原包挪回去（replaceFailed）；
+/// 8. 重启（失败 → relaunchFailed，包已替换，提示用户手动启动）。
 public final class UpdateInstaller: Sendable {
 
     private let fileSystem: any UpdateInstallFileSystem
@@ -92,7 +94,7 @@ public final class UpdateInstaller: Sendable {
                         host: UpdateInstallHost,
                         architecture: UpdateArchitecture,
                         progress: (@Sendable (UpdateInstallPhase) -> Void)? = nil) async throws -> URL {
-        let package = try UpdatePackageLocator.package(for: release, architecture: architecture)
+        let package = try UpdatePackageLocator.target(for: release, architecture: architecture)
         progress?(.downloading)
         let data: Data
         do {
@@ -105,23 +107,30 @@ public final class UpdateInstaller: Sendable {
         logger.info("更新安装：已下载 \(package.name)（\(data.count) 字节）")
 
         progress?(.verifying)
+        // 先验完整性再落盘：校验和不对就到这一步为止，当前应用包一个字节都没动。
+        // 清单里给了 SHA-256 才校验；旧发布（走 API 通道）没有校验和，跳过
+        guard UpdateChecksum.matches(data, expected: package.sha256) else {
+            let actual = UpdateChecksum.sha256Hex(of: data)
+            logger.error("更新安装：\(package.name) 校验和不符（期望 \(package.sha256 ?? "无")，实际 \(actual)）")
+            throw UpdateInstallError.checksumMismatch(expected: package.sha256 ?? "", actual: actual)
+        }
+
         let staging = try makeStagingDirectory()
         // 失败时**保留**暂存目录：里面的备份是用户手工找回原版本的唯一凭据；
         // 只有装成功（已经替换并重启成功）才清理，避免残留几十兆垃圾。
         var keepStaging = false
         defer { if !keepStaging { try? fileSystem.removeItem(at: staging) } }
 
-        let archive = staging.appendingPathComponent("package.zip")
+        // 文件名保留原资产名：展开器要按扩展名判 dmg（挂载）还是 zip（解压）
+        let archive = staging.appendingPathComponent(package.name)
         try fileSystem.write(data, to: archive)
+        let newApp: URL
         do {
-            try fileSystem.unzip(archive, into: staging)
+            newApp = try fileSystem.expand(archive, into: staging)
         } catch let error as UpdateInstallError {
             throw error
         } catch {
             throw UpdateInstallError.unpackFailed(error.localizedDescription)
-        }
-        guard let newApp = fileSystem.appBundles(in: staging).first else {
-            throw UpdateInstallError.appNotFound(package.name)
         }
         let actual = try verifier.verify(appURL: newApp, tag: release.tagName)
         logger.info("更新安装：安装包校验通过（版本 \(actual)）")

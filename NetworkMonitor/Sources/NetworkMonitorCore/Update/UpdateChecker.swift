@@ -15,16 +15,22 @@ public struct UpdateRelease: Equatable, Sendable {
     public let notes: String
     /// 发布时间（解析失败为 nil，不阻塞版本判定）
     public let publishedAt: Date?
-    /// 附件清单（安装包 zip；按架构各一个）
+    /// 附件清单（旧发布的安装包 zip；按架构各一个）
     public let assets: [UpdateAsset]
+    /// 静态清单给出的唯一安装包（universal dmg）
+    ///
+    /// 新发布都走清单通道，这里必有值；为 nil 只可能来自「旧发布回退 API」，
+    /// 那时按本机架构从 assets 里挑 zip（兼容 1.29 及更早的发布）。
+    public let artifact: UpdateArtifact?
 
     public init(tagName: String, htmlURL: URL?, notes: String, publishedAt: Date?,
-                assets: [UpdateAsset] = []) {
+                assets: [UpdateAsset] = [], artifact: UpdateArtifact? = nil) {
         self.tagName = tagName
         self.htmlURL = htmlURL
         self.notes = notes
         self.publishedAt = publishedAt
         self.assets = assets
+        self.artifact = artifact
     }
 
     /// 资产名清单（选择本机架构包 / 报错文案用）

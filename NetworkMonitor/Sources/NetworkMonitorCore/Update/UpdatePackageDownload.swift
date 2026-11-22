@@ -13,6 +13,8 @@ public enum UpdateInstallError: Error, Equatable, Sendable {
     case assetUnavailable(String)
     /// 下载失败（网络 / 非 2xx）
     case downloadFailed(String)
+    /// 校验和不符（下载内容损坏 / 被替换；当前包未动）
+    case checksumMismatch(expected: String, actual: String)
     /// 解压失败（zip 损坏 / 结构不对）
     case unpackFailed(String)
     /// 解压后找不到 .app
@@ -40,6 +42,8 @@ public enum UpdateInstallError: Error, Equatable, Sendable {
             return "\(name) 没有下载地址"
         case .downloadFailed(let detail):
             return detail.isEmpty ? "下载失败" : "下载失败（\(detail)）"
+        case .checksumMismatch:
+            return "安装包校验失败（下载不完整或已被篡改），当前版本未改动"
         case .unpackFailed(let detail):
             return detail.isEmpty ? "解压失败" : "解压失败（\(detail)）"
         case .appNotFound(let detail):

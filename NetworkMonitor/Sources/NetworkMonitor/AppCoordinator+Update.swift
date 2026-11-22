@@ -17,18 +17,31 @@ extension AppCoordinator {
     /// 不带任何用户标识（机器名 / 用户名 / 安装 ID 一律不进请求头）。
     func makeUpdateCheckService() -> UpdateCheckService {
 #if DEBUG
-        // 取证钩子：探针用 NM_UPDATE_PROBE_URL 指向本地失败端点，验证失败路径的界面文案
-        let apiBase = ProcessInfo.processInfo.environment["NM_UPDATE_PROBE_URL"]
+        // 取证钩子：探针用 NM_UPDATE_PROBE_URL 指向本地失败端点，验证失败路径的界面文案。
+        // 两条通道共用同一个基址：清单通道拼 {base}/{repo}/releases/latest/download/update.json，
+        // API 通道拼 {base}/repos/{repo}/releases/latest，指向本地坏端点时两条都会失败
+        let probeBase = ProcessInfo.processInfo.environment["NM_UPDATE_PROBE_URL"]
             .flatMap { $0.isEmpty ? nil : URL(string: $0) }
-            ?? GitHubUpdateChecker.defaultBaseURL
+        let manifestBase = probeBase ?? StaticManifestUpdateChecker.defaultBaseURL
+        let apiBase = probeBase ?? GitHubUpdateChecker.defaultBaseURL
 #else
+        let manifestBase = StaticManifestUpdateChecker.defaultBaseURL
         let apiBase = GitHubUpdateChecker.defaultBaseURL
 #endif
         // 与额度 provider 共用同一个传输层实例（组合根持有）
-        let checker = GitHubUpdateChecker(baseURL: apiBase,
+        //
+        // 通道顺序：静态清单优先（一条 URL、走 CDN、不吃 API 额度），
+        // 失败（1.29 及更早的发布根本没有清单资产）再回退 GitHub API。
+        // 用户从老版本升上来这一跳必须还能查到版本，否则「升级一次才能用上新通道」是死锁
+        let checker = UpdateCheckerChain(
+            primary: StaticManifestUpdateChecker(baseURL: manifestBase,
+                                                 userAgent: Self.updateUserAgent,
+                                                 transport: httpTransport),
+            fallback: GitHubUpdateChecker(baseURL: apiBase,
                                           userAgent: Self.updateUserAgent,
                                           transport: httpTransport,
-                                          logger: logger)
+                                          logger: logger),
+            logger: logger)
         return UpdateCheckService(checker: checker,
                                   preferences: UpdateCheckPreferences(),
                                   currentVersion: { Self.appVersion },
