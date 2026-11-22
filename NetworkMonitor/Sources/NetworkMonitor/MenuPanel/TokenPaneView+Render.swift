@@ -12,9 +12,19 @@ import NetworkMonitorUI
 extension TokenPaneView {
 
     func render() {
-        guard let snapshot else { return }
+        guard let raw = snapshot else { return }
+        let options = availableSources(in: raw)
+        // 当前来源已不可选（设置页关掉 / 数据被清空）：回落「全部」再重渲一次
+        if let source, !options.contains(source) {
+            selectSource(nil)
+            return
+        }
+        // 四屏与二级页都吃这一份收窄快照：换来源 = 换数据，不是换标签
+        guard let snapshot = scopedSnapshot else { return }
         let model = TokenPaneModel.make(snapshot: snapshot,
                                         range: range,
+                                        source: source,
+                                        availableSources: options,
                                         hourScope: hourScope,
                                         hourView: hourView,
                                         metric: metric,
@@ -23,13 +33,9 @@ extension TokenPaneView {
         lastModel = model
         applyScreenVisibility()
 
-        // 页名「DSH」已由页头自带，右侧口径只放会话数（见 headerMeta）
-        headerView.updateMeta(headerMeta(from: model.hostLabel))
-        // 每次渲染都重设：页头视图的默认无障碍文案由页名 + 口径文字拼成，
-        // 只在装配时设一次会被后续 updateMeta 覆盖掉，读屏就听不到时区口径了
-        headerView.setAccessibilityLabel(model.hostLabel + "。" + TokenTimeZoneNote.text)
+        // 页头（来源切换器 / 口径文字 / 范围分段）整块交给 TokenHeaderSection
+        syncHeader(with: model, options: options)
         heroView.update(hero: model.hero)
-        rangeControl.select(range.rawValue, notify: false)
 
         for (index, card) in familyCards.enumerated() where index < model.cards.count {
             card.update(card: model.cards[index])
@@ -61,7 +67,7 @@ extension TokenPaneView {
                         showsScale: true,
                         accessibility: model.bucketTitle + "，每根柱可点开该时段详情")
         hourAxis.update(labels: axisLabels(for: model),
-                        leadingInset: TokenBarsView.scaleGutter)
+                        leadingInset: hourBars.scaleGutter)
         hourLegend.update(items: legendItems(for: model, comparing: comparing,
                                              lineColor: hourBars.lineColor))
 
@@ -113,6 +119,15 @@ extension TokenPaneView {
                               selection: selection, hourScope: hourScope)
         }
         onContentChanged?()
+    }
+
+    /// 来源切换器可选项：已启用且有数据的来源（菜单只列这些）
+    ///
+    /// 页名也由这份清单决定：只有一个可用来源时页头直接写它，不写「全部」。
+    func availableSources(in snapshot: HarnessUsageSnapshot) -> [TokenSourceID] {
+        TokenSourceScope.sources(in: snapshot).filter {
+            TokenSourcePreferences.isEnabled($0, storage: storage)
+        }
     }
 
     // MARK: - 屏显隐

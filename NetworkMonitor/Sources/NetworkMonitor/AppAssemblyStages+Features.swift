@@ -123,20 +123,23 @@ extension AppCoordinator {
                       })
     }
 
-    /// 6f. DSH Token 统计链路（依赖数据库实例）
+    /// 6f. Token 统计链路（多来源索引 + 后台自动监控）
     ///
-    /// 取具体实例而非 AppDatabase：统计服务要的是 HarnessTokenRepository 能力，
-    /// 现有组合别名还没有它（见 AppCoordinator.databaseManager 的说明）。
+    /// 调度器装配见 AppTokenAutoIndexStage.swift。
     var tokenStage: AssembleStage {
         AssembleStage(name: AppAssemblyPlan.token,
-                      requires: [AppAssemblyPlan.database],
+                      requires: [AppAssemblyPlan.database, AppAssemblyPlan.screenActivity],
                       run: { env in
                           guard let database = env.coordinator.databaseManager else {
                               throw AppAssemblyError.missingService(stage: AppAssemblyPlan.token,
                                                                     detail: "数据库未装配")
                           }
-                          env.coordinator.harnessUsageService = HarnessAssembly.makeService(database: database)
-                      })
+                          let service = HarnessAssembly.makeService(database: database)
+                          env.coordinator.harnessUsageService = service
+                          env.coordinator.tokenAutoIndexScheduler =
+                              env.coordinator.startTokenAutoIndexScheduler(service: service)
+                      },
+                      teardown: { env in env.coordinator.stopTokenAutoIndexScheduler() })
     }
 
     /// 6g. 系统监控链路（采样驱动见 MenuBarManager+Sampling）

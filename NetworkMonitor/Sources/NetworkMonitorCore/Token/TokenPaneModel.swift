@@ -10,6 +10,16 @@ import Foundation
 package struct TokenPaneModel {
 
     package let range: TokenRange
+    /// 当前来源（nil = 全部 / 跨源合计）；数据口径由它决定
+    package let source: TokenSourceID?
+    /// 页头可选的来源（已启用且有数据）——页名文案由它与 source 一起决定
+    package let availableSources: [TokenSourceID]
+    /// 页名实际显示的来源：只有一个「有数据的来源」时直接显示它
+    package var displaySource: TokenSourceID? {
+        TokenSourceScope.displaySource(selected: source, dataSources: availableSources)
+    }
+    /// 页头页名文案（来源显示名；两个以上可用来源且看合计时为「全部」）
+    package var sourceLabel: String { displaySource?.displayName ?? "全部" }
     package let hostLabel: String
     package let stamp: String
     /// 首屏 Hero（当前范围三项合计 + 较昨日 + 实时）
@@ -51,6 +61,9 @@ package struct TokenPaneModel {
     /// 当前范围的项目 / 模型合计（与占比分母同源，排行屏汇总块用）
     package let projectTotals: TokenDistroTotals
     package let modelTotals: TokenDistroTotals
+    /// 「按工具」的行与合计（= 按来源；只在页头为「全部」时进排行屏）
+    package let tools: [TokenDistroRow]
+    package let toolTotals: TokenDistroTotals
 
     /// 「按项目 / 按模型」二级页的范围口径文案（Core 派生，视图只透传）
     package let distroCopy: TokenDistroCopy
@@ -83,6 +96,8 @@ package struct TokenPaneModel {
     /// 由快照与交互状态派生展示模型
     package static func make(snapshot: HarnessUsageSnapshot,
                      range: TokenRange,
+                     source: TokenSourceID? = nil,
+                     availableSources: [TokenSourceID]? = nil,
                      hourScope: TokenHourScope,
                      hourView: TokenHourView,
                      metric: TokenChartMetric,
@@ -110,9 +125,20 @@ package struct TokenPaneModel {
         // 就是两套算式各走各的留下的坑）
         let cachePage = TokenDerive.cachePage(snapshot, range: range)
 
+        // 有数据的来源：调用方（页头菜单）给了就用它，否则按快照的 bySource 自己推
+        let dataSources = availableSources ?? TokenSourceScope.dataSources(in: snapshot)
+        // 页名：显式选了来源就写它；只有一个有数据的来源时也写它
+        let pageName = TokenSourceScope.displaySource(selected: source, dataSources: dataSources)?
+            .displayName ?? "全部"
+
         return TokenPaneModel(
             range: range,
-            hostLabel: "DSH · \(snapshot.indexedSessions) 会话",
+            source: source,
+            availableSources: dataSources,
+            // 页名（来源）与口径（会话数）同源派生：页头左侧是来源切换器，
+            // 右侧只留会话数（TokenPaneView+Layout 的 headerMeta 负责去前缀）。
+            // 只有一个可用来源时页名直接写它，避免「全部 · 2147 会话」而实际只有一个源
+            hostLabel: pageName + " · \(snapshot.indexedSessions) 会话",
             stamp: TokenFormatting.clock(now),
             hero: TokenDerive.hero(range: range, current: currentTotal, previous: previousTotal,
                                    clock: TokenFormatting.clock(now)),
@@ -148,6 +174,8 @@ package struct TokenPaneModel {
             modelCount: modelRows.count,
             projectTotals: TokenDistroTotals(usage: snapshot.windowProjectTotals[range.window] ?? .zero),
             modelTotals: TokenDistroTotals(usage: snapshot.windowModelTotals[range.window] ?? .zero),
+            tools: TokenToolRanking.rows(snapshot, range: range),
+            toolTotals: TokenToolRanking.totals(snapshot, range: range),
             distroCopy: distroCopy,
             cachePage: cachePage,
             compare: TokenDerive.compare(snapshot, current: currentTotal, previous: previousTotal, range: range),

@@ -124,8 +124,21 @@ extension HarnessUsageService {
                 continue
             }
 
-            let record = HarnessSessionScanRecord(file: file, scannedAt: nowProvider().timeIntervalSince1970)
-            if store.harnessReplaceSession(record: record, events: result.events, cwd: result.cwd) {
+            // 扫描记录的 sessionID 取**解析器给出的真实会话 id**（result.sessionID），
+            // 与事件里的 session_id 必须一致：写入/删除都按 (session_id, source) 定位，
+            // 两者不一致时删除会删空、每轮都追加一份（实测同一会话被记 3 次）。
+            let record = HarnessSessionScanRecord(
+                path: file.path,
+                sessionID: result.sessionID,
+                size: file.size,
+                mtimeMs: file.mtimeMs,
+                scannedAt: nowProvider().timeIntervalSince1970,
+                source: file.source
+            )
+            // 来源跟着扫描单元走：record 的 source 由扫描器给出，写入时按它落库，
+            // 删除也按 (session_id, source) 定位，跨来源同名会话不会互相误删
+            if store.harnessReplaceSession(record: record, events: result.events,
+                                           cwd: result.cwd, source: record.source) {
                 // 落库即脏：中途取消时也要让下一次按需重算把新数据算进去
                 markSnapshotStale()
             } else {
@@ -153,6 +166,12 @@ extension HarnessUsageService {
             format: "Harness token 索引完成：%d 个变更文件（跳过 %d / 失败 %d）/ %d 条事件 / %d 条坏行，耗时 %.2fs",
             changed.count, skipped, failedFiles, totalEvents, malformedLines, elapsed
         ))
+        // 按来源分一行：多来源后「总数对了但某个源没跑」是最难查的哑巴故障
+        let perSource = Dictionary(grouping: changed, by: \.source)
+        let sourceSummary = perSource.keys.sorted { $0.rawValue < $1.rawValue }.map { source in
+            source.rawValue + " " + String(perSource[source]?.count ?? 0)
+        }
+        logger.info("Harness token 索引来源分布：" + sourceSummary.joined(separator: " / "))
         return HarnessRebuildReceipt(scope: batch.scope,
                                      eventsDeleted: eventsDeleted,
                                      eventsIndexed: totalEvents,

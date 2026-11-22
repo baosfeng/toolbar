@@ -16,6 +16,8 @@ package final class PaneHeaderRowView: NSView {
 
     /// 页名（11pt 粗体，次级色）
     private let titleLabel: NSTextField
+    /// 页名位的替换控件（nil = 用页名标签本身）
+    private weak var titleControl: NSView?
     /// 右侧口径文字（10pt 等宽，三级色）
     private let metaLabel: NSTextField
     /// 右侧动作槽（刷新按钮 / 分段控件等）
@@ -70,6 +72,27 @@ package final class PaneHeaderRowView: NSView {
         updateAccessibilityLabel()
     }
 
+    /// 用控件替换左侧页名（Token 页的来源切换器）
+    ///
+    /// 不调用时页名标签原样显示，其余四页的页头几何零变化；控件插在同一行首位、
+    /// 高度不超出页头，所以页头恒 22pt 的约束不受影响。
+    /// 重复调用即替换（旧控件从排列栈里摘掉）。
+    package func setTitleControl(_ view: NSView) {
+        if let old = titleControl, old !== view {
+            stack.removeArrangedSubview(old)
+            old.removeFromSuperview()
+        }
+        titleLabel.isHidden = true
+        titleControl = view
+        guard view.superview !== stack else {
+            updateAccessibilityLabel()
+            return
+        }
+        view.translatesAutoresizingMaskIntoConstraints = false
+        stack.insertArrangedSubview(view, at: 0)
+        updateAccessibilityLabel()
+    }
+
     /// 替换右侧动作槽内容
     package func setTrailing(_ views: [NSView]) {
         for view in trailingSlot.arrangedSubviews {
@@ -83,8 +106,9 @@ package final class PaneHeaderRowView: NSView {
 
     private func updateAccessibilityLabel() {
         let meta = metaLabel.stringValue
-        setAccessibilityLabel(meta.isEmpty ? titleLabel.stringValue
-                                           : titleLabel.stringValue + "，" + meta)
+        // 页名被控件替换时，读屏文案的页名段取自控件（否则会听到旧的「DSH」）
+        let title = titleControl?.accessibilityLabel() ?? titleLabel.stringValue
+        setAccessibilityLabel(meta.isEmpty ? title : title + "，" + meta)
     }
 }
 

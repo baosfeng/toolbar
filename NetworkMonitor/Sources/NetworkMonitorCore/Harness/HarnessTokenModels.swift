@@ -209,6 +209,8 @@ public struct HarnessAggregate: Sendable, Equatable {
     public let todayHourly: [HarnessHourlyUsage]
     /// 昨日按小时（24 槽，nil = 缺省）
     public let yesterdayHourly: [HarnessHourlyUsage]
+    /// 按来源的完整聚合（键缺失 = 该来源未索引到；「全部」口径不受它影响）
+    public let bySource: [TokenSourceID: HarnessSourceAggregate]
 
     public static let empty = HarnessAggregate(
         allTime: .zero, today: .zero, thisWeek: .zero,
@@ -227,7 +229,8 @@ public struct HarnessAggregate: Sendable, Equatable {
         windowed: [HarnessWindowedUsage] = [],
         indexedSessions: Int,
         todayHourly: [HarnessHourlyUsage] = HarnessHourlyUsage.emptyDay(),
-        yesterdayHourly: [HarnessHourlyUsage] = HarnessHourlyUsage.emptyDay()
+        yesterdayHourly: [HarnessHourlyUsage] = HarnessHourlyUsage.emptyDay(),
+        bySource: [TokenSourceID: HarnessSourceAggregate] = [:]
     ) {
         self.allTime = allTime
         self.today = today
@@ -239,5 +242,6 @@ public struct HarnessAggregate: Sendable, Equatable {
         self.indexedSessions = indexedSessions
         self.todayHourly = todayHourly
         self.yesterdayHourly = yesterdayHourly
+        self.bySource = bySource
     }
 }

@@ -17,9 +17,9 @@ enum HarnessAssembly {
                             logger: LoggingService = AppContext.shared.logger,
                             onStateChange: (@Sendable () -> Void)? = { AppEvents.postHarnessUsageChanged() })
         -> any HarnessUsageServicing {
-        let resolution = HarnessSourceDirectory.resolve(storage: storage)
-        let scanner = HarnessSessionScanner(resolution: resolution,
-                                            streamer: HarnessZstdLineStreamer(logger: logger))
+        // 多来源：一台扫描器跑 DSH / Claude Code / Codex（其余来源按 hasIndexer 返回空）。
+        // 目录与启用开关每轮重读 TokenSourcePreferences，设置页改完下一次索引即生效。
+        let scanner = HarnessMultiSourceScanner(storage: storage, logger: logger)
         let service = HarnessUsageService(scanner: scanner, store: database, logger: logger)
         if let onStateChange {
             service.setStateObserver { _ in onStateChange() }

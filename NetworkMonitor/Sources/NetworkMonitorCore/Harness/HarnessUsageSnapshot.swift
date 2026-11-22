@@ -46,6 +46,15 @@ public struct HarnessUsageSnapshot: Sendable, Equatable {
     /// 带默认值：既有构造点（测试与快照冻结）不改也能编译，
     /// 诊断缺省时按可用性兜底推一份，UI 不会读到空。
     public let sourceDiagnostics: HarnessSourceDiagnostics
+    /// 按来源的完整聚合（键缺失 = 该来源未索引到）
+    ///
+    /// 存明细而不是「已裁好的单源快照」：同一份数据既能出 bySource 的计数，
+    /// 也能出 scoped(to:) 的同形快照，还不必为每个来源各存一份 33 天趋势。
+    public let perSourceAggregates: [TokenSourceID: HarnessSourceAggregate]
+    /// 按来源的可用性（scoped(to:) 用它给单源口径；缺省回落全量口径）
+    public let sourceAvailabilityBySource: [TokenSourceID: HarnessSourceAvailability]
+    /// 按来源的诊断（同上）
+    public let sourceDiagnosticsBySource: [TokenSourceID: HarnessSourceDiagnostics]
 
     public init(
         totals: HarnessUsageTotals,
@@ -63,7 +72,10 @@ public struct HarnessUsageSnapshot: Sendable, Equatable {
         lastScanAt: Date?,
         indexingState: HarnessIndexingState,
         sourceAvailability: HarnessSourceAvailability,
-        sourceDiagnostics: HarnessSourceDiagnostics? = nil
+        sourceDiagnostics: HarnessSourceDiagnostics? = nil,
+        perSourceAggregates: [TokenSourceID: HarnessSourceAggregate] = [:],
+        sourceAvailabilityBySource: [TokenSourceID: HarnessSourceAvailability] = [:],
+        sourceDiagnosticsBySource: [TokenSourceID: HarnessSourceDiagnostics] = [:]
     ) {
         self.totals = totals
         self.daily = daily
@@ -83,6 +95,9 @@ public struct HarnessUsageSnapshot: Sendable, Equatable {
         // 调用方没给诊断时按可用性推一份：UI 永远读得到「哪个目录 / 缺什么」，不会读到空
         self.sourceDiagnostics = sourceDiagnostics
             ?? HarnessSourceDiagnostics.make(availability: sourceAvailability)
+        self.perSourceAggregates = perSourceAggregates
+        self.sourceAvailabilityBySource = sourceAvailabilityBySource
+        self.sourceDiagnosticsBySource = sourceDiagnosticsBySource
     }
 
     /// 空快照：索引尚未跑完时的占位值（UI 先拿到它渲染骨架，不等索引）
@@ -118,7 +133,10 @@ public struct HarnessUsageSnapshot: Sendable, Equatable {
             lastScanAt: lastScanAt,
             indexingState: indexingState,
             sourceAvailability: sourceAvailability,
-            sourceDiagnostics: sourceDiagnostics
+            sourceDiagnostics: sourceDiagnostics,
+            perSourceAggregates: perSourceAggregates,
+            sourceAvailabilityBySource: sourceAvailabilityBySource,
+            sourceDiagnosticsBySource: sourceDiagnosticsBySource
         )
     }
 }

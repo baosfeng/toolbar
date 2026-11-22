@@ -8,28 +8,61 @@ import Foundation
 /// 索引的增量判据是 `harness_session_scan` 的 (size, mtime)，
 /// 只删事件不删扫描记录，下一轮会把该会话判成「未变更」直接跳过 ——
 /// 因此清理动作**必须同时删扫描记录**，让这些会话重新从文件读一遍。
-public enum HarnessRebuildScope: Sendable, Equatable {
+/// indirect：新增的 .source 关联值自身是 HarnessRebuildScope（两维嵌套），
+/// 不标 indirect 就是「值类型无限大小」，编译器会直接拒
+public indirect enum HarnessRebuildScope: Sendable, Equatable {
     /// 清空全部索引（事件 + 扫描记录），随后全量重建
     case full
     /// 只清理「最近 days 天内出现过事件」的会话（事件 + 扫描记录），随后重扫这些会话
     case sinceDays(Int)
+    /// 只处理某个来源（内层是时间范围）；维护区的「按来源」下拉用它
+    ///
+    /// 为什么用关联值而不是加一个 source 字段：范围仍是值类型、仍可直接比较，
+    /// 而「来源 × 时间范围」两维不会互相污染 —— 实现侧统一走 decomposed()，
+    /// 不必在每个 switch 里写嵌套分支。
+    case source(TokenSourceID, HarnessRebuildScope)
 
     /// 供 UI 展示的范围说明
     public var displayName: String {
         switch self {
         case .full: return "全部历史数据"
         case .sinceDays(let days): return "最近 " + String(max(1, days)) + " 天的会话数据"
+        case .source(let id, let inner): return id.displayName + " · " + inner.displayName
+        }
+    }
+
+    /// 拆成 (来源, 时间范围) 两维：实现侧只处理这两维，不写嵌套 switch
+    public func decomposed() -> (source: TokenSourceID?, base: HarnessRebuildScope) {
+        switch self {
+        case .full, .sinceDays:
+            return (nil, self)
+        case .source(let id, let inner):
+            // 外层来源优先（嵌套来源没有语义，按最外层解释）
+            return (id, inner.decomposed().base)
         }
     }
 
     /// 合并两个范围：取覆盖更广的那个（full 吞掉一切）
     public static func merge(_ lhs: HarnessRebuildScope?, _ rhs: HarnessRebuildScope?) -> HarnessRebuildScope? {
+        // 来源维度先合并：同来源取更广的时间范围，不同来源无法合并成一条请求 → 退化为全量
+        // （保守取向：宁可多清，也不能把「清 A 源」说成做了却只动了 B 源）
+        if case .source(let lhsSource, let lhsInner)? = lhs,
+           case .source(let rhsSource, let rhsInner)? = rhs {
+            guard lhsSource == rhsSource else { return .full }
+            return .source(lhsSource, merge(lhsInner, rhsInner) ?? .full)
+        }
+        if case .source = lhs, rhs == nil { return lhs }
+        if case .source = rhs, lhs == nil { return rhs }
+        if case .source = lhs { return .full }
+        if case .source = rhs { return .full }
         switch (lhs, rhs) {
         case (.some(.full), _), (_, .some(.full)): return .full
         case (.some(.sinceDays(let a)), .some(.sinceDays(let b))): return .sinceDays(max(a, b))
         case (.some(let scope), .none): return scope
         case (.none, .some(let scope)): return scope
         case (.none, .none): return nil
+        // 剩余组合（含 .source）已在上面按来源维度处理，这里只是让 switch 穷尽
+        case (.some(.source), _), (_, .some(.source)): return .full
         }
     }
 }

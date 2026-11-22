@@ -239,12 +239,33 @@ package struct TokenDistroTotals {
 /// 占比条与整卡的无障碍文案都从这一处按当前范围派生，避免「按项目累计占比条」这种
 /// 与「按项目已跟随范围」互相打脸的硬编码字符串散落在视图里。
 package enum TokenDistroDimension {
+    /// 按工具（= 按来源）：只在页头来源为「全部」时成立，单源下隐藏这一段
+    case tools
     case projects
     case models
 
+    /// 全部维度（顺序 = 排行屏分段顺序）
+    package static let all: [TokenDistroDimension] = [.tools, .projects, .models]
+
     package var title: String {
-        self == .projects ? "按项目" : "按模型"
+        switch self {
+        case .tools: return "按工具"
+        case .projects: return "按项目"
+        case .models: return "按模型"
+        }
     }
+
+    /// 分段条里的短标签（页内已说明「按什么」，段里只留两字）
+    package var segmentTitle: String {
+        switch self {
+        case .tools: return "工具"
+        case .projects: return "项目"
+        case .models: return "模型"
+        }
+    }
+
+    /// 是否需要项目 / 模型语义的二级页（工具维度没有对应明细页）
+    package var hasDetailPage: Bool { self != .tools }
 
     /// 占比条无障碍文案：维度 + 当前范围（范围与行数据同源，不再写死「累计」）
     package func barAccessibility(range: TokenRange) -> String {

@@ -14,13 +14,19 @@ public struct HarnessSessionFile: Sendable, Equatable {
     public let mtimeMs: Int64
     /// 参与合并扫描的版本文件绝对路径（空表示仅 path 自身）
     public let members: [String]
+    /// 该会话文件所属来源（多来源共用一套索引表与一套扫描流水线）
+    ///
+    /// 带默认值 .dsh：既有 DSH 扫描器、测试桩与旧调用点都不用改。
+    public let source: TokenSourceID
 
-    public init(path: String, sessionID: String, size: Int64, mtimeMs: Int64, members: [String] = []) {
+    public init(path: String, sessionID: String, size: Int64, mtimeMs: Int64,
+                members: [String] = [], source: TokenSourceID = .dsh) {
         self.path = path
         self.sessionID = sessionID
         self.size = size
         self.mtimeMs = mtimeMs
         self.members = members
+        self.source = source
     }
 }
 
@@ -34,23 +40,28 @@ public struct HarnessSessionScanRecord: Sendable, Equatable {
     public let mtimeMs: Int64
     /// 扫描完成时间（Unix 秒）
     public let scannedAt: Double
+    /// 来源（与事件的 source 一致，清理 / 重扫据此只针对一个来源）
+    public let source: TokenSourceID
 
-    public init(path: String, sessionID: String, size: Int64, mtimeMs: Int64, scannedAt: Double) {
+    public init(path: String, sessionID: String, size: Int64, mtimeMs: Int64, scannedAt: Double,
+                source: TokenSourceID = .dsh) {
         self.path = path
         self.sessionID = sessionID
         self.size = size
         self.mtimeMs = mtimeMs
         self.scannedAt = scannedAt
+        self.source = source
     }
 
-    /// 由文件描述与扫描时间构造
+    /// 由文件描述与扫描时间构造（来源跟着文件走，不在调用点再传一遍）
     public init(file: HarnessSessionFile, scannedAt: Double) {
         self.init(
             path: file.path,
             sessionID: file.sessionID,
             size: file.size,
             mtimeMs: file.mtimeMs,
-            scannedAt: scannedAt
+            scannedAt: scannedAt,
+            source: file.source
         )
     }
 
@@ -71,13 +82,17 @@ public struct HarnessTokenEvent: Sendable, Equatable {
     /// 事件时间（Unix 毫秒）
     public let tsMs: Int64
     public let usage: HarnessTokenUsage
+    /// 来源（落 harness_token_event.source；缺省 .dsh 与老数据口径一致）
+    public let source: TokenSourceID
 
-    public init(sessionID: String, cwd: String, provider: String, model: String, tsMs: Int64, usage: HarnessTokenUsage) {
+    public init(sessionID: String, cwd: String, provider: String, model: String, tsMs: Int64,
+                usage: HarnessTokenUsage, source: TokenSourceID = .dsh) {
         self.sessionID = sessionID
         self.cwd = cwd
         self.provider = provider
         self.model = model
         self.tsMs = tsMs
         self.usage = usage
+        self.source = source
     }
 }

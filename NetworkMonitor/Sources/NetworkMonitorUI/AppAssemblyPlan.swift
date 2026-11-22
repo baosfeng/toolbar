@@ -60,8 +60,8 @@ public enum AppAssemblyPlan {
         AssembleStageSpec(name: settings, requires: [billing, updateCheck]),
         // 6e. 屏幕活动：暂停 / 恢复额度后台轮询（弱引用 billingMonitor）
         AssembleStageSpec(name: screenActivity, requires: [billing]),
-        // 6f. Token 统计：依赖数据库实例
-        AssembleStageSpec(name: token, requires: [database]),
+        // 6f. Token 统计：依赖数据库实例；后台自动监控要订阅屏幕活动（锁屏暂停 / 唤醒补跑）
+        AssembleStageSpec(name: token, requires: [database, screenActivity]),
         // 6g. 系统监控：独立采样链路
         AssembleStageSpec(name: systemMonitor),
         // 7. 菜单栏：注入前面装配出的全部服务
@@ -88,12 +88,12 @@ public enum AppAssemblyPlan {
 
     /// 带反向清理的阶段（改造前手写在这个集合上的顺序见 `legacyTeardownOrder`）
     public static let teardownStages: [String] = [
-        database, clipboard, transfer, screenActivity, trafficPersistence, smoothScroll,
+        database, clipboard, transfer, screenActivity, token, trafficPersistence, smoothScroll,
     ]
 
     /// 改造前 `stop()` 的清理顺序（冻结快照）——必须等于启动顺序的逆序裁剪
     public static let legacyTeardownOrder: [String] = [
-        smoothScroll, trafficPersistence, screenActivity, transfer, clipboard, database,
+        smoothScroll, trafficPersistence, token, screenActivity, transfer, clipboard, database,
     ]
 
     /// 声明表经拓扑排序得到的实际启动顺序

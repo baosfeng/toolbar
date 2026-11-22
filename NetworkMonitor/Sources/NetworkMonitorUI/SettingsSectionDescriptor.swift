@@ -127,7 +127,7 @@ public enum SettingsSectionCatalog {
         SettingsSectionDescriptor(id: .token,
                                   title: "Token 用量",
                                   symbolName: "chart.bar.doc.horizontal",
-                                  subtitle: "DSH 会话数据目录、zstd 探测与索引维护（重新扫描 / 清理历史数据）。",
+                                  subtitle: "各编码 agent 的本地会话目录（DSH / Claude Code / Codex / Gemini CLI / Copilot CLI / OpenCode / Zed）、解压工具探测与索引维护（重新扫描 / 清理历史数据）。",
                                   fileSuffix: "token",
                                   group: .feature),
         SettingsSectionDescriptor(id: .permissions,

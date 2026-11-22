@@ -32,8 +32,13 @@ final class TokenBarsView: NSView {
     /// 是否画左侧刻度（0 / 中值 / 峰值）与 4 条水平网格虚线（用量屏主图开；二级页小图不开）
     private var showsScale = false
 
-    /// 左侧刻度栏宽度（横轴刻度行按同一宽度右移，柱与刻度才对得齐）
-    static let scaleGutter: CGFloat = 34
+    /// 刻度栏最小宽度（窄刻度不白占宽度）
+    static let minScaleGutter: CGFloat = 22
+    /// 左侧刻度栏宽度 —— 按当前刻度的最长标签现算（横轴刻度行读同一个值，柱与刻度才对得齐）
+    ///
+    /// 改前写死 34pt：\"1.128亿\" 这类七字符刻度宽约 45pt，右对齐后左端跑到 x < 0，
+    /// 首字符被视图裁掉（用量屏左侧刻度「112.8 万」「3056.4 万」都被切了头）。
+    private(set) var scaleGutter: CGFloat = TokenBarsView.minScaleGutter
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -63,6 +68,8 @@ final class TokenBarsView: NSView {
         self.pairMetric = pairMetric
         self.scaleMax = scaleMax
         self.showsScale = showsScale
+        // 刻度栏宽度跟着这批刻度的最长标签走：标签宽了栏跟着宽，不被裁；窄了不白占
+        if showsScale { scaleGutter = Self.gutterWidth(for: resolvedScale()) }
         setAccessibilityLabel(accessibility)
         needsDisplay = true
     }
@@ -70,8 +77,8 @@ final class TokenBarsView: NSView {
     /// 绘图区：开了左侧刻度就右移刻度栏宽度（柱、折线、累计虚线共用同一块）
     private var plotRect: NSRect {
         guard showsScale else { return bounds }
-        return NSRect(x: bounds.minX + Self.scaleGutter, y: bounds.minY,
-                      width: max(1, bounds.width - Self.scaleGutter), height: bounds.height)
+        return NSRect(x: bounds.minX + scaleGutter, y: bounds.minY,
+                      width: max(1, bounds.width - scaleGutter), height: bounds.height)
     }
 
     /// 对比值（仅对比态用）：请求数取 request，三段取总 tok
@@ -224,18 +231,33 @@ final class TokenBarsView: NSView {
         TokenPaneStyle.gridLine.setStroke()
         line.stroke()
 
-        let ticks: [(CGFloat, Int)] = [(0, 0), (0.5, scale / 2), (1.0, scale)]
-        for (fraction, value) in ticks {
+        for (fraction, value) in Self.ticks(scale: scale) {
             let text = TokenFormatting.abbreviated(Double(value)) as NSString
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: TokenPaneStyle.axisFont,
                 .foregroundColor: TokenPaneStyle.tertiaryText,
             ]
             let size = text.size(withAttributes: attributes)
-            // 右对齐贴着绘图区左边：刻度不压柱子，柱子也不进刻度栏
+            // 右对齐贴着绘图区左边：刻度不压柱子，柱子也不进刻度栏；
+            // 仍夹进视口——极端长标签宁可挤进刻度栏，也不让左侧被裁掉半个字
             let y = plot.minY + fraction * plot.height - size.height / 2
-            text.draw(at: NSPoint(x: plot.minX - 4 - size.width, y: y), withAttributes: attributes)
+            let x = max(bounds.minX, plot.minX - 4 - size.width)
+            text.draw(at: NSPoint(x: x, y: y), withAttributes: attributes)
         }
+    }
+
+    /// 刻度位置与数值（0 / 中值 / 峰值 = 归一化基准，与柱高同一基准）
+    static func ticks(scale: Int) -> [(CGFloat, Int)] {
+        [(0, 0), (0.5, scale / 2), (1.0, scale)]
+    }
+
+    /// 刻度栏宽度 = 最长刻度标签宽 + 与绘图区的间隙 4pt + 1pt 余量
+    private static func gutterWidth(for scale: Int) -> CGFloat {
+        let attributes: [NSAttributedString.Key: Any] = [.font: TokenPaneStyle.axisFont]
+        let widest = ticks(scale: scale)
+            .map { (TokenFormatting.abbreviated(Double($0.1)) as NSString).size(withAttributes: attributes).width }
+            .max() ?? 0
+        return max(minScaleGutter, (widest + 5).rounded(.up))
     }
 
     /// 单桶绘图值：堆叠态 = 三段之和（total）、请求数态 = 请求数、对比态 = 对比指标

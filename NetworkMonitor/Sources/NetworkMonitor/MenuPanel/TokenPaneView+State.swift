@@ -12,7 +12,9 @@ extension TokenPaneView {
     // MARK: - 状态切换
 
     func applyStateMachine() {
-        guard let snapshot else { return }
+        // 按来源报状态：未安装 / 目录不可读 / 无会话由收窄后的快照自己给出，
+        // 不合并成一句「暂无数据」
+        guard let snapshot = scopedSnapshot else { return }
         let available = snapshot.sourceAvailability.isAvailable
         let empty = TokenComparison.isEmpty(snapshot)
         let indexing = snapshot.indexingState.isIndexing
@@ -89,7 +91,7 @@ extension TokenPaneView {
     // MARK: - 二级页
 
     func openDetail(_ kind: TokenDetailKind, selection: TokenBucketSelection? = nil) {
-        guard let snapshot, let model = lastModel else { return }
+        guard let snapshot = scopedSnapshot, let model = lastModel else { return }
         self.detailKind = kind
         self.selection = selection
         detailPane.update(kind: kind, model: model, snapshot: snapshot,

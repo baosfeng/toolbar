@@ -20,11 +20,12 @@ enum SettingsTokenPurgePrompt {
     ///
     /// - Parameter preview: 范围 → 将删除的条数（负数 = 查不到，按「规模未知」展示）
     /// - Returns: 选定的范围；用户取消返回 nil
-    static func askRange(preview: @escaping (HarnessRebuildScope) -> Int) -> HarnessPurgeRange? {
+    static func askRange(preview: @escaping (HarnessRebuildScope) -> Int,
+                         sourceName: String? = nil) -> HarnessPurgeRange? {
         let alert = NSAlert()
-        alert.messageText = "清理哪些历史数据？"
+        alert.messageText = sourceName.map { "清理「" + $0 + "」的哪些历史数据？" } ?? "清理哪些历史数据？"
         alert.informativeText = "只清理本机索引（事件与扫描记录在同一事务里删除），"
-            + "DSH 会话文件本身不会被修改。清理后会自动重新扫描。"
+            + "会话文件本身不会被修改。清理后会自动重新扫描。"
         alert.alertStyle = .warning
         alert.addButton(withTitle: "继续")
         alert.addButton(withTitle: "取消")
@@ -47,25 +48,42 @@ enum SettingsTokenPurgePrompt {
     struct Plan {
         let range: HarnessPurgeRange
         let eventCount: Int
-        var scope: HarnessRebuildScope { range.scope }
+        /// 实际执行的范围：带来源时是 .source(id, 时间范围)，预览与执行用同一个值
+        let scope: HarnessRebuildScope
+        /// 目标来源名（nil = 全部来源）；文案与日志都用它，保证「说的是什么就做什么」
+        let sourceName: String?
         var title: String { range.title }
     }
 
+    /// 一步到位：选范围（预览按来源实时查）→ 二次确认 → 返回执行计划
+    ///
+    /// - Parameter source: 只在某个来源内清理（nil = 全部来源）
     static func plan(preview: @escaping (HarnessRebuildScope) -> Int,
-                     directoryPath: String) -> Plan? {
-        guard let range = askRange(preview: preview) else { return nil }
-        let eventCount = preview(range.scope)
-        guard confirm(range: range, eventCount: eventCount, directoryPath: directoryPath) else { return nil }
-        return Plan(range: range, eventCount: eventCount)
+                     directoryPath: String,
+                     source: TokenSourceID? = nil) -> Plan? {
+        // 预览带来源：用户看到的「将删除 N 条」就是这次真要动的那个来源的条数
+        let scoped: (HarnessRebuildScope) -> HarnessRebuildScope = { base in
+            source.map { .source($0, base) } ?? base
+        }
+        guard let range = askRange(preview: { preview(scoped($0)) }, sourceName: source?.displayName)
+        else { return nil }
+        let scope = scoped(range.scope)
+        let eventCount = preview(scope)
+        guard confirm(range: range, eventCount: eventCount, directoryPath: directoryPath,
+                      sourceName: source?.displayName) else { return nil }
+        return Plan(range: range, eventCount: eventCount, scope: scope, sourceName: source?.displayName)
     }
 
     /// 第二步：写清规模的二次确认（不可撤销的操作必须先让用户看到代价）
-    static func confirm(range: HarnessPurgeRange, eventCount: Int, directoryPath: String) -> Bool {
+    static func confirm(range: HarnessPurgeRange, eventCount: Int, directoryPath: String,
+                        sourceName: String? = nil) -> Bool {
         let alert = NSAlert()
         alert.messageText = "确认清理" + range.confirmationText + "？"
+        let scopeLine = sourceName.map { "目标来源：" + $0 + "（只动这个来源的索引）\n\n" } ?? ""
+        _ = scopeLine
         // 文案不要用 Markdown 强调（NSAlert.informativeText 是纯文本，星号会原样显示），
         // 规模靠换行独立成句来突出
-        alert.informativeText = "将删除 " + eventCountText(eventCount) + "，"
+        alert.informativeText = scopeLine + "将删除 " + eventCountText(eventCount) + "，"
             + "并同时删除对应的扫描记录，随后从会话文件重新扫描。\n\n"
             + "会话文件不受影响，但此操作不可撤销。"
             + (directoryPath.isEmpty ? "" : "\n\n数据目录：" + directoryPath)

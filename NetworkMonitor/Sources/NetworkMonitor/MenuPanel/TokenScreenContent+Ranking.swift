@@ -17,8 +17,10 @@ import NetworkMonitorUI
 @MainActor
 final class TokenRankingScreenView: NSStackView {
 
-    /// 当前维度（项目 / 模型）
-    private(set) var dimension: TokenDistroDimension = .projects
+    /// 当前维度（工具 / 项目 / 模型）——「全部」来源默认落在按工具
+    private(set) var dimension: TokenDistroDimension = .tools
+    /// 用户是否手动选过维度（没选过就跟随来源给默认值，选过就不再动）
+    private var hasPickedDimension = false
     /// 维度切换回调：由 TokenPaneView 接到同一条 render 路径（不各走一套刷新）
     var onDimensionChange: (() -> Void)?
 
@@ -35,8 +37,8 @@ final class TokenRankingScreenView: NSStackView {
 
     private let dimTitle = MenuPanelLabel.text("维度", font: TokenPaneStyle.axisFont,
                                               color: TokenPaneStyle.tertiaryText)
-    let dimSegment = TokenSegmentedControl(titles: ["项目", "模型"], expands: true,
-                                                   style: .inline)
+    let dimSegment = TokenSegmentedControl(titles: TokenDistroDimension.all.map { $0.segmentTitle },
+                                          expands: true, style: .inline)
     // 以下块视图由 TokenScreenContent+Ranking+Snapshot.swift 的快照扩展读取（仅 DEBUG），
     // 跨文件访问必须放宽为 internal；它们只在本目录内使用，不对外暴露语义。
     let card = TokenBoxView(spacing: 3)
@@ -46,7 +48,8 @@ final class TokenRankingScreenView: NSStackView {
     let rowList = DrawnRowList()
     private let emptyRow = TokenKeyRowView()
     /// 汇总块：总 tok / 缓存读 / 未缓存 / 输出 / 请求数（取该维度合计，与占比分母同源）
-    private let summaryRows = (0..<5).map { _ in TokenKeyRowView() }
+    /// 汇总块行（跨文件访问：+Rows.swift 的 updateSummary 填值）
+    let summaryRows = (0..<5).map { _ in TokenKeyRowView() }
     let summaryGrid: NSView
     let noteView = TokenNoteView(maxLines: 4)
     /// 底部留白（行高封顶后剩下的高度放这里，避免被其它块吸走而拉高行）
@@ -63,10 +66,11 @@ final class TokenRankingScreenView: NSStackView {
         alignment = .leading
         spacing = PaneCardStyle.cardSpacing
         setAccessibilityRole(.group)
-        dimSegment.setAccessibilityLabel("切换排行维度：项目 / 模型")
+        dimSegment.setAccessibilityLabel("切换排行维度：工具 / 项目 / 模型")
         dimSegment.onSelect = { [weak self] index in
             guard let self else { return }
             self.dimension = Self.dimension(forIndex: index)
+            self.hasPickedDimension = true
             self.onDimensionChange?()
         }
         buildCard(cardHeight: cardHeight)
@@ -181,10 +185,30 @@ final class TokenRankingScreenView: NSStackView {
 
     /// 只搬运当前维度那一份分布行：颜色偏移与旧主面板一致（模型整体 +1 色）
     func update(model: TokenPaneModel) {
-        let rows = dimension == .projects ? model.projects : model.models
-        let totals = dimension == .projects ? model.projectTotals : model.modelTotals
+        // 「按工具」只在全部来源下成立（单源时只有一行，等于重复页头）
+        let showsTools = model.displaySource == nil
+        applyDimensionAvailability(showsTools: showsTools)
+        if !hasPickedDimension {
+            dimension = showsTools ? .tools : .projects
+        } else if dimension == .tools && !showsTools {
+            dimension = .projects
+        }
+        let rows: [TokenDistroRow]
+        let totals: TokenDistroTotals
+        switch dimension {
+        case .tools:
+            rows = model.tools
+            totals = model.toolTotals
+        case .projects:
+            rows = model.projects
+            totals = model.projectTotals
+        case .models:
+            rows = model.models
+            totals = model.modelTotals
+        }
         let copy = model.distroCopy
-        let offset = dimension == .projects ? 0 : 1
+        // 模型维度整体错一色（与旧主面板一致），其余两段同序取色
+        let offset = dimension == .models ? 1 : 0
         dimSegment.select(Self.index(for: dimension), notify: false)
         head.update(title: dimension.title, meta: copy.rangeTitle + " "
             + String(rows.count) + " 个")
@@ -227,48 +251,20 @@ final class TokenRankingScreenView: NSStackView {
         summaryGrid.isHidden = visibleRowCount > 7
         noteView.isHidden = visibleRowCount > 7
         updateSummary(totals)
-        noteView.update(dimension == .projects ? copy.projectsNote : copy.modelsNote)
+        switch dimension {
+        case .tools: noteView.update(TokenToolRanking.note(range: model.range))
+        case .projects: noteView.update(copy.projectsNote)
+        case .models: noteView.update(copy.modelsNote)
+        }
         setAccessibilityLabel(dimension.cardAccessibility(range: model.range))
         layoutSubtreeIfNeeded()
         updateRowHeights()
     }
 
-    private func updateSummary(_ totals: TokenDistroTotals) {
-        let items: [(String, String)] = [
-            ("总 tok", TokenFormatting.tokens(totals.totalTokens)),
-            ("缓存读", TokenFormatting.tokens(totals.cacheRead)),
-            ("未缓存", TokenFormatting.tokens(totals.uncached)),
-            ("输出", TokenFormatting.tokens(totals.output)),
-            ("请求数", TokenFormatting.grouped(totals.requestCount)),
-        ]
-        for (index, row) in summaryRows.enumerated() where index < items.count {
-            row.update(title: items[index].0, value: items[index].1)
-        }
-    }
+    // MARK: 辅助（行文案与维度映射见 TokenRankingRows.swift）
 
-    // MARK: 辅助
-
-    /// 维度 → 分段下标（分段只两段，顺序固定：项目 / 模型）
-    static func index(for dimension: TokenDistroDimension) -> Int {
-        dimension == .projects ? 0 : 1
-    }
-
-    static func dimension(forIndex index: Int) -> TokenDistroDimension {
-        index == 0 ? .projects : .models
-    }
-
-    /// 第二行：项目给「会话数 · 请求数」，模型给「provider · 请求数」
-    static func metaText(row: TokenDistroRow) -> String {
-        let requests = TokenFormatting.grouped(row.requestCount) + " 次请求"
-        if row.sessionCount > 0 {
-            return String(row.sessionCount) + " 会话 · " + requests
-        }
-        let provider = row.provider.isEmpty ? "未记录 provider" : "provider " + row.provider
-        return provider + " · " + requests
-    }
-
-    /// 键盘可达：维度分段可聚焦（行本身是只读文本，不做点击）
-    var focusableRows: [MenuPanelRow] { dimSegment.focusableRows }
+    /// 键盘可达：维度分段可聚焦（行本身是只读文本，不做点击）；隐藏的段不进焦点链
+    var focusableRows: [MenuPanelRow] { dimSegment.focusableRows.filter { !$0.isHidden } }
 #if DEBUG
     /// 快照自证：直接切维度（不回调，避免取证过程触发整页刷新）
     ///

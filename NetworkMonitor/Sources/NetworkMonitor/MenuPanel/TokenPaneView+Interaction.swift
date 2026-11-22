@@ -12,6 +12,8 @@ extension TokenPaneView {
 
     func wireActions() {
         refreshRow.onClick = { [weak self] in self?.onRefresh?() }
+        // 页头（来源切换器）的接线在 TokenHeaderSection
+        wireHeaderActions()
         // 不可用态的动作行：三类失败都指向设置 →「Token 用量」（改目录 / 看 zstd 探测链）
         unavailableView.actionRow.onClick = { [weak self] in self?.onOpenSettings?(.token) }
         rangeControl.onSelect = { [weak self] index in

@@ -87,6 +87,23 @@ enum SnapshotFreeze {
             windowModelTotals[window] = modelTotal
         }
 
+        // 单来源视图在冻结模式下全部归到 .dsh：保证「全部 == DSH」，
+        // 既有的 Token 页逐像素基线不因多来源改造而漂移（其它来源在冻结数据里恒为空）
+        let dshAggregate = HarnessSourceAggregate(
+            allTime: allTimeUsage,
+            today: todayUsage,
+            thisWeek: weekUsage,
+            daily: daily,
+            projects: projects,
+            models: models,
+            windowed: HarnessUsageWindow.allCases.map { window in
+                HarnessWindowedUsage(window: window, projects: projects, models: models,
+                                     projectTotals: projectTotal, modelTotals: modelTotal)
+            },
+            todayHourly: todayHourly,
+            yesterdayHourly: yesterdayHourly,
+            indexedSessions: 1_964
+        )
         return HarnessUsageSnapshot(
             totals: HarnessUsageTotals(today: todayUsage, thisWeek: weekUsage,
                                        allTime: allTimeUsage, cacheHitRate: 0.986),
@@ -103,7 +120,9 @@ enum SnapshotFreeze {
             totalSessions: 1_964,
             lastScanAt: now,
             indexingState: .ready,
-            sourceAvailability: .available(toolPath: "/opt/homebrew/bin/zstd"))
+            sourceAvailability: .available(toolPath: "/opt/homebrew/bin/zstd"),
+            perSourceAggregates: [.dsh: dshAggregate],
+            sourceAvailabilityBySource: [.dsh: .available(toolPath: "/opt/homebrew/bin/zstd")])
     }
 
     // MARK: 内部

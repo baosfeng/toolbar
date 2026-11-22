@@ -14,7 +14,8 @@ import NetworkMonitorUI
 /// 切屏后走 onContentChanged 让面板重算 popover 尺寸。
 /// 二级页保留三个（单桶 / 按小时三段 / 天趋势）；「缓存命中 / 按项目 / 按模型」
 /// 已并入缓存屏与排行屏，入口与枚举 case 一并删除。
-/// 成员分布：状态机与二级页在 +State.swift，布局在 +Layout.swift，渲染在 +Render.swift，
+/// 成员分布：页头装配与来源同步在 TokenHeaderSection.swift，状态机与二级页在 +State.swift，
+/// 布局在 +Layout.swift，渲染在 +Render.swift，
 /// 屏内容在 TokenScreenContent*.swift，二级页在 TokenDetailPages*.swift。
 final class TokenPaneView: MenuPanelPaneView {
 
@@ -35,6 +36,8 @@ final class TokenPaneView: MenuPanelPaneView {
 
     // 下面五个交互状态由 wireActions（TokenPaneView+Interaction.swift）写入：
     // 跨文件访问故去掉 private(set)，写入路径只有那一个扩展与 DEBUG 取证入口。
+    /// 当前来源（nil = 全部 / 跨源合计）—— 页头切换器写入，四屏与二级页共用同一口径
+    var source: TokenSourceID?
     var range: TokenRange = .today
     var hourScope: TokenHourScope = .today
     var hourView: TokenHourView = .stack
@@ -52,6 +55,15 @@ final class TokenPaneView: MenuPanelPaneView {
 
     /// 最近一帧快照（渲染 / 二级页共用，跨文件访问故为 internal）
     var snapshot: HarnessUsageSnapshot?
+    /// 当前来源收窄后的快照 —— 状态机 / 四屏 / 二级页的唯一数据入口
+    ///
+    /// 收窄是全同形的（日/时桶、项目/模型、可用性诊断都在内），所以「跟随来源」不必
+    /// 在各区块里逐处判断，只要换这一个入口。
+    var scopedSnapshot: HarnessUsageSnapshot? {
+        snapshot.map { TokenSourceScope.narrow($0, to: source) }
+    }
+    /// 偏好存储（来源选择 / 自动监控开关都走它，禁止 UserDefaults.standard）
+    var storage: any KeyValueStorage { AppContext.shared.storage }
     var lastModel: TokenPaneModel?
 
     // MARK: - 页头
@@ -63,10 +75,12 @@ final class TokenPaneView: MenuPanelPaneView {
     let refreshRow = TokenIconButtonRow(symbolName: "arrow.clockwise")
     let indexLabel = MenuPanelLabel.text("", font: TokenPaneStyle.metaFont,
                                         color: TokenPaneStyle.tertiaryText)
-    /// 页名（页头左侧；与 Core 给的 hostLabel 前缀同源，口径文字去重时用）
-    static let pageTitle = "DSH"
-    /// 页头行（页名 → 会话数 → 范围分段 → 刷新），右侧口径文字与时区提示都挂在这条上
-    let headerView = PaneHeaderRowView(title: TokenPaneView.pageTitle)
+    /// 页头行（来源切换器 → 会话数 → 范围分段 → 刷新），右侧口径文字与时区提示都挂在这条上
+    ///
+    /// 页名位由来源切换器替换（buildHeader 调 setTitleControl）；骨架本身没动，页头仍是 22pt。
+    let headerView = PaneHeaderRowView(title: "")
+    /// 来源切换器（占页名位）——「全部 ▾」；菜单里只列已启用且有数据的来源
+    let sourceSelector = TokenSourceSelectorView()
 
     // MARK: - 分区
 
@@ -171,6 +185,8 @@ final class TokenPaneView: MenuPanelPaneView {
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
+        // 来源选择是持久化的：面板每次重开接着上次的来源看
+        source = TokenSourcePreferences.selectedSource(AppContext.shared.storage)
         buildHeader()
         buildSections()
         wireActions()
@@ -186,7 +202,7 @@ final class TokenPaneView: MenuPanelPaneView {
         guard detailKind == nil else { return detailPane.focusableRows }
         // 页头三组行（刷新 / 范围 / 屏切换条）永远在前且数量固定：
         // 切屏只改变其后的行，焦点下标不会指向别的控件
-        var rows: [MenuPanelRow] = [refreshRow]
+        var rows: [MenuPanelRow] = [sourceSelector, refreshRow]
         rows.append(contentsOf: rangeControl.focusableRows)
         rows.append(contentsOf: screenControl.focusableRows)
         if !dataStack.isHidden {

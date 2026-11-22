@@ -28,7 +28,9 @@ public enum HarnessSourceAvailability: Sendable, Equatable {
     public var displayMessage: String {
         switch self {
         case .available(let toolPath):
-            return "DSH 会话数据源可用（zstd: " + toolPath + "）"
+            // 空路径 = 不需要外部工具（纯 JSONL 来源，如 Claude / Codex）：别把 zstd 塞给它们
+            return toolPath.isEmpty ? "数据源可用（内置 JSONL 解析）"
+                                    : "DSH 会话数据源可用（zstd: " + toolPath + "）"
         case .toolMissing(let searchedPaths):
             return "未找到 zstd 解压工具，无法读取 DSH 会话；已探测: " + searchedPaths.joined(separator: ", ")
         case .sessionsDirectoryMissing(let path):
@@ -186,10 +188,35 @@ public protocol HarnessSessionScanning: Sendable {
 }
 
 public extension HarnessSessionScanning {
+    /// 单来源可用性（多来源扫描器覆盖它；单来源扫描器默认就是整体可用性）
+    func availability(for source: TokenSourceID) -> HarnessSourceAvailability { availability }
+
+    /// 单来源诊断（同上）
+    func diagnostics(for source: TokenSourceID) -> HarnessSourceDiagnostics {
+        HarnessSourceDiagnostics.make(resolution: sourceResolution, availability: availability)
+    }
+
     /// 默认来源：测试桩只关心扫描行为，不关心目录来源
     var sourceResolution: HarnessSourceResolution {
         HarnessSourceResolution(path: HarnessSourceDirectory.defaultSessionsRoot(),
                                 origin: .homeDefault)
+    }
+}
+
+// MARK: - 按来源的索引规模
+
+/// 按来源的索引规模（设置页「索引」卡按来源分组展示）
+public struct HarnessSourceIndexCount: Sendable, Equatable {
+    public let source: TokenSourceID
+    /// 该来源已入库的事件数
+    public let eventCount: Int
+    /// 该来源已建扫描记录的会话数
+    public let sessionCount: Int
+
+    public init(source: TokenSourceID, eventCount: Int, sessionCount: Int) {
+        self.source = source
+        self.eventCount = eventCount
+        self.sessionCount = sessionCount
     }
 }
 
@@ -203,12 +230,35 @@ public protocol HarnessTokenRepository: AnyObject, Sendable {
     /// 读取已有扫描记录（键为文件绝对路径）
     func harnessScanRecords() -> [String: HarnessSessionScanRecord]
 
+    /// 读取已有扫描记录，可按来源过滤（source == nil = 全部）
+    ///
+    /// 多来源后「重扫 / 清理只针对一个来源」要靠它：判据是落库记录自带的 source，
+    /// 而不是从路径反推来源（路径规则会随各家版本变，落库的才可信）。
+    func harnessScanRecords(source: TokenSourceID?) -> [String: HarnessSessionScanRecord]
+
     /// 覆盖写入单个会话的事件与扫描记录（单事务，先删后插）
+    ///
+    /// 未指定来源的旧入口：等价于 `source: .dsh`（既有 DSH 扫描器走这条）。
     func harnessReplaceSession(
         record: HarnessSessionScanRecord,
         events: [HarnessTokenEvent],
         cwd: String
     ) -> Bool
+
+    /// 覆盖写入单个会话的事件与扫描记录，并打上来源标记
+    ///
+    /// 多来源共用 `harness_token_event` / `harness_session_scan` 同一套表，
+    /// 删除与写入都按 `(session_id, source)` 定位，各家会话 id 空间互不干扰。
+    /// 默认实现忽略来源（测试桩不必感知多来源）。
+    func harnessReplaceSession(
+        record: HarnessSessionScanRecord,
+        events: [HarnessTokenEvent],
+        cwd: String,
+        source: TokenSourceID
+    ) -> Bool
+
+    /// 按来源统计已索引的事件数与会话数（设置页「索引」卡；只含有数据的来源）
+    func harnessSourceCounts() -> [HarnessSourceIndexCount]
 
     /// 聚合查询（今日 / 本周 / 累计 / 按天 / 按项目 / 按模型）
     func harnessAggregate(now: Date) -> HarnessAggregate
@@ -236,6 +286,26 @@ public protocol HarnessTokenRepository: AnyObject, Sendable {
 public extension HarnessTokenRepository {
     /// 默认实现：不支持预览（-1 = 未知），调用方据此显示「规模未知」而不是假的 0
     func harnessPurgePreview(scope: HarnessRebuildScope, now: Date) -> Int { -1 }
+
+    /// 默认实现：忽略来源，退回旧入口（测试桩只实现旧入口即可）
+    func harnessReplaceSession(
+        record: HarnessSessionScanRecord,
+        events: [HarnessTokenEvent],
+        cwd: String,
+        source: TokenSourceID
+    ) -> Bool {
+        harnessReplaceSession(record: record, events: events, cwd: cwd)
+    }
+
+    /// 默认实现：不支持按来源统计（空数组 = 无数据，不是错误）
+    func harnessSourceCounts() -> [HarnessSourceIndexCount] { [] }
+
+    /// 默认实现：先全量读再按记录自带的来源过滤（测试桩只实现全量入口即可）
+    func harnessScanRecords(source: TokenSourceID?) -> [String: HarnessSessionScanRecord] {
+        let all = harnessScanRecords()
+        guard let source else { return all }
+        return all.filter { $0.value.source == source }
+    }
 }
 
 /// 对外门面服务

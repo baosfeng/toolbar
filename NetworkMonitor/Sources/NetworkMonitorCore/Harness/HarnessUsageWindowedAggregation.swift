@@ -41,7 +41,10 @@ extension DatabaseManager {
     ///
     /// 请求数用 `SUM(... THEN 1 ELSE 0 END)` 而不是 `COUNT(*)`：
     /// 聚合函数不能嵌在 `SUM(CASE ...)` 里（SQLite 会报 "misuse of aggregate function COUNT()"）。
-    private static func windowColumns(_ count: Int32, withSessions: Bool) -> String {
+    ///
+    /// private 放宽为 internal 的原因：按来源分桶（HarnessUsageSourceRanking.swift）要复用
+    /// 同一份列构造，否则两处窗口口径会各写一套、迟早分叉。
+    static func windowColumns(_ count: Int32, withSessions: Bool) -> String {
         let fields = ["uncached_in", "output", "cache_read", "cache_write"]
         var parts: [String] = []
         for _ in 0..<count {
@@ -57,7 +60,9 @@ extension DatabaseManager {
     }
 
     /// 绑定按 SELECT 项出现顺序排列的窗口参数（每个窗口 6 组「from / to」× 窗口数）
-    private static func bindWindows(_ stmt: OpaquePointer,
+    ///
+    /// private 放宽为 internal：按来源分桶复用同一份绑定（理由同 windowColumns）。
+    static func bindWindows(_ stmt: OpaquePointer,
                                     windows: [(window: HarnessUsageWindow, range: HarnessMsWindow)],
                                     withSessions: Bool) -> Int32 {
         var index: Int32 = 1

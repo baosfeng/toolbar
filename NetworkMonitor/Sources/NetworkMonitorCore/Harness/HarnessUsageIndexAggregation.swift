@@ -35,11 +35,17 @@ extension DatabaseManager {
                 ),
                 yesterdayHourly: harnessHourly(
                     db, fromMs: todayStart - dayMs, toMs: todayStart, maskAfterHour: nil
-                )
+                ),
+                // 单来源视图：同一批行按 source 再分桶一次（口径与上面完全同源）
+                bySource: harnessSourceAggregates(db, now: now)
             )
         }
         // 出口耗时埋点：一次聚合是 8~10 条全表查询，> 100 ms 才记（避免刷屏）
         let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000
+        // 探针：单次聚合耗时（改前/改后对比同一份数据用，不影响生产日志）
+        if ProcessInfo.processInfo.environment[Self.aggregateProbeEnvironmentKey] == "1" {
+            logger.info(String(format: "[TOKEN-AGG] 单次聚合 %.0f ms", elapsedMs))
+        }
         if elapsedMs > Self.aggregateSlowThresholdMs {
             logger.warning(String(format: "Harness 聚合耗时 %.0f ms（8~10 条全表查询，阈值 %.0f ms）",
                                   elapsedMs, Self.aggregateSlowThresholdMs))
@@ -49,6 +55,9 @@ extension DatabaseManager {
 
     /// 聚合耗时告警阈值（毫秒）
     private static let aggregateSlowThresholdMs: Double = 100
+
+    /// 聚合耗时探针开关（与调度器探针同名：一次设置两边都出数）
+    static let aggregateProbeEnvironmentKey = "NM_TOKEN_AUTOINDEX_PROBE"
 
     /// 区间求和（fromMs 含、toMs 不含；nil 表示不限）
     ///

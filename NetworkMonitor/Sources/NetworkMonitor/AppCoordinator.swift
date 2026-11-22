@@ -34,6 +34,10 @@ public final class AppCoordinator {
     var trafficPersistenceTimer: Timer?
     /// DSH Token 统计服务（设置页「Token 用量」要读诊断 / 事件数并触发重扫）
     var harnessUsageService: (any HarnessUsageServicing)?
+    /// Token 后台自动增量索引调度器（tokenStage 产出、teardown 停止）
+    ///
+    /// 必须强持有：定时器与屏幕活动订阅都在它身上，释放即静默失效（后台再也不扫）。
+    var tokenAutoIndexScheduler: TokenAutoIndexScheduler?
     /// 系统指标监控服务（装配细节见 AppCoordinator+SystemMonitor）
     // 放宽为 internal：装配阶段（AppAssemblyStages+Features）跨文件写入
     var systemMonitor: (any SystemMonitoringService)?

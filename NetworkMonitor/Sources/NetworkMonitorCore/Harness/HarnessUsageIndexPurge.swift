@@ -29,22 +29,29 @@ extension DatabaseManager {
     /// 残留 (size, mtime) 记录，下一轮增量扫描把这些会话判成「未变更」直接跳过，
     /// 用户看到的是「清了却永远不回来」。这里的 DELETE 语句与 harnessClearAll 同源。
     public func harnessPurge(scope: HarnessRebuildScope, now: Date) -> Int {
-        serialQueue.sync { () -> Int in
+        // 来源维度在这里落地：清理只动该来源的事件与扫描记录，别的来源原样保留
+        let (source, base) = scope.decomposed()
+        return serialQueue.sync { () -> Int in
             guard let db, harnessMigrateSchema(db) else { return -1 }
             do {
                 return try NetworkMonitorCore.withTransaction(db, mode: .immediate) { conn in
                     // 会话集合必须在删事件之前取：删完就再也查不到「最近 n 天有过事件」的会话了
                     let sessionIDs: [String]?
-                    switch scope {
+                    switch base {
                     case .full:
                         sessionIDs = []
                     case .sinceDays(let days):
-                        sessionIDs = harnessRecentSessionIDs(conn, sinceMs: Self.purgeSinceMs(now: now, days: days))
+                        sessionIDs = harnessRecentSessionIDs(conn,
+                                                             sinceMs: Self.purgeSinceMs(now: now, days: days),
+                                                             source: source)
+                    case .source:
+                        sessionIDs = []
                     }
                     guard let sessionIDs else { throw DatabaseOperationError("会话集合查询失败") }
-                    let deleted = harnessPurgeEvents(conn, scope: scope, now: now)
+                    let deleted = harnessPurgeEvents(conn, scope: base, now: now, source: source)
                     guard deleted >= 0,
-                          harnessPurgeScanRecords(conn, scope: scope, sessionIDs: sessionIDs) else {
+                          harnessPurgeScanRecords(conn, scope: base, sessionIDs: sessionIDs,
+                                                  source: source) else {
                         throw DatabaseOperationError("Harness 索引清理失败")
                     }
                     return deleted
@@ -56,15 +63,28 @@ extension DatabaseManager {
         }
     }
 
+    /// 来源过滤子句（source 来自闭枚举，取值只有固定几个 rawValue，无注入面）
+    private static func sourceClause(_ source: TokenSourceID?) -> String {
+        guard let source else { return "" }
+        return " AND source = '" + source.rawValue + "'"
+    }
+
     /// 删事件，返回删除行数（-1 = 失败）
-    private func harnessPurgeEvents(_ db: OpaquePointer, scope: HarnessRebuildScope, now: Date) -> Int {
+    private func harnessPurgeEvents(_ db: OpaquePointer, scope: HarnessRebuildScope, now: Date,
+                                    source: TokenSourceID?) -> Int {
+        let filter = Self.sourceClause(source)
         let sql: String
         switch scope {
         case .full:
-            sql = "DELETE FROM harness_token_event;"
+            // 全量 + 来源：只清该来源（不能退化成整表 DELETE）
+            sql = filter.isEmpty ? "DELETE FROM harness_token_event;"
+                                 : "DELETE FROM harness_token_event WHERE 1 = 1" + filter + ";"
         case .sinceDays(let days):
             let sinceMs = Self.purgeSinceMs(now: now, days: days)
-            sql = "DELETE FROM harness_token_event WHERE ts_ms >= \(sinceMs);"
+            sql = "DELETE FROM harness_token_event WHERE ts_ms >= \(sinceMs)" + filter + ";"
+        case .source(let id, let inner):
+            // 理论上已被 decomposed() 剥掉；真走到这里按内层 + 该来源处理
+            return harnessPurgeEvents(db, scope: inner, now: now, source: id)
         }
         guard clipExec(db, sql) else {
             logger.warning("Harness 事件清理失败: " + String(cString: sqlite3_errmsg(db)))
@@ -79,16 +99,19 @@ extension DatabaseManager {
     /// 因此会话集合必须在**删事件之前**取好，删完再删记录。
     private func harnessPurgeScanRecords(_ db: OpaquePointer,
                                         scope: HarnessRebuildScope,
-                                        sessionIDs: [String]) -> Bool {
+                                        sessionIDs: [String],
+                                        source: TokenSourceID?) -> Bool {
+        let filter = Self.sourceClause(source)
         // 全量清理必须无条件清空扫描记录：这里如果沿用「按会话 id 列表删」，
         // .full 传进来的是空列表就会一条都不删，下一轮把全部会话判成「未变更」跳过，
         // 结果是「清了却永远不回来」的假清空（实测踩到过）。
         if case .full = scope {
-            return clipExec(db, "DELETE FROM harness_session_scan;")
+            return clipExec(db, filter.isEmpty ? "DELETE FROM harness_session_scan;"
+                                               : "DELETE FROM harness_session_scan WHERE 1 = 1" + filter + ";")
         }
         if sessionIDs.isEmpty { return true }
         let placeholders = Array(repeating: "?", count: sessionIDs.count).joined(separator: ", ")
-        let sql = "DELETE FROM harness_session_scan WHERE session_id IN (\(placeholders));"
+        let sql = "DELETE FROM harness_session_scan WHERE session_id IN (\(placeholders))" + filter + ";"
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
@@ -106,8 +129,10 @@ extension DatabaseManager {
     }
 
     /// 最近 n 天内出现过事件的会话 id（去重，升序稳定）
-    private func harnessRecentSessionIDs(_ db: OpaquePointer, sinceMs: Int64) -> [String]? {
-        let sql = "SELECT DISTINCT session_id FROM harness_token_event WHERE ts_ms >= ? ORDER BY session_id;"
+    private func harnessRecentSessionIDs(_ db: OpaquePointer, sinceMs: Int64,
+                                        source: TokenSourceID?) -> [String]? {
+        let sql = "SELECT DISTINCT session_id FROM harness_token_event WHERE ts_ms >= ?"
+            + Self.sourceClause(source) + " ORDER BY session_id;"
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
@@ -139,13 +164,19 @@ extension DatabaseManager {
     public func harnessPurgePreview(scope: HarnessRebuildScope, now: Date) -> Int {
         withReadDB(0) { db -> Int in
             guard harnessMigrateSchema(db) else { return -1 }
+            // 预览与清理必须同源：来源维度也一起算进来，否则「说删 1200 条」实际只删本源的
+            let (source, base) = scope.decomposed()
+            let filter = Self.sourceClause(source)
             let sql: String
-            switch scope {
+            switch base {
             case .full:
-                sql = "SELECT COUNT(*) FROM harness_token_event;"
+                sql = filter.isEmpty ? "SELECT COUNT(*) FROM harness_token_event;"
+                                     : "SELECT COUNT(*) FROM harness_token_event WHERE 1 = 1" + filter + ";"
             case .sinceDays(let days):
                 sql = "SELECT COUNT(*) FROM harness_token_event WHERE ts_ms >= "
-                    + String(Self.purgeSinceMs(now: now, days: days)) + ";"
+                    + String(Self.purgeSinceMs(now: now, days: days)) + filter + ";"
+            case .source:
+                sql = "SELECT COUNT(*) FROM harness_token_event WHERE 0;"
             }
             var stmt: OpaquePointer?
             defer { sqlite3_finalize(stmt) }

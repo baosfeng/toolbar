@@ -125,6 +125,15 @@ extension HarnessUsageService {
             windowProjectTotals[item.window] = item.projectTotals
             windowModelTotals[item.window] = item.modelTotals
         }
+        // 单来源口径的可用性与诊断：只登记已实现来源（未实现的源没有目录可诊断，
+        // 它们的 status 由设置页按 hasIndexer 自己说明「未实现」）
+        var availabilityBySource: [TokenSourceID: HarnessSourceAvailability] = [:]
+        var diagnosticsBySource: [TokenSourceID: HarnessSourceDiagnostics] = [:]
+        for source in TokenSourceID.allCases where source.hasIndexer {
+            let sourceAvailability = scanner.availability(for: source)
+            availabilityBySource[source] = sourceAvailability
+            diagnosticsBySource[source] = scanner.diagnostics(for: source)
+        }
         return HarnessUsageSnapshot(
             totals: totals,
             daily: daily,
@@ -142,7 +151,10 @@ extension HarnessUsageService {
             indexingState: state,
             sourceAvailability: availability,
             sourceDiagnostics: HarnessSourceDiagnostics.make(resolution: scanner.sourceResolution,
-                                                             availability: availability)
+                                                             availability: availability),
+            perSourceAggregates: aggregate.bySource,
+            sourceAvailabilityBySource: availabilityBySource,
+            sourceDiagnosticsBySource: diagnosticsBySource
         )
     }
 }
