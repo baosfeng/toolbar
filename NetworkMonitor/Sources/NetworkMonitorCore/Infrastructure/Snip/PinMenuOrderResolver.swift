@@ -7,7 +7,7 @@ import Foundation
 /// 与截图工具条同理：键名只在这里定义一次，设置页写入、贴图窗读取、测试断言共用，
 /// 避免「设置页写了一个键、贴图窗读的是另一个键」这类「设了不生效」的故障。
 public enum PinMenuPreferenceKey {
-    /// 贴图右键菜单顺序（逗号分隔的九项 rawValue；缺键时按 PinMenuAction.defaultOrder 回落）
+    /// 贴图右键菜单顺序（逗号分隔的 rawValue；缺键时按 PinMenuAction.defaultOrder 回落）
     public static let contextMenuOrder = "pin.contextMenu.order"
 }
 
@@ -19,8 +19,10 @@ public enum PinMenuPreferenceKey {
 /// 1. 缺键 / 空串 / 全非法项 → 回落 PinMenuAction.defaultOrder，老配置外观不变；
 /// 2. 已知项严格按偏好顺序落位，跨组换序也生效（用户要求「全部放开可调」）；
 /// 3. 未知项只丢该项、重复项只留第一次出现，缺失项按默认顺序补尾；
-/// 4. 旧偏好（组内换序时代的顺序串）无需迁移：它本来就是一个合法的九项全序，
-///    直接按同一套规则读出来即可，只是从此允许跨组。
+/// 4. 旧偏好（组内换序时代的顺序串）无需迁移：它本来就是一个合法的全序，
+///    直接按同一套规则读出来即可，只是从此允许跨组；
+/// 5. 新增项（灰度 / 反色 / 棋盘底）对老偏好就是「缺失项」，按第 3 条补到末尾 ——
+///    用户已排好的前几项逐位不动，新功能只是追加在菜单尾部，不是插进中间。
 ///
 /// 读路径不写回：默认值将来变了，没设置过的用户跟着变。
 public enum PinMenuOrderResolver {
@@ -34,7 +36,7 @@ public enum PinMenuOrderResolver {
     /// 把原始顺序整理成合法菜单顺序
     ///
     /// - Parameter raw: 偏好里的原始 id 顺序
-    /// - Returns: 完整九项，顺序即最终菜单顺序
+    /// - Returns: 完整菜单项（顺序即最终菜单顺序）
     public static func normalize(_ raw: [String]) -> [PinMenuAction] {
         // 按出现顺序收集已知项：未知项丢弃、重复项只留第一次
         var seen = Set<PinMenuAction>()
@@ -88,7 +90,7 @@ public enum PinMenuOrderResolver {
 
     /// 该位置能否朝 offset 方向移动（行尾按钮的启用判据）
     ///
-    /// 判据与 moved 同源：只看越界，不看分组 —— 九项任意排列都是合法菜单。
+    /// 判据与 moved 同源：只看越界，不看分组 —— 任意排列都是合法菜单。
     public static func canMove(_ ids: [String], index: Int, offset: Int) -> Bool {
         let order = resolve(orderRaw: SettingsOrderCoding.encode(ids))
         guard order.indices.contains(index) else { return false }

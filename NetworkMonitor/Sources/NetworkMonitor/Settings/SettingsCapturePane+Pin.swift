@@ -59,7 +59,7 @@ extension SettingsCapturePane {
     /// 「贴图菜单顺序」卡片 —— 与工具条「排列顺序」同构（行尾上移 / 下移 + 恢复默认）
     ///
     /// 顺序存 PinMenuPreferenceKey.contextMenuOrder，缺键回落 PinMenuAction.defaultOrder。
-    /// 排序口径注入 PinMenuOrderResolver.movePolicy：九项整列自由换序，跨组也可以，
+    /// 排序口径注入 PinMenuOrderResolver.movePolicy：整列自由换序，跨组也可以，
     /// 因此每个有相邻项的行上移 / 下移都可用（只越界才灰）。
     /// 分隔线不跟着分组固定，而是按最终顺序在语义分组变化处自动插入（PinMenuDivider）。
     func buildPinMenuOrderCard() {

@@ -29,6 +29,8 @@ final class PinWindow: NSPanel {
     /// 偏好存储：右键菜单顺序每次现读（改完不重启也生效），禁止直读 UserDefaults
     private let storage: any KeyValueStorage
     private let imageView = NSImageView()
+    /// 棋盘底：容器最底层的装饰视图，仅当「开关打开 + 图含透明像素」时显示
+    private let boardView = PinBoardView(frame: .zero)
     /// 内容视图：双击 / 中键必须在这里判，否则会被窗口拖动吃掉（见 PinContentView）
     private let container = PinContentView(frame: .zero)
     private(set) var currentImage: CGImage
@@ -36,6 +38,10 @@ final class PinWindow: NSPanel {
     private(set) var baseSize: CGSize
     private(set) var currentScale: CGFloat = 1
     private(set) var isThumbnail = false
+    /// 棋盘底开关（本窗当前状态；缺键即关，右键菜单切一次即落盘）
+    private(set) var isBoardBackgroundEnabled = false
+    /// 当前图是否含透明像素 —— 建窗时与每次换图时算一次，绘制路径不重复整图扫描
+    private var currentImageHasAlpha = false
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -61,6 +67,9 @@ final class PinWindow: NSPanel {
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
         animationBehavior = .none
+        // 棋盘底开关：缺键即关（老用户零变化）；本窗只读不写，右键菜单切换时才落盘
+        isBoardBackgroundEnabled = PinBoardBackgroundResolver.isEnabled(storage: storage)
+        currentImageHasAlpha = SnipImageAlphaProbe.hasTransparentPixels(image)
         // 默认透明度来自设置页：建窗时读一次，之后滚轮 / 快捷键只改本窗，不影响偏好
         alphaValue = CGFloat(PinDefaultAlphaResolver.resolve(
             raw: storage.object(forKey: PinDefaultAlphaPreferenceKey.pinDefaultAlpha) as? Double))
@@ -69,13 +78,19 @@ final class PinWindow: NSPanel {
         imageView.image = NSImage(cgImage: image, size: initialSize)
         imageView.imageScaling = .scaleAxesIndependently
         imageView.autoresizingMask = [.width, .height]
+        // 棋盘底先加 = 容器最底层；开关缺键即关，老用户看到的外观与接线前一致
+        boardView.frame = NSRect(origin: .zero, size: initialSize)
+        boardView.autoresizingMask = [.width, .height]
         container.frame = NSRect(origin: .zero, size: initialSize)
         container.autoresizingMask = [.width, .height]
+        container.addSubview(boardView)
         container.addSubview(imageView)
         // 官方贴图行为：左键双击关闭、中键单击重置为 100% 大小与 100% 不透明
         container.onCloseRequest = { [weak self] in self?.closeAndReport() }
         container.onResetRequest = { [weak self] in self?.resetSizeAndAlpha() }
         contentView = container
+        // 首帧就把棋盘底的显隐算好：透明图 + 开关打开时一出现就能看清哪里是透明区
+        refreshBoardVisibility()
     }
 
     // MARK: - 键盘
@@ -100,6 +115,8 @@ final class PinWindow: NSPanel {
         case .rotateCounterClockwise: rotate(clockwise: false)
         case .mirrorHorizontal: mirror(horizontal: true)
         case .mirrorVertical: mirror(horizontal: false)
+        case .grayscale: grayscale()
+        case .invert: invert()
         case .thumbnail: toggleThumbnail()
         case .zoom(let factor): setScale(currentScale * factor)
         case .alphaDelta(let delta): adjustAlpha(by: delta)
@@ -114,16 +131,22 @@ final class PinWindow: NSPanel {
         if event.modifierFlags.contains(.control) {
             adjustAlpha(by: event.scrollingDeltaY * 0.03)
         } else {
-            setScale(currentScale * (1 + event.scrollingDeltaY * 0.02))
+            // 以鼠标为锚缩放（Snipaste 口径）：光标底下那个内容点缩放后保持不动
+            setScale(currentScale * (1 + event.scrollingDeltaY * 0.02), anchor: NSEvent.mouseLocation)
         }
     }
 
-    /// 以窗口中心为锚点缩放
-    func setScale(_ scale: CGFloat) {
+    /// 缩放贴图
+    ///
+    /// - Parameter anchor: 屏幕坐标锚点；传 nil 表示以窗口中心为锚，
+    ///   键盘 + / - 与缩略图开关走这条，行为与「以中心缩放」的旧实现逐点一致。
+    ///   滚轮传鼠标位置，锚点下的内容点缩放前后落在同一处。
+    func setScale(_ scale: CGFloat, anchor: CGPoint? = nil) {
         let clamped = min(max(scale, 0.1), 10)
         guard abs(clamped - currentScale) > 0.0001 else { return }
         currentScale = clamped
-        applySize(CGSize(width: baseSize.width * clamped, height: baseSize.height * clamped))
+        applySize(CGSize(width: baseSize.width * clamped, height: baseSize.height * clamped),
+                  anchor: anchor)
     }
 
     /// 复制该贴图的来源纯文本到剪贴板（官方 ⌘⇧C）
@@ -175,8 +198,47 @@ final class PinWindow: NSPanel {
         applyImage(mirrored)
     }
 
+    /// 灰度（菜单项与键位 5）
+    ///
+    /// 与旋转 / 镜像同一条出口：重采样成新图后走 applyImage，尺寸与缩放保持不变。
+    func grayscale() {
+        guard let gray = SnipImageTransform.grayscale(currentImage) else { return }
+        applyImage(gray)
+    }
+
+    /// 反色（菜单项与键位 6）
+    ///
+    /// 连续按两次回到原图（反色是对合运算），不额外记撤销栈，与旋转镜像的行为一致。
+    func invert() {
+        guard let inverted = SnipImageTransform.inverted(currentImage) else { return }
+        applyImage(inverted)
+    }
+
     func adjustAlpha(by delta: CGFloat) {
         alphaValue = min(max(alphaValue + delta, 0.1), 1)
+    }
+
+    // MARK: - 棋盘底
+
+    /// 切换棋盘底开关（右键菜单项）
+    ///
+    /// 开关是**偏好**：切一次即落盘，之后新建的贴图沿用；
+    /// 已有贴图只改本窗显隐（用户可能只是想把当前这张看清楚）。
+    func setBoardBackground(_ enabled: Bool) {
+        isBoardBackgroundEnabled = enabled
+        PinBoardBackgroundResolver.save(enabled, storage: storage)
+        refreshBoardVisibility()
+        AppContext.shared.logger.info("贴图棋盘底：\(enabled ? "开" : "关")"
+            + "（当前图含透明像素=\(currentImageHasAlpha)）")
+    }
+
+    /// 按「开关 + 是否含 alpha」重算棋盘底显隐
+    ///
+    /// 判据只在 PinBoardBackgroundResolver 里定义一次，视图只执行结果。
+    private func refreshBoardVisibility() {
+        boardView.isHidden = !PinBoardBackgroundResolver.shouldDraw(
+            enabled: isBoardBackgroundEnabled,
+            hasTransparentPixels: currentImageHasAlpha)
     }
 
     private func applyImage(_ image: CGImage) {
@@ -184,18 +246,22 @@ final class PinWindow: NSPanel {
         let pointSize = CGSize(width: CGFloat(image.width) / screenScale,
                                height: CGFloat(image.height) / screenScale)
         currentImage = image
+        // 换图（旋转 / 镜像 / 灰度 / 反色）后 alpha 分布可能变了，棋盘底判据要跟着重算
+        currentImageHasAlpha = SnipImageAlphaProbe.hasTransparentPixels(image)
+        refreshBoardVisibility()
         baseSize = pointSize
         imageView.image = NSImage(cgImage: image, size: pointSize)
         applySize(CGSize(width: pointSize.width * currentScale,
                          height: pointSize.height * currentScale))
     }
 
-    private func applySize(_ size: CGSize) {
-        var frame = self.frame
-        let center = CGPoint(x: frame.midX, y: frame.midY)
-        frame.size = size
-        frame.origin = CGPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
-        setFrame(frame, display: true)
+    /// 套用新尺寸并重算原点
+    ///
+    /// 原点口径只有一份（PinZoomAnchor）：锚点为 nil 时按窗口中心换算，
+    /// 与旧实现「中心不变」逐点等价；滚轮缩放传鼠标位置，锚点下的内容点不动。
+    private func applySize(_ size: CGSize, anchor: CGPoint? = nil) {
+        let origin = PinZoomAnchor.origin(frame: frame, newSize: size, anchor: anchor)
+        setFrame(CGRect(origin: origin, size: size), display: true)
     }
 
     // MARK: - 关闭与销毁
@@ -214,8 +280,9 @@ final class PinWindow: NSPanel {
 
     /// 右键菜单每次现读偏好再装配 —— 设置页改完顺序，下一张右键菜单就按新顺序出现
     ///
-    /// 九项的顺序与标题都来自 PinMenuAction（Core），九项已允许跨组换序，
+    /// 各项的顺序与标题都来自 PinMenuAction（Core），且允许跨组换序，
     /// 分隔线因此按**最终顺序**在语义分组变化处插入（PinMenuDivider），不看固定分组区间。
+    /// 选择器映射与各菜单动作在 PinWindow+Menu.swift（同一个类的扩展）。
     /// 危险项位置由顺序决定，误点风险由视觉兜：菜单里用红色文字标出「关闭 / 销毁」。
     override func rightMouseDown(with event: NSEvent) {
 #if DEBUG
@@ -232,6 +299,10 @@ final class PinWindow: NSPanel {
                                   action: Self.selector(for: action),
                                   keyEquivalent: "")
             item.target = self
+            // 开关项带勾选态：棋盘底开着时菜单里能直接看出来
+            if action == .boardBackground {
+                item.state = isBoardBackgroundEnabled ? .on : .off
+            }
             if action.isDestructive {
                 item.attributedTitle = NSAttributedString(
                     string: action.title,
@@ -242,28 +313,4 @@ final class PinWindow: NSPanel {
         NSMenu.popUpContextMenu(menu, with: event, for: imageView)
     }
 
-    /// 菜单项 → 响应选择器（枚举在 Core，不能带 Selector，映射只在这里维护一份）
-    private static func selector(for action: PinMenuAction) -> Selector {
-        switch action {
-        case .copy: return #selector(menuCopy)
-        case .save: return #selector(menuSave)
-        case .rotate: return #selector(menuRotate)
-        case .mirrorHorizontal: return #selector(menuMirrorH)
-        case .mirrorVertical: return #selector(menuMirrorV)
-        case .thumbnail: return #selector(menuThumbnail)
-        case .resetSizeAndAlpha: return #selector(menuResetAll)
-        case .close: return #selector(menuClose)
-        case .destroy: return #selector(menuDestroy)
-        }
-    }
-
-    @objc private func menuCopy() { onCopy?(self) }
-    @objc private func menuSave() { onSave?(self) }
-    @objc private func menuRotate() { rotate(clockwise: true) }
-    @objc private func menuMirrorH() { mirror(horizontal: true) }
-    @objc private func menuMirrorV() { mirror(horizontal: false) }
-    @objc private func menuThumbnail() { toggleThumbnail() }
-    @objc private func menuResetAll() { resetSizeAndAlpha() }
-    @objc private func menuClose() { closeAndReport() }
-    @objc private func menuDestroy() { destroy() }
 }

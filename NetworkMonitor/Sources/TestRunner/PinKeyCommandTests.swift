@@ -30,7 +30,18 @@ func runPinKeyCommandTests() {
     assertEqual(Resolver.resolve(keyCode: 19, characters: "2", modifiers: none), .rotateCounterClockwise, "2 逆时针")
     assertEqual(Resolver.resolve(keyCode: 20, characters: "3", modifiers: none), .mirrorHorizontal, "3 水平镜像")
     assertEqual(Resolver.resolve(keyCode: 21, characters: "4", modifiers: none), .mirrorVertical, "4 垂直镜像")
-    assertEqual(Resolver.resolve(keyCode: 23, characters: "5", modifiers: none), .thumbnail, "5 缩略图")
+    // 官方贴图键位表：5 = 灰度、6 = 反色；缩略图顺延到 7（官方是 ⇧+左键双击，无默认键位）
+    assertEqual(Resolver.resolve(keyCode: 23, characters: "5", modifiers: none), .grayscale, "5 灰度")
+    assertEqual(Resolver.resolve(keyCode: 22, characters: "6", modifiers: none), .invert, "6 反色")
+    assertEqual(Resolver.resolve(keyCode: 26, characters: "7", modifiers: none), .thumbnail, "7 缩略图")
+    // 输入法 / 特殊布局下系统不给字符时靠键码兜底，5 / 6 同样要能识别
+    assertEqual(Resolver.resolve(keyCode: 23, characters: nil, modifiers: none), .grayscale,
+                "5 缺字符时按键码兜底仍是灰度")
+    assertEqual(Resolver.resolve(keyCode: 22, characters: nil, modifiers: none), .invert,
+                "6 缺字符时按键码兜底仍是反色")
+    // ⌘ 组合里的数字键不归贴图窗（避免抢走 App 的 ⌘5 / ⌘6）
+    assertEqual(Resolver.resolve(keyCode: 23, characters: "5", modifiers: cmd), nil, "⌘5 不归贴图窗")
+    assertEqual(Resolver.resolve(keyCode: 22, characters: "6", modifiers: cmd), nil, "⌘6 不归贴图窗")
 
     // P0-4：+ / - 缩放，⌃+ / ⌃- 调透明度
     assertEqual(Resolver.resolve(keyCode: 24, characters: "+", modifiers: none),

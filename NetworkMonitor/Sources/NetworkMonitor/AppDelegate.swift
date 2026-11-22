@@ -66,6 +66,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PinDragProbe.runIfRequested(pin: coordinator.snipController.pinWindows)
         // 仅 DEBUG：NM_PIN_MENU_PROBE=1 时按四份偏好装配菜单并打印，验证跨组换序生效
         PinMenuProbe.run(storage: SnapshotKeyValueStorage())
+        // 仅 DEBUG：NM_PIN_BOARD_PROBE=<目录> 时出「棋盘底 + 灰度 / 反色」四联取证图并退出
+        PinBoardProbe.runIfRequested()
         // 仅 DEBUG：NM_NOTIFY_SELFCHECK=<file> 时跑一遍通知与音效自检并退出（取证用）
         NotificationSelfCheck.runIfRequested(coordinator: coordinator)
         // 仅 DEBUG：--measure-panel-open 时逐阶段计时并退出（性能回归取证）
