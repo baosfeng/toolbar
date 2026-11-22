@@ -5,13 +5,9 @@ import Foundation
 // 覆盖：选区 / 标注 / 工具条 / 贴图窗
 //
 // 本域全部测试入口的**唯一登记处**：新增本域测试文件时只在这里加一行调用，
-// 不必改 main.swift（它只剩域调度、不再随测试增长，不会贴到 500 行门禁线）。
-// 顺序即执行顺序；行尾注释是该套件覆盖的口径。忘了登记不会编译报错，
-// 但 TestSuiteRegistrationTests 会把「定义了却没人调用」的套件判红。
-//
-// @MainActor 与改造前的顶层代码保持同等隔离语义：原先 main.swift 的顶层语句
-// 在 Swift 6 下就是 MainActor，个别套件（runClipboardPanelMockTests）本身是
-// @MainActor，域函数不标就会报 actor 隔离错误。
+// 不必改 main.swift；顺序即执行顺序，行尾注释是该套件覆盖的口径。
+// 忘了登记不会编译报错，但 TestSuiteRegistrationTests 会把「定义了却没人调用」的套件判红。
+// @MainActor 与改造前 main.swift 顶层语句同隔离语义（个别套件本身是 @MainActor）。
 
 @MainActor
 func runSnipSuites() {
@@ -53,8 +49,11 @@ func runSnipSuites() {
     runSnipAnnotationStyleResolverTests()
     runSnipAnnotationSelectionTests()
     runSnipPinSourceTextTests()
-    runPinMenuOrderTests()
+    runPinMenuOrderTests()  // 贴图菜单顺序：归一化口径（缺键回落 / 未知项丢弃 / 新项补尾）
+    runPinMenuOrderMoveTests()  // 贴图菜单顺序：分隔线落位 / 上下移动 / 偏好读写不写回
     runPinDefaultAlphaTests()  // 贴图默认透明度：设置页写入 → 新贴图窗生效（缺键 1 / 越界钳制）
     runPinDragSessionTests()
+    runPinZoomAnchorTests()  // 滚轮缩放以鼠标为锚：锚点归一化位置不变 / 缺省锚点仍是窗口中心
+    runPinBoardBackgroundTests()  // 棋盘底：含 alpha 才画 + 开关缺键即关
     runSnipFeatureBoundaryTests()  // 截图服务层拆成 NetworkMonitorFeatureSnip：端口注入 / 写盘与选档 / 热键归一化 / 源码边界
 }

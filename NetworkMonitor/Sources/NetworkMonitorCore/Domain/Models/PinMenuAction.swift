@@ -5,7 +5,7 @@ import Foundation
 /// 贴图右键菜单的语义分组 —— 只决定「在哪里画分隔线」，不再限制排序
 ///
 /// 分组曾经是排序边界（危险组恒在末尾、组内才能换序），现已全部放开：
-/// 九项按用户偏好的顺序排列，分隔线按最终顺序在**语义分组变化处**自动插入。
+/// 各项按用户偏好的顺序排列，分隔线按最终顺序在**语义分组变化处**自动插入。
 /// 于是跨组换序也连贯：把「缩略图」挪到第一位，它前面不再有分隔线，
 /// 后面接回「另存为」时按分组变化补一条，菜单读起来仍是一段一段的。
 ///
@@ -14,8 +14,10 @@ import Foundation
 public enum PinMenuActionGroup: String, CaseIterable, Equatable, Sendable, Hashable {
     /// 复制与另存为
     case output
-    /// 旋转 / 镜像 / 缩略图等变换
+    /// 旋转 / 镜像 / 灰度 / 反色 / 缩略图等变换
     case transform
+    /// 背景（棋盘底开关）
+    case background
     /// 重置大小与不透明度
     case reset
     /// 关闭与销毁（危险组）
@@ -26,6 +28,7 @@ public enum PinMenuActionGroup: String, CaseIterable, Equatable, Sendable, Hasha
         switch self {
         case .output: return "复制与另存为"
         case .transform: return "变换"
+        case .background: return "背景"
         case .reset: return "重置"
         case .dismiss: return "关闭与销毁"
         }
@@ -34,13 +37,13 @@ public enum PinMenuActionGroup: String, CaseIterable, Equatable, Sendable, Hasha
 
 // MARK: - 贴图右键菜单项
 
-/// 贴图窗口右键菜单的九项 —— 标题、分组与默认顺序的唯一真源
+/// 贴图窗口右键菜单的全部项 —— 标题、分组与默认顺序的唯一真源
 ///
 /// 菜单装配（`PinWindow.rightMouseDown`）与设置页可排序卡片共用这一份定义：
 /// 标题不再散落在拼接代码里，测试也能直接断言顺序，不必起窗口。
 ///
 /// 排序口径（用户要求「贴图菜单全部放开可调」）：
-/// - 九项整列自由换序，跨组也可以（设置页上移 / 下移不再有灰化行）；
+/// - 整列自由换序，跨组也可以（设置页上移 / 下移不再有灰化行）；
 /// - 分隔线按最终顺序在语义分组变化处自动插入（`PinMenuDivider`），不看声明顺序；
 /// - 危险项（`isDestructive`）位置由顺序键决定，不再恒在末尾，
 ///   误点风险改由视觉承担：菜单里用红色文字标出。
@@ -55,8 +58,14 @@ public enum PinMenuAction: String, CaseIterable, Equatable, Sendable, Hashable {
     case mirrorHorizontal
     /// 垂直镜像
     case mirrorVertical
+    /// 灰度（Rec.601 亮度加权，官方键位 5）
+    case grayscale
+    /// 反色（通道取补，官方键位 6）
+    case invert
     /// 固定尺寸缩略图
     case thumbnail
+    /// 半透明区域画棋盘底（开关项，默认关）
+    case boardBackground
     /// 重置为 100% 大小与 100% 不透明
     case resetSizeAndAlpha
     /// 关闭（可恢复）
@@ -72,7 +81,10 @@ public enum PinMenuAction: String, CaseIterable, Equatable, Sendable, Hashable {
         case .rotate: return "旋转 90°"
         case .mirrorHorizontal: return "水平镜像"
         case .mirrorVertical: return "垂直镜像"
+        case .grayscale: return "灰度"
+        case .invert: return "反色"
         case .thumbnail: return "缩略图"
+        case .boardBackground: return "棋盘底"
         case .resetSizeAndAlpha: return "重置大小与不透明度"
         case .close: return "关闭（可恢复）"
         case .destroy: return "销毁"
@@ -83,7 +95,9 @@ public enum PinMenuAction: String, CaseIterable, Equatable, Sendable, Hashable {
     public var group: PinMenuActionGroup {
         switch self {
         case .copy, .save: return .output
-        case .rotate, .mirrorHorizontal, .mirrorVertical, .thumbnail: return .transform
+        case .rotate, .mirrorHorizontal, .mirrorVertical, .grayscale, .invert, .thumbnail:
+            return .transform
+        case .boardBackground: return .background
         case .resetSizeAndAlpha: return .reset
         case .close, .destroy: return .dismiss
         }
@@ -108,7 +122,7 @@ public enum PinMenuAction: String, CaseIterable, Equatable, Sendable, Hashable {
 /// 右键菜单分隔线的落位规则（纯函数，可单测）
 ///
 /// 规则：第一项之前不画；此后**每当语义分组与上一项不同**就在该项之前画一条。
-/// 之所以按「最终顺序」而不是「固定分组区间」算：九项已允许跨组换序，
+/// 之所以按「最终顺序」而不是「固定分组区间」算：各项已允许跨组换序，
 /// 按固定区间画会在乱序时出现空段（连续两条分隔线）或该断的地方没断。
 public enum PinMenuDivider {
 

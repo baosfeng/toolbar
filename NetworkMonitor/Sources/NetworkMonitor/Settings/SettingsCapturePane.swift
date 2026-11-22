@@ -154,10 +154,10 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         // 内容源与恢复池两行在扩展文件里组装（守住单文件体积门禁）
         addPinContentSourceRows(to: card)
         page.addCard(card, sectionTitle: "贴图")
-        // 右键菜单顺序：可排序卡片（九项整列自由换序，分隔线按最终顺序追着分组变化走）
+        // 右键菜单顺序：可排序卡片（整列自由换序，分隔线按最终顺序追着分组变化走）
         buildPinMenuOrderCard()
-        // 用户要求「贴图菜单全部放开可调」：九项整列自由换序，分组只决定分隔线落点
-        page.addNote("贴图右键菜单九项可任意排序，跨组也可以；分隔线按最终顺序在语义分组变化处自动插入。"
+        // 用户要求「贴图菜单全部放开可调」：整列自由换序，分组只决定分隔线落点
+        page.addNote("贴图右键菜单各项可任意排序，跨组也可以；分隔线按最终顺序在语义分组变化处自动插入。"
                      + "「关闭（可恢复）」与「销毁」在菜单里以红字标出，排到哪里由你决定。")
     }
 
