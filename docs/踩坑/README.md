@@ -52,6 +52,7 @@
 - [flipped 上下文里的位图绘制要翻正](运行时/flipped上下文里的位图绘制要翻正.md) — flipped 视图里位图（`NSImage.draw(in:from:operation:fraction:)`）不补偿坐标、文字却会自行翻正，所以翻正只挡位图不整段翻；绕法是 `DrawnUnflip` + `DrawnInk.withUnflippedIfNeeded`，验证靠离屏取样比对上下缘像素
 - [离屏快照里投影要靠像素差自证](运行时/离屏快照里投影要靠像素差自证.md) — 投影看不见有三种成因（裸图层无填充内容 / 宿主 `masksToBounds` 裁切 / 单图暗像素阈值假阴性）；判据是「有阴影 vs 无阴影」两图逐像素做差
 - [毛玻璃材质离屏不可辨](运行时/毛玻璃材质离屏不可辨.md) — `NSVisualEffectView` 的模糊由窗口服务器合成，`cacheDisplay` 只给近似底色（浅 255→228）；判据是结构自证（材质 / 圆角 / 内缩 / 层级 / hitTest）+ 真机确认
+- [面板随菜单栏宽度漂移](运行时/面板随菜单栏宽度漂移.md) — 状态项宽度随网速文字每秒变化，NSPopover 按锚点重排使面板 x 漂 26pt；锚点改 1pt 窄矩形 + 展开时冻结右边缘并监听 didMoveNotification 自愈才恒定
 - [系统无 zstd 解码能力](运行时/系统无zstd解码能力.md) — macOS 没有 zstd 解码路径（Compression framework 无该算法 id、无系统 libzstd、libarchive 只是外部程序转发）的实测矩阵；现行做法是随包携带 libzstd 用 dlopen 流式解码（多帧拼接自动续帧），可执行文件降为备选
 
 ---
