@@ -41,4 +41,9 @@ func runTokenSuites() {
     // 自动监控时间口径（Core）与来源状态四档文案（UI）—— 已下沉的纯口径
     runTokenAutoIndexScheduleTests()
     runTokenSourceStatusTextTests()
+    // P2 四家解析器（只测解析器本身，不测接线）
+    runGeminiSessionParserTests()
+    runZedThreadParserTests()
+    runOpenCodeMessageParserTests()
+    runCopilotUsageParserTests()
 }
