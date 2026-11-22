@@ -1,6 +1,8 @@
 # Token 多来源接入 —— 数据源格式与交互设计规格
 
-> 状态：**P1 已实现**（DSH / Claude Code / Codex 三源 + 来源切换 + 设置页清单 + 后台自动监控）· P2（Gemini / Copilot / OpenCode / Zed）待接 · 取证日期 2026-11-22 · 前置调研见 [Agent token 用量监控扩展调研](../调研/agent-token用量监控-扩展调研.md)
+> 状态：**已全部实现**——七源全接（DSH / Claude Code / Codex / Gemini CLI / Copilot CLI / OpenCode / Zed）+ 来源切换 + 设置页来源清单 + 后台自动监控；Cursor 按 §2.8 只保留额度监控 · 取证日期 2026-11-22 · 前置调研见 [Agent token 用量监控扩展调研](../调研/agent-token用量监控-扩展调研.md)
+>
+> 实现补记（与规格的差异，都有据）：① 来源读取分两类——文件型（DSH / Claude / Codex / Gemini）与会话单位型（Copilot / OpenCode / Zed 走 SQLite，判据是 **db 文件**而非目录，`defaultRoots` 语义是 db 路径）；② Gemini 用**文档级**入口（一份文件可能多事件），不套逐行协议；③ 请求数按事件行计数，Zed 的合成差额记录会让该会话 +1（可接受，改需表加列 + 迁移）；④ 坏库落「黄：有目标无数据」而不是灰。
 >
 > 目标：Token 页从「只有 DSH」扩到多家编码 agent；用户可在 Token 页切换来源，在设置页配置后由后台自动增量监控。
 

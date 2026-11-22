@@ -8,6 +8,7 @@ Debug/PinDragProbe 388 3
 Debug/TokenPaneSnapshot 1047 8
 Discovery/UdpDiscoveryService 425 2
 DrawnUI/DrawnRowList 540 2
+Harness/HarnessMultiSourceScanner 338 2
 Harness/HarnessUsageService 362 2
 MenuPanel/BillingPaneSections 313 2
 MenuPanel/BillingProviderBlockView 304 2
@@ -40,6 +41,6 @@ Settings/SettingsWindow 583 3
 Snip/SnipController 1279 7
 Snip/SnipOverlayView 1426 8
 Snip/SnipToolBarView 472 3
-TestRunner/TestSuites 366 8
+TestRunner/TestSuites 371 8
 Token/TokenDerive 705 4
 Transfer/TransferController 383 2

@@ -17,7 +17,9 @@ enum HarnessAssembly {
                             logger: LoggingService = AppContext.shared.logger,
                             onStateChange: (@Sendable () -> Void)? = { AppEvents.postHarnessUsageChanged() })
         -> any HarnessUsageServicing {
-        // 多来源：一台扫描器跑 DSH / Claude Code / Codex（其余来源按 hasIndexer 返回空）。
+        // 多来源：一台扫描器跑全部七个来源 —— DSH / Claude Code / Codex / Gemini 是文件型
+        //（Gemini 走文档级解析），Copilot / OpenCode / Zed 是 SQLite 型（判据是 db 文件存在性，
+        // 会话单位是库里的一行 message / 一个 thread）。
         // 目录与启用开关每轮重读 TokenSourcePreferences，设置页改完下一次索引即生效。
         let scanner = HarnessMultiSourceScanner(storage: storage, logger: logger)
         let service = HarnessUsageService(scanner: scanner, store: database, logger: logger)

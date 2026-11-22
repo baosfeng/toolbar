@@ -29,7 +29,9 @@ final class SettingsTokenSourceRowView: NSView {
                                         color: SettingsTheme.textPrimary)
         subtitleLabel = MenuPanelLabel.text("", font: SettingsTheme.rowSubtitleFont,
                                             color: SettingsTheme.textSecondary)
-        chooseButton = SettingsLinkButton.make("选择目录…", target: nil, action: #selector(chooseTapped))
+        // SQLite 源的 rootPath 是 db 文件本身，按钮与无障碍文案都要跟着说「数据库」
+        chooseButton = SettingsLinkButton.make(source.isSQLite ? "选择数据库…" : "选择目录…",
+                                              target: nil, action: #selector(chooseTapped))
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
@@ -38,7 +40,9 @@ final class SettingsTokenSourceRowView: NSView {
         subtitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         chooseButton.target = self
-        chooseButton.setAccessibilityLabel("选择 " + source.displayName + " 的会话目录")
+        chooseButton.setAccessibilityLabel(source.isSQLite
+                                           ? "选择 " + source.displayName + " 的数据库文件"
+                                           : "选择 " + source.displayName + " 的会话目录")
         toggle.target = self
         toggle.action = #selector(toggleChanged)
         toggle.setAccessibilityLabel("启用 " + source.displayName + " 用量来源")
@@ -75,18 +79,22 @@ final class SettingsTokenSourceRowView: NSView {
 
     /// 刷新一行（状态点语义色 / 路径 / 开关态 / 目录链接显隐）
     func update(path: String, status: TokenSourceStatus, counts: String?, enabled: Bool) {
-        let subtitle = TokenSourceStatusText.subtitle(path: path, status: status, counts: counts)
+        // 文件型说「目录」、SQLite 型说「数据库文件」：同一套四档判据，措辞按来源类型分流
+        let isSQLite = source.isSQLite
+        let subtitle = TokenSourceStatusText.subtitle(path: path, status: status, counts: counts,
+                                                      isSQLite: isSQLite)
         subtitleLabel.stringValue = subtitle
         // 副标题单行会截断：tooltip 给完整文案，路径与状态都能看全
         subtitleLabel.toolTip = subtitle
         dot.setColor(color(for: status))
         toggle.state = enabled ? .on : .off
         chooseButton.isHidden = !enabled
-        toggle.toolTip = TokenSourceStatusText.note(for: status)
+        let note = TokenSourceStatusText.note(for: status, isSQLite: isSQLite)
+        toggle.toolTip = note
         var reading = source.displayName + "，" + (enabled ? "已启用" : "未启用") + "，"
-        reading += path.isEmpty ? "未配置目录" : path
+        reading += path.isEmpty ? (isSQLite ? "未配置数据库文件" : "未配置目录") : path
         if let counts { reading += "，" + counts }
-        if let note = TokenSourceStatusText.note(for: status) { reading += "，" + note }
+        if let note { reading += "，" + note }
         setAccessibilityLabel(reading)
     }
 

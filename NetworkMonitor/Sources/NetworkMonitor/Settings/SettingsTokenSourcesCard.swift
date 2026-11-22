@@ -60,10 +60,12 @@ extension SettingsTokenPane {
 
     /// 数据来源的口径说明（跟在索引 / 维护卡之后，与「来源清单」这件事同源）
     func addSourceNote() {
-        page.addNote("数据来自各工具的本地会话日志：DSH（session*.jsonl.zstd）、Claude Code（transcript JSONL）、"
-                     + "Codex（rollout JSONL）、Gemini CLI、Copilot CLI、OpenCode、Zed。"
-                     + "每个来源可以单独指定目录与开关；关掉的来源不再参与索引与「全部」统计，已有数据保留、"
-                     + "重新打开即恢复。面板页头的来源切换器只列「已启用且有数据」的来源。")
+        page.addNote("数据来自各工具的本地会话记录：DSH（session*.jsonl.zstd）、Claude Code（transcript JSONL）、"
+                     + "Codex（rollout JSONL）、Gemini CLI（会话 JSON），以及 Copilot CLI / OpenCode / Zed 的"
+                     + "SQLite 数据库文件（session-store.db / opencode.db / threads.db）。"
+                     + "每个来源可以单独指定路径与开关：前者选目录，后三者选具体的 .db 文件；"
+                     + "关掉的来源不再参与索引与「全部」统计，已有数据保留、重新打开即恢复。"
+                     + "面板页头的来源切换器只列「已启用且有数据」的来源。")
     }
 
     // MARK: - 刷新
@@ -116,26 +118,46 @@ extension SettingsTokenPane {
         refresh()
     }
 
-    /// 选择某来源的会话目录：选完先校验是目录，再落偏好（不自动重扫，动作分开）
+    /// 选择某来源的路径：文件型选会话目录、SQLite 型选具体的 db 文件，再落偏好（不自动重扫）
     func chooseDirectory(for source: TokenSourceID) {
+        let isSQLite = source.isSQLite
         let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
+        panel.canChooseFiles = isSQLite
+        panel.canChooseDirectories = !isSQLite
         panel.canCreateDirectories = false
         panel.allowsMultipleSelection = false
-        panel.title = "选择 " + source.displayName + " 的会话目录"
+        panel.title = "选择 " + source.displayName + (isSQLite ? " 的数据库文件" : " 的会话目录")
         panel.prompt = "选择"
-        panel.message = "选择存放 " + source.displayName + " 会话记录的目录；改完点「重新扫描」生效"
+        if isSQLite {
+            panel.message = "选择 " + source.displayName + " 的 SQLite 数据库文件（应用只读打开，不会写它）；"
+                + "改完点「重新扫描」生效"
+        } else {
+            panel.message = "选择存放 " + source.displayName + " 会话记录的目录；改完点「重新扫描」生效"
+        }
         let current = readings[source]?.path ?? ""
-        if !current.isEmpty { panel.directoryURL = URL(fileURLWithPath: current, isDirectory: true) }
+        if !current.isEmpty {
+            panel.directoryURL = isSQLite
+                ? URL(fileURLWithPath: current).deletingLastPathComponent()
+                : URL(fileURLWithPath: current, isDirectory: true)
+        }
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        guard SettingsTokenController.isValidDirectory(url) else {
-            presentAlert(title: "无法使用该目录", message: "选中的位置不是可用的文件夹。", style: .warning)
+        guard isSQLite ? Self.isUsableDatabase(url) : SettingsTokenController.isValidDirectory(url) else {
+            presentAlert(title: isSQLite ? "无法使用该数据库文件" : "无法使用该目录",
+                         message: isSQLite ? "选中的位置不是可读的 SQLite 文件。" : "选中的位置不是可用的文件夹。",
+                         style: .warning)
             return
         }
         TokenSourcePreferences.setRootPath(url.path, for: source, storage: controller.storage)
         refresh()
-        logger.info("设置页切换 " + source.rawValue + " 会话目录：" + url.path)
+        logger.info("设置页切换 " + source.rawValue
+                    + (isSQLite ? " 数据库文件：" : " 会话目录：") + url.path)
+    }
+
+    /// 选中的库文件是否可用（存在 + 可读；不打开库，避免在设置页里与 CLI 抢锁）
+    private static func isUsableDatabase(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+        return exists && !isDirectory.boolValue && FileManager.default.isReadableFile(atPath: url.path)
     }
 
     /// 统一的一次性提示（不叠加窗口：设置页已有足够上下文）

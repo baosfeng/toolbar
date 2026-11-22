@@ -64,9 +64,14 @@ extension DatabaseManager {
     /// - Parameter onlyWithProject: 为真时只统计挂在项目下的事件（cwd 非空），
     ///   用于「按项目」的占比分母 —— 分母必须包含全部项目行（含 TopN 之外的），
     ///   但不能包含无法归属任何项目的事件，否则 sum(占比) 会小于 100%。
+    ///
+    /// 请求数口径 = **事件行数**（`COUNT(*)`），不是各事件 `requestCount` 的求和：合成事件
+    ///（Zed 的 `cumulative-remainder`，requestCount 记 0）因此也占一行 —— 已知偏差，四桶金额
+    /// 不受影响；要精确得给事件表加 request_count 列 + 迁移，暂不做。
     // internal：按范围聚合扩展（HarnessUsageWindowedAggregation.swift）复用同一求和实现
     func harnessSum(_ db: OpaquePointer, fromMs: Int64?, toMs: Int64?,
                     onlyWithProject: Bool = false) -> HarnessTokenUsage {
+        // COUNT(*) = 请求数（按行计，含合成事件）
         var sql = """
         SELECT COUNT(*), COALESCE(SUM(uncached_in), 0), COALESCE(SUM(output), 0),
                COALESCE(SUM(cache_read), 0), COALESCE(SUM(cache_write), 0)

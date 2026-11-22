@@ -24,6 +24,27 @@ public enum HarnessSourceAvailability: Sendable, Equatable {
         return false
     }
 
+    /// 按来源说人话的可用性文案
+    ///
+    /// `displayMessage` 是 DSH 时期的口径（「DSH 会话目录」），多来源后对 SQLite 源要说
+    /// 「数据库文件」—— 用户据此才知道该去装工具、还是去改一个文件路径。
+    /// 文件型来源原样复用 `displayMessage`，既有文案一个字都不变。
+    public func displayMessage(source: TokenSourceID) -> String {
+        // dsh 沿用原文案（既有空态与建议都基于它）
+        guard source != .dsh else { return displayMessage }
+        switch self {
+        case .sessionsDirectoryMissing(let path):
+            return (source.isSQLite ? "数据库文件不存在: " : "未找到会话目录: ") + path
+        case .sessionsDirectoryUnreadable(let path):
+            let what = source.isSQLite ? "数据库文件" : "会话目录"
+            return what + "不可读（权限不足或卷未挂载）: " + path
+        case .available(let toolPath):
+            return toolPath.isEmpty ? "数据源可用（内置解析）" : displayMessage
+        case .toolMissing:
+            return displayMessage
+        }
+    }
+
     /// 供 UI 展示的说明文案（中文）
     public var displayMessage: String {
         switch self {

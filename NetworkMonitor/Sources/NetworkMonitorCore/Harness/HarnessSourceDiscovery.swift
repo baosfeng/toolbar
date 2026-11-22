@@ -5,13 +5,13 @@ import Foundation
 public extension TokenSourceID {
     /// 该来源的索引实现是否已落地（未落地的来源一律「空结果 + 不参与索引」）
     ///
-    /// 分阶段接：本轮是 DSH / Claude Code / Codex，其余四个（Gemini / Copilot /
-    /// OpenCode / Zed，其中后三者是 SQLite）下一轮接。判据集中在这里，
-    /// 扫描器与调度器都读它，不在各处散 if。
+    /// 七家已全部落地：DSH 走 zstd 会话目录，Claude / Codex 走明文 JSONL，
+    /// Gemini 是文档级解析（`HarnessDocumentSourceReader`），Copilot / OpenCode / Zed
+    /// 走 SQLite（`HarnessSQLiteSourceReader`）。判据集中在这里，扫描器与调度器都读它，
+    /// 不在各处散 if —— 将来万一要临时下线某一家，只改这一处。
     var hasIndexer: Bool {
         switch self {
-        case .dsh, .claudeCode, .codex: return true
-        case .gemini, .copilot, .opencode, .zed: return false
+        case .dsh, .claudeCode, .codex, .gemini, .copilot, .opencode, .zed: return true
         }
     }
 }
@@ -60,7 +60,11 @@ public enum HarnessSourceDiscovery {
 
     // MARK: 发现（带诊断）
 
-    /// 发现该来源的会话文件与丢弃计数（未实现 / dsh 由各自的扫描器负责，这里恒空）
+    /// 发现该来源的会话文件与丢弃计数（dsh / SQLite 源由各自的读取器负责，这里恒空）
+    ///
+    /// - dsh：`HarnessSessionScanner` 自己发现（要合并多版本文件 + zstd 解压后的内容去重）；
+    /// - Gemini：`HarnessDocumentSourceReader` 要按文档解析才能拿到会话键，故不在这条路径；
+    /// - Copilot / OpenCode / Zed：`HarnessSQLiteSourceReader` 按库里的行 / thread 拆单元。
     public static func report(
         source: TokenSourceID,
         storage: any KeyValueStorage,
@@ -69,14 +73,19 @@ public enum HarnessSourceDiscovery {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> HarnessSourceDiscoveryReport {
         let empty = HarnessSourceDiscoveryReport(files: [], droppedDuplicateSessions: 0)
-        guard source.hasIndexer, source != .dsh else { return empty }
+        guard source.hasIndexer, source != .dsh, !source.isSQLite else { return empty }
         let roots = roots(for: source, storage: storage, homeDirectory: homeDirectory, environment: environment)
         switch source {
         case .claudeCode: return claudeReport(roots: roots, fileManager: fileManager)
         case .codex:
             return HarnessSourceDiscoveryReport(files: codexFiles(roots: roots, fileManager: fileManager),
                                                 droppedDuplicateSessions: 0)
-        case .dsh, .gemini, .copilot, .opencode, .zed: return empty
+        case .gemini:
+            let found = HarnessDocumentSourceReader().discover(source: .gemini, roots: roots,
+                                                              fileManager: fileManager)
+            return HarnessSourceDiscoveryReport(files: found.files,
+                                                droppedDuplicateSessions: found.droppedDuplicates)
+        case .dsh, .copilot, .opencode, .zed: return empty
         }
     }
 

@@ -39,6 +39,20 @@ public enum TokenSourceID: String, Sendable, Equatable, CaseIterable, Codable {
         }
     }
 
+    /// 该来源的会话单位是否落在 SQLite 数据库里（Copilot / OpenCode / Zed）
+    ///
+    /// 这个维度决定三件事，全部只读它、不在别处再散 if：
+    /// 1. **发现判据**是 db 文件存在性（不是目录）；
+    /// 2. **rootPath 语义**是 db 文件路径（设置页文案写「数据库文件」而不是「目录」）；
+    /// 3. **会话单位**是库里的一行 message / 一个 thread，scan 记录键要拼成
+    ///    `<dbPath>#<sessionKey>` 才唯一（db 的 size/mtime 仍是增量判据）。
+    public var isSQLite: Bool {
+        switch self {
+        case .copilot, .opencode, .zed: return true
+        case .dsh, .claudeCode, .codex, .gemini: return false
+        }
+    }
+
     /// 该来源识别的环境变量（nil = 无环境变量覆盖，只认 home 下的默认路径）
     public var environmentKey: String? {
         switch self {
@@ -87,22 +101,26 @@ public enum TokenSourceID: String, Sendable, Equatable, CaseIterable, Codable {
                 base.appendingPathComponent("archived_sessions", isDirectory: true),
             ]
         case .gemini:
-            if let base = env.path("GEMINI_CLI_HOME") {
-                return [base.appendingPathComponent(".gemini", isDirectory: true)]
-            }
-            return [home(homeDirectory, ".gemini")]
+            // 会话在 <home>/.gemini/tmp/<项目 slug>/chats/session-*.jsonl（旧版同目录的整份 .json）。
+            // GEMINI_CLI_HOME 是「home」语义：它的下面还要再找一层 .gemini，不是直接指向 .gemini。
+            let base = env.path("GEMINI_CLI_HOME") ?? homeDirectory
+            return [base.appendingPathComponent(".gemini", isDirectory: true)
+                .appendingPathComponent("tmp", isDirectory: true)]
         case .copilot:
-            return [home(homeDirectory, ".copilot")]
+            // SQLite 源：给的是 db 文件本身，不是目录
+            return [home(homeDirectory, ".copilot").appendingPathComponent("session-store.db")]
         case .opencode:
             let base = env.path("XDG_DATA_HOME")
                 ?? home(homeDirectory, ".local").appendingPathComponent("share", isDirectory: true)
-            return [base.appendingPathComponent("opencode", isDirectory: true)]
+            return [base.appendingPathComponent("opencode", isDirectory: true)
+                .appendingPathComponent("opencode.db")]
         case .zed:
             return [
                 home(homeDirectory, "Library")
                     .appendingPathComponent("Application Support", isDirectory: true)
                     .appendingPathComponent("Zed", isDirectory: true)
-                    .appendingPathComponent("threads", isDirectory: true),
+                    .appendingPathComponent("threads", isDirectory: true)
+                    .appendingPathComponent("threads.db"),
             ]
         }
     }

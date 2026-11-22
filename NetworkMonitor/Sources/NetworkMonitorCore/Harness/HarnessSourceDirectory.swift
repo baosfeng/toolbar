@@ -181,8 +181,12 @@ public struct HarnessSourceDiagnostics: Sendable, Equatable {
     }
 
     /// 由解析结果与可用性构造
+    ///
+    /// - Parameter source: 该诊断所属来源（nil = 整体口径，沿用 DSH 时期文案）。
+    ///   传了来源才能把 SQLite 源的降级原因说成「数据库文件」而不是「会话目录」。
     public static func make(resolution: HarnessSourceResolution,
-                            availability: HarnessSourceAvailability) -> HarnessSourceDiagnostics {
+                            availability: HarnessSourceAvailability,
+                            source: TokenSourceID? = nil) -> HarnessSourceDiagnostics {
         switch availability {
         case .available(let toolPath):
             return HarnessSourceDiagnostics(directoryPath: resolution.pathText,
@@ -202,14 +206,21 @@ public struct HarnessSourceDiagnostics: Sendable, Equatable {
             return HarnessSourceDiagnostics(directoryPath: resolution.pathText,
                                             origin: resolution.origin,
                                             zstdPath: nil,
-                                            zstdNote: availability.displayMessage,
+                                            zstdNote: message(availability, source: source),
                                             failureKind: .directoryMissing)
         case .sessionsDirectoryUnreadable:
             return HarnessSourceDiagnostics(directoryPath: resolution.pathText,
                                             origin: resolution.origin,
                                             zstdPath: nil,
-                                            zstdNote: availability.displayMessage,
+                                            zstdNote: message(availability, source: source),
                                             failureKind: .directoryUnreadable)
         }
+    }
+
+    /// 按来源取降级文案（没给来源就沿用 DSH 口径）
+    private static func message(_ availability: HarnessSourceAvailability,
+                               source: TokenSourceID?) -> String {
+        guard let source else { return availability.displayMessage }
+        return availability.displayMessage(source: source)
     }
 }
