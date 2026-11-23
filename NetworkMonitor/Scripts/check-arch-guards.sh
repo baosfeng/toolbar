@@ -47,7 +47,8 @@ done
 
 # 3) Core / UI 不得 print( —— 白名单只有一个文件：LoggingService 自己的实现
 for target in NetworkMonitorCore NetworkMonitorUI; do
-    hits=$(grep -rn "print(" "$SOURCES_DIR/$target" --include='*.swift' \
+    # 用词边界匹配：`fingerprint(` 里也含 "print("，裸 grep 会把它误报成日志输出
+    hits=$(grep -rnE "(^|[^[:alnum:]_])print\\(" "$SOURCES_DIR/$target" --include='*.swift' \
         | grep -v "Infrastructure/Logging/Loggers.swift" || true)
     if [ -n "$hits" ]; then
         failed=$((failed + 1))

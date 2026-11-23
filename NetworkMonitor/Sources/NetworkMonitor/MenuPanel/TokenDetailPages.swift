@@ -6,17 +6,20 @@ import NetworkMonitorDesign
 
 /// 二级页种类
 ///
-/// 只剩三种：单桶详情（点柱子）、按小时三段拆分（用量屏「24h 明细」）、
-/// 天趋势明细（用量屏「30 天」）。缓存 / 按项目 / 按模型三种内容已并入
-/// 缓存屏与排行屏，这里的 case 与入口一并删除，不留死代码。
+/// 四种：缓存命中（总览屏缓存条点进来：环 / 命中率走势 / 本周期对照 / 样本统计 + 口径）、
+/// 单桶详情（点柱子）、按小时三段拆分（主图卡点进来）、天趋势明细（主图卡「14 天 ›」）。
+/// 缓存命中改前是独立第 3 屏，两屏收敛后降级到这里——主面板只留一条可点的命中率条。
+/// 按项目 / 按模型不再有独立页，它们是分布屏内的维度分段。
 enum TokenDetailKind: Int, CaseIterable {
+    case cache
     case hourly
     case bucket
     case trend
 
-    /// 返回条面包屑（bucket 页在运行时改写）
+    /// 返回条面包屑（bucket / cache 页在运行时改写）
     var crumb: String {
         switch self {
+        case .cache: return "/ 缓存命中"
         case .hourly: return "/ 按小时 · 三段拆分"
         case .bucket: return "/ 按小时"
         case .trend: return "/ 天趋势"
@@ -28,6 +31,7 @@ enum TokenDetailKind: Int, CaseIterable {
     /// 视图只做透传：范围口径文案在 Core 派生，改口径改一处即可，TestRunner 也能断言。
     func metaText(for model: TokenPaneModel) -> String {
         switch self {
+        case .cache: return model.cachePage.bucketUnitText
         case .hourly: return "00–23 时"
         case .bucket: return "单桶"
         case .trend: return "上限 33 天"
@@ -254,6 +258,7 @@ final class TokenDetailPaneView: NSView {
                            selection: TokenBucketSelection?,
                            hourScope: TokenHourScope) -> [NSView] {
         switch kind {
+        case .cache: return buildCache(model: model)
         case .hourly: return buildHourly(snapshot: snapshot, hourScope: hourScope)
         case .bucket: return buildBucket(model: model, snapshot: snapshot, selection: selection)
         case .trend: return buildTrend(snapshot: snapshot)

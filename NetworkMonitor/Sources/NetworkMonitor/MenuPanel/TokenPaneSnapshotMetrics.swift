@@ -30,6 +30,7 @@ extension TokenPaneView {
             ("meta-hourMeta", hourMeta),
             ("meta-viewAction", viewAction),
             ("meta-hourAction", hourAction),
+            ("meta-trendAction", trendAction),
         ]
         let anchor = reference ?? hourCard
         return items.map { ($0.0, $0.1.convert($0.1.bounds, to: anchor), needed($0.1), text($0.1)) }
@@ -37,8 +38,8 @@ extension TokenPaneView {
 
     /// 快照自证专用（仅 DEBUG）：当前屏的区块与屏切换条在页面坐标系中的 frame
     ///
-    /// 只量当前可见屏：隐藏的屏栈 frame 全为零，量了也没意义；4 屏各自的几何由
-    /// TokenPaneSnapshot+Screens.swift 逐屏取证。缓存 / 排行屏是整块视图，
+    /// 只量当前可见屏：隐藏的屏栈 frame 全为零，量了也没意义；2 屏各自的几何由
+    /// TokenPaneSnapshot+Screens.swift 逐屏取证。分布屏是整块视图，
     /// 由 screen-stack 一行覆盖，块内不再逐个列（内部块不是主面板的子视图）。
     func layoutMetricsForSnapshot() -> [(name: String, frame: NSRect)] {
         layoutSubtreeIfNeeded()
@@ -50,21 +51,16 @@ extension TokenPaneView {
         return items.map { ($0.0, $0.1.convert($0.1.bounds, to: self)) }
     }
 
-    /// 当前屏里独立成块的视图（缓存屏 / 排行屏内部块不经这里）
+    /// 当前屏里独立成块的视图（分布屏内部块不经这里）
     private func blockMeasureTargets() -> [(String, NSView)] {
         switch screen {
         case .overview:
             return [("hero", heroView), ("card-uncached", familyCards[0]), ("card-output", familyCards[1]),
                     ("card-cache", familyCards[2]), ("card-req", familyCards[3]),
-                    ("chart-trend-mini", overviewTrendCard), ("compare-card", compareCard),
-                    ("footer-stateband", overviewBand)]
-        case .usage:
-            return [("chart-hourly", hourCard), ("chart-hourly-bars", hourBars),
-                    ("chart-trend", trendCard), ("footer-stateband", usageBand)]
-        case .cache:
-            return [("footer-note", cacheScreen.footerView)]
-        case .ranking:
-            return [("footer-stateband", rankingBand)]
+                    ("cache-hit-strip", cacheHitStrip), ("chart-hourly", hourCard),
+                    ("chart-hourly-bars", hourBars), ("footer-stateband", overviewBand)]
+        case .distro:
+            return [("compare-card", compareCard), ("footer-stateband", distroBand)]
         }
     }
 

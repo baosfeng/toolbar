@@ -89,7 +89,7 @@ enum TokenPaneSnapshot {
             panel.updateToken(tokenSnapshot, notifySize: false)
             panel.select(tab: .token)
             panel.tokenPane.applyStateForSnapshot(range: .d7, hourScope: .yesterday, trendMode: .line)
-            panel.tokenPane.selectScreenForSnapshot(.usage)
+            panel.tokenPane.selectScreenForSnapshot(.overview)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
             MenuPanelSnapshot.render(view: panel, size: size, appearanceName: .aqua,
                                      to: directory.appendingPathComponent("menu-token-d7-line-light.png"))
@@ -104,7 +104,7 @@ enum TokenPaneSnapshot {
                 panel.select(tab: .token)
                 panel.tokenPane.applyStateForSnapshot(range: .today, hourScope: .today,
                                                       trendMode: .stack, hourView: .compare)
-                panel.tokenPane.selectScreenForSnapshot(.usage)
+                panel.tokenPane.selectScreenForSnapshot(.overview)
                 let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
                 MenuPanelSnapshot.render(view: panel, size: size, appearanceName: appearance,
                                          to: directory.appendingPathComponent("menu-token-compare-" + name + ".png"))

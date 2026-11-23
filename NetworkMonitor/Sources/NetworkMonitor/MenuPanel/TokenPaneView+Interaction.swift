@@ -36,11 +36,8 @@ extension TokenPaneView {
             self.metric = self.metric == .total ? .request : .total
             self.render()
         }
-        trendAction.onClick = { [weak self] in
-            guard let self else { return }
-            self.trendMode = self.trendMode == .stack ? .line : .stack
-            self.render()
-        }
+        // 天趋势二级页的入口：两屏收敛后它挂在主图卡的 meta 行上
+        trendAction.onClick = { [weak self] in self?.openDetail(.trend) }
         for card in familyCards {
             card.onClick = { [weak self] in self?.openDetail(.hourly) }
         }
@@ -52,13 +49,11 @@ extension TokenPaneView {
                                                            isHour: self.range == .today,
                                                            scope: self.hourScope))
         }
-        trendCard.onClick = { [weak self] in self?.openDetail(.trend) }
-        overviewTrendCard.onClick = { [weak self] in self?.openDetail(.trend) }
         screenControl.onSelect = { [weak self] index in
             guard let self, let value = TokenScreen(rawValue: index) else { return }
             self.selectScreen(value)
         }
-        // 排行屏的维度分段与屏切换走同一条 render 路径（不各走一套刷新）
+        // 分布屏的维度分段与屏切换走同一条 render 路径（不各走一套刷新）
         rankScreen.onDimensionChange = { [weak self] in self?.render() }
         detailPane.onBack = { [weak self] in self?.closeDetail() }
         detailPane.onSelectBucket = { [weak self] selection in
@@ -107,19 +102,35 @@ extension TokenPaneView {
     func clearIndexNote() {
         noteExpiry = nil
         durableNote = nil
-        guard let snapshot else {
-            indexLabel.isHidden = true
-            return
-        }
-        update(snapshot)
+        setIndexNote(nil, isWarning: false)
     }
 
-    /// 把常驻提示贴回索引标签（状态机重渲后会把它盖掉，所以每次重渲都要补一次）
+    /// 把常驻提示贴回页头 meta 位（状态机重渲后会把它盖掉，所以每次重渲都要补一次）
     func applyDurableNote() {
         guard let durableNote else { return }
-        indexLabel.stringValue = durableNote.text
-        indexLabel.textColor = durableNote.isWarning ? TokenPaneStyle.warnInk : TokenPaneStyle.tertiaryText
-        indexLabel.isHidden = false
+        setIndexNote(durableNote.text, isWarning: durableNote.isWarning)
+    }
+
+    /// 写索引提示：**页头 meta 位**（会话数那一格）而不是独立一行
+    ///
+    /// 两屏内容预算 385pt 已填满，索引期间若多出一条 15pt 的标签，
+    /// 会立刻顶出外框滚动条、把页脚状态带挤走（实测截图里就少了状态带）。
+    /// 页头 meta 位本来就是「当前数据是什么状态」的口径文字，索引中改写它语义也顺。
+    func setIndexNote(_ text: String?, isWarning: Bool) {
+        indexNote = text
+        indexNoteIsWarning = isWarning
+        guard let model = lastModel else {
+            headerView.updateMeta(text)
+            return
+        }
+        // 有提示就盖住会话数（告警走告警色），没提示就恢复常规口径
+        if let text {
+            headerView.updateMeta(text)
+            headerView.setMetaColor(isWarning ? TokenPaneStyle.warnInk : TokenPaneStyle.tertiaryText)
+        } else {
+            headerView.setMetaColor(TokenPaneStyle.tertiaryText)
+            headerView.updateMeta(headerMeta(from: model))
+        }
     }
 
 }

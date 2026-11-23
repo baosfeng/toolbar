@@ -4,14 +4,15 @@ import NetworkMonitorCore
 import NetworkMonitorDesign
 import NetworkMonitorUI
 
-// MARK: - Token 4 屏取证（浅 / 深，仅 DEBUG）
+// MARK: - Token 2 屏取证（浅 / 深，仅 DEBUG）
 
-/// 分屏后的核心验收是「每屏单独看读不读得全」，并且**四屏高度必须一致**
+/// 分屏后的核心验收是「每屏单独看读不读得全」，并且**两屏高度必须一致**
 /// （否则用户切屏时 popover 跳高跳低）。截图证明没裁切，量值证明没挤压、没跳动。
+/// 两屏都按 385pt 内容预算定高（fill_ratio 应接近 100%），这是「信息密度」的量化判据。
 @MainActor
 extension TokenPaneSnapshot {
 
-    /// 概览 / 用量 / 缓存 / 排行各截浅深两张 + 一份「屏 → 区块 / 页脚 / 高度」台账
+    /// 总览 / 分布各截浅深两张 + 一份「屏 → 区块 / 页脚 / 高度」台账
     static func captureScreens(directory: URL, snapshot: HarnessUsageSnapshot) {
         var lines: [String] = []
         var heights: [(slug: String, height: CGFloat)] = []
@@ -35,9 +36,9 @@ extension TokenPaneSnapshot {
             }
             lines.append(contentsOf: metrics)
         }
-        // 四屏高度是否恒定（切屏不跳高跳低的直接证据）
+        // 两屏高度是否恒定（切屏不跳高跳低的直接证据）
         let distinct = Set(heights.map { Int($0.height.rounded()) })
-        lines.append("# 四屏 pane 高度：" + heights.map { $0.slug + "=" + fmt($0.height) }.joined(separator: " · "))
+        lines.append("# 两屏 pane 高度：" + heights.map { $0.slug + "=" + fmt($0.height) }.joined(separator: " · "))
         lines.append("# pane 高度一致 = " + (distinct.count == 1 ? "YES" : "NO"))
         lines.append("# 内容占可视区比例：" + fills.map {
             $0.slug + "=" + String(format: "%.1f%%", $0.ratio)
@@ -48,7 +49,7 @@ extension TokenPaneSnapshot {
         let text = lines.joined(separator: "\n") + "\n"
         try? text.write(to: directory.appendingPathComponent("menu-token-screens.txt"),
                         atomically: true, encoding: .utf8)
-        AppContext.shared.logger.info("Token 4 屏取证完成（浅 / 深 × 概览 / 用量 / 缓存 / 排行）")
+        AppContext.shared.logger.info("Token 2 屏取证完成（浅 / 深 × 总览 / 分布）")
     }
 
     // MARK: - 内部
@@ -76,7 +77,7 @@ extension TokenPaneSnapshot {
         lines.append(String(format: "pane_height = %.1f content_needed = %.0f popover_max = %.0f outer_scrollable = %@",
                             pane.fittingSize.height, panel.desiredContentHeight, MenuPanelStyle.maxHeight,
                             panel.desiredContentHeight > MenuPanelStyle.maxHeight + 0.5 ? "YES" : "NO"))
-        if screen == .ranking {
+        if screen == .distro {
             let rows = pane.rankScreen.rowMetricsForSnapshot()
             lines.append(String(format: "ranking_rows = %d row_height = %.1fpt row_blank = %.1fpt (min %.0f / max %.0f)",
                                 rows.visible, rows.rowHeight, rows.blank,
@@ -84,9 +85,9 @@ extension TokenPaneSnapshot {
                                 TokenRankingScreenView.maxRowHeight))
             lines.append("ranking_parts = " + pane.rankScreen.cardPartsForSnapshot())
         }
-        if screen == .usage {
-            lines.append(String(format: "chart_hourly_height = %.1f chart_trend_height = %.1f",
-                                pane.hourBars.bounds.height, pane.trendSpark.bounds.height))
+        if screen == .overview {
+            lines.append(String(format: "chart_hourly_height = %.1f card_height = %.1f",
+                                pane.hourBars.bounds.height, pane.hourCard.bounds.height))
         }
         if let frame = pane.screenFrames[safe: screen.rawValue] {
             let scroll = frame.snapshotScrollMetrics()
@@ -120,9 +121,7 @@ extension TokenPaneSnapshot {
     private static func screenSlug(_ screen: TokenScreen) -> String {
         switch screen {
         case .overview: return "overview"
-        case .usage: return "usage"
-        case .cache: return "cache"
-        case .ranking: return "ranking"
+        case .distro: return "distro"
         }
     }
 }

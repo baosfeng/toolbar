@@ -276,6 +276,21 @@ package enum TokenDistroDimension {
     package func cardAccessibility(range: TokenRange) -> String {
         title + " " + range.window.title + "分布，可点击查看" + title.dropFirst() + "明细"
     }
+    /// 单行短口径（卡底那一行）
+    ///
+    /// 卡片底部只容得下一行：原先给 4 行文案，实测被压成 1 行再按词硬切，
+    /// 尾巴凭空消失、留下半句。这里给每种维度一句能在 296pt 里读完的口径，
+    /// 完整版（TokenDistroCopy 的 projectsNote / modelsNote）仍挂悬停与读屏，信息不丢。
+    package func shortNote(range: TokenRange) -> String {
+        switch self {
+        case .tools:
+            return "口径：一行一个来源 · 分母是各来源合计"
+        case .projects:
+            return "口径：按会话 cwd 聚合 · 分母是全部项目（非 TopN）"
+        case .models:
+            return "口径：provider/model 分行不合并 · 分母是全部模型"
+        }
+    }
 }
 
 /// 底状态带的一格

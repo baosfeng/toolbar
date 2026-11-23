@@ -32,8 +32,13 @@ final class TokenRankingScreenView: NSStackView {
     /// 当前档位允许的可见行数（标准 / 极致 8 行，省电 4 行）
     static var topRowCount: Int { min(maxRowCount, ThemeStyle.profile.rankingLimit) }
     /// 行高上下限（pt）
+    ///
+    /// 上限 64：项目/模型只有 2–3 个是单机常态（实测本机今日 3 个），
+    /// 上限给 44 时卡片中段会空出 70pt+ 一片白，读作「内容没加载完」。
+    /// 抬到 64 后 3 行恰好吃掉大部分余量；4 行以上按可用高度均分自然收敛，
+    /// 8 行时由「汇总块 / 口径让位」+ 34pt 保底兜住，不会顶破卡高。
     static let minRowHeight: CGFloat = 34
-    static let maxRowHeight: CGFloat = 48
+    static let maxRowHeight: CGFloat = 64
 
     private let dimTitle = MenuPanelLabel.text("维度", font: TokenPaneStyle.axisFont,
                                               color: TokenPaneStyle.tertiaryText)
@@ -51,12 +56,19 @@ final class TokenRankingScreenView: NSStackView {
     /// 汇总块行（跨文件访问：+Rows.swift 的 updateSummary 填值）
     let summaryRows = (0..<5).map { _ in TokenKeyRowView() }
     let summaryGrid: NSView
-    let noteView = TokenNoteView(maxLines: 4)
+    /// 口径说明：单行 + 尾部省略，完整文案进悬停与读屏
+    ///
+    /// 原本给 4 行，但 385pt 卡高里 5 行数据时它实际被压成 1 行、还按词硬切（尾巴凭空消失）。
+    /// 改成显式单行：头部信息保留（「口径：项目按会话 cwd 归属聚合…」），全文靠悬停补。
+    let noteView = TokenNoteView(maxLines: 1)
     /// 底部留白（行高封顶后剩下的高度放这里，避免被其它块吸走而拉高行）
     let spacer = NSView()
-    private var rowsHeight: NSLayoutConstraint?
-    private var spacerHeight: NSLayoutConstraint?
-    private var isMeasuring = false
+    /// 行列表面板高度约束（跨文件：+Ranking+Layout.swift 的行高自适应要写它）
+    var rowsHeight: NSLayoutConstraint?
+    /// 留白高度约束（跨文件同上）
+    var spacerHeight: NSLayoutConstraint?
+    /// 行高自适应重入保护（跨文件同上）
+    var isMeasuring = false
 
     init(cardHeight: CGFloat) {
         summaryGrid = TokenContentKit.twoColumn(summaryRows)
@@ -102,11 +114,18 @@ final class TokenRankingScreenView: NSStackView {
         spacerHeight.isActive = true
         self.spacerHeight = spacerHeight
 
-        // 定高块一律 required hugging：多出来的高度只能进 spacer，不能被它们吸走
+        // 定高块一律 required hugging：多出来的高度只能进 spacer，不能被它们吸走；
+        // 口径说明再叠一条 required 压缩阻力：否则它会被行列表挤成 1 行（实测尾巴被吃掉）
         for view in [dimRow, head, bar, emptyRow, summaryGrid, noteView] {
             view.setContentHuggingPriority(.required, for: .vertical)
         }
-        card.setRows([dimRow, head, bar, rowList, emptyRow, summaryGrid, noteView, spacer])
+        noteView.setContentCompressionResistancePriority(.required, for: .vertical)
+        // 顺序：维度段 → 卡头 → 占比条 → 行列表 → 余量 → 汇总 → 口径
+        //
+        // 余量（spacer）放在行列表与汇总之间，不放卡底：项目/模型只有 2–3 个时
+        // （单机常见），余量放卡底会让整张卡下半截塌成一片空白，看起来像"内容没加载完"。
+        // 放中间时它读作「列表区留白」，而汇总与口径永远贴卡底、与其它卡对齐。
+        card.setRows([dimRow, head, bar, rowList, emptyRow, spacer, summaryGrid, noteView])
         card.heightAnchor.constraint(equalToConstant: cardHeight).isActive = true
         addArrangedSubview(card)
         card.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
@@ -144,41 +163,6 @@ final class TokenRankingScreenView: NSStackView {
     override func layout() {
         super.layout()
         updateRowHeights()
-    }
-
-    private func updateRowHeights() {
-        guard !isMeasuring, card.bounds.height > 0 else { return }
-        let visible = rowList.rows.count
-        guard visible > 0 else { return }
-        isMeasuring = true
-        defer { isMeasuring = false }
-        let body = card.body
-        // 注意要排除 spacer 自己：把它的当前高度算进 used 会形成自反馈（行高被压在 35pt 不动）
-        let siblings = body.arrangedSubviews.filter {
-            $0 !== rowList && $0 !== spacer && !$0.isHidden
-        }
-        // 可见段之间的间距：兄弟块 N 个 + 行列表 + spacer 自身
-        let gaps = CGFloat(siblings.count + 1) * body.spacing
-        let used = siblings.reduce(CGFloat(0)) { $0 + $1.frame.height } + gaps
-        let available = max(0, body.bounds.height - used)
-        // 行间距从可用高度里先扣，再均分给行——与改造前 fillEqually 的行高口径一致
-        // （否则 2 行时行高会比旧版多 1pt，行高台账对不上）
-        let spacing = rowList.rowSpacing
-        let usable = max(0, available - spacing * CGFloat(max(visible - 1, 0)))
-        let rowHeight = min(Self.maxRowHeight,
-                            max(Self.minRowHeight, usable / CGFloat(visible)))
-        if abs(rowList.rowHeight - rowHeight) > 0.5 {
-            rowList.rowHeight = rowHeight
-        }
-        let total = DrawnRowLayout.contentHeight(rowCount: visible,
-                                                 rowHeight: rowHeight,
-                                                 rowSpacing: rowList.rowSpacing)
-        if let rowsHeight, abs(rowsHeight.constant - total) > 0.5 {
-            rowsHeight.constant = total
-        }
-        if abs((spacerHeight?.constant ?? -1) - max(0, available - total)) > 0.5 {
-            spacerHeight?.constant = max(0, available - total)
-        }
     }
 
     // MARK: 渲染
@@ -251,11 +235,15 @@ final class TokenRankingScreenView: NSStackView {
         summaryGrid.isHidden = visibleRowCount > 7
         noteView.isHidden = visibleRowCount > 7
         updateSummary(totals)
+        // 卡面只放单行短口径；完整口径（含「去重 / 分母 / 跟随范围」）走悬停与读屏，
+        // 否则 385pt 卡高里它会被压成 1 行再按词硬切、留下半句
+        let fullNote: String
         switch dimension {
-        case .tools: noteView.update(TokenToolRanking.note(range: model.range))
-        case .projects: noteView.update(copy.projectsNote)
-        case .models: noteView.update(copy.modelsNote)
+        case .tools: fullNote = TokenToolRanking.note(range: model.range)
+        case .projects: fullNote = copy.projectsNote
+        case .models: fullNote = copy.modelsNote
         }
+        noteView.update(dimension.shortNote(range: model.range), full: fullNote)
         setAccessibilityLabel(dimension.cardAccessibility(range: model.range))
         layoutSubtreeIfNeeded()
         updateRowHeights()

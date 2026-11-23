@@ -99,7 +99,6 @@ enum TokenPaneStyle {
     static let bigRingSize: CGFloat = PaneCardStyle.bigRingSize
     static let bigRingWidth: CGFloat = PaneCardStyle.bigRingWidth
     static let usageChartHeight: CGFloat = PaneCardStyle.usageChartHeight
-    static let usageTrendHeight: CGFloat = PaneCardStyle.usageTrendHeight
     static let stackBarHeight: CGFloat = 7
     static let pairLineInset: CGFloat = 1.8
     static let heroHeight: CGFloat = PaneCardStyle.heroHeight

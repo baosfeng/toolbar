@@ -16,16 +16,17 @@ extension TokenPaneSnapshot {
     /// 二级页文件后缀（与页面名一一对应）
     static func detailSlug(_ kind: TokenDetailKind) -> String {
         switch kind {
+        case .cache: return "cache"
         case .hourly: return "hourly"
         case .bucket: return "bucket"
         case .trend: return "trend"
         }
     }
 
-    /// 三张二级页各截「顶部 / 滚到底部」两张，并导出文档高度与视口高度
+    /// 四张二级页各截「顶部 / 滚到底部」两张，并导出文档高度与视口高度
     ///
-    /// 缓存 / 按项目 / 按模型三种内容已并入缓存屏与排行屏（取证见 +Cache 与 +Distro），
-    /// 这里只留仍然存在的三个覆盖式二级页。
+    /// 缓存命中原先是一整屏（取证在 +Cache），两屏收敛后降级为二级页，改由这里覆盖。
+    /// 按项目 / 按模型没有独立页，它们是分布屏内的维度分段（取证见 +Distro）。
     static func captureDetailPages(directory: URL, snapshot: HarnessUsageSnapshot) {
         var lines: [String] = []
         for kind in TokenDetailKind.allCases {

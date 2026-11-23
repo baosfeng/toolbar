@@ -72,6 +72,11 @@ package final class PaneHeaderRowView: NSView {
         updateAccessibilityLabel()
     }
 
+    /// 右侧口径文字的颜色（默认三级色；告警态由调用方染成告警色）
+    package func setMetaColor(_ color: NSColor) {
+        metaLabel.textColor = color
+    }
+
     /// 用控件替换左侧页名（Token 页的来源切换器）
     ///
     /// 不调用时页名标签原样显示，其余四页的页头几何零变化；控件插在同一行首位、

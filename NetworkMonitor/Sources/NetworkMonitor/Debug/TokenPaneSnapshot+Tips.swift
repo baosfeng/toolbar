@@ -23,7 +23,7 @@ extension TokenPaneSnapshot {
             let panel = MenuPanelView.evidencePanel()
             panel.updateToken(snapshot, notifySize: false)
             panel.select(tab: .token)
-            panel.tokenPane.selectScreenForSnapshot(.ranking)
+            panel.tokenPane.selectScreenForSnapshot(.distro)
             panel.tokenPane.rankScreen.setDimensionForSnapshot(dimension)
             if let model = panel.tokenPane.lastModel { panel.tokenPane.rankScreen.update(model: model) }
             panel.layoutSubtreeIfNeeded()

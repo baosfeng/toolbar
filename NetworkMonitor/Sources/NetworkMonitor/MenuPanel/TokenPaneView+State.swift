@@ -41,11 +41,7 @@ extension TokenPaneView {
             emptyView.isHidden = true
             // 重扫时索引被清空 → 数据为空 → 落到这一支；临时提示（过程 / 回执）仍要显示，
             // 否则用户点了刷新看不到任何反应（旧实现正是在这里把标签一律收起来）
-            if durableNote != nil {
-                applyDurableNote()
-            } else {
-                indexLabel.isHidden = true
-            }
+            if durableNote == nil { clearIndexNote() }
             resetDetail()
             onContentChanged?()
             return
@@ -62,28 +58,22 @@ extension TokenPaneView {
             } else {
                 emptyView.update(reason: nil)
             }
-            indexLabel.isHidden = true
+            clearIndexNote()
             resetDetail()
             onContentChanged?()
             return
         }
-        // 有数据但索引失败：保留数据，同时把失败原因挂到索引标签上，不让错误静默
-        // 每次快照刷新先把标签颜色复位：重扫回执可能把它染成了告警色
-        indexLabel.textColor = TokenPaneStyle.tertiaryText
+        // 有数据但索引失败：保留数据，同时把失败原因挂到页头 meta 位，不让错误静默
         if case .failed(let message) = snapshot.indexingState {
-            indexLabel.isHidden = false
-            indexLabel.stringValue = "索引失败：\(message)"
-        } else {
+            setIndexNote("索引失败：\(message)", isWarning: true)
+        } else if durableNote != nil {
             // 常驻提示（重扫过程 / 回执）优先：它在下一轮索引开始时才被清掉
-            if durableNote != nil {
-                applyDurableNote()
-            } else {
-                indexLabel.isHidden = !indexing
-                if indexing, let progress {
-                    indexLabel.stringValue = "索引中 \(progress.completedFiles)/\(progress.totalFiles)"
-                        + " · " + String(progress.linesRead) + " 行"
-                }
-            }
+            applyDurableNote()
+        } else if indexing, let progress {
+            setIndexNote("索引中 \(progress.completedFiles)/\(progress.totalFiles)"
+                + " · " + String(progress.linesRead) + " 行", isWarning: false)
+        } else {
+            clearIndexNote()
         }
         render()
     }
@@ -118,7 +108,7 @@ extension TokenPaneView {
         dataStack.isHidden = true
         loadingView.isHidden = true
         emptyView.isHidden = true
-        indexLabel.isHidden = true
+        clearIndexNote()
         resetDetail()
     }
 

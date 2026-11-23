@@ -8,7 +8,7 @@ import NetworkMonitorUI
 ///
 /// 所有数值都来自 TokenPaneModel（派生计算在 TokenDerive），这里只做「模型 → 控件」的搬运，
 /// 不在视图层重算占比 / 窗口 / 环比，保证同一份数据在各区块口径一致。
-/// 屏显隐只在这里切：四个屏栈里只有当前屏可见，切屏后由 onContentChanged 让面板重算高度。
+/// 屏显隐只在这里切：两个屏栈里只有当前屏可见，切屏后由 onContentChanged 让面板重算高度。
 extension TokenPaneView {
 
     func render() {
@@ -19,7 +19,7 @@ extension TokenPaneView {
             selectSource(nil)
             return
         }
-        // 四屏与二级页都吃这一份收窄快照：换来源 = 换数据，不是换标签
+        // 两屏与二级页都吃这一份收窄快照：换来源 = 换数据，不是换标签
         guard let snapshot = scopedSnapshot else { return }
         let model = TokenPaneModel.make(snapshot: snapshot,
                                         range: range,
@@ -71,25 +71,11 @@ extension TokenPaneView {
         hourLegend.update(items: legendItems(for: model, comparing: comparing,
                                              lineColor: hourBars.lineColor))
 
-        trendTitle.stringValue = model.trendTitle
-        trendMeta.stringValue = model.trendMeta
-        trendAction.update(title: "切：" + (trendMode == .stack ? "分线" : "面积"))
-        let trendValues = trendMode == .stack
-            ? model.trendBuckets.map { Double($0.total) }
-            : model.trendBuckets.map { Double($0.cache) }
-        trendSpark.update(values: trendValues, accessibility: "近 14 天每日 Token 总量走势")
-
-        // 概览屏的缓存命中条：与缓存屏同一份 cachePage（小环 / 命中率 / 三个值）
+        // 总览屏的缓存命中条：数据取同一份 cachePage（小环 / 命中率 / 三个值），
+        // 整条可点进缓存二级页 —— 原先的独立「缓存」屏就降级到这一条 + 那一页
         cacheHitStrip.update(page: model.cachePage)
 
-        // 概览屏的迷你走势：同一条天序列（跟着主面板总量，不另算口径）
-        overviewTrendMeta.stringValue = model.trendMeta
-        overviewTrendSpark.update(values: model.trendBuckets.map { Double($0.total) },
-                                  accessibility: "近 14 天每日 Token 总量走势（概览）")
-
-        // 缓存屏 / 排行屏：全部数值取自 Core 的 cachePage 与 projects / models，
-        // 两个屏视图只做搬运（内容常驻，切屏不重建，避免丢焦点与闪一下）
-        cacheScreen.update(page: model.cachePage)
+        // 分布屏：数值取自 Core 的 projects / models / tools（内容常驻，切屏不重建）
         rankScreen.update(model: model)
 
         if let compare = model.compare {
@@ -105,7 +91,7 @@ extension TokenPaneView {
             compareCard.isHidden = true
         }
 
-        // 页脚状态带：三屏各一个实例，同一份 model.stateBand（不各算一套）；
+        // 页脚状态带：两屏各一个实例，同一份 model.stateBand（不各算一套）；
         // 语气色由 TokenStateItem.toneColor 映射成四族墨色，交给共用状态带
         let bandItems: [(key: String, value: String?, tone: NSColor?)] = model.stateBand.map {
             (key: $0.title, value: $0.value, tone: $0.toneColor)
@@ -132,7 +118,7 @@ extension TokenPaneView {
 
     // MARK: - 屏显隐
 
-    /// 按当前屏切显隐：四个屏外框只有一个可见（隐藏的外框由 NSStackView 折叠，不占高度）
+    /// 按当前屏切显隐：两个屏外框只有一个可见（隐藏的外框由 NSStackView 折叠，不占高度）
     ///
     /// 外框高度一致，所以切屏只换内容，不换面板高度。
     func applyScreenVisibility() {

@@ -38,26 +38,26 @@ extension TokenDetailPaneView {
         overrideCrumb("/ 按小时 · \(index) 时", meta: scope.title + " · 24 桶")
 
         let split = TokenStackBarView(height: 6)
-        split.update(shares: splitShares(current),
+        split.update(shares: TokenContentKit.splitShares(current),
                      colors: [TokenPaneStyle.cacheStackFill, TokenPaneStyle.uncachedColor, TokenPaneStyle.outputColor],
                      accessibility: "第 \(index) 时三段拆分")
         let splitCard = TokenBoxView()
         splitCard.setRows([
-            head("三段拆分 · \(index) 时", meta: "占" + scope.title + "全天 "
+            TokenContentKit.head("三段拆分 · \(index) 时", meta: "占" + scope.title + "全天 "
                 + TokenFormatting.percent(share)),
             split,
-            twoColumn([
-                keyRow("缓存读", TokenFormatting.tokens(current.cache), color: TokenPaneStyle.cacheInk),
-                keyRow("未缓存", TokenFormatting.tokens(current.uncached), color: TokenPaneStyle.uncachedInk),
-                keyRow("输出", TokenFormatting.tokens(current.output)),
-                keyRow("请求数", TokenFormatting.grouped(current.request), color: TokenPaneStyle.requestInk),
+            TokenContentKit.twoColumn([
+                TokenContentKit.keyRow("缓存读", TokenFormatting.tokens(current.cache), color: TokenPaneStyle.cacheInk),
+                TokenContentKit.keyRow("未缓存", TokenFormatting.tokens(current.uncached), color: TokenPaneStyle.uncachedInk),
+                TokenContentKit.keyRow("输出", TokenFormatting.tokens(current.output)),
+                TokenContentKit.keyRow("请求数", TokenFormatting.grouped(current.request), color: TokenPaneStyle.requestInk),
             ]),
         ])
 
         let scale = Double(max(current.total, before.total, 1))
         let compareCard = TokenBoxView()
         compareCard.setRows([
-            head(scope.title + " \(index) 时 · vs " + scope.otherTitle + "同时段", meta: "总量 " + tokenDelta),
+            TokenContentKit.head(scope.title + " \(index) 时 · vs " + scope.otherTitle + "同时段", meta: "总量 " + tokenDelta),
             compareRow(name: scope.title + " tok", text: TokenFormatting.tokens(current.total),
                        fraction: Double(current.total) / scale, color: TokenPaneStyle.uncachedColor),
             compareRow(name: scope.otherTitle + " tok", text: TokenFormatting.tokens(before.total),
@@ -72,18 +72,18 @@ extension TokenDetailPaneView {
 
         let extraCard = TokenBoxView()
         extraCard.setRows([
-            twoColumn([
-                keyRow("占" + scope.title + "全天", TokenFormatting.percent(share)),
-                keyRow("24 桶排名", "\(ranking) / \(buckets.count)"),
-                keyRow("较同时段总量", tokenDelta),
-                keyRow("较同时段请求", requestDelta),
+            TokenContentKit.twoColumn([
+                TokenContentKit.keyRow("占" + scope.title + "全天", TokenFormatting.percent(share)),
+                TokenContentKit.keyRow("24 桶排名", "\(ranking) / \(buckets.count)"),
+                TokenContentKit.keyRow("较同时段总量", tokenDelta),
+                TokenContentKit.keyRow("较同时段请求", requestDelta),
             ]),
         ])
 
-        return [hero(TokenFormatting.tokens(current.total), unit: "tok / 时",
+        return [TokenContentKit.hero(TokenFormatting.tokens(current.total), unit: "tok / 时",
                      sub: scope.title + " \(index):00–\(index):59 · 三段相加 = 该小时总 tok"),
                 splitCard, compareCard, extraCard,
-                note("口径：按小时桶仅「今日」与「昨日」可得；历史日只有天粒度，所以 7 / 30 天那排柱点开的是日详情。三段相加 = 该小时总 tok，请求数与 tok 不同源，不做除法换算。")]
+                TokenContentKit.note("口径：按小时桶仅「今日」与「昨日」可得；历史日只有天粒度，所以 7 / 30 天那排柱点开的是日详情。三段相加 = 该小时总 tok，请求数与 tok 不同源，不做除法换算。")]
     }
 
     private func dayBucketRows(index: Int,
@@ -100,25 +100,25 @@ extension TokenDetailPaneView {
         overrideCrumb("/ 按天 · " + current.label, meta: range.title + " · 天粒度")
 
         let split = TokenStackBarView(height: 6)
-        split.update(shares: splitShares(current),
+        split.update(shares: TokenContentKit.splitShares(current),
                      colors: [TokenPaneStyle.cacheStackFill, TokenPaneStyle.uncachedColor, TokenPaneStyle.outputColor],
                      accessibility: current.label + " 三段拆分")
         let splitCard = TokenBoxView()
         splitCard.setRows([
-            head("三段拆分 · 日汇总", meta: "占" + range.title + " " + TokenFormatting.percent(share)),
+            TokenContentKit.head("三段拆分 · 日汇总", meta: "占" + range.title + " " + TokenFormatting.percent(share)),
             split,
-            twoColumn([
-                keyRow("缓存读", TokenFormatting.tokens(current.cache), color: TokenPaneStyle.cacheInk),
-                keyRow("未缓存", TokenFormatting.tokens(current.uncached), color: TokenPaneStyle.uncachedInk),
-                keyRow("输出", TokenFormatting.tokens(current.output)),
-                keyRow("请求数", TokenFormatting.grouped(current.request), color: TokenPaneStyle.requestInk),
+            TokenContentKit.twoColumn([
+                TokenContentKit.keyRow("缓存读", TokenFormatting.tokens(current.cache), color: TokenPaneStyle.cacheInk),
+                TokenContentKit.keyRow("未缓存", TokenFormatting.tokens(current.uncached), color: TokenPaneStyle.uncachedInk),
+                TokenContentKit.keyRow("输出", TokenFormatting.tokens(current.output)),
+                TokenContentKit.keyRow("请求数", TokenFormatting.grouped(current.request), color: TokenPaneStyle.requestInk),
             ]),
         ])
 
         let scale = Double(max(current.total, before.total, 1))
         let compareCard = TokenBoxView()
         compareCard.setRows([
-            head("vs 前一日", meta: "总量 " + tokenDelta),
+            TokenContentKit.head("vs 前一日", meta: "总量 " + tokenDelta),
             compareRow(name: "该日 tok", text: TokenFormatting.tokens(current.total),
                        fraction: Double(current.total) / scale, color: TokenPaneStyle.uncachedColor),
             compareRow(name: "前一日 tok", text: TokenFormatting.tokens(before.total),
@@ -133,18 +133,18 @@ extension TokenDetailPaneView {
 
         let extraCard = TokenBoxView()
         extraCard.setRows([
-            twoColumn([
-                keyRow("占窗口", TokenFormatting.percent(share)),
-                keyRow("窗口内排名", "\(ranking) / \(buckets.count)"),
-                keyRow("较前一日总量", tokenDelta),
-                keyRow("较前一日请求", requestDelta),
+            TokenContentKit.twoColumn([
+                TokenContentKit.keyRow("占窗口", TokenFormatting.percent(share)),
+                TokenContentKit.keyRow("窗口内排名", "\(ranking) / \(buckets.count)"),
+                TokenContentKit.keyRow("较前一日总量", tokenDelta),
+                TokenContentKit.keyRow("较前一日请求", requestDelta),
             ]),
         ])
 
-        return [hero(TokenFormatting.tokens(current.total), unit: "tok / 日",
+        return [TokenContentKit.hero(TokenFormatting.tokens(current.total), unit: "tok / 日",
                      sub: current.label + " · 日汇总 · 与前一日对比（仅天粒度）"),
                 splitCard, compareCard, extraCard,
-                note(TokenDistroCopy.dayBucketNote)]
+                TokenContentKit.note(TokenDistroCopy.dayBucketNote)]
     }
 
     /// 对比行：实现在 TokenContentKit（缓存屏的对照块共用同一份）

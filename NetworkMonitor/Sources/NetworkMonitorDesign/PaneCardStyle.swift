@@ -122,9 +122,12 @@ package enum PaneCardStyle {
     package static let ringWidth: CGFloat = 3.6
     package static let bigRingSize: CGFloat = 72
     package static let bigRingWidth: CGFloat = 7
-    /// 用量屏主图 / 天趋势高度（整屏独占）
-    package static let usageChartHeight: CGFloat = 160
-    package static let usageTrendHeight: CGFloat = 120
+    /// Token 页总览屏主图柱高
+    ///
+    /// 两屏收敛后主图与 Hero / 四族卡 / 缓存条同屏，柱高受 385pt 内容预算约束：
+    /// 8（内边距）+ 13（卡头）+ 14（meta 行）+ 柱 + 11（轴）+ 12（图例）+ 8（行距）= 163pt 卡高，
+    /// 于是柱高 = 96。原先独立「用量」屏时是 160，那是因为整屏只放这一张图。
+    package static let usageChartHeight: CGFloat = 96
 
     // MARK: 卡片底色（转发主题）
 

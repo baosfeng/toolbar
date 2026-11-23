@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 
 // MARK: - 二级页：按小时 / 单桶 / 天趋势
 //
@@ -28,14 +29,14 @@ extension TokenDetailPaneView {
 
         let chartCard = TokenBoxView()
         chartCard.setRows([
-            head(hourScope.title + " 24 小时", meta: "峰值 " + TokenFormatting.tokens(peak.bucket.total)),
+            TokenContentKit.head(hourScope.title + " 24 小时", meta: "峰值 " + TokenFormatting.tokens(peak.bucket.total)),
             bars,
-            axisView(buckets.map { $0.label }),
-            twoColumn([
-                keyRow("缓存读", TokenFormatting.tokens(total.cache), color: TokenPaneStyle.cacheInk),
-                keyRow("未缓存", TokenFormatting.tokens(total.uncached), color: TokenPaneStyle.uncachedInk),
-                keyRow("输出", TokenFormatting.tokens(total.output)),
-                keyRow("请求", TokenFormatting.grouped(total.request), color: TokenPaneStyle.requestInk),
+            TokenContentKit.axisView(buckets.map { $0.label }),
+            TokenContentKit.twoColumn([
+                TokenContentKit.keyRow("缓存读", TokenFormatting.tokens(total.cache), color: TokenPaneStyle.cacheInk),
+                TokenContentKit.keyRow("未缓存", TokenFormatting.tokens(total.uncached), color: TokenPaneStyle.uncachedInk),
+                TokenContentKit.keyRow("输出", TokenFormatting.tokens(total.output)),
+                TokenContentKit.keyRow("请求", TokenFormatting.grouped(total.request), color: TokenPaneStyle.requestInk),
             ]),
         ])
 
@@ -50,7 +51,7 @@ extension TokenDetailPaneView {
         pairBars.heightAnchor.constraint(equalToConstant: 40).isActive = true
         let pairCard = TokenBoxView()
         pairCard.setRows([
-            head("今日 / 昨日 · 请求数",
+            TokenContentKit.head("今日 / 昨日 · 请求数",
                  meta: "今日 " + TokenFormatting.grouped(TokenDerive.sum(TokenDerive.todayBuckets(snapshot)).request)
                      + " / 昨日 " + TokenFormatting.grouped(TokenDerive.sum(TokenDerive.yesterdayBuckets(snapshot)).request)),
             pairBars,
@@ -58,18 +59,18 @@ extension TokenDetailPaneView {
 
         let statCard = TokenBoxView()
         statCard.setRows([
-            twoColumn([
-                keyRow("峰值时段", "\(peak.index) 时"),
-                keyRow("峰值 tok/h", TokenFormatting.tokens(peak.bucket.total)),
-                keyRow("均值 tok/h", TokenFormatting.tokens(total.total / 24)),
-                keyRow("缓存占比", TokenFormatting.percent(TokenDerive.hitRate(total)), color: TokenPaneStyle.cacheInk),
+            TokenContentKit.twoColumn([
+                TokenContentKit.keyRow("峰值时段", "\(peak.index) 时"),
+                TokenContentKit.keyRow("峰值 tok/h", TokenFormatting.tokens(peak.bucket.total)),
+                TokenContentKit.keyRow("均值 tok/h", TokenFormatting.tokens(total.total / 24)),
+                TokenContentKit.keyRow("缓存占比", TokenFormatting.percent(TokenDerive.hitRate(total)), color: TokenPaneStyle.cacheInk),
             ]),
         ])
 
-        return [hero(TokenFormatting.tokens(total.total), unit: "tok",
+        return [TokenContentKit.hero(TokenFormatting.tokens(total.total), unit: "tok",
                      sub: hourScope.title + " 24 桶 · 缓存读 / 未缓存输入 / 输出 · 昨日同时段可对比"),
                 chartCard, pairCard, statCard,
-                note("口径：按小时桶仅「今日」可得（昨日同时段真算同比）；历史日只有天粒度。三段相加 = 当日总 tok，请求数与 tok 不同源，不做除法换算。")]
+                TokenContentKit.note("口径：按小时桶仅「今日」可得（昨日同时段真算同比）；历史日只有天粒度。三段相加 = 当日总 tok，请求数与 tok 不同源，不做除法换算。")]
     }
 
     // MARK: 天趋势
@@ -90,9 +91,9 @@ extension TokenDetailPaneView {
 
         let chartCard = TokenBoxView()
         chartCard.setRows([
-            head("每日总 tok", meta: "峰 " + TokenFormatting.tokens(Int(peak))),
+            TokenContentKit.head("每日总 tok", meta: "峰 " + TokenFormatting.tokens(Int(peak))),
             chart,
-            axisView(["30 天前", "23 天前", "16 天前", "9 天前", "今日"]),
+            TokenContentKit.axisView(["30 天前", "23 天前", "16 天前", "9 天前", "今日"]),
         ])
 
         let ranking: [NSView] = buckets.enumerated()
@@ -102,24 +103,24 @@ extension TokenDetailPaneView {
                 let label = pair.offset == buckets.count - 1
                     ? "今日"
                     : "\(buckets.count - 1 - pair.offset) 天前"
-                return keyRow(label, TokenFormatting.tokens(pair.element.total))
+                return TokenContentKit.keyRow(label, TokenFormatting.tokens(pair.element.total))
             }
         let topCard = TokenBoxView()
-        topCard.setRows([head("日总量 Top 5", meta: "tok")] + ranking)
+        topCard.setRows([TokenContentKit.head("日总量 Top 5", meta: "tok")] + ranking)
 
         let statCard = TokenBoxView()
         statCard.setRows([
-            twoColumn([
-                keyRow("日均", TokenFormatting.tokens(average)),
-                keyRow("最高", TokenFormatting.tokens(Int(peak))),
-                keyRow("最低", TokenFormatting.tokens(Int(low))),
-                keyRow("有记录天数", "\(days) / \(buckets.count)"),
+            TokenContentKit.twoColumn([
+                TokenContentKit.keyRow("日均", TokenFormatting.tokens(average)),
+                TokenContentKit.keyRow("最高", TokenFormatting.tokens(Int(peak))),
+                TokenContentKit.keyRow("最低", TokenFormatting.tokens(Int(low))),
+                TokenContentKit.keyRow("有记录天数", "\(days) / \(buckets.count)"),
             ]),
         ])
 
-        return [hero(TokenFormatting.tokens(total), unit: "tok / 30 天",
+        return [TokenContentKit.hero(TokenFormatting.tokens(total), unit: "tok / 30 天",
                      sub: "按天序列 · 索引里能取到的最长 30 天 · 今日那根 = 主面板今日总量"),
                 chartCard, topCard, statCard,
-                note("口径：天粒度序列在索引里最多回溯 33 天，本页固定取最近 30 天。「今日」那根柱 = 主面板今日总量。不给跨设备合计。")]
+                TokenContentKit.note("口径：天粒度序列在索引里最多回溯 33 天，本页固定取最近 30 天。「今日」那根柱 = 主面板今日总量。不给跨设备合计。")]
     }
 }

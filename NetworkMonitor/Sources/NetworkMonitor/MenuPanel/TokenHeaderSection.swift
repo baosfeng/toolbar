@@ -54,7 +54,8 @@ extension TokenPaneView {
     /// 页名由页头左侧的来源切换器承担（单源时直接写该来源名），右侧口径只放会话数。
     func syncHeader(with model: TokenPaneModel, options: [TokenSourceID]) {
         sourceSelector.update(current: source, options: options)
-        headerView.updateMeta(headerMeta(from: model))
+        // 索引提示优先：它在页头 meta 位常驻（两屏内容预算已填满，独立一行会顶出滚动条）
+        headerView.updateMeta(indexNote ?? headerMeta(from: model))
         // 每次渲染都重设：页头视图的默认无障碍文案由页名 + 口径文字拼成，
         // 只在装配时设一次会被后续 updateMeta 覆盖掉，读屏就听不到时区口径了
         headerView.setAccessibilityLabel(model.hostLabel + "。" + TokenTimeZoneNote.text)

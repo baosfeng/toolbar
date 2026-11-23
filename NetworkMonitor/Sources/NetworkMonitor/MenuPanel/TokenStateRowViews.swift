@@ -58,12 +58,14 @@ final class TokenNoteView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
-    func update(_ text: String) {
+    func update(_ text: String, full: String? = nil) {
         label.stringValue = text
-        // 限行时正文会被省略，完整口径靠悬停与读屏补全
+        // 限行时正文会被省略，完整口径靠悬停与读屏补全；
+        // 卡面本身已是短口径时（full 非 nil），悬停与读屏必须给完整版，不能重复短的那句
         if truncated {
-            label.toolTip = text
-            setAccessibilityLabel(text)
+            let tip = full ?? text
+            label.toolTip = tip
+            setAccessibilityLabel(tip)
         }
     }
 }

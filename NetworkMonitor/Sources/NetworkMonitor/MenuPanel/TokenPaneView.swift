@@ -8,15 +8,15 @@ import NetworkMonitorUI
 /// Token 消耗页 —— 菜单面板第 5 个 tab
 ///
 /// 数据由 HarnessUsageSnapshot 注入（update），本视图不直接访问数据库或索引服务。
-/// 版式（改前 8 个区块一屏到底，520pt 内既看不到图表也看不到分布）：
-/// 页头（主机 + 范围 + 刷新）→ 屏切换条（概览 / 用量 / 缓存 / 排行）→ 当前屏内容。
-/// 区块归属由 TokenScreen 契约给出（NetworkMonitorUI，纯逻辑可断言）；各屏高度不同，
-/// 切屏后走 onContentChanged 让面板重算 popover 尺寸。
-/// 二级页保留三个（单桶 / 按小时三段 / 天趋势）；「缓存命中 / 按项目 / 按模型」
-/// 已并入缓存屏与排行屏，入口与枚举 case 一并删除。
+/// 版式（v3 两屏）：页头（来源 + 会话数 + 范围 + 刷新）→ 屏切换条（总览 / 分布）→ 当前屏内容。
+/// 收敛依据：改前 4 屏每屏只用掉约 300/409pt，下方常年空白、看全数据要切三次屏。
+/// 缓存命中从独立屏降级为二级页（TokenDetailKind.cache），主面板只留一条可点的命中率条。
+/// 区块归属由 TokenScreen 契约给出（NetworkMonitorUI，纯逻辑可断言）；两个屏高度一致，
+/// 切屏走 onContentChanged 让面板重算 popover 尺寸。
+///
 /// 成员分布：页头装配与来源同步在 TokenHeaderSection.swift，状态机与二级页在 +State.swift，
-/// 布局在 +Layout.swift，渲染在 +Render.swift，
-/// 屏内容在 TokenScreenContent*.swift，二级页在 TokenDetailPages*.swift。
+/// 布局在 +Layout.swift，渲染在 +Render.swift，屏内容在 TokenScreenContent*.swift，
+/// 二级页在 TokenDetailPages*.swift。
 final class TokenPaneView: MenuPanelPaneView {
 
     // MARK: - 回调
@@ -36,7 +36,7 @@ final class TokenPaneView: MenuPanelPaneView {
 
     // 下面五个交互状态由 wireActions（TokenPaneView+Interaction.swift）写入：
     // 跨文件访问故去掉 private(set)，写入路径只有那一个扩展与 DEBUG 取证入口。
-    /// 当前来源（nil = 全部 / 跨源合计）—— 页头切换器写入，四屏与二级页共用同一口径
+    /// 当前来源（nil = 全部 / 跨源合计）—— 页头切换器写入，两屏与二级页共用同一口径
     var source: TokenSourceID?
     var range: TokenRange = .today
     var hourScope: TokenHourScope = .today
@@ -55,7 +55,7 @@ final class TokenPaneView: MenuPanelPaneView {
 
     /// 最近一帧快照（渲染 / 二级页共用，跨文件访问故为 internal）
     var snapshot: HarnessUsageSnapshot?
-    /// 当前来源收窄后的快照 —— 状态机 / 四屏 / 二级页的唯一数据入口
+    /// 当前来源收窄后的快照 —— 状态机 / 两屏 / 二级页的唯一数据入口
     ///
     /// 收窄是全同形的（日/时桶、项目/模型、可用性诊断都在内），所以「跟随来源」不必
     /// 在各区块里逐处判断，只要换这一个入口。
@@ -70,11 +70,18 @@ final class TokenPaneView: MenuPanelPaneView {
 
     /// 范围分段（窗口边界按 Asia/Shanghai 切分，页头时区提示里写明）
     let rangeControl = TokenSegmentedControl(titles: TokenRange.allCases.map { $0.title })
-    /// 屏切换条（页头下一行，四段等宽）
+    /// 屏切换条（页头下一行，两段等宽）
     let screenControl = TokenSegmentedControl(titles: TokenScreen.titles, expands: true)
     let refreshRow = TokenIconButtonRow(symbolName: "arrow.clockwise")
-    let indexLabel = MenuPanelLabel.text("", font: TokenPaneStyle.metaFont,
-                                        color: TokenPaneStyle.tertiaryText)
+    /// 索引进度 / 失败原因 / 重扫回执 —— 显示在**页头 meta 位**（会话数那一格）
+    ///
+    /// 改前它是一条独立标签、排在屏切换条上方：索引期间多出一行（约 15pt），
+    /// 两屏内容预算 385pt 已经填满，一出现就顶出外框滚动条、把页脚状态带挤没。
+    /// 页头 meta 位本来就写「2218 会话」这类口径文字，索引中改写成「索引中 2/6 · 500 行」
+    /// 语义也顺（都是「当前看到的数据是什么状态」），且零高度成本。
+    var indexNote: String?
+    /// 索引提示是否为告警语气（失败 / 重扫未执行）
+    var indexNoteIsWarning = false
     /// 页头行（来源切换器 → 会话数 → 范围分段 → 刷新），右侧口径文字与时区提示都挂在这条上
     ///
     /// 页名位由来源切换器替换（buildHeader 调 setTitleControl）；骨架本身没动，页头仍是 22pt。
@@ -84,25 +91,27 @@ final class TokenPaneView: MenuPanelPaneView {
 
     // MARK: - 分区
 
-    /// 概览屏 Hero（当前范围三项合计 + 较昨日 + 实时）
+    /// 总览屏 Hero（当前范围三项合计 + 较昨日 + 实时）
     let heroView = TokenHeroView()
     lazy var familyCards = TokenMetric.allCases.map { metric in
         TokenFamilyCardView(metric: metric, onClick: {})
     }
     /// 四族卡矩阵容器（2×2）
     let familyGrid = NSStackView()
-    /// 屏页脚状态带：概览 / 用量 / 排行各一个实例，都用同一份 model.stateBand 更新
+    /// 屏页脚状态带：两屏各一个实例，都用同一份 model.stateBand 更新
     ///
     /// 用的是五页共用的 `PaneStateBandView`（底 / 高度 / 内边距 / 圆角 / 键值字号走
     /// `PaneBandChrome`）；Token 页此前那份 `TokenStateBandView` 已删除，只保留语气色映射。
     let overviewBand = PaneStateBandView()
-    let usageBand = PaneStateBandView()
-    let rankingBand = PaneStateBandView()
-    /// 三个状态带实例（渲染时统一刷新；缓存屏页脚是口径说明，没有状态带）
-    var stateBands: [PaneStateBandView] { [overviewBand, usageBand, rankingBand] }
+    let distroBand = PaneStateBandView()
+    /// 两个状态带实例（渲染时统一刷新）
+    var stateBands: [PaneStateBandView] { [overviewBand, distroBand] }
 
-    /// 用量屏：主图卡（整屏独占，柱高 160pt + 左侧刻度与网格；每根柱可点进单桶页）
-    let hourCard = TokenCardRow(height: 230, background: TokenPaneStyle.cardFill)
+    /// 总览屏：主图卡（24 桶 / 按天 N 桶，柱高 96pt；每根柱可点进单桶页）
+    ///
+    /// 高度 = Hero 46 + 四族 122 + 缓存条 42 + 3×间距 12 + 主图 163 = 385pt（= 409 − 状态带 20 − 间距 4），
+    /// 恰好填满屏内容预算、不触发屏内滚动。
+    let hourCard = TokenCardRow(height: 163, background: TokenPaneStyle.cardFill)
     let hourTitle = MenuPanelLabel.text("", font: TokenPaneStyle.cardHeadTitleFont,
                                         color: TokenPaneStyle.secondaryText)
     let hourMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
@@ -111,38 +120,24 @@ final class TokenPaneView: MenuPanelPaneView {
     let daySegment = TokenSegmentedControl(titles: TokenHourScope.allCases.map { $0.title })
     /// 主图形态切换（堆叠 / 对比）——收成单按钮，省掉第二个分段控件的宽度
     let viewAction = TokenTextButton(title: "切：对比")
+    /// 进「天趋势」二级页（原先靠用量屏的趋势卡承担，两屏收敛后改由主图卡头承担）
+    let trendAction = TokenTextButton(title: "14 天 ›")
     let hourBars = TokenBarsView()
     let hourAxis = TokenAxisView()
     let hourLegend = TokenLegendRowView()
 
-    /// 概览屏：缓存命中紧凑条（小环 + 命中率大字 + 三个值，数据取 model.cachePage）
+    /// 总览屏：缓存命中紧凑条（小环 + 命中率大字 + 三个值，数据取 model.cachePage）
+    ///
+    /// 整条可点 → 打开缓存命中二级页（环 / 命中率走势 / 本周期对照 / 样本统计 + 口径说明）。
     lazy var cacheHitStrip = TokenCacheHitStripView(onClick: { [weak self] in
-        self?.selectScreen(.cache)
+        self?.openDetail(.cache)
     })
 
-    /// 概览屏：近 14 天迷你走势（56pt 高，补概览密度；整高的天趋势卡在用量屏）
-    let overviewTrendCard = TokenCardRow(height: 79, background: TokenPaneStyle.cardFill)
-    let overviewTrendTitle = MenuPanelLabel.text("近 14 天 · 固定",
-                                                 font: TokenPaneStyle.cardHeadTitleFont,
-                                                 color: TokenPaneStyle.secondaryText)
-    let overviewTrendMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
-                                                color: TokenPaneStyle.tertiaryText)
-    let overviewTrendSpark = TokenSparkView(height: 56,
-                                            stroke: TokenPaneStyle.uncachedColor,
-                                            fill: TokenPaneStyle.uncachedColor)
-
-    /// 用量屏：天趋势卡（整屏独占，走势给足 88pt）
-    let trendCard = TokenCardRow(height: 144, background: TokenPaneStyle.cardFill)
-    let trendTitle = MenuPanelLabel.text("天趋势 · 固定 14 天", font: TokenPaneStyle.cardHeadTitleFont,
-                                         color: TokenPaneStyle.secondaryText)
-    let trendMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
-                                        color: TokenPaneStyle.tertiaryText)
-    let trendAction = TokenTextButton(title: "切：分线")
-    let trendSpark = TokenSparkView(height: TokenPaneStyle.usageTrendHeight,
-                                    stroke: TokenPaneStyle.uncachedColor,
-                                    fill: TokenPaneStyle.uncachedColor)
-
-    /// 用量屏：今日 vs 昨日同期（无对照窗口时整卡隐藏，不编数）
+    /// 分布屏（维度分段 + 占比条 + Top 8 两行式行 + 汇总），自带内容栈
+    ///
+    /// 卡高 = 屏内容预算 385 − 对照卡 50 − 间距 4 = 331pt。
+    let rankScreen = TokenRankingScreenView(cardHeight: TokenPaneView.rankingCardHeight)
+    /// 分布屏：今日 vs 昨日同期（无对照窗口时整卡隐藏，不编数）
     let compareCard = TokenCardRow(height: 50, background: TokenPaneStyle.cardFill)
     let compareTotal = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
                                            color: TokenPaneStyle.tertiaryText)
@@ -151,22 +146,21 @@ final class TokenPaneView: MenuPanelPaneView {
     let compareCurrentRow = TokenCompareRowView()
     let comparePreviousRow = TokenCompareRowView()
 
-    /// 缓存屏（大环 + 四行拆分 / 趋势 / 对照 / 统计 + 口径），自带内容栈
-    let cacheScreen = TokenCacheScreenView()
-    /// 排行屏（维度分段 + 占比条 + Top 8 两行式行 + 计数），自带内容栈
-    let rankScreen = TokenRankingScreenView(cardHeight: TokenPaneView.rankingCardHeight)
-    /// 四个屏的外框（顺序 = TokenScreen.allCases；渲染按 screen 切显隐）
+    /// 两个屏的外框（顺序 = TokenScreen.allCases；渲染按 screen 切显隐）
     ///
-    /// 外框高度给死（screenHeight）→ 四屏 pane 高度一致 → 切屏时 popover 不跳高跳低；
-    /// 屏内 = 内容滚动区 + 页脚（状态带 / 口径说明），超高内容走屏内滚动。
+    /// 外框高度给死（screenHeight）→ 两屏 pane 高度一致 → 切屏时 popover 不跳高跳低；
+    /// 屏内 = 内容滚动区 + 页脚状态带，超高内容走屏内滚动。
     var screenFrames: [TokenScreenFrameView] = []
 
     /// 屏外框高度：520（popover 上限）− 顶 10 − 分页条 28 − 间距 12 − 底 12 − 页头 22 − 间隙 3
     /// − 屏切换条 20 − 屏间距 4 = 409；于是 pane = 458，desiredContentHeight 恰好 520（不再触发外框滚动）
     static let screenHeight: CGFloat = 409
 
-    /// 排行卡高度 = 外框 − 页脚状态带 − 间距：卡片撑到页脚上方，可见行均分这块高度
-    static let rankingCardHeight: CGFloat = screenHeight - PaneCardStyle.stateBandHeight - 4
+    /// 屏内容预算 = 外框 − 页脚状态带 − 间距（两屏都用到最后一 pt，不留尾巴）
+    static var screenContentHeight: CGFloat { screenHeight - PaneCardStyle.stateBandHeight - 4 }
+
+    /// 分布屏卡片高度 = 内容预算 − 对照卡 − 间距
+    static var rankingCardHeight: CGFloat { screenContentHeight - 50 - PaneCardStyle.cardSpacing }
 
     /// 二级页容器（覆盖在主面板之上，同一 Pane 内切换）
     let detailPane = TokenDetailPaneView()
@@ -210,14 +204,9 @@ final class TokenPaneView: MenuPanelPaneView {
             case .overview:
                 rows.append(contentsOf: familyCards)
                 rows.append(cacheHitStrip)
-                rows.append(overviewTrendCard)
-            case .usage:
                 if range == .today { rows.append(contentsOf: daySegment.focusableRows) }
                 rows.append(hourCard)
-                rows.append(trendCard)
-            case .cache:
-                rows.append(contentsOf: cacheScreen.focusableRows)
-            case .ranking:
+            case .distro:
                 rows.append(contentsOf: rankScreen.focusableRows)
             }
         }
@@ -236,7 +225,7 @@ final class TokenPaneView: MenuPanelPaneView {
 
     // MARK: - 屏切换
 
-    /// 切换屏：先切显隐再渲染，渲染末尾统一通知面板按新屏重算高度（各屏不做等高等）
+    /// 切换屏：先切显隐再渲染，渲染末尾统一通知面板按新屏重算高度（两屏不做等高等）
     func selectScreen(_ value: TokenScreen) {
         guard screen != value else { return }
         screen = value
@@ -250,9 +239,6 @@ final class TokenPaneView: MenuPanelPaneView {
         }
         render()
     }
-
-    // MARK: - 动作
-
 
 #if DEBUG
     /// 快照自证专用（仅 DEBUG）：切换范围 / 小时归属 / 趋势形态 / 主图形态（堆叠·对比）
@@ -271,7 +257,7 @@ final class TokenPaneView: MenuPanelPaneView {
         openDetail(kind, selection: selection)
     }
 
-    /// 快照自证专用（仅 DEBUG）：切到指定屏（4 屏 × 浅/深取证）
+    /// 快照自证专用（仅 DEBUG）：切到指定屏（2 屏 × 浅/深取证）
     func selectScreenForSnapshot(_ screen: TokenScreen) {
         selectScreen(screen)
     }
