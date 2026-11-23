@@ -33,7 +33,10 @@ final class MenuBarManager: NSObject {
     let displayPreferences: MenuBarDisplayPreferences
     /// 注入的键值存储（菜单栏偏好与面板分页偏好共用同一份，测试 / 取证可写隔离 suite）
     let storage: any KeyValueStorage
-    private let harnessUsage: (any HarnessUsageServicing)?
+    // 放宽为 internal：菜单栏 Token 指标的补拉判据拆在 MenuBarManager+TokenRefresh.swift
+    let harnessUsage: (any HarnessUsageServicing)?
+    /// 上次为菜单栏 Token 指标补拉增量索引的时刻（nil = 本轮启动后还没拉过）
+    var lastTokenPullAt: Date?
     /// 外观偏好（主题 / 玻璃 / 渲染档）— 与菜单栏偏好共用同一份存储实例
     let appearancePreferences: AppearancePreferences
     /// 系统指标采样周期（秒）— 由渲染档给出（原为只读偏好值，现随档位变）
@@ -270,7 +273,10 @@ final class MenuBarManager: NSObject {
         }
 
         // 采样节拍跟随面板可见性（实现见 MenuBarManager+Sampling.swift）
-        pollSamplingIfNeeded(now: Date())
+        let now = Date()
+        pollSamplingIfNeeded(now: now)
+        // 菜单栏显示着 Token 指标时自行补拉增量索引（判据见 MenuBarManager+TokenRefresh.swift）
+        pullTokenIfNeeded(now: now)
         // 面板自身按 1 秒 / 5 秒分层刷新（内部按时间差节流，收起时直接返回），与状态栏刷新周期无关
         panel.tick()
     }
