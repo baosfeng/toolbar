@@ -62,6 +62,29 @@ public enum PanelAnchor {
         return min(max(rightAligned, visibleMinX), upperBound)
     }
 
+    /// 面板纵向钉住的目标原点 y —— **顶边**贴展开那一刻的顶边，高度变化只向下长
+    ///
+    /// 为什么钉顶边而不是让 AppKit 自己排：popover 在内容尺寸变化时保持**底边**不动，
+    /// 顶边随高度上下跑。实测同一台机器切 tab（高度 350 / 506 / 537 / 546）时顶边在
+    /// 28 / 33 / 42 / 73 / 229 之间跳，底边恒为 579 —— 用户看到的就是「详情页位置时刻在变」。
+    /// 钉住顶边后，切到更矮的页（额度 350）面板仍贴在菜单栏下沿，而不是掉到屏幕中下部。
+    ///
+    /// 边界：顶边不越出可视区上沿；面板比可视区还高时回落可视区下沿（贴地优先于贴顶）。
+    ///
+    /// - Parameters:
+    ///   - panelHeight: 面板窗口高度（pt）
+    ///   - panelTopEdge: 展开那一刻记下的窗口顶边（屏幕坐标，bottom-left 原点）
+    ///   - visibleMinY / visibleMaxY: 屏幕可视区上下边界（面板不得越出）
+    /// - Returns: 目标原点 y（NSWindow.frame 用 bottom-left 坐标，origin.y 即底边）
+    public static func pinnedOriginY(panelHeight: CGFloat,
+                                     panelTopEdge: CGFloat,
+                                     visibleMinY: CGFloat,
+                                     visibleMaxY: CGFloat) -> CGFloat {
+        guard panelHeight > 0 else { return visibleMinY }
+        let topEdge = min(panelTopEdge, visibleMaxY)
+        return max(topEdge - panelHeight, visibleMinY)
+    }
+
     /// 把按钮本地坐标系的锚点矩形换算到屏幕坐标系（用于自证「落在屏幕内」）
     ///
     /// - Parameters:

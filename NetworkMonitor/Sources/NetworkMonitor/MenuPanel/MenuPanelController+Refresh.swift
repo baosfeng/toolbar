@@ -173,6 +173,9 @@ extension MenuPanelController {
             guard force || abs(popover.contentSize.height - height) > 0.5 else { return }
             PanelOpenProbe.bucket("popover.contentSize 赋值") {
                 popover.contentSize = NSSize(width: MenuPanelStyle.panelWidth, height: height)
+                // 高度变了必然带来纵向位移（popover 保持底边不动）：立刻按记住的顶边补钉一次，
+                // 否则切页 / 进出二级详情时面板顶边会跟着高度上下跳
+                PanelWindowPin.repinAfterContentSizeChange(logger: logger)
             }
         }
     }

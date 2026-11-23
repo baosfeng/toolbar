@@ -109,7 +109,52 @@ func runPanelAnchorTests() {
                                     visibleMinX: 0, visibleMaxX: 1512), 0,
                 "面板宽度非法：回落左边界")
 
-    // 9. 按钮 bounds 原点不在 (0,0) 时同样只锁右边缘（NSPopover 用视图坐标系）
+    // 9. 纵向钉顶边：同一组实测高度下，目标顶边恒定、原点 y 只在屏幕边界处夹取
+    //    现场（nmcli 连采同一进程，切 tab 时底边恒 579）：h=350→顶边 229 / h=506→73 / h=537→42
+    let visibleY = CGRect(x: 0, y: 0, width: 1512, height: 960)
+    let pinnedTop: CGFloat = 900
+    var topEdges: [CGFloat] = []
+    for height in [350, 506, 537, 546] as [CGFloat] {
+        let originY = PanelAnchor.pinnedOriginY(panelHeight: height,
+                                                panelTopEdge: pinnedTop,
+                                                visibleMinY: visibleY.minY,
+                                                visibleMaxY: visibleY.maxY)
+        topEdges.append(originY + height)
+        assertEqual(originY, pinnedTop - height,
+                    "高度 " + String(describing: height) + "：原点 y = 记住的顶边 − 高度（面板向下长）")
+        assertEqual(originY >= visibleY.minY, true,
+                    "高度 " + String(describing: height) + "：原点不越出可视区下沿")
+    }
+    assertEqual(Set(topEdges).count, 1,
+                "高度在 350…546 之间变化时顶边只有一个取值（实际 " + String(describing: topEdges) + "）")
+
+    // 10. 纵向边界：顶边跑到屏幕外要夹回可视区上沿；面板比可视区还高时贴下沿
+    assertEqual(PanelAnchor.pinnedOriginY(panelHeight: 300, panelTopEdge: 1200,
+                                          visibleMinY: 0, visibleMaxY: 960), 660,
+                "顶边越出屏幕上沿：先夹到 960，再算原点 960 − 300")
+    assertEqual(PanelAnchor.pinnedOriginY(panelHeight: 1200, panelTopEdge: 900,
+                                          visibleMinY: 0, visibleMaxY: 960), 0,
+                "面板比可视区还高：原点贴可视区下沿")
+    assertEqual(PanelAnchor.pinnedOriginY(panelHeight: 0, panelTopEdge: 900,
+                                          visibleMinY: 0, visibleMaxY: 960), 0,
+                "高度非法：回落可视区下沿")
+
+    // 11. 横向 + 纵向组合：面板右上角恒定（切多高的页，右上角都不动）
+    var topRightCorners: [CGPoint] = []
+    for height in [350, 506, 537, 546] as [CGFloat] {
+        let x = PanelAnchor.pinnedX(panelWidth: 346, statusItemMaxX: 1130,
+                                    visibleMinX: visibleY.minX, visibleMaxX: visibleY.maxX)
+        let y = PanelAnchor.pinnedOriginY(panelHeight: height,
+                                          panelTopEdge: pinnedTop,
+                                          visibleMinY: visibleY.minY,
+                                          visibleMaxY: visibleY.maxY)
+        topRightCorners.append(CGPoint(x: x + 346, y: y + height))
+    }
+    let cornerKeys = Set(topRightCorners.map { "\($0.x)|$0.y" })
+    assertEqual(cornerKeys.count, 1,
+                "高度 350…546 变化时右上角恒定（实际 " + String(describing: topRightCorners) + "）")
+
+    // 12. 按钮 bounds 原点不在 (0,0) 时同样只锁右边缘（NSPopover 用视图坐标系）
     let offsetBounds = CGRect(x: 12, y: 3, width: 106, height: 24)
     let offsetAnchor = PanelAnchor.rect(for: offsetBounds)
     assertEqual(offsetAnchor.maxX, offsetBounds.maxX, "非零原点：锚点右边缘仍对齐按钮右边缘")

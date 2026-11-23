@@ -76,6 +76,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ClipboardPreviewProbe.runIfRequested(coordinator: coordinator) { return }
         // 仅 DEBUG：NM_SHOW_PANEL=1 时走真实路径展开 popover 并保持打开（实机截图取证）
         MenuPanelEvidence.openIfRequested(manager: menuBarManager)
+        // 仅 DEBUG：NM_PANEL_PIN_PROBE=1 时在同一次展开里逐页切过去，核对右上角是否恒定
+        if PanelPinProbe.isRequested, let manager = menuBarManager {
+            PanelPinProbe.run(manager: manager)
+        }
         // 仅 DEBUG：面板开着时抓一张屏，验证「对着面板截图抓到的是面板而非背景」
         if SnipPanelCaptureProbe.isRequested {
             SnipPanelCaptureProbe.run(capture: coordinator.snipController.captureService,
