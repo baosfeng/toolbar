@@ -4,20 +4,24 @@ import NetworkMonitorUI
 
 // MARK: - 面板窗口位置钉住
 
-/// 把面板窗口钉在「展开那一刻」的锚点上：**横向右对齐状态项右边缘，纵向顶边贴展开时的顶边**
+/// 把面板窗口钉在「展开那一刻」的锚点上：**横向以状态项中心居中，纵向顶边贴展开时的顶边**
+///
+/// 为什么横向是「居中」而不是「右对齐」：系统给 popover 画的顶端小三角恒在窗口水平中心，
+/// 挪不动也改不了。右对齐状态项右边缘时三角会偏左（实测状态项中心 1038 / 窗口中心 956，
+/// 偏 82pt，正指在「↓36K」那个字上），只有让窗口中心落在状态项中心，三角才真的指向点击的那个图标。
 ///
 /// 为什么不是每次按当前值算：
-/// - 横向：状态项宽度每秒随网速文字变化（实测 96…112pt），右边缘虽然恒定，但 AppKit 每拍
-///   仍会按锚点重排已展开的 popover，跟着最新值走等于永远追着跑；
+/// - 横向：状态项宽度每秒随网速文字变化（实测 96…112pt），AppKit 每拍仍会按锚点重排
+///   已展开的 popover，跟着最新值走等于永远追着跑；
 /// - 纵向：popover 在内容尺寸变化时保持**底边**不动，顶边随高度跑。实测切 tab（内容高 350 / 506 /
 ///   537 / 546）时，屏幕坐标里的顶边在 28 / 33 / 42 / 73 / 229 之间跳、底边却恒为 579 ——
 ///   用户看到的就是「详情页位置时刻在变」。
 ///
 /// 三条口径一起才成立：
-/// 1. **横向从第一帧就钉**：popover 自己按「锚点中心」摆窗口，实测落点是 x=955（面板 346 宽、
-///    状态项右边缘 1129 时应为 783）。原先横向纠正也被「出场动画结束」这道闸门挡着，于是前 240ms
-///    用户看到的是居中位置、随后「啪」地跳到右边 —— 逐帧轨迹里 14 帧 x=955 之后才变 783。
-///    横向不需要等动画：锚点在 show 时就已冻结，动画期间 popover 也不改位置（那 14 帧全 955），
+/// 1. **横向从第一帧就钉**：popover 自己按「锚点中心」摆窗口，落点会跟着状态项宽度抖动。
+///    原先横向纠正也被「出场动画结束」这道闸门挡着，于是前 240ms 用户看到的是 popover 自己摆的位置、
+///    随后「啪」地跳一下 —— 逐帧轨迹里 14 帧停在旧 x 之后才变。
+///    横向不需要等动画：锚点中心在 show 时就已冻结，动画期间 popover 也不改位置，
 ///    所以 attach 里立刻钉一次，之后由 didMove / didResize 保持纠正；
 /// 2. **纵向顶边在出场动画结束后才锁**：动画期间窗口位置与尺寸都在变，实测按动画帧取到的顶边
 ///    比稳定值低 50pt，面板会被钉到屏幕中下部；所以纵向基准在动画结束后从真实 frame 锁一次；
@@ -29,8 +33,8 @@ import NetworkMonitorUI
 @MainActor
 enum PanelWindowPin {
 
-    /// 本次展开记下的目标右边缘（屏幕坐标）；nil = 没展开 / 已摘除
-    private static var targetRightEdge: CGFloat?
+    /// 本次展开记下的状态项中心 x（屏幕坐标）；nil = 没展开 / 已摘除
+    private static var targetCenterX: CGFloat?
     /// 本次展开记下的目标顶边（屏幕坐标，bottom-left 原点）；nil = 没展开 / 已摘除
     private static var targetTopEdge: CGFloat?
     private static weak var panelWindow: NSWindow?
@@ -55,7 +59,7 @@ enum PanelWindowPin {
               let anchor = anchorView,
               let anchorWindow = anchor.window else { return }
         let anchorRect = anchorWindow.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-        targetRightEdge = anchorRect.maxX
+        targetCenterX = anchorRect.midX
         // 顶边不在这一刻取：show 之后、出场动画结束之前窗口还在动（实测按动画帧取到的顶边
         // 比稳定值低 50pt，面板会被钉到屏幕中下部）。等动画结束再锁一次真实顶边。
         panelWindow = window
@@ -67,7 +71,7 @@ enum PanelWindowPin {
                 }
             movers.append(token)
         }
-        // 横向立刻钉：用户看到的第一帧就应该是右对齐位置，而不是「先居中再跳过去」。
+        // 横向立刻钉：用户看到的第一帧就应该是居中位置，而不是「先摆错再跳过去」。
         // 纵向此刻还没有基准（targetTopEdge 为 nil），这一步只动 x。
         pin(logger: logger)
         // 出场动画结束后才允许改纵向：动画期间 popover 自己在改 frame，插进去会和它抢。
@@ -88,7 +92,7 @@ enum PanelWindowPin {
         pendingPin?.cancel()
         pendingPin = nil
         panelWindow = nil
-        targetRightEdge = nil
+        targetCenterX = nil
         targetTopEdge = nil
         isArmed = false
     }
@@ -129,24 +133,24 @@ enum PanelWindowPin {
 
     /// 纠正位置：**只改原点**，尺寸交给 popover（改尺寸会让出场动画的中间态被冻住）
     ///
-    /// 横向随时可纠正（targetRightEdge 在 show 时就冻结）；纵向只在 armed 之后，
+    /// 横向随时可纠正（targetCenterX 在 show 时就冻结）；纵向只在 armed 之后，
     /// 因为要先拿到真实顶边（targetTopEdge）才算得出目标原点。
     private static func pin(logger: LoggingService?) {
-        guard let window = panelWindow, let rightEdge = targetRightEdge else { return }
+        guard let window = panelWindow, let centerX = targetCenterX else { return }
         let visible = (window.screen ?? NSScreen.main)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1920, height: 1080)
         let frame = window.frame
         // 口径（横向随时可算 / 纵向要先锁顶边）在 NetworkMonitorUI 的纯逻辑里，这里只落副作用
         let target = PanelAnchor.pinTarget(panelFrame: frame,
-                                           statusItemMaxX: rightEdge,
+                                           statusItemCenterX: centerX,
                                            lockedTopEdge: isArmed ? targetTopEdge : nil,
                                            visible: visible)
         let targetY = target.y ?? frame.origin.y
         guard abs(frame.origin.x - target.x) > 0.5 || abs(frame.origin.y - targetY) > 0.5 else { return }
         let before = frame.origin
         window.setFrameOrigin(NSPoint(x: target.x, y: targetY))
-        logger?.debug(String(format: "面板位置钉住：(%.1f, %.1f) → (%.1f, %.1f)，锚点右边缘 %.1f / 顶边 %@",
-                             before.x, before.y, target.x, targetY, rightEdge,
+        logger?.debug(String(format: "面板位置钉住：(%.1f, %.1f) → (%.1f, %.1f)，状态项中心 %.1f / 顶边 %@",
+                             before.x, before.y, target.x, targetY, centerX,
                              targetTopEdge.map { String(format: "%.1f", $0) } ?? "未锁"))
     }
 }

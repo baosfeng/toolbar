@@ -33,7 +33,7 @@ extension MenuPanelController {
         refreshAll()
         PanelOpenProbe.mark("03 popover.show")
         popover.show(relativeTo: rect, of: view, preferredEdge: .minY)
-        // 挂上「窗口被挪动就按状态项右边缘纠正」的观察者（见 PanelWindowPin 的说明）
+        // 挂上「窗口被挪动就按状态项中心纠正」的观察者（见 PanelWindowPin 的说明）
         PanelWindowPin.attach(to: popover, anchorView: view, logger: logger)
         PanelOpenProbe.mark("04 updateContentSize(force)")
         updateContentSize(force: true)

@@ -2,24 +2,28 @@ import CoreGraphics
 
 // MARK: - 面板锚点矩形（纯逻辑，可单测）
 
-/// NSPopover 的锚点矩形 — 贴状态项**右边缘**的 1pt 窄矩形
+/// NSPopover 的锚点矩形 — 贴状态项**中心**的 1pt 窄矩形
 ///
-/// 状态项宽度随菜单栏文字实时变化（实测 x=1039 w=91 / x=1035 w=95 / x=1049 w=81），
-/// 但右边缘恒定（maxX 恒为 1130）：右侧系统图标位置固定、宽度只向左生长。
+/// 为什么是中心而不是右边缘：系统给 popover 画的顶端小三角（beak）**恒在窗口水平中心**，
+/// 挪不动也改不了（实测用户截图里三角中心 362.4pt vs 面板中心 362.5pt，差 0.1pt）。
+/// 所以「三角指向状态项」只能靠**让窗口中心落在状态项中心**来实现，
+/// 右边缘对齐只会让三角指向状态项的左半截。
 ///
-/// 两轮实测结论（都是 nmcli 连采同一进程）：
-/// 1. 直接把 `button.bounds` 交给 popover → 锚点中心 = `bounds.midX` 随宽度漂移，
-///    面板 x 在 891…917 之间跳 26pt；
-/// 2. 把「宽 320pt、x = maxX−320」的大矩形交进去 → **仍在漂**（904…914，10pt）：
-///    这个矩形大幅越出按钮自身 bounds，AppKit 按视图边界处理后中心仍与按钮宽度相关。
+/// 实测（nmcli 连采同一进程）：状态项 947,4.5 183x24（中心 1038）时，右对齐口径把面板
+/// 摆在 783，窗口中心 956，三角偏左 82pt，正指在「↓36K」那个字上。
 ///
-/// 所以口径收成一条：**锚点宽度取 1pt、右边缘对齐按钮右边缘**。
-/// 中心 = maxX − 0.5，与按钮宽度彻底无关，实测面板 x 恒定（957/955/956，残差仅来自动画帧）。
+/// 锚点宽度仍收成 1pt：
+/// 1. 直接把 `button.bounds` 交给 popover → 锚点矩形随宽度变化，实测面板 x 跳 26pt；
+/// 2. 把「宽 320pt、贴右边缘」的大矩形交进去 → 仍漂 10pt（越出按钮 bounds，
+///    被 AppKit 按视图边界处理）。
+///
+/// 宽度 1pt 时锚点中心 = `bounds.midX`，与按钮宽度彻底无关；实测三种宽度
+/// （120/175/220）下窗口中心与状态项中心的残差都在 0.5pt 内。
 public enum PanelAnchor {
 
-    /// 锚点矩形宽度（pt）—— 1pt：中心落在 maxX − 0.5，与按钮宽度解耦
+    /// 锚点矩形宽度（pt）—— 1pt：中心落在 `bounds.midX`，与按钮宽度解耦
     ///
-    /// 不用面板宽度量级（320pt）：越出按钮 bounds 的大矩形会被 AppKit 按视图边界处理，
+    /// 不用面板宽度量级：越出按钮 bounds 的大矩形会被 AppKit 按视图边界处理，
     /// 中心重新带上按钮宽度分量，实测仍漂 10pt。
     public static let preferredWidth: CGFloat = 1
 
@@ -28,38 +32,38 @@ public enum PanelAnchor {
     /// - Parameters:
     ///   - buttonBounds: 状态项按钮的 bounds（按钮自身坐标系）
     ///   - width: 锚点矩形宽度（<= 0 时回落到 1pt，不产生非法矩形）
-    /// - Returns: 右边缘与按钮右边缘对齐的窄矩形（与入参同一坐标系）
+    /// - Returns: 中心与按钮中心对齐的窄矩形（与入参同一坐标系）
     ///
     /// 高度与 y 沿用按钮：popover 以 `preferredEdge: .minY` 贴锚点矩形下边展开，
     /// 这里只锁横向口径，不改动纵向行为。
     public static func rect(for buttonBounds: CGRect,
                             width: CGFloat = preferredWidth) -> CGRect {
         let clampedWidth = width > 0 ? width : preferredWidth
-        return CGRect(x: buttonBounds.maxX - clampedWidth,
+        return CGRect(x: buttonBounds.midX - clampedWidth / 2,
                       y: buttonBounds.minY,
                       width: clampedWidth,
                       height: buttonBounds.height)
     }
 
-    /// 面板横向钉住的目标原点 x —— **右对齐**状态项右边缘
+    /// 面板横向钉住的目标原点 x —— **以状态项中心居中**
     ///
-    /// NSPopover 自己的定位不可控：同一份锚点宽度下，它会按「锚点中心居中 + 屏幕夹取」
-    /// 摆放窗口，实测面板 x 出现 950 / 955 / 957 三类（漂 7pt）。所以 show 之后
-    /// 由调用方按这里算出的 x 显式 setFrameOrigin，把横向位置钉死。
+    /// NSPopover 自己的定位不完全可控：它会按「锚点中心居中 + 屏幕夹取」摆放窗口。
+    /// 展开后由调用方按这里算出的 x 显式 setFrameOrigin，把横向位置钉死，
+    /// 让「窗口中心 == 状态项中心」在任何一次展开里都成立。
     ///
     /// - Parameters:
     ///   - panelWidth: 面板窗口宽度（pt）
-    ///   - statusItemMaxX: 状态项右边缘的屏幕坐标（同一坐标系）
+    ///   - statusItemCenterX: 状态项中心的屏幕坐标（同一坐标系）
     ///   - visibleMinX / visibleMaxX: 屏幕可视区左右边界（面板不得越出）
-    /// - Returns: 目标原点 x；面板比屏幕还宽时贴左边界
+    /// - Returns: 目标原点 x；面板越界时先贴左边界、再夹到右边界
     public static func pinnedX(panelWidth: CGFloat,
-                               statusItemMaxX: CGFloat,
+                               statusItemCenterX: CGFloat,
                                visibleMinX: CGFloat,
                                visibleMaxX: CGFloat) -> CGFloat {
         guard panelWidth > 0 else { return visibleMinX }
-        let rightAligned = statusItemMaxX - panelWidth
+        let centered = statusItemCenterX - panelWidth / 2
         let upperBound = max(visibleMinX, visibleMaxX - panelWidth)
-        return min(max(rightAligned, visibleMinX), upperBound)
+        return min(max(centered, visibleMinX), upperBound)
     }
 
     /// 面板纵向钉住的目标原点 y —— **顶边**贴展开那一刻的顶边，高度变化只向下长
@@ -103,10 +107,9 @@ public enum PanelAnchor {
 
     /// 一次纠正的目标原点 —— 横向与纵向各有自己的「能不能算」条件
     ///
-    /// 为什么要分两个方向：popover 摆窗口时按「锚点中心」定位，实测面板 346 宽、状态项右边缘
-    /// 1129 时它落在 x=955（应为 783）；而纵向在出场动画期间窗口还在长，取不到稳定顶边。
-    /// 两者的可纠正时机不同，混在一个开关里就会出现「横向也跟着等 240ms」——
-    /// 用户看到的是「先居中再跳到右边」。
+    /// 为什么要分两个方向：popover 摆窗口时按「锚点中心」定位，而纵向在出场动画期间
+    /// 窗口还在长，取不到稳定顶边。两者的可纠正时机不同，混在一个开关里就会出现
+    /// 「横向也跟着等 240ms」——用户看到的是「先居中再跳」。
     public struct PinTarget: Equatable {
         /// 纠正后的原点 x
         public let x: CGFloat
@@ -118,20 +121,20 @@ public enum PanelAnchor {
         }
     }
 
-    /// 算一次纠正目标 —— 横向随时可算（右边缘 show 时就冻结），纵向只在拿到真实顶边后可算
+    /// 算一次纠正目标 —— 横向随时可算（状态项中心 show 时就冻结），纵向只在拿到真实顶边后可算
     ///
     /// - Parameters:
     ///   - panelFrame: 面板窗口当前 frame
-    ///   - statusItemMaxX: 展开那一刻记下的状态项右边缘（屏幕坐标）
+    ///   - statusItemCenterX: 展开那一刻记下的状态项中心（屏幕坐标）
     ///   - lockedTopEdge: 出场动画结束后锁下的顶边；nil = 还没锁
     ///   - visible: 屏幕可视区
     /// - Returns: 目标原点；纵向未锁时 y 为 nil（调用方保持当前 y 不动）
     public static func pinTarget(panelFrame: CGRect,
-                                 statusItemMaxX: CGFloat,
+                                 statusItemCenterX: CGFloat,
                                  lockedTopEdge: CGFloat?,
                                  visible: CGRect) -> PinTarget {
         let x = pinnedX(panelWidth: panelFrame.width,
-                        statusItemMaxX: statusItemMaxX,
+                        statusItemCenterX: statusItemCenterX,
                         visibleMinX: visible.minX,
                         visibleMaxX: visible.maxX)
         guard let top = lockedTopEdge else { return PinTarget(x: x, y: nil) }
