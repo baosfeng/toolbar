@@ -46,9 +46,14 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
     var densityControl = NSPopUpButton(frame: .zero, pullsDown: false)
     var unitControl2 = NSPopUpButton(frame: .zero, pullsDown: false)
     var layoutControl = NSPopUpButton(frame: .zero, pullsDown: false)
-    var intervalControl = NSPopUpButton(frame: .zero, pullsDown: false)
     /// 菜单栏「单位」行（副标题随档位变化，refresh 时要更新）
     let unit2Row = SettingsRowView(title: "单位")
+    /// 菜单栏超限告警卡（行 / 控件 / 回灌 / 动作全在卡内，本页只负责 addCard 与 refresh）
+    ///
+    /// 为什么单独立卡：三个偏好键（menuBar.alertsEnabled / cpuAlert / memoryAlert）早就存在、
+    /// 消费端也写好了，但从来没有任何控件写过它们 —— 功能实际是死的。
+    /// 放宽为 internal：DEBUG 快照要按卡片真实坐标滚到它再出图（在本页首屏之外）。
+    let alertCard: SettingsMenuBarAlertCard
     /// 可排序卡片的装配器（恢复默认按钮挂在卡片标题行右侧）
     var metricsOrderCard: SettingsOrderedCardView?
     var panelTabsOrderCard: SettingsOrderedCardView?
@@ -78,7 +83,10 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         self.notificationCard = SettingsNotificationEventCard(events: [.panelToggle],
                                                               context: notificationContext)
         self.storage = storage
-        self.displayPreferences = MenuBarDisplayPreferences(storage: storage)
+        let displayPreferences = MenuBarDisplayPreferences(storage: storage)
+        self.displayPreferences = displayPreferences
+        self.alertCard = SettingsMenuBarAlertCard(preferences: displayPreferences,
+                                                  onChange: { AppEvents.postMenuBarDisplayChanged() })
         self.panelTabPreferences = PanelTabPreferences(storage: storage)
         super.init(section: .general)
     }
@@ -105,19 +113,21 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         let launchCard = SettingsCardView()
         launchCard.addRow(launchRow)
 
-        let alertCard = SettingsCardView()
-        alertCard.addRow(alertRow)
+        // 局部名带 billing 前缀：本页另有「菜单栏超限告警」卡（属性 alertCard），两者是不同事件
+        let billingAlertCard = SettingsCardView()
+        billingAlertCard.addRow(alertRow)
 
         let unitCard = SettingsCardView()
         unitCard.addRow(unitRow)
 
         page.addCard(launchCard, sectionTitle: "启动")
-        page.addCard(alertCard, sectionTitle: "额度提醒")
+        page.addCard(billingAlertCard, sectionTitle: "额度提醒")
         page.addCard(unitCard, sectionTitle: "显示")
         page.addCard(smoothScrollCard.card, sectionTitle: "鼠标滚轮")
         page.addCard(notificationCard.card, sectionTitle: "通知与音效")
 
         buildOrderableCards()
+        page.addCard(alertCard.card, sectionTitle: "菜单栏告警")
         page.addNote("设置会立即生效；菜单栏指标与面板分页的顺序用行尾「上移 / 下移」调整，"
                      + "标题右侧可一键恢复默认。开机自启动依赖应用签名，未签名构建可能被系统拒绝。")
     }
@@ -139,6 +149,7 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         smoothScrollCard.refresh()
         notificationCard.refresh()
         refreshOrderableControls()
+        alertCard.refresh()
     }
 
 #if DEBUG
@@ -170,4 +181,5 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         unitRow.update(subtitle: style.detailText)
         AppEvents.postNumberUnitStyleChanged()
     }
+
 }

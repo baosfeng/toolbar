@@ -93,6 +93,7 @@ extension SettingsGeneralPane {
         densityControl.addItems(withTitles: MenuBarDensity.allCases.map(\.rawValue))
         densityControl.target = self
         densityControl.action = #selector(menuBarDensityChanged)
+        densityControl.setAccessibilityLabel("菜单栏密度")
         densityControl.font = SettingsTheme.rowTitleFont
         SettingsControlChrome.applyStandardHeight(to: densityControl)
         let densityRow = SettingsRowView(title: "密度")
@@ -104,6 +105,7 @@ extension SettingsGeneralPane {
         unitControl2.addItems(withTitles: MenuBarUnitStyle.allCases.map(\.title))
         unitControl2.target = self
         unitControl2.action = #selector(menuBarUnitChanged)
+        unitControl2.setAccessibilityLabel("菜单栏单位")
         unitControl2.font = SettingsTheme.rowTitleFont
         SettingsControlChrome.applyStandardHeight(to: unitControl2)
         unit2Row.trailingStack.addArrangedSubview(unitControl2)
@@ -112,22 +114,17 @@ extension SettingsGeneralPane {
         layoutControl.addItems(withTitles: MenuBarLayout.allCases.map(\.rawValue))
         layoutControl.target = self
         layoutControl.action = #selector(menuBarLayoutChanged)
+        layoutControl.setAccessibilityLabel("菜单栏布局")
         layoutControl.font = SettingsTheme.rowTitleFont
         SettingsControlChrome.applyStandardHeight(to: layoutControl)
         let layoutRow = SettingsRowView(title: "布局")
         layoutRow.trailingStack.addArrangedSubview(layoutControl)
         card.addRow(layoutRow)
 
-        intervalControl.addItems(withTitles: ["1s", "2s", "5s"])
-        intervalControl.target = self
-        intervalControl.action = #selector(menuBarIntervalChanged)
-        intervalControl.font = SettingsTheme.rowTitleFont
-        SettingsControlChrome.applyStandardHeight(to: intervalControl)
-        let intervalRow = SettingsRowView(title: "间隔")
-        intervalRow.trailingStack.addArrangedSubview(intervalControl)
-        card.addRow(intervalRow)
 
         page.addCard(card, sectionTitle: "菜单栏显示方式")
+        page.addNote("刷新节拍不在这里：它由「外观 → 渲染帧率」统一决定（标准 1 秒 / 极致 0.5 秒 / "
+                     + "省电 2 秒）——同一维度的两个旋钮并存，会出现「选了省电还是 1 秒刷」。")
     }
 
     // MARK: - 刷新
@@ -147,9 +144,8 @@ extension SettingsGeneralPane {
         if let i = MenuBarDensity.allCases.firstIndex(of: displayPreferences.density) { densityControl.selectItem(at: i) }
         if let i = MenuBarUnitStyle.allCases.firstIndex(of: displayPreferences.unitStyle) { unitControl2.selectItem(at: i) }
         unit2Row.update(subtitle: Self.menuBarUnitSubtitle(displayPreferences.unitStyle))
+        // 刷新节拍不在这里回灌：它由渲染档接管（见卡片说明），本卡不再有 interval 控件
         if let i = MenuBarLayout.allCases.firstIndex(of: displayPreferences.layout) { layoutControl.selectItem(at: i) }
-        let vals: [TimeInterval] = [1, 2, 5]
-        if let i = vals.firstIndex(of: displayPreferences.refreshInterval) { intervalControl.selectItem(at: i) }
     }
 
     /// 菜单栏单位行副标题 —— 直接写出各档的实际效果，避免「选了自定义却看不出变化」
@@ -185,14 +181,6 @@ extension SettingsGeneralPane {
         AppEvents.postMenuBarDisplayChanged()
     }
 
-    @objc private func menuBarIntervalChanged() {
-        let titles = ["1s", "2s", "5s"]
-        let idx = intervalControl.indexOfSelectedItem
-        guard titles.indices.contains(idx) else { return }
-        let vals: [TimeInterval] = [1, 2, 5]
-        displayPreferences.refreshInterval = vals[idx]
-        AppEvents.postMenuBarDisplayChanged()
-    }
 
     // MARK: - 动作（菜单栏指标 / 面板分页）
 
