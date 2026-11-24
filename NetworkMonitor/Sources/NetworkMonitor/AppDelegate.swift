@@ -80,6 +80,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if PanelPinProbe.isRequested, let manager = menuBarManager {
             PanelPinProbe.run(manager: manager)
         }
+        // 仅 DEBUG：NM_PANEL_PIN_TRACE=1 时逐帧记录展开过程与切页后的窗口 frame（定位过程性抖动）
+        if PanelPinTraceProbe.isRequested, let manager = menuBarManager {
+            PanelPinTraceProbe.run(manager: manager)
+        }
         // 仅 DEBUG：面板开着时抓一张屏，验证「对着面板截图抓到的是面板而非背景」
         if SnipPanelCaptureProbe.isRequested {
             SnipPanelCaptureProbe.run(capture: coordinator.snipController.captureService,

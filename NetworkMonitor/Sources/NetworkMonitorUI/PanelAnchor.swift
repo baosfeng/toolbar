@@ -98,4 +98,47 @@ public enum PanelAnchor {
         rect(for: buttonBounds, width: width)
             .offsetBy(dx: buttonFrameInScreen.minX, dy: buttonFrameInScreen.minY)
     }
+
+    // MARK: - 钉住目标（横向 / 纵向分开算）
+
+    /// 一次纠正的目标原点 —— 横向与纵向各有自己的「能不能算」条件
+    ///
+    /// 为什么要分两个方向：popover 摆窗口时按「锚点中心」定位，实测面板 346 宽、状态项右边缘
+    /// 1129 时它落在 x=955（应为 783）；而纵向在出场动画期间窗口还在长，取不到稳定顶边。
+    /// 两者的可纠正时机不同，混在一个开关里就会出现「横向也跟着等 240ms」——
+    /// 用户看到的是「先居中再跳到右边」。
+    public struct PinTarget: Equatable {
+        /// 纠正后的原点 x
+        public let x: CGFloat
+        /// 纠正后的原点 y；nil = 纵向还没基准，本次不动 y
+        public let y: CGFloat?
+        public init(x: CGFloat, y: CGFloat?) {
+            self.x = x
+            self.y = y
+        }
+    }
+
+    /// 算一次纠正目标 —— 横向随时可算（右边缘 show 时就冻结），纵向只在拿到真实顶边后可算
+    ///
+    /// - Parameters:
+    ///   - panelFrame: 面板窗口当前 frame
+    ///   - statusItemMaxX: 展开那一刻记下的状态项右边缘（屏幕坐标）
+    ///   - lockedTopEdge: 出场动画结束后锁下的顶边；nil = 还没锁
+    ///   - visible: 屏幕可视区
+    /// - Returns: 目标原点；纵向未锁时 y 为 nil（调用方保持当前 y 不动）
+    public static func pinTarget(panelFrame: CGRect,
+                                 statusItemMaxX: CGFloat,
+                                 lockedTopEdge: CGFloat?,
+                                 visible: CGRect) -> PinTarget {
+        let x = pinnedX(panelWidth: panelFrame.width,
+                        statusItemMaxX: statusItemMaxX,
+                        visibleMinX: visible.minX,
+                        visibleMaxX: visible.maxX)
+        guard let top = lockedTopEdge else { return PinTarget(x: x, y: nil) }
+        let y = pinnedOriginY(panelHeight: panelFrame.height,
+                              panelTopEdge: top,
+                              visibleMinY: visible.minY,
+                              visibleMaxY: visible.maxY)
+        return PinTarget(x: x, y: y)
+    }
 }

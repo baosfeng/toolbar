@@ -160,5 +160,36 @@ func runPanelAnchorTests() {
     assertEqual(offsetAnchor.maxX, offsetBounds.maxX, "非零原点：锚点右边缘仍对齐按钮右边缘")
     assertEqual(offsetAnchor.minY, offsetBounds.minY, "非零原点：纵向沿用按钮")
 
+
+    // 13. 纠正目标：横向随时可算、纵向要有锁定的顶边才算（这是「先居中再跳」的直接成因）
+    //
+    //     实测（逐帧轨迹，面板宽 346 / 状态项右边缘 1129）：popover 自己摆在 x=955，
+    //     而右对齐目标是 783。原先横向纠正也被「等出场动画结束」挡着，前 240ms 用户看到居中位置。
+    let unlocked = PanelAnchor.pinTarget(panelFrame: CGRect(x: 955, y: 524, width: 346, height: 425),
+                                         statusItemMaxX: 1129,
+                                         lockedTopEdge: nil,
+                                         visible: visible)
+    assertEqual(unlocked.x, 783, "未锁顶边：横向照样算出右对齐目标 1129 − 346")
+    assertEqual(unlocked.y, nil, "未锁顶边：纵向不给目标（调用方保持当前 y）")
+
+    let locked = PanelAnchor.pinTarget(panelFrame: CGRect(x: 955, y: 524, width: 346, height: 425),
+                                       statusItemMaxX: 1129,
+                                       lockedTopEdge: 949,
+                                       visible: visible)
+    assertEqual(locked.x, 783, "已锁顶边：横向目标不变")
+    assertEqual(locked.y, 524, "已锁顶边：原点 y = 949 − 425")
+
+    // 14. 同一顶边下切不同高度的页：右上角恒定（x 一致、x+高度的一致由第 9~11 条保证）
+    var corners: [CGFloat] = []
+    for height in [345, 425, 506, 546] as [CGFloat] {
+        let target = PanelAnchor.pinTarget(panelFrame: CGRect(x: 955, y: 300, width: 346, height: height),
+                                           statusItemMaxX: 1129,
+                                           lockedTopEdge: 949,
+                                           visible: visible)
+        assertEqual(target.x, 783, "高度 " + String(describing: height) + "：横向目标恒定")
+        corners.append(target.x + 346)
+    }
+    assertEqual(Set(corners).count, 1, "高度 345…546 变化时右边缘恒定（实际 " + String(describing: corners) + "）")
+
     print("✅ PanelAnchor works")
 }
