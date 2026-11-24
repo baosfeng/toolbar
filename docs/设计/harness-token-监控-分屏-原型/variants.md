@@ -1,5 +1,9 @@
 # Token tab · 4 屏原型（A / B 两版）
 
+> **历史文档（改造前）**：本文是 4 屏（概览 / 用量 / 缓存 / 排行）时期的分屏原型记录，屏数、区块归属与高度均已过期。
+> 现行结构是 2 屏（总览 / 分布）+ 4 个面板内二级页，见 [Token tab 分屏设计](../harness-token-监控-分屏-设计规格.md) 与 `NetworkMonitor/Sources/NetworkMonitorUI/Token/TokenScreen.swift`；
+> 改造依据与取证见 `.open-design/token-ia-r1/`。下文保留原样作为演进证据。
+
 - 产物：`.open-design/harness-token-screens/screens.html`（单文件，1313 行，无外部依赖）
 - 截图：`.open-design/harness-token-screens/shots/` 共 20 张 —— 16 张主图（A/B × 4 屏 × 浅/深）+ 4 张用量屏「滚到底」补图。320×600，jpg q80，最大 35KB
 - 输入：`docs/设计/harness-token-监控-原型/交接.md`（口径与量级）、同目录 a/b/c 原型里的 34 天日表 / 项目表 / 模型表 / 今日与昨日 24 桶、`.open-design/02-style.md`（apple 尺度取舍）、`NetworkMonitor/…/PaneCardStyle.swift`（颜色 / 字号 / 圆角，只读参考）

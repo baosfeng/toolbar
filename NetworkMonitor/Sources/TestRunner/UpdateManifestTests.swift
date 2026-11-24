@@ -99,7 +99,9 @@ private func expectedCheckError(from json: String) -> UpdateCheckError? {
         _ = try UpdateManifestParser.manifest(fromJSON: Data(json.utf8))
         return nil
     } catch {
-        return error as? UpdateCheckError
+        // manifest(fromJSON:) 只抛 UpdateCheckError，catch 里的 error 已是该类型：
+        // 曾经的 `error as? UpdateCheckError` 被编译器判为「必然成功」，每轮构建多一条告警。
+        return error
     }
 }
 

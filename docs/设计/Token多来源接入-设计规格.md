@@ -276,13 +276,13 @@ VS Code 侧另有一套 delta journal（`kind:0` 设根对象、`kind:1` 按路�
 | 范围分段 | **不动**（130pt，高频操作） |
 | 刷新 | **不动**（24pt） |
 
-**硬约束**：页头恒 22pt，控件塞进这一行时高度代价为零；**绝不新增第二行**——四屏外框 409pt 已写死，用量屏自然高 398pt 只剩 11pt 余量，加行会把四屏全部挤破。`PaneHeaderRowView` 是五页共用骨架，改完必须复验另外四页截图无变化。
+**硬约束**：页头恒 22pt，控件塞进这一行时高度代价为零；**保持单行**——屏外框 409pt 已写死（`NetworkMonitor/Sources/NetworkMonitor/MenuPanel/TokenPaneView.swift` 157 行），两屏内容预算 385pt 已按区块高度分配满（同文件 112、138 行），加一行会把两屏都挤破。`PaneHeaderRowView` 是五页共用骨架，改完必须复验另外四页截图无变化。
 
 ### 3.2 「全部」视图的口径
 
 - Hero / 四族卡 / 图与趋势 / 缓存：**跨源求和**，四桶已统一，可直接相加。
-- 排行屏：在「按项目 / 按模型」之外增加第三段「**按工具**」；「全部」时默认落在「按工具」。
-- 缓存命中率跨源合并后仍然有意义（分子分母同口径），但要在缓存屏脚注写明「跨 N 个来源合并」。
+- 分布屏：在「按项目 / 按模型」之外增加第三段「**按工具**」；「全部」时默认落在「按工具」（`NetworkMonitor/Sources/NetworkMonitorCore/Token/TokenPresentationModels.swift` 241–265 行，维度 = 工具 / 项目 / 模型）。
+- 缓存命中率跨源合并后仍然有意义（分子分母同口径），但要在缓存命中二级页口径里写明「跨 N 个来源合并」。
 
 ### 3.3 空态与不可用态
 
@@ -386,7 +386,7 @@ CREATE INDEX IF NOT EXISTS idx_harness_event_source ON harness_token_event(sourc
 
 - 默认值 `'dsh'` 让既有数据零迁移；`CREATE INDEX IF NOT EXISTS` 保证幂等（现有建表函数可重复执行）。
 - 聚合快照按 `source` 分组一次查出，`HarnessUsageSnapshot` 增加 `bySource: [TokenSourceID: HarnessSourceUsage]`（计数器 + 会话数）。
-- **单源视图必须与全量同形**：另加 `scoped(to source: TokenSourceID) -> HarnessUsageSnapshot`，返回含日/时桶、项目/模型、窗口聚合的完整快照。`bySource` 只够画「有哪些来源」，画不了四屏——这条是实现期补的契约缺口。
+- **单源视图必须与全量同形**：另加 `scoped(to source: TokenSourceID) -> HarnessUsageSnapshot`，返回含日/时桶、项目/模型、窗口聚合的完整快照。`bySource` 只够画「有哪些来源」，画不了整页（屏与二级页都要完整快照）——这条是实现期补的契约缺口。
 - `HarnessParsedEvent` 扩展：`session(cwd:model:)`、`message(…)` 不变，新增每个来源自己的 parser 类型，统一实现 `TokenLineParsing`。
 
 ## 7 验收
@@ -401,7 +401,7 @@ CREATE INDEX IF NOT EXISTS idx_harness_event_source ON harness_token_event(sourc
 | Copilot | `input_tokens - cache_read`；只读打开 `session-store.db` |
 | OpenCode | `output + reasoning`；`parent_id` 子会话照常计入 |
 | Zed | zstd 解压；`cumulative-remainder` 补齐后与 `cumulative_token_usage` 相等 |
-| 切换 | 选单源 → 四屏数字等于该源聚合；选「全部」→ 等于各源之和 |
+| 切换 | 选单源 → 两屏与二级页数字等于该源聚合；选「全部」→ 等于各源之和 |
 | 自动监控 | 关开关 → 定时器不跑；开开关 → 到点增量、无变更文件不重算 |
 
 ## 8 分阶段
