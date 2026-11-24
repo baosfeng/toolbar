@@ -69,21 +69,50 @@ func testCacheNoPreviousData() {
     print("✅ 缓存命中页上一周期无数据时给「—」（不编 0%，本周期照常）works")
 }
 
-/// 5) 主面板缓存卡与二级页同源
+/// 5) 主面板缓存条与二级页同源
+///
+/// 收敛为两屏后主面板只剩一条缓存命中条，它直接读 cachePage（不再经模型的中转字段）。
+/// 这里改为守住「同一份 cachePage 喂两处」这件事：范围换、数值与单位一起换。
 func testCachePaneModelSync() {
     let snapshot = cacheRangeSnapshot()
     for range in [TokenRange.today, .d7, .d30] {
-        let model = cacheModel(snapshot, range)
-        let page = model.cachePage
-        assertEqual(model.hitText, page.heroValue, "\(range.title) 主面板大数字 = 二级页主数值")
-        assertEqual(model.hitBucketText, page.bucketUnitText, "\(range.title) 主面板桶数文案 = 二级页")
-        assertEqual(model.hitMeta.hasPrefix(range.title), true,
-                    "\(range.title) 主面板缓存卡说明以当前范围开头")
-        assertEqual(model.hitRateFraction, page.ringFraction, "\(range.title) 主面板环与二级页环同值")
+        let page = cacheModel(snapshot, range).cachePage
+        assertEqual(page.range, range, "\(range.title) 缓存页范围 = 主面板当前范围")
+        assertEqual(page.crumbMeta, range.title + "口径", "\(range.title) 主面板与二级页共用同一份面包屑口径")
+        assertEqual(page.bucketUnitText,
+                    range == .today ? "24 桶" : "\(range.days) 天",
+                    "\(range.title) 桶数文案随范围")
+        assertEqual(page.ringText, page.heroValue, "\(range.title) 环心文字 = 主数值")
     }
-    let d7 = cacheModel(snapshot, .d7)
-    assertEqual(d7.hitMeta, "近 7 天 " + d7.cachePage.heroValue + "%", "近 7 天主面板缓存卡说明")
-    print("✅ 主面板缓存卡与二级页同源（大数字 / 桶数 / 序列 / 环形比例）works")
+    // 同一快照换范围真的换数（不是换标签）：三档命中率互不相同
+    let values = [TokenRange.today, .d7, .d30].map { cacheModel(snapshot, $0).cachePage.heroValue }
+    assertEqual(Set(values).count, 3, "三档范围的主数值互不相同")
+    print("✅ 主面板缓存条与二级页同源（同一份 cachePage / 三档范围数值互不相同）works")
+}
+
+/// 6) 口径脚注写明「跨 N 个来源合并」（单来源不写，写了是噪音）
+///
+/// 契约见 docs/设计/Token多来源接入-设计规格.md §3.2：缓存命中率跨源合并后仍然有意义，
+/// 但用户看不出这个数是「一家」还是「几家之和」，所以 ≥2 个来源时要在口径里写出来。
+func testCacheNoteSourceCount() {
+    let snapshot = cacheRangeSnapshot()
+    func model(_ sources: [TokenSourceID]) -> TokenPaneModel {
+        TokenPaneModel.make(snapshot: snapshot, range: .today, availableSources: sources,
+                            hourScope: .today, hourView: .stack, metric: .total)
+    }
+    // 单来源：只写「命中率」口径，不出现「跨 N 个来源」
+    let single = model([.claudeCode]).cachePage
+    assertEqual(single.note.contains("跨"), false, "单来源的脚注不写跨源合并")
+    assertEqual(single.note.contains("口径：命中率只看"), true, "单来源脚注仍给口径说明")
+
+    // 双来源：写明合并了几家（N 取自 availableSources，与页头同一份判据）
+    let dual = model([.claudeCode, .codex]).cachePage
+    assertEqual(dual.note.contains("跨 2 个来源合并"), true, "双来源的脚注写明跨 2 个来源合并")
+
+    // 三来源：N 跟着变，不是写死 2
+    assertEqual(model([.claudeCode, .codex, .zed]).cachePage.note.contains("跨 3 个来源合并"), true,
+                "三来源的脚注写明跨 3 个来源合并")
+    print("✅ 缓存页脚注的来源数（单来源省略 / 双来源写「跨 2 个来源合并」）works")
 }
 
 /// 套件入口（由 runTokenRangeConsistencyTests 调用，main.swift 调度不变）
@@ -95,4 +124,5 @@ func runTokenCachePageTests() {
     testCacheCopyFollowsRange()
     testCacheNoPreviousData()
     testCachePaneModelSync()
+    testCacheNoteSourceCount()
 }

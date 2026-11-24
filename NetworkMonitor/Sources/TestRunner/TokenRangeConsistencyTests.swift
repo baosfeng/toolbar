@@ -103,7 +103,7 @@ private func testProjectModelFollowRange() {
     // TokenPaneModel 的卡头与行数随范围
     for range in [TokenRange.today, .d7, .d30] {
         let model = TokenPaneModel.make(snapshot: snapshot, range: range, hourScope: .today,
-                                        hourView: .stack, metric: .total, trendMode: .stack)
+                                        hourView: .stack, metric: .total)
         assertEqual(model.projectMeta, "\(range.window.title) \(model.projects.count) 个",
                     "\(range.window.title) 卡头文案随范围")
         assertEqual(model.projectCount, model.projects.count, "projectCount 与行数一致")

@@ -36,13 +36,16 @@ package struct TokenDistroCopy {
     /// 用户把主面板切到近 7 天后页面仍是混合口径，直接要求「我选择 7 天就只展示 7 天的」。
     /// 现在每一块都用同一个范围，文案必须与实现逐条对得上：范围取哪个、桶怎么数、
     /// 上一周期从哪来，都在这里写明，TestRunner 直接断言这段文案。
-    package static func cacheNote(range: TokenRange) -> String {
+    /// - Parameter sourceCount: 参与合并的来源数（页头「全部」时 = 有数据的来源数）
+    package static func cacheNote(range: TokenRange, sourceCount: Int = 1) -> String {
         let buckets = range == .today ? "24 个小时桶" : "\(range.days) 个天桶"
         let previous = range == .today ? "昨日同时段" : "再往前 " + String(range.days) + " 天"
+        // 跨源合并后命中率仍同口径（设计规格 §3.2），但看不出是「一家」还是「几家之和」，≥2 家才写
+        let merged = sourceCount >= 2 ? "跨 " + String(sourceCount) + " 个来源合并（分子分母同口径）。" : ""
         return "口径：命中率只看「缓存读」与「未缓存输入」两项，输出不进分母（输出不可能被缓存）。"
-            + "本页每一块都跟随主面板范围（" + range.title + "）：主数值、环形卡、走势、对照、统计"
-            + "全部是同一个窗口，不混用两种口径。按 " + buckets + "逐桶算；"
-            + "上一周期取同一长度的前一段（" + previous + "），上一周期没有数据时写「—」，不拿 0% 冒充。"
+            + "本页每一块都跟随主面板范围（" + range.title + "），按 " + buckets + "逐桶算；"
+            + "上一周期取同一长度的前一段（" + previous + "），没有数据时写「—」，不拿 0% 冒充。"
+            + merged
             + "没有单价表，所以不给金额折算。"
     }
 

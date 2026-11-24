@@ -83,9 +83,12 @@ final class TokenSkeletonView: NSView {
 final class TokenEmptyView: NSView {
 
     /// 默认空态文案（索引正常但确实还没有会话）
+    ///
+    /// 不绑定单一来源：七家来源（DSH / Claude Code / Codex / Gemini CLI / Copilot CLI /
+    /// OpenCode / Zed）都已接入，只写 DSH 会让另外六家的用户以为这里收不到自己的数据。
     private static let defaultTitle = "还没有可统计的会话"
-    private static let defaultNote = "运行一次 DSH 会话后，这里会出现 token 消耗。\n"
-        + "数据来自 DSH 会话日志；目录可在「设置 → Token 用量」里指定。"
+    private static let defaultNote = "运行一次会话后，这里会出现 token 消耗。\n"
+        + "数据来自各来源的会话日志；目录可在「设置 → Token 用量」里指定。"
 
     /// 「重新扫描」按钮行（键盘可达）
     let retryRow: MenuPanelRow
@@ -107,7 +110,7 @@ final class TokenEmptyView: NSView {
         retryLabel.alignment = .center
         retryRow.widthAnchor.constraint(equalToConstant: 96).isActive = true
         retryRow.contentStack.addArrangedSubview(retryLabel)
-        retryRow.setAccessibilityLabel("重新扫描 DSH 会话")
+        retryRow.setAccessibilityLabel("重新扫描会话日志")
 
         let title = titleLabel
         let note = noteLabel
@@ -144,12 +147,12 @@ final class TokenEmptyView: NSView {
         guard let reason, !reason.isEmpty else {
             titleLabel.stringValue = Self.defaultTitle
             noteLabel.stringValue = Self.defaultNote
-            retryRow.setAccessibilityLabel("重新扫描 DSH 会话")
+            retryRow.setAccessibilityLabel("重新扫描会话日志")
             return
         }
         titleLabel.stringValue = "Token 索引失败"
         noteLabel.stringValue = reason + "\n可点「重新扫描」重试。"
-        retryRow.setAccessibilityLabel("重新扫描 DSH 会话（上次失败：" + reason + "）")
+        retryRow.setAccessibilityLabel("重新扫描会话日志（上次失败：" + reason + "）")
     }
 }
 

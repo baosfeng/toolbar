@@ -20,11 +20,8 @@ extension TokenPaneSnapshot {
             ("compare", .compare, .total),
         ]
         for state in states {
-            let panel = MenuPanelView.evidencePanel()
-            panel.updateToken(snapshot, notifySize: false)
-            panel.select(tab: .token)
+            let panel = tokenPanel(snapshot)
             panel.tokenPane.applyStateForSnapshot(range: .today, hourScope: .today,
-                                                  trendMode: .stack,
                                                   hourView: state.hourView, metric: state.metric)
             panel.layoutSubtreeIfNeeded()
             lines.append("# 主面板 · " + state.name)
@@ -32,9 +29,7 @@ extension TokenPaneSnapshot {
             appendLegendLine(&lines, legend: panel.tokenPane.hourLegend)
         }
 
-        let detailPanel = MenuPanelView.evidencePanel()
-        detailPanel.updateToken(snapshot, notifySize: false)
-        detailPanel.select(tab: .token)
+        let detailPanel = tokenPanel(snapshot)
         detailPanel.tokenPane.openDetailForSnapshot(.hourly)
         detailPanel.layoutSubtreeIfNeeded()
         let bars = barViews(in: detailPanel.tokenPane.detailPane)

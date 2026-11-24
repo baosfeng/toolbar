@@ -49,9 +49,11 @@ final class TokenCacheHitStripView: TokenCardRow {
         readCell.update(title: "缓存读", value: page.cacheReadText, color: TokenPaneStyle.cacheInk)
         uncachedCell.update(title: "未缓存", value: page.uncachedText)
         savedCell.update(title: page.saveRatioLabel, value: page.saveRatioText)
+        // 动作是「打开二级页」不是「切屏」：这句读屏文案改前写成「可切换到缓存屏」，
+        // 而缓存屏已在两屏收敛中降级为 detail(.cache)，照旧说法会让人去找一个不存在的分段
         setAccessibilityLabel("缓存命中率 " + page.ringText + "%，缓存读 " + page.cacheReadText
             + "，未缓存输入 " + page.uncachedText + "，" + page.saveRatioLabel + " "
-            + page.saveRatioText + "。可切换到缓存屏")
+            + page.saveRatioText + "。可打开缓存的详细页")
     }
 }
 

@@ -20,9 +20,7 @@ extension TokenPaneSnapshot {
 
         // 1. 排行屏：项目 / 模型两个维度各一遍（维度分段切换后行整套换掉）
         for dimension in [TokenDistroDimension.projects, .models] {
-            let panel = MenuPanelView.evidencePanel()
-            panel.updateToken(snapshot, notifySize: false)
-            panel.select(tab: .token)
+            let panel = tokenPanel(snapshot)
             panel.tokenPane.selectScreenForSnapshot(.distro)
             panel.tokenPane.rankScreen.setDimensionForSnapshot(dimension)
             if let model = panel.tokenPane.lastModel { panel.tokenPane.rankScreen.update(model: model) }
@@ -39,9 +37,7 @@ extension TokenPaneSnapshot {
 
         // 2. 三张二级页：整宽列表行 + 顶部占比条 + 图例项（同一套组件挂的文案）
         for kind in TokenDetailKind.allCases {
-            let detailPanel = MenuPanelView.evidencePanel()
-            detailPanel.updateToken(snapshot, notifySize: false)
-            detailPanel.select(tab: .token)
+            let detailPanel = tokenPanel(snapshot)
             detailPanel.tokenPane.openDetailForSnapshot(kind)
             detailPanel.layoutSubtreeIfNeeded()
             let detailPane = detailPanel.tokenPane.detailPane

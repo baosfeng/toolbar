@@ -65,14 +65,6 @@ package enum TokenChartMetric: Int, CaseIterable {
     package var title: String { self == .total ? "总量" : "请求数" }
 }
 
-/// 天趋势形态：面积 / 分线
-package enum TokenTrendMode: Int, CaseIterable {
-    case stack
-    case line
-
-    package var title: String { self == .stack ? "面积" : "分线" }
-}
-
 /// 四个指标族
 package enum TokenMetric: Int, CaseIterable {
     case uncached

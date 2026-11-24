@@ -37,20 +37,9 @@ package struct TokenPaneModel {
     package let bucketLegend: [(title: String, value: String)]
     /// 累计虚线基准（无量纲，按当前序列累加）
     package let cumulative: [Double]
-    package let cumulativeText: String
 
-    package let trendBuckets: [TokenBucket]
-    package let trendTitle: String
-    package let trendMeta: String
-
-    package let hitText: String
-    package let hitMeta: String
     package let cacheReadText: String
     package let uncachedText: String
-    /// 当前口径命中率（0…1，环形图用）
-    package let hitRateFraction: Double
-    /// 桶数文案（24 桶 / 7 天 / 30 天）
-    package let hitBucketText: String
 
     package let projects: [TokenDistroRow]
     package let models: [TokenDistroRow]
@@ -101,7 +90,6 @@ package struct TokenPaneModel {
                      hourScope: TokenHourScope,
                      hourView: TokenHourView,
                      metric: TokenChartMetric,
-                     trendMode: TokenTrendMode,
                      now: Date = Date()) -> TokenPaneModel {
         let today = TokenDerive.todayBuckets(snapshot)
         let yesterday = TokenDerive.yesterdayBuckets(snapshot)
@@ -120,13 +108,14 @@ package struct TokenPaneModel {
         let modelRows = TokenDerive.modelRows(snapshot, window: range.window)
         // 二级页文案与主面板同源派生，避免「上面跟随范围、下面写累计口径」再次分叉
         let distroCopy = TokenDerive.distroCopy(range: range)
-        // 缓存命中页与主面板缓存卡共用同一份派生：卡片大数字 / 图例桶数 / 环形比例
-        // 全部取自 cachePage，视图层不再各算一遍（改前主面板说「昨日 97.1%」而圆环画的是今日，
-        // 就是两套算式各走各的留下的坑）
-        let cachePage = TokenDerive.cachePage(snapshot, range: range)
-
         // 有数据的来源：调用方（页头菜单）给了就用它，否则按快照的 bySource 自己推
         let dataSources = availableSources ?? TokenSourceScope.dataSources(in: snapshot)
+        // 缓存命中页与主面板缓存卡共用同一份派生：卡片大数字 / 图例桶数 / 环形比例
+        // 全部取自 cachePage，视图层不再各算一遍（改前主面板说「昨日 97.1%」而圆环画的是今日，
+        // 就是两套算式各走各的留下的坑）。
+        // 来源数用这里已经算好的 dataSources：脚注「跨 N 个来源合并」的 N 与页头同一份判据，
+        // 不另读偏好，也不在 Core 里再推一次。
+        let cachePage = TokenDerive.cachePage(snapshot, range: range, sourceCount: dataSources.count)
         // 页名：显式选了来源就写它；只有一个有数据的来源时也写它
         let pageName = TokenSourceScope.displaySource(selected: source, dataSources: dataSources)?
             .displayName ?? "全部"
@@ -155,17 +144,8 @@ package struct TokenPaneModel {
             bucketLegend: TokenDerive.bucketLegend(range: range, total: windowTotal, prev: windowPrevTotal,
                                                    hourScope: hourScope, hourView: hourView, metric: metric),
             cumulative: TokenDerive.cumulative(windowBuckets, metric: metric),
-            cumulativeText: TokenFormatting.tokens(TokenDerive.metricTotal(windowBuckets, metric: metric)),
-            trendBuckets: TokenDerive.dailyBuckets(snapshot, days: 14),
-            trendTitle: "天趋势 · 固定 14 天",
-            trendMeta: TokenDerive.trendMeta(snapshot),
-            hitText: cachePage.heroValue,
-            // 说明始终写当前范围（曾按 hourScope 写「昨日」，而数值取的是今日，标签与数字打架）
-            hitMeta: range.title + " " + cachePage.heroValue + "%",
             cacheReadText: TokenFormatting.tokens(currentTotal.cache),
             uncachedText: TokenFormatting.tokens(currentTotal.uncached),
-            hitRateFraction: cachePage.ringFraction,
-            hitBucketText: cachePage.bucketUnitText,
             projects: projectRows,
             models: modelRows,
             projectMeta: "\(distroCopy.rangeTitle) \(projectRows.count) 个",

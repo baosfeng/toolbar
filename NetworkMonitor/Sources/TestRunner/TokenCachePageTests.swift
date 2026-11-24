@@ -48,7 +48,7 @@ func cacheNoPreviousSnapshot() -> HarnessUsageSnapshot {
 
 func cacheModel(_ snapshot: HarnessUsageSnapshot, _ range: TokenRange) -> TokenPaneModel {
     TokenPaneModel.make(snapshot: snapshot, range: range, hourScope: .today,
-                        hourView: .stack, metric: .total, trendMode: .stack)
+                        hourView: .stack, metric: .total)
 }
 
 /// 1) 桶序列跟随范围（由 TokenCachePageCopyTests 的套件入口跨文件调用，故不设 private）
@@ -72,9 +72,11 @@ func testCacheBucketsFollowRange() {
     assertEqual(today.cachePage.bucketUnitText, "24 桶", "今日桶数单位「24 桶」")
     assertEqual(d7.cachePage.bucketUnitText, "7 天", "近 7 天桶数单位「7 天」")
     assertEqual(d30.cachePage.bucketUnitText, "30 天", "近 30 天桶数单位「30 天」")
-    // 主面板缓存卡图例的虚线条目与二级页同一处取值
-    assertEqual(today.hitBucketText, today.cachePage.bucketUnitText, "主面板「24 桶」与二级页同源")
-    assertEqual(d7.hitBucketText, d7.cachePage.bucketUnitText, "主面板「7 天」与二级页同源")
+    // 主面板缓存条与二级页同一处取值（视图层直接读 cachePage，模型不再各存一份）
+    assertEqual(today.cacheReadText, TokenFormatting.tokens(TokenDerive.sum(today.buckets).cache),
+                "主面板缓存读与桶合计同源")
+    assertEqual(d7.cacheReadText, TokenFormatting.tokens(TokenDerive.sum(d7.buckets).cache),
+                "近 7 天缓存读与桶合计同源")
 
     // 轴行等宽分列：30 格每格只剩约 8pt，mmdd 会被裁成一个「1」，所以少给刻度
     assertEqual(today.cachePage.axisLabels.count, 5, "今日横轴 5 个刻度（0/6/12/18/23 时）")

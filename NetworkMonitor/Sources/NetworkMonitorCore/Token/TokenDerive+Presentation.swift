@@ -135,13 +135,7 @@ extension TokenDerive {
 
     package static func metricIndex(_ bucket: TokenBucket) -> Int { bucket.total }
 
-    // MARK: - 天趋势 / 分布 / 对比 / 状态带
-
-    package static func trendMeta(_ snapshot: HarnessUsageSnapshot) -> String {
-        let buckets = dailyBuckets(snapshot, days: 14)
-        let total = sum(buckets).total
-        return "不随范围 · 日均 " + TokenFormatting.tokens(Int(Double(total) / 14.0))
-    }
+    // MARK: - 分布 / 对比 / 状态带
 
     /// 项目分布行 —— 跟随范围（`window` = 当前范围的数据窗口）
     ///

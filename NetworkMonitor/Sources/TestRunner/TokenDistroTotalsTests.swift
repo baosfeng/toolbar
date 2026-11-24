@@ -16,7 +16,7 @@ private func testDistroTotals() {
     ]
     let model = TokenPaneModel.make(snapshot: tokenSnapshot(projects: projects), range: .today,
                                     hourScope: .today, hourView: .stack,
-                                    metric: .total, trendMode: .stack)
+                                    metric: .total)
     assertEqual(model.projectTotals.totalTokens, 615, "汇总块总 tok = 该窗口全部项目合计")
     assertEqual(model.projectTotals.cacheRead, 450, "汇总块缓存读")
     assertEqual(model.projectTotals.uncached, 150, "汇总块未缓存输入")

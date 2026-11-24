@@ -146,22 +146,21 @@ private func testPaneModelMake() {
     let fixedDate = HarnessTokenTimeWindow.calendar.date(from: components) ?? Date()
 
     let model = TokenPaneModel.make(snapshot: snapshot, range: .today, hourScope: .today, hourView: .stack,
-                                    metric: .total, trendMode: .stack, now: fixedDate)
+                                    metric: .total, now: fixedDate)
     assertEqual(model.buckets.count, 24, "今日模型 24 桶")
     assertEqual(model.bucketTitle, "今日 · 按小时 24 桶", "主图标题随范围与形态")
-    assertEqual(model.hitBucketText, "24 桶", "今日按桶统计")
+    assertEqual(model.cachePage.bucketUnitText, "24 桶", "今日按桶统计")
     assertEqual(model.hostLabel, "DSH · 3 会话", "页头会话数")
     assertEqual(model.stamp, "17:05", "页头时钟")
     assertEqual(model.hero.title, "今日总消耗", "Hero 跟随今日范围")
     assertEqual(model.cards.count, 4, "四族卡随范围")
-    assertEqual(model.trendBuckets.count, 14, "天趋势固定 14 天")
-    assertEqual(model.trendTitle, "天趋势 · 固定 14 天", "天趋势标题不随范围")
-    assertEqual(model.hitRateFraction, TokenDerive.hitRate(TokenDerive.sum(model.buckets)), "环形图命中率与桶合计同源")
+    assertEqual(model.cachePage.ringFraction, TokenDerive.hitRate(TokenDerive.sum(model.buckets)),
+                "环形图命中率与桶合计同源")
     assertEqual(model.hasData, true, "有累计数据不判空态")
     let emptyModel = TokenPaneModel.make(snapshot: tokenSnapshot(), range: .today, hourScope: .today,
-                                         hourView: .stack, metric: .total, trendMode: .stack, now: fixedDate)
+                                         hourView: .stack, metric: .total, now: fixedDate)
     assertEqual(emptyModel.hasData, false, "空快照判空态")
-    print("✅ Token 展示模型装配（make 可见性 / 页头 / 趋势固定 14 天）works")
+    print("✅ Token 展示模型装配（make 可见性 / 页头 / 缓存页同源数值）works")
 }
 
 // MARK: - 主图图例（项数与形态一致）

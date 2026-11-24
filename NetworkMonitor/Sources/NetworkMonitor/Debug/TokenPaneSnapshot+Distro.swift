@@ -65,9 +65,7 @@ extension TokenPaneSnapshot {
     /// 切到排行屏并指定维度的面板
     private static func makeRankingPanel(snapshot: HarnessUsageSnapshot,
                                         dimension: TokenDistroDimension) -> MenuPanelView {
-        let panel = MenuPanelView.evidencePanel()
-        panel.updateToken(snapshot, notifySize: false)
-        panel.select(tab: .token)
+        let panel = tokenPanel(snapshot)
         panel.tokenPane.selectScreenForSnapshot(.distro)
         panel.tokenPane.rankScreen.setDimensionForSnapshot(dimension)
         if let model = panel.tokenPane.lastModel { panel.tokenPane.rankScreen.update(model: model) }

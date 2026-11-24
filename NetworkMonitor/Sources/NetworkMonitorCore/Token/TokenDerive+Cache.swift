@@ -118,8 +118,11 @@ extension TokenDerive {
     /// - 当前范围桶序列：今日 24 个小时桶；近 7 / 30 天为按天桶（含无数据的补 0 桶）；
     /// - 当前命中率 = 命中率(该序列合计)，分母只含缓存读 + 未缓存输入；
     /// - 上一周期：今日 → 昨日 24 桶；近 7 / 30 天 → 同长度前一段的天桶；
-    /// - 上一周期分母为 0 时不给数字（「—」），不拿 0% 冒充「命中率 0」。
-    package static func cachePage(_ snapshot: HarnessUsageSnapshot, range: TokenRange) -> TokenCachePage {
+    /// - 上一周期分母为 0 时不给数字（「—」），不拿 0% 冒充「命中率 0」；
+    /// - sourceCount：参与合并的来源数（脚注「跨 N 个来源合并」的 N），nil = 按快照自己算。
+    package static func cachePage(_ snapshot: HarnessUsageSnapshot, range: TokenRange,
+                                  sourceCount: Int? = nil) -> TokenCachePage {
+        let mergedSources = sourceCount ?? TokenSourceScope.dataSources(in: snapshot).count
         let buckets = range == .today ? todayBuckets(snapshot) : dailyBuckets(snapshot, days: range.days)
         let previousBuckets = range == .today
             ? yesterdayBuckets(snapshot)
@@ -201,7 +204,7 @@ extension TokenDerive {
             previousDaysWithData: previousDaysWithData,
             previousDaysExpected: previousDaysExpected,
             crumbMeta: range.title + "口径",
-            note: TokenDistroCopy.cacheNote(range: range))
+            note: TokenDistroCopy.cacheNote(range: range, sourceCount: mergedSources))
     }
 
     /// 对照卡卡头说明

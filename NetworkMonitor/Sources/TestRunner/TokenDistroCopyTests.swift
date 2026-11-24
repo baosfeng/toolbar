@@ -48,7 +48,7 @@ func testDistroPageCopyFollowsRange() {
     // 同一份 snapshot 三个范围各建一次模型
     func paneModel(_ range: TokenRange) -> TokenPaneModel {
         TokenPaneModel.make(snapshot: snapshot, range: range, hourScope: .today,
-                            hourView: .stack, metric: .total, trendMode: .stack)
+                            hourView: .stack, metric: .total)
     }
     let today = paneModel(.today)
     let d7 = paneModel(.d7)

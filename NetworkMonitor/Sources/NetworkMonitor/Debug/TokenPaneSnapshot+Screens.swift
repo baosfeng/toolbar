@@ -57,9 +57,7 @@ extension TokenPaneSnapshot {
     /// 切到指定屏的面板（截图与台账共用同一条链路）
     private static func makeScreenPanel(snapshot: HarnessUsageSnapshot,
                                         screen: TokenScreen) -> MenuPanelView {
-        let panel = MenuPanelView.evidencePanel()
-        panel.updateToken(snapshot, notifySize: false)
-        panel.select(tab: .token)
+        let panel = tokenPanel(snapshot)
         panel.tokenPane.selectScreenForSnapshot(screen)
         panel.layoutSubtreeIfNeeded()
         return panel

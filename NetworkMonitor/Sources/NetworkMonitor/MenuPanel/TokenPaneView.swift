@@ -42,7 +42,6 @@ final class TokenPaneView: MenuPanelPaneView {
     var hourScope: TokenHourScope = .today
     var hourView: TokenHourView = .stack
     var metric: TokenChartMetric = .total
-    var trendMode: TokenTrendMode = .stack
     /// 当前屏 —— 区块归属见 TokenScreen 契约
     private(set) var screen: TokenScreen = .overview
     /// 当前打开的二级页（nil = 主面板）
@@ -241,12 +240,14 @@ final class TokenPaneView: MenuPanelPaneView {
     }
 
 #if DEBUG
-    /// 快照自证专用（仅 DEBUG）：切换范围 / 小时归属 / 趋势形态 / 主图形态（堆叠·对比）
-    func applyStateForSnapshot(range: TokenRange, hourScope: TokenHourScope, trendMode: TokenTrendMode,
+    /// 快照自证专用（仅 DEBUG）：切换范围 / 小时归属 / 主图形态（堆叠·对比）
+    ///
+    /// 天趋势形态随「天趋势」独立屏一起下线，取证入口不再接收它：
+    /// 收了也没有第二处读它，只会让每个调用点多写一个恒定实参。
+    func applyStateForSnapshot(range: TokenRange, hourScope: TokenHourScope,
                                hourView: TokenHourView? = nil, metric: TokenChartMetric? = nil) {
         self.range = range
         self.hourScope = hourScope
-        self.trendMode = trendMode
         if let hourView { self.hourView = hourView }
         if let metric { self.metric = metric }
         if snapshot != nil { render() }

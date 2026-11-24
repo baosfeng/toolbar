@@ -12,6 +12,25 @@ import NetworkMonitorDesign
 @MainActor
 enum TokenPaneSnapshot {
 
+    /// 快照必出的两档外观：浅色保持原名，深色加 "-dark" 后缀
+    ///
+    /// 集中一份而不是每个取证函数各写一行循环：改前有三处只写死 .aqua，
+    /// 「深色下读不读得全」就一直缺图，且每加一处又要漏一次。
+    static let appearancePasses: [(appearance: NSAppearance.Name, suffix: String)] = [
+        (.aqua, ""), (.darkAqua, "-dark"),
+    ]
+
+    /// 造一块已装好 Token 快照的面板 —— 取证函数的公共前缀
+    ///
+    /// 同一段四行在八个文件里重复了十几处，是这部分最贵的空白。集中一份的好处不只是省行数：
+    /// 取证链上「先 updateToken 再 select(tab:)」的先后顺序只有一处可写错。
+    static func tokenPanel(_ snapshot: HarnessUsageSnapshot) -> MenuPanelView {
+        let panel = MenuPanelView.evidencePanel()
+        panel.updateToken(snapshot, notifySize: false)
+        panel.select(tab: .token)
+        return panel
+    }
+
     /// 等一次按需索引跑完，返回真实快照（服务未装配时返回 nil）
     static func waitForSnapshot(harness: (any HarnessUsageServicing)?) async -> HarnessUsageSnapshot? {
         guard let harness else { return nil }
@@ -41,9 +60,7 @@ enum TokenPaneSnapshot {
                                                        state: .failed(message: missing.displayMessage))),
         ]
         for state in states {
-            let panel = MenuPanelView.evidencePanel()
-            panel.updateToken(state.snapshot, notifySize: false)
-            panel.select(tab: .token)
+            let panel = tokenPanel(state.snapshot)
             let height = min(max(panel.desiredContentHeight, 180), MenuPanelStyle.maxHeight)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
@@ -56,9 +73,7 @@ enum TokenPaneSnapshot {
         if let tokenSnapshot {
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let name = appearance == .aqua ? "light" : "dark"
-                let panel = MenuPanelView.evidencePanel()
-                panel.updateToken(tokenSnapshot, notifySize: false)
-                panel.select(tab: .token)
+                let panel = tokenPanel(tokenSnapshot)
                 let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
                 MenuPanelSnapshot.render(view: panel, size: size, appearanceName: appearance,
                                          to: directory.appendingPathComponent("menu-token-lower-\(name).png"),
@@ -70,9 +85,7 @@ enum TokenPaneSnapshot {
 
         // 折叠区块展开态（手风琴详情布局自证）
         if let tokenSnapshot {
-            let panel = MenuPanelView.evidencePanel()
-            panel.updateToken(tokenSnapshot, notifySize: false)
-            panel.select(tab: .token)
+            let panel = tokenPanel(tokenSnapshot)
             panel.tokenPane.openDetailForSnapshot(.hourly)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
             MenuPanelSnapshot.render(view: panel, size: size, appearanceName: .aqua,
@@ -85,10 +98,8 @@ enum TokenPaneSnapshot {
         // 交互状态：近 7 天 + 折线 + 比昨日（覆盖范围切换与两种图标形态）
         // 主图与天趋势现在都在「用量」屏，取证必须先切屏再截
         if let tokenSnapshot {
-            let panel = MenuPanelView.evidencePanel()
-            panel.updateToken(tokenSnapshot, notifySize: false)
-            panel.select(tab: .token)
-            panel.tokenPane.applyStateForSnapshot(range: .d7, hourScope: .yesterday, trendMode: .line)
+            let panel = tokenPanel(tokenSnapshot)
+            panel.tokenPane.applyStateForSnapshot(range: .d7, hourScope: .yesterday)
             panel.tokenPane.selectScreenForSnapshot(.overview)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
             MenuPanelSnapshot.render(view: panel, size: size, appearanceName: .aqua,
@@ -99,11 +110,9 @@ enum TokenPaneSnapshot {
         if let tokenSnapshot {
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let name = appearance == .aqua ? "light" : "dark"
-                let panel = MenuPanelView.evidencePanel()
-                panel.updateToken(tokenSnapshot, notifySize: false)
-                panel.select(tab: .token)
+                let panel = tokenPanel(tokenSnapshot)
                 panel.tokenPane.applyStateForSnapshot(range: .today, hourScope: .today,
-                                                      trendMode: .stack, hourView: .compare)
+                                                      hourView: .compare)
                 panel.tokenPane.selectScreenForSnapshot(.overview)
                 let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
                 MenuPanelSnapshot.render(view: panel, size: size, appearanceName: appearance,
@@ -116,9 +125,7 @@ enum TokenPaneSnapshot {
         if let tokenSnapshot {
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 let name = appearance == .aqua ? "light" : "dark"
-                let panel = MenuPanelView.evidencePanel()
-                panel.updateToken(tokenSnapshot, notifySize: false)
-                panel.select(tab: .token)
+                let panel = tokenPanel(tokenSnapshot)
                 let size = NSSize(width: MenuPanelStyle.panelWidth, height: MenuPanelStyle.maxHeight)
                 MenuPanelSnapshot.render(view: panel, size: size, appearanceName: appearance,
                                          to: directory.appendingPathComponent("menu-token-520-\(name).png"),
@@ -128,9 +135,7 @@ enum TokenPaneSnapshot {
 
         // 定稿画布 320×600：主面板整幅（面板默认 clamp 520，这里按原型画布取证）
         if let tokenSnapshot {
-            let panel = MenuPanelView.evidencePanel()
-            panel.updateToken(tokenSnapshot, notifySize: false)
-            panel.select(tab: .token)
+            let panel = tokenPanel(tokenSnapshot)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: 600)
             MenuPanelSnapshot.render(view: panel, size: size, appearanceName: .aqua,
                                      to: directory.appendingPathComponent("menu-token-canvas600-light.png"),
@@ -148,9 +153,9 @@ enum TokenPaneSnapshot {
         // 小时卡取证：面板内容宽 296（320 面板）+ 更窄的 300 面板口径，证明不截断不重叠
         if let tokenSnapshot {
             captureHourCard(directory: directory, snapshot: tokenSnapshot,
-                            width: MenuPanelStyle.contentWidth, name: "menu-token-hourcard-320.png")
+                            width: MenuPanelStyle.contentWidth, name: "menu-token-hourcard-320")
             captureHourCard(directory: directory, snapshot: tokenSnapshot,
-                            width: 300 - MenuPanelStyle.inset * 2, name: "menu-token-hourcard-300.png")
+                            width: 300 - MenuPanelStyle.inset * 2, name: "menu-token-hourcard-300")
         }
 
         if let tokenSnapshot {
@@ -187,9 +192,7 @@ enum TokenPaneSnapshot {
 
     /// 导出关键区块几何（与原型 CSS 值逐项对照）
     private static func writeLayoutMetrics(directory: URL, snapshot: HarnessUsageSnapshot) {
-        let panel = MenuPanelView.evidencePanel()
-        panel.updateToken(snapshot, notifySize: false)
-        panel.select(tab: .token)
+        let panel = tokenPanel(snapshot)
         panel.layoutSubtreeIfNeeded()
         let pane = panel.tokenPane
         var lines = ["pane_width_pt = \(Int(pane.bounds.width.rounded()))"]
