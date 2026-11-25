@@ -83,12 +83,24 @@ extension SettingsCapturePane {
                                           subtitle: "与线宽解耦；截图里用 0 / 9 或滚轮微调")
         fontSizeRow.trailingStack.addArrangedSubview(fontSizeStack)
 
+        // 滚轮调数值的总开关：滚轮已被塞进四种语义（调粗细 / 调透明度 / 缩放图形 / 调放大镜），
+        // 不给整体关闭通路的话，习惯用滚轮做别的操作的用户只能忍
+        let scrollSwitch = NSSwitch()
+        scrollSwitch.target = self
+        scrollSwitch.action = #selector(scrollAdjustChanged)
+        scrollSwitch.setAccessibilityLabel("滚轮调整标注数值")
+        scrollAdjustSwitch = scrollSwitch
+        let scrollRow = SettingsRowView(title: "滚轮调数值",
+                                        subtitle: "关掉后截图里的滚轮不再改粗细 / 透明度 / 缩放")
+        scrollRow.trailingStack.addArrangedSubview(scrollSwitch)
+
         let card = SettingsCardView()
         card.addRow(colorRow)
         card.addRow(widthRow)
         card.addRow(dashRow)
         card.addRow(fontSizeRow)
         addEffectStyleRows(to: card)
+        card.addRow(scrollRow)
         page.addCard(card, sectionTitle: "标注")
     }
 
@@ -103,6 +115,8 @@ extension SettingsCapturePane {
         widthValueLabel?.stringValue = SnipPanelLabelText.width(width)
 
         dashedSwitch?.state = storage.bool(forKey: SnipPreferenceKey.annotationDashed) ? .on : .off
+        // 缺键即开：老用户升级后滚轮行为不变
+        scrollAdjustSwitch?.state = ((storage.object(forKey: SnipPreferenceKey.scrollAdjustEnabled) as? Bool) ?? true) ? .on : .off
 
         let text = SnipTextStylePreference.load(storage: storage)
         // 字号显示的应当是「这支笔真正会用的字号」：缺键时回落到线宽推导值，
@@ -140,6 +154,12 @@ extension SettingsCapturePane {
         storage.set(Double(width), forKey: SnipPreferenceKey.annotationLineWidth)
         widthValueLabel?.stringValue = SnipPanelLabelText.width(width)
         logger.info("标注默认线宽：" + SnipPanelLabelText.width(width))
+    }
+
+    @objc func scrollAdjustChanged() {
+        let enabled = scrollAdjustSwitch?.state == .on
+        storage.set(enabled, forKey: SnipPreferenceKey.scrollAdjustEnabled)
+        logger.info("滚轮调数值：" + (enabled ? "开" : "关"))
     }
 
     @objc func dashedChanged() {

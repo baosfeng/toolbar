@@ -9,6 +9,9 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
     // MARK: - 工具条回调
 
     func toolBarDidChangeTool(_ tool: SnipTool?) {
+        // 首次进标注态浮一条操作提示：本轮把滚轮做成四种语义之后，
+        // ⌘ 快调 / ⌥ 精调 / ⌃ 透明度 / ⇧ 缩放 四条都没有可见入口
+        if tool != nil { hints.showIfNeeded() }
         // 「识别文字」是动作型条目：点中就直接对当前选区执行一次，不进入工具态
         // （它没有可绘制的图元，留在选中态会让下一次点选区又识别一遍，容易误触发）
         if tool == .ocr {

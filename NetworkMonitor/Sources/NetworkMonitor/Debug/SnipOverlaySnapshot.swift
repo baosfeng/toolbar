@@ -35,6 +35,8 @@ enum SnipOverlaySnapshot {
             // 本轮：数值读数气泡 + 画笔样式盘（含「输入数值…」格）
             renderToFile(at: directory.appendingPathComponent("overlay-numeric-hud.png"), phase: .numericHUD)
             renderToFile(at: directory.appendingPathComponent("overlay-style-panel.png"), phase: .stylePanel)
+            // 首次进标注态的操作提示（⌘ / ⌥ / ⌃ / ⇧ 四条组合键的唯一可见入口）
+            renderToFile(at: directory.appendingPathComponent("overlay-hints.png"), phase: .hints)
             NSApp.terminate(nil)
         }
     }
@@ -54,6 +56,8 @@ enum SnipOverlaySnapshot {
         case numericHUD
         /// 画笔样式盘：线宽档 + −/+ + 线型 + 五档透明度 + 「输入数值…」
         case stylePanel
+        /// 首次进标注态的操作提示（看过一次后不再出现）
+        case hints
     }
 
     /// 取证用的工具条配置：与默认配置一致（悬停提示档），保证图面对应真实默认外观
@@ -124,6 +128,11 @@ enum SnipOverlaySnapshot {
             view.debugOpenPanel(.styles(widths: SnipLineWidthStepper.widths,
                                         dashes: SnipToolBarView.dashes,
                                         alphas: SnipToolBarView.alphas))
+        case .hints:
+            view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            // 新用户视角：偏好里还没写过「看过了」，进标注态就会浮出提示
+            view.hints.alreadyShown = false
+            view.toolBarDidChangeTool(.rectangle)
         }
 
         let container = SnapshotBackdropView(frame: NSRect(origin: .zero, size: canvasSize))

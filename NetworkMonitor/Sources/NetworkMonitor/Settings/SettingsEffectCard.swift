@@ -7,7 +7,7 @@ import NetworkMonitorUI
 
 /// 马赛克粒度 / 模糊强度两行的组装、回灌与动作
 ///
-/// 为什么单独成文件而不挂在 SettingsCapturePane+Annotation：标注卡片本身已经装着
+/// 为什么单独成文件而不挂在 SettingsAnnotationCard：标注卡片本身已经装着
 /// 颜色 / 线宽 / 虚线 / 字号四行，再加两行就撞同族合计门禁；而这两行是**像素效果**
 /// （作用于底图像素，与笔的颜色线宽无关），概念上也是独立的一族。
 /// 文件名不带 `SettingsCapturePane` 前缀，因此单独成族、不占标注卡片的额度。

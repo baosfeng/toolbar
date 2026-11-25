@@ -141,6 +141,12 @@ extension SnipOverlayView {
     /// 手感完全不同（一个有档位、一个 3% 连续），而且都不落偏好。
     /// 现在统一成「选了什么就调什么」，步长与范围都来自 SnipNumericParam。
     override func scrollWheel(with event: NSEvent) {
+        // 总开关关掉时整条通路放行，不只跳过数值调整：
+        // 半开半关会让人分不清「滚轮在这个界面到底能不能用」
+        guard scrollAdjustEnabled else {
+            super.scrollWheel(with: event)
+            return
+        }
         if numeric.handleScroll(event) { return }
         super.scrollWheel(with: event)
     }

@@ -33,8 +33,8 @@ extension SnipController {
                               toolbarConfiguration: toolbarConfiguration,
                               delegate: self)
         }
+        OverlayPreferences.apply(to: overlays, storage: storage, logger: logger)
         // 样式回写：覆盖层里调过的颜色 / 线宽 / 实虚线要落进偏好，下次截图还是这支笔
-        // （此前设置页写了这三个键却无人消费，等于「设了不生效」）
         for window in overlays {
             window.overlayView.onStylePersist = { [weak self] style in
                 guard let self else { return }

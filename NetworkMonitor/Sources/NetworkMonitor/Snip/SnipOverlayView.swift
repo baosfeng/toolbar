@@ -98,6 +98,17 @@ final class SnipOverlayView: NSView {
     var onFirstFrameRendered: (() -> Void)?
     /// 是否有输入框正在编辑（此时按键要让给输入框）
     var hasActiveTextInput: Bool { sizeEditor != nil || textEditor != nil }
+    /// 是否允许滚轮调数值（设置页可关；缺键即开）
+    /// 滚轮已被塞进四种语义，不给整体开关的话，习惯拿它做别的操作的用户只能忍。
+    var scrollAdjustEnabled = true
+    /// 操作提示（首次进标注态浮 3 秒；看过就不再打扰）
+    lazy var hints = SnipHintsPresenter(
+        hostView: { [unowned self] in self },
+        selectionRect: { [unowned self] in self.state.selection },
+        bounds: { [unowned self] in self.bounds },
+        onShown: { [unowned self] in self.onHintsShown?() })
+    /// 看过提示后回写偏好（由编排层注入）
+    var onHintsShown: (() -> Void)?
     /// 本次按下时的落点（用于区分单击选窗与拖拽选区）
     /// 放宽为 internal：动作扩展文件（+Actions 的单击选窗判定）要读写
     var pressPoint: CGPoint?
@@ -105,11 +116,8 @@ final class SnipOverlayView: NSView {
     /// 放宽为 internal：动作扩展文件（+Actions 的单击选窗判定）要读写
     var pressedWindow: SnipWindowInfo?
 
-    /// 数值旋钮控制器（线宽 / 字号 / 透明度 / 马赛克粒度 / 模糊强度 / 放大镜倍数）
-    ///
-    /// 数值调整自成一套行为（参数表 / 步进 / 意图 / 滚轮归一 / 读数 / 精确输入 / 图形缩放），
-    /// 塞进 SnipOverlayView 的扩展会让同族合计门禁告警 —— 那正是「按类名堆文件」要被拦住的形态。
-    /// 装配见 SnipOverlayView+NumericWiring.swift。
+    /// 数值旋钮控制器（线宽 / 字号 / 透明度 / 马赛克 / 模糊 / 放大镜）
+    /// 数值调整自成一套行为，塞进本类扩展会让同族合计门禁告警；装配见 Snip/Numeric/。
     lazy var numeric = makeNumericController()
 
     init(frame: NSRect,
