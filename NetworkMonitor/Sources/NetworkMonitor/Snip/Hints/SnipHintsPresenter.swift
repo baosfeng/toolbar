@@ -79,9 +79,14 @@ final class SnipHintsPresenter {
             context.duration = Self.fadeDuration
             hints.animator().alphaValue = 0
         } completionHandler: { [weak self] in
-            hints.removeFromSuperview()
-            if self?.view === hints {
-                self?.view = nil
+            // completionHandler 是 @Sendable 的 nonisolated 闭包，AppKit 在主线程回调它；
+            // 直接摸主 actor 隔离的属性会被判成跨隔离访问（release 构建告警），
+            // 用 assumeIsolated 把「我知道自己在主线程」显式写出来。
+            MainActor.assumeIsolated {
+                hints.removeFromSuperview()
+                if self?.view === hints {
+                    self?.view = nil
+                }
             }
         }
     }

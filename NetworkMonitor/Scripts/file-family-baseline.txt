@@ -27,10 +27,10 @@ NetworkMonitorFeatureBilling/BillingMonitor 596 5
 NetworkMonitorFeatureClipboard/PasteboardWatcher 466 3
 NetworkMonitorFeatureSmoothScroll/ScrollSmoothingEngine 507 3
 NetworkMonitorFeatureSystemMetrics/SystemMonitor 370 2
-Numeric/SnipNumericController 365 2
+Numeric/SnipNumericController 369 2
 Pin/PinWindow 361 2
 Service/TransferService 1395 8
-Settings/SettingsCapturePane 891 5
+Settings/SettingsCapturePane 734 4
 Settings/SettingsClipboardPane 607 4
 Settings/SettingsGeneralPane 397 2
 Settings/SettingsNotificationPane 378 2
@@ -40,7 +40,7 @@ Settings/SettingsTokenPane 317 2
 Settings/SettingsTransferPane 413 3
 Settings/SettingsWindow 583 3
 Snip/SnipController 1324 7
-Snip/SnipOverlayView 1635 8
+Snip/SnipOverlayView 1418 7
 Snip/SnipToolBarView 455 3
 TestRunner/TestSuites 384 8
 Token/TokenDerive 705 4

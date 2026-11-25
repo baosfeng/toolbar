@@ -64,11 +64,15 @@ extension SnipNumericController {
                 context.duration = SnipNumericHUD.fadeDuration
                 view.animator().alphaValue = 0
             } completionHandler: { [weak self] in
-                guard let self, let view = self.hud else { return }
-                // 淡出期间若又被调整过（alphaValue 被拉回 1），这次隐藏要作废
-                guard view.alphaValue < 0.01 else { return }
-                view.isHidden = true
-                view.clear()
+                // completionHandler 是 nonisolated 的 @Sendable 闭包，AppKit 在主线程回调它；
+                // assumeIsolated 把「我知道自己在主线程」显式写出来，否则 release 构建告警。
+                MainActor.assumeIsolated {
+                    guard let self, let view = self.hud else { return }
+                    // 淡出期间若又被调整过（alphaValue 被拉回 1），这次隐藏要作废
+                    guard view.alphaValue < 0.01 else { return }
+                    view.isHidden = true
+                    view.clear()
+                }
             }
         }
         hudTask = task
