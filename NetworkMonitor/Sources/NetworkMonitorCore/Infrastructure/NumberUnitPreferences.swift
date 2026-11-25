@@ -24,11 +24,14 @@ public enum NumberUnitStyle: String, CaseIterable, Sendable, Equatable {
     ///
     /// 生效范围必须写明：网络页的柱状图标签用固定的短写法（`1.2G` / `34M`），
     /// 那是有意为之——柱子之间的刻度位只有十几 pt，换成「1.6亿」会被裁掉。
+    /// **菜单栏的速率类**（下载 / 上传 / 磁盘读写）同理保持 K/M/B：`亿/秒` 在中文里不通顺，
+    /// 面板与设置页也没有任何一处这么写；菜单栏的**计数类**（今日 / 本周流量、Token 三个数）
+    /// 跟随本档，否则「设置页选了亿、菜单栏还是 M」就是用户报过的那条缺陷。
     /// 不写清范围时，用户切到中文档会以为设置没生效。
     public var detailText: String {
         switch self {
-        case .automatic: return "当前用 K / M / B（默认档：1.6M、225.2K、2.11B）；作用于 Token 与额度页"
-        case .chinese:   return "当前用万 / 亿：159,590,000 → 1.6亿、2,650,000 → 265万；作用于 Token 与额度页"
+        case .automatic: return "当前用 K / M / B（默认档：1.6M、225.2K、2.11B）；作用于 Token 与额度页、菜单栏的流量与 Token 计数"
+        case .chinese:   return "当前用万 / 亿：159,590,000 → 1.6亿、2,650,000 → 265万；作用于 Token 与额度页、菜单栏的流量与 Token 计数"
         }
     }
 }

@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 菜单栏显示偏好
 
@@ -36,6 +37,8 @@ final class MenuBarDisplayPreferences {
         static let density = "menuBar.density"
         static let layout = "menuBar.layout"
         static let unit = "menuBar.unitStyle"
+        static let labelStyle = "menuBar.labelStyle"
+        static let customLabels = "menuBar.customLabels"
         static let interval = "menuBar.refreshInterval"
         static let template = "menuBar.template"
         static let alertsEnabled = "menuBar.alertsEnabled"
@@ -114,6 +117,84 @@ final class MenuBarDisplayPreferences {
     var unitStyle: MenuBarUnitStyle {
         get { MenuBarUnitStyle(rawValue: storage.string(forKey: Key.unit) ?? "") ?? .short }
         set { storage.set(newValue.rawValue, forKey: Key.unit) }
+    }
+
+    // MARK: - 标签（前缀）
+
+    /// 前缀档；**缺键 = full**，等于接入本偏好之前的硬编码前缀，老用户外观零变化
+    var labelStyle: MenuBarLabelStyle {
+        get { MenuBarLabelStyle(rawValue: storage.string(forKey: Key.labelStyle) ?? "") ?? .full }
+        set { storage.set(newValue.rawValue, forKey: Key.labelStyle) }
+    }
+
+    /// 逐项自定义前缀（metric rawValue → 用户填的文本；磁盘 I/O 的写片段用
+    /// `MenuBarLabelResolver.diskWriteKey`）。
+    ///
+    /// 存成一个 `key=value` 逗号串而不是 JSON：偏好键只有十来项、值都是单行短文本，
+    /// 逗号串在 `defaults read` 里可读可改，也避免 JSON 编解码失败时整块丢光。
+    /// 空值等于「没填」——写的时候就把空值剔掉，读的时候再剔除一次（手改过的偏好兜底）。
+    var customLabels: [String: String] {
+        get {
+            guard let raw = storage.string(forKey: Key.customLabels), !raw.isEmpty else { return [:] }
+            var result: [String: String] = [:]
+            for pair in raw.split(separator: ",") {
+                let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+                guard parts.count == 2 else { continue }
+                let key = parts[0].trimmingCharacters(in: .whitespaces)
+                let value = parts[1].trimmingCharacters(in: .whitespaces)
+                guard !key.isEmpty, !value.isEmpty else { continue }
+                result[key] = value
+            }
+            return result
+        }
+        set {
+            let pairs = newValue
+                .filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .sorted { $0.key < $1.key }
+                .map { $0.key + "=" + $0.value }
+            if pairs.isEmpty {
+                storage.removeObject(forKey: Key.customLabels)
+            } else {
+                storage.set(pairs.joined(separator: ","), forKey: Key.customLabels)
+            }
+        }
+    }
+
+    /// 写单项自定义前缀（空串 = 删除该项，回落档位默认）
+    func setCustomLabel(_ text: String, for metric: MenuBarMetric) {
+        setCustomLabel(text, forKey: metric.rawValue)
+    }
+
+    /// 写磁盘 I/O 的「写」片段自定义前缀
+    func setDiskWriteLabel(_ text: String) {
+        setCustomLabel(text, forKey: MenuBarLabelResolver.diskWriteKey)
+    }
+
+    /// 某一项当前的自定义值（空 = 未自定义）
+    func customLabel(for metric: MenuBarMetric) -> String {
+        customLabels[metric.rawValue] ?? ""
+    }
+
+    /// 磁盘 I/O「写」片段的自定义值
+    var diskWriteLabel: String { customLabels[MenuBarLabelResolver.diskWriteKey] ?? "" }
+
+    /// 是否有任何一项被自定义过（设置页「恢复默认」按钮的可用态判据）
+    var hasCustomLabels: Bool { !customLabels.isEmpty }
+
+    /// 清空全部自定义前缀（恢复默认）
+    func resetCustomLabels() {
+        storage.removeObject(forKey: Key.customLabels)
+    }
+
+    private func setCustomLabel(_ text: String, forKey key: String) {
+        var current = customLabels
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            current.removeValue(forKey: key)
+        } else {
+            current[key] = trimmed
+        }
+        customLabels = current
     }
     var refreshInterval: TimeInterval {
         get {

@@ -33,6 +33,9 @@ final class MenuBarManager: NSObject {
     let displayPreferences: MenuBarDisplayPreferences
     /// 注入的键值存储（菜单栏偏好与面板分页偏好共用同一份，测试 / 取证可写隔离 suite）
     let storage: any KeyValueStorage
+    /// 设置页「数值单位」偏好 —— 计数类指标（流量 / Token）的量级口径
+    // 放宽为 internal：状态栏片段组装的单位分派在 MenuBarManager+StatusTitle.swift
+    let numberUnitPreferences: NumberUnitPreferences
     // 放宽为 internal：菜单栏 Token 指标的补拉判据拆在 MenuBarManager+TokenRefresh.swift
     let harnessUsage: (any HarnessUsageServicing)?
     /// 上次为菜单栏 Token 指标补拉增量索引的时刻（nil = 本轮启动后还没拉过）
@@ -52,7 +55,9 @@ final class MenuBarManager: NSObject {
     // 放宽为 internal：定时器重建与偏好订阅拆在 MenuBarManager+DisplayPreferences.swift
     var timerInterval: TimeInterval = 0
     /// 菜单栏显示偏好变更观察者（注册与移除都在 +DisplayPreferences 扩展文件）
-    nonisolated(unsafe) var displayPreferencesObserver: NSObjectProtocol?
+    ///
+    /// 两个事件（显示偏好 / 数值单位）走同一条重渲染入口，所以是数组而不是单个。
+    nonisolated(unsafe) var displayPreferencesObservers: [NSObjectProtocol] = []
 
     /// 剪贴板采集服务（暂停 / 恢复的唯一真源；菜单项标题与状态栏前缀都读它）
     let clipboardCapture: (any ClipboardCaptureService)?
@@ -84,6 +89,7 @@ final class MenuBarManager: NSObject {
         self.storage = storage
         self.clipboardCapture = captureService
         self.displayPreferences = MenuBarDisplayPreferences(storage: storage)
+        self.numberUnitPreferences = NumberUnitPreferences(storage: storage)
         self.harnessUsage = harnessUsage
         let appearance = AppearancePreferences(storage: storage)
         self.appearancePreferences = appearance
@@ -130,8 +136,8 @@ final class MenuBarManager: NSObject {
     }
 
     nonisolated deinit {
-        if let displayPreferencesObserver {
-            NotificationCenter.default.removeObserver(displayPreferencesObserver)
+        for observer in displayPreferencesObservers {
+            NotificationCenter.default.removeObserver(observer)
         }
     }
 
@@ -242,9 +248,7 @@ final class MenuBarManager: NSObject {
                                     snapshot: systemMonitor?.snapshot,
                                     todayTraffic: trafficTracker.todayRx + trafficTracker.todayTx,
                                     weekTraffic: weekTraffic,
-                                    tokenTotals: harnessUsage?.snapshot().totals,
-                                    unitStyle: MenuBarDisplayLogic.unitStyle(
-                                        fromRawValue: displayPreferences.unitStyle.rawValue))
+                                    tokenTotals: harnessUsage?.snapshot().totals)
         let separator: String
         switch displayPreferences.density {
         case .compact: separator = "  "

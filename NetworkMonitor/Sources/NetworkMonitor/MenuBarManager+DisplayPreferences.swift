@@ -11,13 +11,21 @@ import NetworkMonitorUI
 extension MenuBarManager {
 
     /// 订阅菜单栏显示偏好变更（主类 init 末尾调用，只注册一次）
+    ///
+    /// 同时订「数值单位」：菜单栏的流量 / Token 是**计数**，量级跟设置页这一档走，
+    /// 切到「万 / 亿」后菜单栏必须跟着变，否则就是用户说的「我在设置页都设置单位是亿了，
+    /// 但是这里还是 M」。两条事件都只重建定时器 + 立刻重渲染，走同一条入口。
     func observeDisplayPreferenceChanges() {
-        displayPreferencesObserver = NotificationCenter.default.addObserver(
-            forName: AppEvents.menuBarDisplayChanged, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.applyDisplayPreferences()
+        let names = [AppEvents.menuBarDisplayChanged, AppEvents.numberUnitStyleChanged]
+        for name in names {
+            let observer = NotificationCenter.default.addObserver(
+                forName: name, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.applyDisplayPreferences()
+                }
             }
+            displayPreferencesObservers.append(observer)
         }
     }
 

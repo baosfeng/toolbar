@@ -42,12 +42,9 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
     var metricByToggle: [NSSwitch: MenuBarMetric] = [:]
     /// 面板分页开关 → 分页
     var tabByToggle: [NSSwitch: MenuPanelTab] = [:]
-    var templateControl: NSSegmentedControl?
-    var densityControl = NSPopUpButton(frame: .zero, pullsDown: false)
-    var unitControl2 = NSPopUpButton(frame: .zero, pullsDown: false)
-    var layoutControl = NSPopUpButton(frame: .zero, pullsDown: false)
-    /// 菜单栏「单位」行（副标题随档位变化，refresh 时要更新）
-    let unit2Row = SettingsRowView(title: "单位")
+    /// 菜单栏显示方式卡（模板 / 密度 / 单位 / 标签 / 布局 + 逐项自定义；
+    /// 行 / 控件 / 回灌 / 动作全在卡内，本页只负责 addCard 与 refresh）
+    let displayStyleCard: SettingsMenuBarDisplayStyleCard
     /// 菜单栏超限告警卡（行 / 控件 / 回灌 / 动作全在卡内，本页只负责 addCard 与 refresh）
     ///
     /// 为什么单独立卡：三个偏好键（menuBar.alertsEnabled / cpuAlert / memoryAlert）早就存在、
@@ -87,6 +84,9 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         self.displayPreferences = displayPreferences
         self.alertCard = SettingsMenuBarAlertCard(preferences: displayPreferences,
                                                   onChange: { AppEvents.postMenuBarDisplayChanged() })
+        self.displayStyleCard = SettingsMenuBarDisplayStyleCard(
+            preferences: displayPreferences,
+            onChange: { AppEvents.postMenuBarDisplayChanged() })
         self.panelTabPreferences = PanelTabPreferences(storage: storage)
         super.init(section: .general)
     }
@@ -126,6 +126,10 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         page.addCard(smoothScrollCard.card, sectionTitle: "鼠标滚轮")
         page.addCard(notificationCard.card, sectionTitle: "通知与音效")
 
+        // 模板只改「显示哪些指标」，指标卡的开关不在那张卡里，回灌交给本页；
+        // 逐项自定义弹窗挂在本窗口上（离屏 / 快照时没有窗口，退化成独立模态）
+        displayStyleCard.onTemplateChange = { [weak self] in self?.syncMetricToggles() }
+        displayStyleCard.windowProvider = { [weak self] in self?.window }
         buildOrderableCards()
         page.addCard(alertCard.card, sectionTitle: "菜单栏告警")
         page.addNote("设置会立即生效；菜单栏指标与面板分页的顺序用行尾「上移 / 下移」调整，"

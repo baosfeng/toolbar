@@ -8,10 +8,14 @@ import NetworkMonitorCore
 ///
 /// 设置页写的三个死设置（布局 / 单位 / 刷新周期）以前没有任何消费方，跑起来改设置看不出反应。
 /// 这里用同一条真实链路（写偏好 → 发事件 → MenuBarManager / MenuPanelView 订阅）验证效果：
-/// - `NM_DISPLAY_EVIDENCE=1`：启动 1.4s 后依次切两行布局、全称单位、5 秒周期，各记一行状态栏文本与
-///   当前定时器周期；再隐藏「系统」分页，记当前分页与系统页二级详情状态；最后把偏好还原。
+/// - `NM_DISPLAY_EVIDENCE=1`：启动 1.4s 后依次切两行布局、全称单位、**短标签档**、
+///   **中文数值单位**、**逐项自定义前缀**、5 秒周期，各记一行状态栏文本与当前定时器周期；
+///   再隐藏「系统」分页，记当前分页与系统页二级详情状态；最后把偏好逐项还原。
 /// - `NM_EVIDENCE_SUITE=<suite>`：偏好写隔离 suite（由 MenuBarManager.preferredStorage 读取），
 ///   不污染用户真实设置。
+///
+/// 指标集合在取证开头被固定为 `↓ ↑ CPU Token今日`：默认只开两个箭头，而箭头两档同形、
+/// 速率写法又不随数值单位变——不补这两项，切标签档 / 数值单位的标题会一个字符都不动。
 @MainActor
 enum DisplayPreferenceEvidence {
 
@@ -42,10 +46,16 @@ enum DisplayPreferenceEvidence {
         let originals = (layout: prefs.layout, unit: prefs.unitStyle,
                          interval: prefs.refreshInterval, template: prefs.template,
                          metrics: prefs.enabledMetrics, order: prefs.metricOrder,
+                         labelStyle: prefs.labelStyle, numberUnits: manager.numberUnitPreferences.style,
                          visible: tabPrefs.visibleTabs)
 
         var lines: [String] = []
         lines.append("# 菜单栏显示偏好生效取证")
+
+        // 指标集合先补到能看出差异：默认只开 ↑↓，而箭头符号与速率写法
+        // 都不随「标签档 / 数值单位」变化 —— 不补这两项，切档标题一个字符都不动，
+        // 取证就会得出「没生效」的假结论。CPU 看标签档、Token 今日看标签 + 计数单位。
+        prefs.enabledMetrics = [.downSpeed, .upSpeed, .cpu, .tokenToday]
 
         // 1) 单行 + 紧凑单位（基线）
         prefs.unitStyle = .short
@@ -73,7 +83,29 @@ enum DisplayPreferenceEvidence {
         try? await Task.sleep(nanoseconds: 400_000_000)
         lines.append("twoLine+full+5s    interval=\(fmt(manager.timerIntervalForEvidence))  title=\(quoted(manager.statusTitleForEvidence))")
 
-        // 5) 分页可见性：打开系统页 → 进二级详情 → 隐藏系统分页
+        // 5) 标签档：短标签（完整档已在 1–4 里取过）——只有 CPU / Token 这类文字前缀会变，
+        //    ↓ / ↑ 两个箭头是符号、两档同形，正是「切了看不出变化」的真实边界
+        prefs.unitStyle = .short
+        prefs.labelStyle = .short
+        AppEvents.postMenuBarDisplayChanged()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        lines.append("short labels       title=\(quoted(manager.statusTitleForEvidence))")
+
+        // 6) 数值单位：同一份快照切成万 / 亿 —— 计数类（Token 今日）立刻变、速率类不动；
+        //    走的是 AppEvents.numberUnitStyleChanged 那条真实链路（MenuBarManager 订阅它）
+        manager.numberUnitPreferences.setStyle(.chinese)
+        AppEvents.postNumberUnitStyleChanged()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        lines.append("chinese units      title=\(quoted(manager.statusTitleForEvidence))")
+
+        // 7) 逐项自定义：只覆盖 Token 今日一项，验证「自定义 > 档位」优先级与尾随空格
+        prefs.setCustomLabel("TK", for: .tokenToday)
+        AppEvents.postMenuBarDisplayChanged()
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        lines.append("custom token       title=\(quoted(manager.statusTitleForEvidence))")
+        prefs.resetCustomLabels()
+
+        // 8) 分页可见性：打开系统页 → 进二级详情 → 隐藏系统分页
         manager.selectTabForEvidence(.system)
         try? await Task.sleep(nanoseconds: 300_000_000)
         lines.append("tab=system         current=\(manager.currentTabForEvidence.title)")
@@ -89,7 +121,7 @@ enum DisplayPreferenceEvidence {
         let segments = manager.visibleTabsForEvidence.map(\.title).joined(separator: "/")
         lines.append("hidden system      current=\(manager.currentTabForEvidence.title)  isShowingDetail=\(manager.systemDetailShownForEvidence)  segments=[\(segments)]")
 
-        // 6) 菜单栏指标顺序：交换「下载 / 上传」→ 状态栏文本首位变化；再恢复默认
+        // 9) 菜单栏指标顺序：交换「下载 / 上传」→ 状态栏文本首位变化；再恢复默认
         var swapped = prefs.metricOrder
         if let downIndex = swapped.firstIndex(of: .downSpeed), downIndex + 1 < swapped.count {
             swapped.swapAt(downIndex, downIndex + 1)
@@ -104,13 +136,19 @@ enum DisplayPreferenceEvidence {
         try? await Task.sleep(nanoseconds: 400_000_000)
         lines.append("order reset        order=\(orderText(prefs.metricOrder))  title=\(quoted(manager.statusTitleForEvidence))")
 
-        // 7) 还原偏好（恢复默认「单行 / 紧凑 / 1 秒 / 全部分页可见」，以及用户原有的指标顺序）
+        // 10) 还原偏好：本轮取证改过的每一项都回到取证前的值
+        //     （指标集合与标签档是新加的，一起还原；数值单位走 manager 的偏好实例，
+        //      与设置页写的是同一个键）
         prefs.layout = originals.layout
         prefs.unitStyle = originals.unit
         prefs.refreshInterval = originals.interval
         prefs.metricOrder = originals.order
+        prefs.labelStyle = originals.labelStyle
+        prefs.enabledMetrics = originals.metrics
+        manager.numberUnitPreferences.setStyle(originals.numberUnits)
         tabPrefs.visibleTabs = originals.visible
         AppEvents.postMenuBarDisplayChanged()
+        AppEvents.postNumberUnitStyleChanged()
         AppEvents.postPanelTabsChanged()
         logger.info("显示偏好取证完成")
         return lines.joined(separator: "\n") + "\n"

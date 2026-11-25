@@ -1,4 +1,5 @@
 import Foundation
+import NetworkMonitorCore
 
 // MARK: - 菜单栏显示口径（纯逻辑）
 
@@ -10,7 +11,7 @@ import Foundation
 public enum MenuBarDisplayLogic {
 
     /// 菜单栏布局
-    public enum Layout: String, CaseIterable {
+    public enum Layout: String, CaseIterable, Sendable {
         /// 所有指标在同一行（历史形态）
         case singleLine
         /// 上下两行，用换行符分行
@@ -20,7 +21,7 @@ public enum MenuBarDisplayLogic {
     }
 
     /// 数值单位写法
-    public enum UnitStyle: String, CaseIterable {
+    public enum UnitStyle: String, CaseIterable, Sendable {
         /// 紧凑写法（"1.2M"，沿用 formatSpeedShort）
         case short
         /// 带空格全称（"1.2 MB/s"）
@@ -92,6 +93,28 @@ public enum MenuBarDisplayLogic {
         case "G": return "GB/s"
         case "T": return "TB/s"
         default: return nil
+        }
+    }
+    /// 计数类数值写法（流量总量 / Token 数）—— **不带 /s**
+    ///
+    /// 改造前这两类误用了速率格式化：今日流量渲染成 `Today 1.2 MB/s`、
+    /// Token 今日渲染成 `Token 2.5 GB/s`，既不成立也读不出「一共多少」。
+    /// 现在量级一律走设置页「数值单位」（`NumberUnits.scale`：automatic 用 K/M/B、
+    /// chinese 用万 / 亿），full 档只补一个空格，不补 `/s`。
+    ///
+    /// 空格规则：拉丁单位补空格（`2.51 B` / `225 M`），中文单位不补（`1.6亿`）——
+    /// 「1.6 亿」在菜单栏里比不带空格更占宽，且中文排版本来不插空格。
+    public static func countText(_ value: Double,
+                                 numberStyle: NumberUnitStyle,
+                                 unitStyle: UnitStyle) -> String {
+        let scaled = NumberUnits.scale(value, style: numberStyle)
+        guard let unit = scaled.unit, !unit.isEmpty else { return scaled.number }
+        switch unitStyle {
+        case .short, .custom:
+            return scaled.text
+        case .full:
+            let needsSpace = unit.unicodeScalars.contains { $0.isASCII }
+            return needsSpace ? scaled.number + " " + unit : scaled.text
         }
     }
 
