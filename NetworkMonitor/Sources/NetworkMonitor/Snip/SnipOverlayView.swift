@@ -209,8 +209,9 @@ final class SnipOverlayView: NSView {
         case .toggleCursor:
             delegate?.overlayViewDidToggleCursor(self)
         case .toggleToolBar:
-            // 拖拽中按空格 = 切「移动选区」，不是显隐工具条（Snipaste 高级技巧同款）
-            // 只有正在拉选区时才占用空格；其余时候空格仍是工具条开关。
+            // 拖拽中按空格 = 切「移动选区」（Snipaste 高级技巧）；其余时候仍是工具条开关。
+            // 已在移动模式时必须继续吃掉：按住不放的重复 keyDown 会让工具条疯狂闪烁。
+            if state.isSpaceMoving { return true }
             if state.phase == .dragging, state.enterSpaceMove() {
                 needsDisplay = true
                 return true

@@ -40,7 +40,7 @@ Settings/SettingsTokenPane 317 2
 Settings/SettingsTransferPane 413 3
 Settings/SettingsWindow 583 3
 Snip/SnipController 1324 7
-Snip/SnipOverlayView 1634 8
+Snip/SnipOverlayView 1635 8
 Snip/SnipToolBarView 455 3
 TestRunner/TestSuites 384 8
 Token/TokenDerive 705 4

@@ -159,13 +159,13 @@
 | # | 模式 | Snipaste 做法 | 我们 |
 |---|---|---|---|
 | 1 | 同一数值多通路等价 | 滚轮 / `1``2` / `[``]` | ✅ 滚轮 + 键位 + 面板格 + 工具条按钮 + 输入框五条，全部走同一份 `SnipNumericStepper` |
-| 2 | 光标编码当前值 | 光标图案随笔宽变化 | ❌ 覆盖层全程无 `NSCursor` 设定 |
+| 2 | 光标编码当前值 | 光标图案随笔宽变化 | ❌ 覆盖层全程无 `NSCursor` 设定（第 2 批待做） |
 | 3 | 常显当前值 | 工具条数值标签 | ✅ 常驻标签档走 `SnipNumericParam.format`，与读数气泡同一份格式 |
 | 4 | 调整瞬间 HUD | 放大镜内坐标与操作提示 | ✅ `SnipNumericController+HUD`：光标旁 1.2s 淡出，带「精调 / 快调」角标 |
 | 5 | 拖动中按空格切移动 | 拉框不松手按空格 = 平移选区 | ✅ `SnipSelectionState.enterSpaceMove` / `spaceMove` / `exitSpaceMove` |
 | 6 | ⇧ 约束几何 | 矩形→正方、椭圆→圆、线→45° | ✅ `SnipAnnotationConstraint` |
 | 7 | 右键 = 收笔，非编辑态才中止 | 编辑态右键结束当前图形 | ✅ `SnipRightClickIntent` |
-| 8 | Esc 逐层退出 | 文字编辑中 Esc 只结束输入 | ⚠️ 待核 |
+| 8 | Esc 逐层退出 | 文字编辑中 Esc 只结束输入 | ✅ 已核实：输入框的 `cancelOperation` 只收输入（`SnipTextEditing.cancelTextEditing`），系统层 tap 在编辑态整键放行 |
 | 9 | 双击 / 中键复位 | 贴图中键 = 100%+100% | ✅ 双击工具条数值按钮回默认值（贴图中键复位此前已有） |
 | 10 | 数值直接打字输入 | 点尺寸数字 → 输入 | ✅ 样式盘末格「输入数值…」+ `SnipNumericInput` 解析（`12pt` / `60%`） |
 | 11 | 分形状记忆样式 | 「为不同标注形状分别记忆颜色」 | ❌ 全局一个 `currentStyle` |
