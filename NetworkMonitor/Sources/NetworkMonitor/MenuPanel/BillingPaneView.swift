@@ -169,6 +169,9 @@ final class BillingPaneView: MenuPanelPaneView {
 
         tableView.update(states: snapshot.states)
         chartsView.update(states: snapshot.states, range: range)
+        // 首帧把各家 provider 的用量范围对齐到页级范围：不对齐则聚合按 range 严格过滤后
+        // 一律为空 —— 用户看到的就是「默认进入额度页图表都不显示」（见 alignProviderRanges）
+        alignProviderRanges(snapshot)
         if isShowingDetail { syncDetail() }
 
         let stamp = Self.latestStamp(snapshot.states)
@@ -188,6 +191,37 @@ final class BillingPaneView: MenuPanelPaneView {
              tone: BillingRefreshStatusLogic.bandWarns(isPaused: snapshot.isPaused)
                  ? PaneCardStyle.warnInk : nil),
         ])
+    }
+
+    /// 首帧范围对齐 —— 把还没跟到页级范围的 provider 逐家通知一次
+    ///
+    /// 根因链：页级初值 `.last7Days`，而 provider 的 usage range 初值是
+    /// `supportedUsageRanges.first`（Open Design 是 24h）→ 聚合严格 `usage.range == range`
+    /// → 首帧过滤为空 → 柱图与轴隐藏。切一次 7d 之所以就好，是因为那一下真的走了
+    /// `applyRange` 的逐家通知；首帧缺的正是这一步，这里复用同一套口径。
+    ///
+    /// 只通知「支持用量 + 支持该档 + 当前不是该档」的三类都满足的那些家
+    /// （判据在 NetworkMonitorUI 的 `BillingRangeAlignment`，可单测）。
+    private func alignProviderRanges(_ snapshot: BillingMonitor.Snapshot) {
+        let pageRange = range
+        let targets = BillingRangeAlignment.idsNeedingAlignment(
+            snapshot.states.map(Self.alignmentCandidate), pageRange: pageRange)
+        guard !targets.isEmpty else { return }
+        // 延后一拍：selectRange 内部会同步 emit 回调，直接在这里调用会重入 update；
+        // 期间用户自己切了档的话 applyRange 已经逐家重拉，这里就不再插手。
+        Task { @MainActor [weak self] in
+            guard let self, self.range == pageRange else { return }
+            for id in targets { self.onRangeChange?(pageRange, id) }
+        }
+    }
+
+    /// provider 状态 → 范围对齐输入（视图只做映射，判据在 UI 库）
+    static func alignmentCandidate(_ state: BillingMonitor.ProviderState)
+        -> BillingRangeAlignment.Candidate {
+        BillingRangeAlignment.Candidate(id: state.descriptor.id,
+                                        supportsUsage: state.descriptor.supportsUsage,
+                                        supportedRanges: state.descriptor.supportedRanges,
+                                        currentRange: state.range)
     }
 
     /// 切换页级范围：整块图表立即重算；同时让数据层按该范围重拉用量

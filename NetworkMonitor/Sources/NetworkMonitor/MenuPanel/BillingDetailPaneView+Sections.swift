@@ -75,7 +75,7 @@ extension BillingDetailPaneView {
         chartCard.isHidden = series.isEmpty
         if !series.isEmpty {
             chartMeta.stringValue = BillingChartAggregate.chartSubtitle(series, range: .last7Days)
-            barsView.update(points: series.points,
+            barsView.update(points: series.points, metric: series.metric, granularity: .day,
                             fillColor: BillingChartsSectionView.barColor(series.metric))
         }
         let models = BillingChartAggregate.topModels(usages: [usage], range: .last7Days, limit: 4)

@@ -38,8 +38,11 @@ final class BillingChartsSectionView: NSView {
                                                 color: PaneCardStyle.tertiaryText)
     private let trendView = BillingTrendLineView()
 
-    /// 柱图高度（原型实测 61pt：七根柱 + 轴一行刚好）
-    static let barHeight: CGFloat = 61
+    /// 柱图高度（61 → 76pt：原 61 里还要塞卡头 / 轴行 / 3 × 3pt 间距，实绘仅约 40pt，
+    /// 七根柱近乎方形；抬到 76 后实绘约 55pt，柱高:柱宽 ≈ 2:1，才读得出「柱状图」）
+    ///
+    /// 额度页本来就允许纵向滚动（面板根视图是 NSScrollView），加高不裁切内容。
+    static let barHeight: CGFloat = 76
     /// 走势高度（30 个折线点，比柱图矮一档）
     static let trendHeight: CGFloat = 34
 
@@ -157,9 +160,15 @@ final class BillingChartsSectionView: NSView {
         barsView.isHidden = series.isEmpty
         axisRow.isHidden = series.isEmpty
         emptyLabel.isHidden = !series.isEmpty
+        // 空序列分两种：真没数据 / 正在按页级范围补拉（首帧 provider 还停在 24h 时，
+        // 写「暂无用量数据」会让用户以为这段时间真没用量）
+        emptyLabel.stringValue = Self.emptyChartText(states: states, range: range)
         if !series.isEmpty {
-            barsView.update(points: series.points, fillColor: Self.barColor(series.metric))
-            axisRow.update(left: series.points.first?.label ?? "",
+            barsView.update(points: series.points,
+                            metric: series.metric,
+                            granularity: BillingChartAggregate.granularity(for: range),
+                            fillColor: Self.barColor(series.metric))
+            axisRow.update(left: Self.axisLeft(series.points.first?.label ?? "", range: range),
                            right: Self.axisRight(range))
         }
 
@@ -196,6 +205,30 @@ final class BillingChartsSectionView: NSView {
         case .last7Days: return "近 7 天走势"
         case .last30Days: return "近 30 天走势"
         }
+    }
+
+    /// 柱图空态文案（真的没数据 vs 正在按页级范围补拉）
+    static func emptyChartText(states: [BillingMonitor.ProviderState],
+                               range: BillingRange) -> String {
+        let candidates = states.map {
+            BillingRangeAlignment.Candidate(id: $0.descriptor.id,
+                                            supportsUsage: $0.descriptor.supportsUsage,
+                                            supportedRanges: $0.descriptor.supportedRanges,
+                                            currentRange: $0.range)
+        }
+        let aligning = !BillingRangeAlignment.idsNeedingAlignment(candidates, pageRange: range).isEmpty
+        let loading = states.contains { $0.descriptor.supportsUsage && $0.isLoading }
+        return (aligning || loading) ? "统计中…" : "暂无用量数据"
+    }
+
+    /// 轴左侧标签（首桶读数 + 粒度单位）
+    ///
+    /// 改造前只给裸数字「14」，7d / 30d 下读不出那 14 是日还是时；补单位后与悬停文案
+    /// （「14 时 · 1,204」）同一粒度口径，两处不再各写一套。
+    static func axisLeft(_ label: String, range: BillingRange) -> String {
+        guard !label.isEmpty else { return label }
+        let unit = BillingChartGeometry.captionUnit(for: BillingChartAggregate.granularity(for: range))
+        return label + " " + unit
     }
 
     /// 轴右侧标签（与旧展开区同一口径，避免两处写法不同）
