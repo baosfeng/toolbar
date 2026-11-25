@@ -76,6 +76,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-swift-rel-${{ matrix.arch }}-
 
+      # REQUIRE_SIGNING_CERT=1 是发布门禁：证书找不到时 build-app.sh 直接失败，
+      # 不再「打一行警告 就签成 ad-hoc」。v1.30.0 / v1.31.0 两个包正是这么发出去的 ——
+      # ad-hoc 的 designated requirement 是 cdhash，逐版本都不同，用户升级后
+      # 屏幕录制 / 辅助功能 / 输入监控 / 本地网络 / 登录项全部失配。
+      # 日常 CI（ci.yml）不设它：那条链路允许 ad-hoc，只有发布必须是稳定身份。
       - name: Build, sign and package
         working-directory: NetworkMonitor
         env:
@@ -83,6 +88,7 @@ jobs:
           SKIP_INSTALL: "1"
           ARCH: ${{ matrix.arch }}
           SIGN_IDENTITY: ${{ secrets.SIGNING_IDENTITY || 'NetworkMonitor Local Signing' }}
+          REQUIRE_SIGNING_CERT: "1"
         run: ./Scripts/build-app.sh release
 
       # 产物架构自证：脚本按 ARCH 交叉构建时若参数没生效，这里会红而不是静默发出错包
@@ -137,9 +143,12 @@ jobs:
           path: artifacts
 
       # 合并 + 重新签名 + 打 dmg（与本地预览共用同一支脚本，签名实现见 lib-signing.sh）
+      # 合并会破坏两个单架构包的签名，这里重新签一次 —— 同样是发布产物，
+      # 同样要求证书（否则 universal dmg 会盖过两个单架构包，又变回 ad-hoc）
       - name: Merge to universal and build dmg
         env:
           SIGN_IDENTITY: ${{ secrets.SIGNING_IDENTITY || 'NetworkMonitor Local Signing' }}
+          REQUIRE_SIGNING_CERT: "1"
         run: |
           set -euo pipefail
           # shellcheck source=NetworkMonitor/version.env

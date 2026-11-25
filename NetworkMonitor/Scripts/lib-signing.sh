@@ -11,6 +11,7 @@
 #   APP_EXECUTABLE_NAME  包内可执行名（Contents/MacOS/<此名>，中文「一览」）
 #   SIGN_IDENTITY        证书名（找不到就回落 ad-hoc）
 #   SIGN_ENTITLEMENTS    可选，entitlements 文件路径
+#   REQUIRE_SIGNING_CERT 可选，为 1 时「找不到证书」直接失败（发布门禁）
 #
 # shellcheck shell=bash
 
@@ -18,6 +19,66 @@
 # 未找到证书时回落 ad-hoc（身份随 cdhash 变化，权限需重新授权）。
 SIGN_IDENTITY="${SIGN_IDENTITY:-NetworkMonitor Local Signing}"
 SIGN_ENTITLEMENTS="${SIGN_ENTITLEMENTS:-}"
+
+# 发布门禁：REQUIRE_SIGNING_CERT=1 时「找不到证书」是错误而不是警告。
+#
+# 为什么要有它：v1.30.0 / v1.31.0 两个发布包都是 ad-hoc —— 因为 CI 没配证书 secret，
+# 而回落分支只打一行警告就继续，发布门禁（assert_stable_signature）恰好只在有证书时
+# 才被调用，最需要它的场景被绕过了。下载包与用户本机证书签名的包 DR 不同，
+# macOS 视为两个应用，屏幕录制 / 辅助功能 / 输入监控 / 本地网络 / 登录项全部失配。
+# 默认不设 = 保持现状（本机日常 debug 打包仍允许 ad-hoc）。
+REQUIRE_SIGNING_CERT="${REQUIRE_SIGNING_CERT:-0}"
+
+# 证书缺失时的唯一处置点：门禁开着一律失败，否则退回「警告 + 继续」的日常口径。
+#
+# 失败信息必须可操作 —— 下一个看到它的人可能不知道要配哪三个 secret、
+# 也不知道证书要从哪台机器的钥匙串导出来。
+fail_missing_certificate() {
+    local available
+    available=$(security find-identity -v -p codesigning 2>/dev/null | grep -c '^ *[0-9]) ') || available=0
+    if [ "${REQUIRE_SIGNING_CERT}" != "1" ]; then
+        echo "      ⚠️  未找到证书 ${SIGN_IDENTITY}，回落 ad-hoc（每次构建权限会重新询问）"
+        return 0
+    fi
+    {
+        echo ""
+        echo "      ❌ REQUIRE_SIGNING_CERT=1 但钥匙串里找不到证书 ${SIGN_IDENTITY}（当前可用签名身份 ${available} 个）"
+        echo "         拒绝以 ad-hoc 签发发布包：ad-hoc 的 designated requirement 是 cdhash，"
+        echo "         每重建一次身份就变一次，用户升级后屏幕录制 / 辅助功能 / 输入监控 /"
+        echo "         本地网络与登录项会全部失配（TCC 视为另一个应用）。"
+        echo ""
+        echo "         修法（二选一）："
+        echo "         1) 本机：把证书导进当前钥匙串后重跑 ——"
+        echo "            security import <证书>.p12 -k ~/Library/Keychains/login.keychain-db -P <p12密码> -T /usr/bin/codesign"
+        echo "         2) CI：仓库 Settings → Secrets and variables → Actions 配三个 secret ——"
+        echo "            BUILD_CERTIFICATE_BASE64（security export -t certs -f pkcs12 的结果再 base64）"
+        echo "            P12_PASSWORD（导出 .p12 时设的密码）"
+        echo "            KEYCHAIN_PASSWORD（CI 临时钥匙串密码，随便给一个随机串）"
+        echo "            可选 SIGNING_IDENTITY（不给就用默认名 ${SIGN_IDENTITY}）"
+        echo ""
+        echo "         只想临时放行（本机 debug 打包）：不要设 REQUIRE_SIGNING_CERT。"
+    } >&2
+    return 1
+}
+
+# 校验包体的签名 identifier 是固定的 $APP_BUNDLE_ID。
+#
+# 为什么单独查：linker 会给每个 Mach-O 自带一份 ad-hoc 签名，identifier 形如
+# 「NetworkMonitor-<hash>」（每次构建都变）。脚本中途失败、没走到 sign_app_bundle 时，
+# codesign -dv 仍会对这份自带签名返回 exit 0 —— 看起来「签过了」，其实 TCC 认的是另一串身份。
+assert_bundle_identifier() {
+    local target="$1"
+    local expected="${APP_BUNDLE_ID:-}"
+    [ -n "$expected" ] || return 0
+    local actual
+    actual=$(codesign -dv --verbose=2 "$target" 2>&1 | sed -n 's/^Identifier=//p' | head -1)
+    if [ "$actual" != "$expected" ]; then
+        echo "      ❌ 包体 identifier 不是固定的 ${expected}（实际：${actual:-读不到}）" >&2
+        echo "         这通常意味着本产物没经过 sign_app_bundle —— 它带着 linker 自带的临时标识，" >&2
+        echo "         macOS 会把它当成另一个应用，TCC 授权与本地网络权限都会失效。" >&2
+        return 1
+    fi
+}
 
 # 校验签名是否落在稳定身份上：ad-hoc 签名的 designated requirement 是 cdhash，
 # 每次构建都变，TCC 授权（屏幕录制 / 辅助功能 / 本地网络）会被当成另一个应用。
@@ -70,6 +131,9 @@ sign_app_bundle() {
         USE_SIGNING_CERT=1
     else
         USE_SIGNING_CERT=0
+        # 门禁开着一律在此失败：继续逐层签只会把包签成 ad-hoc，
+        # 等打完再发现「身份错了」比当场告诉用户「证书没装」贵得多
+        fail_missing_certificate || return 1
     fi
 
     local nested
@@ -92,10 +156,14 @@ sign_app_bundle() {
     # 包体
     sign_object "$target" "$APP_BUNDLE_ID"
 
+    # 签完必须自证：identifier 固定 + 有证书时 DR 不认 cdhash。
+    # 这两条是 TCC 授权跨版本保留的全部依据，缺一条就等于发了个会丢权限的包。
+    assert_bundle_identifier "$target" || return 1
     if [ "$USE_SIGNING_CERT" = "1" ]; then
         echo "      使用证书：${SIGN_IDENTITY}"
-        assert_stable_signature "$target"
+        assert_stable_signature "$target" || return 1
     else
-        echo "      ⚠️  未找到证书 ${SIGN_IDENTITY}，回落 ad-hoc（每次构建权限会重新询问）"
+        echo "      ⚠️  ad-hoc 签名（identifier 已固定为 ${APP_BUNDLE_ID}，DR 仍认 cdhash）"
+        echo "         升级后权限可能需重新授权；发布包请设 REQUIRE_SIGNING_CERT=1 阻断此路径"
     fi
 }
