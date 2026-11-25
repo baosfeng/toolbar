@@ -5,7 +5,7 @@ Clipboard/ClipboardPanelView 542 2
 Debug/DrawnUIProbe 415 3
 Debug/MenuPanelSnapshot 611 6
 Debug/PinDragProbe 388 3
-Debug/TokenPaneSnapshot 1031 8
+Debug/TokenPaneSnapshot 1028 8
 Discovery/UdpDiscoveryService 425 2
 DrawnUI/DrawnRowList 540 2
 Harness/HarnessMultiSourceScanner 338 2
@@ -29,7 +29,7 @@ NetworkMonitorFeatureSmoothScroll/ScrollSmoothingEngine 507 3
 NetworkMonitorFeatureSystemMetrics/SystemMonitor 370 2
 Pin/PinWindow 361 2
 Service/TransferService 1395 8
-Settings/SettingsCapturePane 775 4
+Settings/SettingsCapturePane 898 5
 Settings/SettingsClipboardPane 607 4
 Settings/SettingsGeneralPane 397 2
 Settings/SettingsNotificationPane 378 2
@@ -38,9 +38,9 @@ Settings/SettingsProvidersPane 456 4
 Settings/SettingsTokenPane 317 2
 Settings/SettingsTransferPane 413 3
 Settings/SettingsWindow 583 3
-Snip/SnipController 1279 7
-Snip/SnipOverlayView 1425 8
-Snip/SnipToolBarView 446 3
-TestRunner/TestSuites 382 8
+Snip/SnipController 1321 7
+Snip/SnipOverlayView 1596 8
+Snip/SnipToolBarView 475 3
+TestRunner/TestSuites 383 8
 Token/TokenDerive 705 4
 Transfer/TransferController 383 2

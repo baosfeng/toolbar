@@ -85,6 +85,36 @@ extension SnipOverlayView {
         needsDisplay = true
     }
 
+    /// 调整文字字号：没有显式字号时从「线宽推导出来的那个值」起跳
+    ///
+    /// 返回 true 表示真的改了（调用方据此决定按键是否放行）。
+    @discardableResult
+    func adjustTextFontSize(by delta: Int) -> Bool {
+        let base = currentStyle.text.fontSize ?? max(currentStyle.lineWidth * 5, 14)
+        let next = SnipTextStyle.steppedFontSize(from: base, by: delta)
+        guard abs(next - base) > 0.01 else { return false }
+        currentStyle.text.fontSize = next
+        // 选中了一条文字标注时同步改它：用户按了字号键却看不到变化是最费解的空操作
+        applyStyleToSelectedAnnotation { annotation in
+            annotation.style.text = currentStyle.text
+        }
+        toolBarDidChangeStyle(currentStyle)
+        return true
+    }
+
+    /// 把 currentStyle 的一部分改到当前选中的标注上（样式热更新）
+    ///
+    /// 二次编辑的最小闭环：选中 → 改样式 → 立刻看见。只改选中项，
+    /// 不动其它图元，也不把这次改动作成新的可撤销步骤（撤销栈只记「加了什么」）。
+    func applyStyleToSelectedAnnotation(_ mutate: (inout SnipAnnotation) -> Void) {
+        guard let index = selectedAnnotationIndex,
+              annotationStack.annotations.indices.contains(index) else { return }
+        var annotation = annotationStack.annotations[index]
+        mutate(&annotation)
+        annotationStack.replace(at: index, with: annotation)
+        needsDisplay = true
+    }
+
     /// 标注模式下的滚轮调粗细；返回 true 表示已消费这次滚轮
     ///
     /// 文字字号那条通路优先：选中文字时滚轮仍改字号（早于本函数的判定）。
@@ -93,6 +123,12 @@ extension SnipOverlayView {
         guard activeTool != nil, state.phase == .selected else { return false }
         let delta = event.scrollingDeltaY
         guard abs(delta) > 0.01 else { return true }
+        // 文字工具下滚轮改字号：Snipaste 的滚轮是「笔有多大」这一根旋钮，
+        // 对文字来说那个「大」就是字号，而不是描边粗细。
+        if activeTool == .text {
+            adjustTextFontSize(by: delta > 0 ? 1 : -1)
+            return true
+        }
         stepLineWidth(by: delta > 0 ? 1 : -1)
         return true
     }

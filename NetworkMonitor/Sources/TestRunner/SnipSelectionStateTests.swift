@@ -76,6 +76,37 @@ func runSnipSelectionStateTests() {
     assertEqual(mover.rect, CGRect(x: 5, y: -3, width: 50, height: 50), "键盘移动整块")
 
     // 扩缩
+    // 单边扩缩（Snipaste 的 Ctrl/Shift + 方向键）：只动对应那条边
+    var edged = SnipSelectionState()
+    edged.begin(at: CGPoint(x: 10, y: 10))
+    edged.drag(to: CGPoint(x: 110, y: 60))
+    edged.end()
+    let before = edged.rect
+    edged.expand(edge: .right, by: 1)
+    assertEqual(edged.rect.maxX, before.maxX + 1, "右边扩 1px")
+    assertEqual(edged.rect.minX, before.minX, "扩右边不动左边")
+    assertEqual(edged.rect.minY, before.minY, "扩右边不动上边")
+    edged.shrink(edge: .left, by: 1)
+    assertEqual(edged.rect.minX, before.minX + 1, "左边收 1px")
+    edged.expand(edge: .down, by: 1)
+    assertEqual(edged.rect.maxY, before.maxY + 1, "下边扩 1px")
+
+    // 屏幕裁剪：扩到可视区外时被裁住，不会扩出屏幕
+    var bounded = SnipSelectionState()
+    bounded.begin(at: CGPoint(x: 0, y: 0))
+    bounded.drag(to: CGPoint(x: 100, y: 100))
+    bounded.end()
+    bounded.expand(edge: .left, by: 10, within: CGRect(x: 0, y: 0, width: 200, height: 200))
+    assertEqual(bounded.rect.minX, 0, "左扩被屏幕左边界裁住")
+
+    // 缩边越界时整条边不动（不会缩成负尺寸）
+    var edgeTiny = SnipSelectionState()
+    edgeTiny.begin(at: CGPoint(x: 10, y: 10))
+    edgeTiny.drag(to: CGPoint(x: 20, y: 20))
+    edgeTiny.end()
+    edgeTiny.shrink(edge: .right, by: 100)
+    assertEqual(edgeTiny.rect.width, 10, "缩边越界时整条边不动")
+
     mover.expand(by: 5)
     assertEqual(mover.rect, CGRect(x: 0, y: -8, width: 60, height: 60), "向外扩大四边")
     mover.shrink(by: 10)

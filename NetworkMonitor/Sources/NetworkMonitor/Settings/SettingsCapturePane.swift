@@ -41,8 +41,14 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
     /// 放宽为 internal：控件在 SettingsCapturePane+Pin.swift 里创建与刷新
     var displayImageFilesSwitch: NSSwitch?
     var recoverablePopup: NSPopUpButton?
-    private var widthControl: NSSegmentedControl?
-    private var colorButtons: [NSButton] = []
+    /// 标注样式控件（组装 / 回灌 / 动作都在 SettingsCapturePane+Annotation.swift 里）
+    /// 放宽为 internal：该扩展文件要创建与回灌
+    var widthControl: NSStepper?
+    var widthValueLabel: NSTextField?
+    var dashedSwitch: NSSwitch?
+    var fontSizeControl: NSStepper?
+    var fontSizeValueLabel: NSTextField?
+    var colorButtons: [NSButton] = []
     private var hotKeyRecorders: [SnipHotKeyAction: HotKeyRecorderView] = [:]
 
     // MARK: 工具条自定义控件（组装与刷新在 SettingsCapturePane+ToolBar.swift 里）
@@ -62,7 +68,8 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
     var pinMenuOrderCard: SettingsOrderedCardView?
 
     /// 标注调色板 — hex 与 `SnipAnnotationColor` 一一对应（偏好里存 hex）
-    private static let palette: [(hex: String, color: SnipAnnotationColor, name: String)] = [
+    /// 放宽为 internal：标注卡片扩展文件（SettingsCapturePane+Annotation）要建色块
+    static let palette: [(hex: String, color: SnipAnnotationColor, name: String)] = [
         ("#EB3330", .red, "红色"),
         ("#F58C24", .orange, "橙色"),
         ("#FAD12E", .yellow, "黄色"),
@@ -72,7 +79,8 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         ("#FFFFFF", .white, "白色"),
     ]
 
-    private static let defaultColorHex = "#EB3330"
+    /// 放宽为 internal：标注卡片扩展文件按它回落默认选中色
+    static let defaultColorHex = "#EB3330"
 
     init(storage: any KeyValueStorage = AppContext.shared.storage,
          hotKeyDelegate: (any SnipSettingsDelegate)? = nil,
@@ -100,30 +108,6 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         buildHotKeySection()
         page.addNote("「选择…」切换快速保存目录后只影响之后的截图落盘，已保存的文件不会迁移；"
                      + "标注默认颜色与线宽对新截图生效。")
-    }
-
-    private func buildAnnotationSection() {
-        buildColorButtons()
-        let swatches = NSStackView()
-        swatches.orientation = .horizontal
-        swatches.alignment = .centerY
-        swatches.spacing = 6
-        colorButtons.forEach(swatches.addArrangedSubview)
-        let colorRow = SettingsRowView(title: "默认颜色")
-        colorRow.trailingStack.addArrangedSubview(swatches)
-
-        let width = NSSegmentedControl(labels: ["细", "中", "粗"], trackingMode: .selectOne,
-                                       target: self, action: #selector(widthChanged))
-        width.controlSize = .small
-        width.setAccessibilityLabel("标注默认线宽")
-        widthControl = width
-        let widthRow = SettingsRowView(title: "线宽")
-        widthRow.trailingStack.addArrangedSubview(width)
-
-        let card = SettingsCardView()
-        card.addRow(colorRow)
-        card.addRow(widthRow)
-        page.addCard(card, sectionTitle: "标注")
     }
 
     private func buildPinSection() {
@@ -177,25 +161,6 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         page.addCard(card, sectionTitle: "识别")
     }
 
-    /// 调色板色块 — 22pt 圆形；选中态 2pt 强调色描边，未选中 1pt 分隔线（白色块在浅色下可见）
-    private func buildColorButtons() {
-        for (index, entry) in Self.palette.enumerated() {
-            let button = NSButton(title: "", target: self, action: #selector(colorChanged(_:)))
-            button.isBordered = false
-            button.wantsLayer = true
-            button.layer?.cornerRadius = 11
-            button.layer?.backgroundColor = NSColor(srgbRed: entry.color.red,
-                                                    green: entry.color.green,
-                                                    blue: entry.color.blue,
-                                                    alpha: entry.color.alpha).cgColor
-            button.tag = index
-            button.widthAnchor.constraint(equalToConstant: 22).isActive = true
-            button.heightAnchor.constraint(equalToConstant: 22).isActive = true
-            button.setAccessibilityLabel("标注默认颜色：\(entry.name)")
-            colorButtons.append(button)
-        }
-    }
-
     /// 快捷键 — 录制控件（点一下再按新组合键完成录制；Esc 取消）
     private func buildHotKeySection() {
         let preferences = SnipHotKeyPreferences(storage: storage)
@@ -230,8 +195,7 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         alphaSlider?.doubleValue = alpha
         alphaValueLabel?.stringValue = "\(Int((alpha * 100).rounded()))%"
 
-        let lineWidth = storage.object(forKey: SnipPreferenceKey.annotationLineWidth) as? Double ?? 3
-        widthControl?.selectedSegment = lineWidth <= 2 ? 0 : (lineWidth >= 8 ? 2 : 1)
+        refreshAnnotationStyle()
 
         refreshQuickSaveDirectory()
         refreshToolBar()
@@ -262,16 +226,6 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         updateColorSelection()
     }
 
-    private func updateColorSelection() {
-        let hex = storage.string(forKey: SnipPreferenceKey.annotationColor) ?? Self.defaultColorHex
-        let selectedIndex = Self.palette.firstIndex { $0.hex.caseInsensitiveCompare(hex) == .orderedSame } ?? 0
-        for (index, button) in colorButtons.enumerated() {
-            let isSelected = index == selectedIndex
-            button.layer?.borderWidth = isSelected ? 2 : 1
-            // 选中描边用主题强调色，未选中用 1pt 分隔线色（都不再用系统 separatorColor：它不随主题变）
-            button.layer?.borderColor = (isSelected ? SettingsTheme.accent : SettingsTheme.hairline).cgColor
-        }
-    }
 
     // MARK: - 动作
 
@@ -287,17 +241,12 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
         alphaValueLabel?.stringValue = "\(Int((value * 100).rounded()))%"
     }
 
-    @objc private func colorChanged(_ sender: NSButton) {
+    /// 放宽为 internal：标注卡片的色块在 SettingsCapturePane+Annotation.swift 里创建
+    @objc func colorChanged(_ sender: NSButton) {
         guard Self.palette.indices.contains(sender.tag) else { return }
         storage.set(Self.palette[sender.tag].hex, forKey: SnipPreferenceKey.annotationColor)
         updateColorSelection()
     }
 
-    @objc private func widthChanged() {
-        let widths: [Double] = [2, 4, 8]
-        let index = widthControl?.selectedSegment ?? 1
-        guard widths.indices.contains(index) else { return }
-        storage.set(Double(widths[index]), forKey: SnipPreferenceKey.annotationLineWidth)
-    }
 
 }

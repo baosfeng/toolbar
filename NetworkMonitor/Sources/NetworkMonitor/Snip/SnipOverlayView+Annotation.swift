@@ -153,12 +153,15 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
             return true
         }
         if kind == .text {
-            // 点在已有文字上 → 选中它（滚轮改字号、⌘R 旋转）；点在空白 → 新建
+            // 点在已有文字上 → 选中它并进入改文字（滚轮改字号、⌘R 旋转、回车改内容）；
+            // 点在空白 → 新建。先选中再改文字，比「远端先删后画」快得多。
             if let index = annotationStack.annotations.indices.last(where: {
                 annotationStack.annotations[$0].kind == .text
                     && SnipAnnotationRenderer.hitTest(annotationStack.annotations[$0], point: point)
             }) {
                 selectedAnnotationIndex = index
+                let existing = annotationStack.annotations[index]
+                beginTextEditing(at: existing.start, editing: index)
                 needsDisplay = true
                 return true
             }

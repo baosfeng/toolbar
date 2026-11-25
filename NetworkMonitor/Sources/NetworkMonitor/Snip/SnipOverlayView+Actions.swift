@@ -138,12 +138,19 @@ extension SnipOverlayView {
         applyGlobalSelection(lastSelection)
     }
 
+    /// 方向键微调：无修饰 = 整块移动，⌘/⌃ = 扩大对应那条边，⇧ = 缩小对应那条边
+    ///
+    /// 与 Snipaste 对齐的两处：
+    /// 1. **单边**而不是四边同时动 —— 「右边多带 1px」时四边同扩会把左边也带进来；
+    /// 2. 修饰键同时接受 ⌘ 与 ⌃ —— 官方文档原文是「Ctrl + 方向」，Mac 侧对应 ⌘，
+    ///    但本项目历史实现用的是 ⌃，两种都认才不会让老用户按了没反应。
     func nudge(dx: CGFloat, dy: CGFloat, modifiers: NSEvent.ModifierFlags) {
         guard state.phase == .selected else { return }
-        if modifiers.contains(.control) {
-            state.expand(by: max(abs(dx), abs(dy)))
+        let edge: SnipSelectionState.Edge? = dx < 0 ? .left : (dx > 0 ? .right : (dy < 0 ? .up : (dy > 0 ? .down : nil)))
+        if modifiers.contains(.command) || modifiers.contains(.control) {
+            if let edge { state.expand(edge: edge, by: 1, within: bounds) }
         } else if modifiers.contains(.shift) {
-            state.shrink(by: max(abs(dx), abs(dy)))
+            if let edge { state.shrink(edge: edge, by: 1, within: bounds) }
         } else {
             state.move(by: CGSize(width: dx, height: dy))
         }
@@ -248,14 +255,20 @@ extension SnipOverlayView {
         layoutToolBar()
         toolbarView?.debugHover(item)
     }
-    /// 仅 DEBUG：程序化弹出二级面板（工具 / 颜色 / 线宽），供实机取证核对面板定位
+    /// 仅 DEBUG：程序化打开自绘取色板（离屏取证用）
+    func debugOpenColorPicker() {
+        guard let bar = toolbarView else { return }
+        openColorPicker(anchor: bar.debugRect(.color), replacingPanel: true)
+    }
+
+    /// 仅 DEBUG：程序化弹出二级面板（工具 / 颜色 / 线宽 / 文字样式），供实机取证核对面板定位
     func debugOpenPanel(_ content: SnipPanelContent) {
         guard let bar = toolbarView else { return }
         let anchor: CGRect
         switch content {
         case .tools: anchor = bar.debugRect(.more)
         case .colors: anchor = bar.debugRect(.color)
-        case .widths, .styles: anchor = bar.debugRect(.width)
+        case .widths, .styles, .textStyles: anchor = bar.debugRect(.width)
         }
         toolBarDidRequestPanel(content, anchor: anchor)
     }

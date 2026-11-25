@@ -153,11 +153,21 @@ final class SnipToolBarView: NSView {
         case .color:
             delegate?.toolBarDidRequestPanel(.colors(Self.colors), anchor: visibleRect(of: hit))
         case .width:
-            // 官方把线宽 / 实虚线 / 颜色 Alpha 放在同一个「画笔设置」入口里
-            delegate?.toolBarDidRequestPanel(.styles(widths: Self.widths,
-                                                    dashes: Self.dashes,
-                                                    alphas: Self.alphas),
-                                            anchor: visibleRect(of: hit))
+            // 选中文字工具时这个入口弹的是「文字样式」（字号 / 加粗 / 字体），
+            // 其余情况才是画笔样式（线宽 / 虚线 / 颜色 Alpha）。
+            // 为什么不拆成两个按钮：文字标注时线宽对结果几乎无影响，而字号是刚需，
+            // 复用同一个入口让工具条保持 4 个高频工具 + 4 个动作的既有宽度。
+            if selectedTool == .text {
+                delegate?.toolBarDidRequestPanel(.textStyles(sizes: SnipTextStyle.fontSizePresets,
+                                                             bold: style.text.bold,
+                                                             family: style.text.family),
+                                                 anchor: visibleRect(of: hit))
+            } else {
+                delegate?.toolBarDidRequestPanel(.styles(widths: Self.widths,
+                                                         dashes: Self.dashes,
+                                                         alphas: Self.alphas),
+                                                 anchor: visibleRect(of: hit))
+            }
         case .action(let action):
             delegate?.toolBarDidPerform(action)
         }

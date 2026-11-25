@@ -209,14 +209,18 @@ extension SnipController: SnipKeyboardReceiving {
         if flags.contains(.maskControl) { modifierFlags.insert(.control) }
         if flags.contains(.maskAlternate) { modifierFlags.insert(.option) }
         if flags.contains(.maskCommand) { modifierFlags.insert(.command) }
+        // 字符优先级：系统解码（布局 / 输入法安全）→ 符号键兜底 → 字母键兜底
+        let resolved = characters
+            ?? SnipSymbolKeyCharacters.text(for: keyCode)
+            ?? SnipKeyCharacters.text(for: keyCode)
         guard let event = NSEvent.keyEvent(with: .keyDown,
                                            location: .zero,
                                            modifierFlags: modifierFlags,
                                            timestamp: ProcessInfo.processInfo.systemUptime,
                                            windowNumber: overlay.window?.windowNumber ?? 0,
                                            context: nil,
-                                           characters: characters ?? SnipKeyCharacters.text(for: keyCode),
-                                           charactersIgnoringModifiers: characters ?? SnipKeyCharacters.text(for: keyCode),
+                                           characters: resolved,
+                                           charactersIgnoringModifiers: resolved,
                                            isARepeat: false,
                                            keyCode: UInt16(keyCode)) else { return }
         overlay.handleKeyEvent(event)
@@ -243,6 +247,40 @@ enum SnipKeyCharacters {
         case 17: return "t"
         case 6: return "z"
         default: return ""
+        }
+    }
+}
+
+// MARK: - 符号键（字号 / 线宽的加减）
+
+/// 符号类按键的字符兜底
+///
+/// CGEvent → NSEvent 的兜底路径在部分键盘布局上拿不到等号 / 减号这些键的字符，
+/// 而线宽与字号的加减正好依赖它们。这里按 **键码** 兜一层：
+/// keyCode 与布局无关，是 US 布局上的物理位置，正是我们要表达的那个键。
+enum SnipSymbolKeyCharacters {
+    /// 等号键（数字 0 右边那个）→ 加粗 / 放大
+    static let equal = 24
+    /// 减号键 → 变细 / 缩小
+    static let minus = 27
+    /// 左方括号 → 变细（历史口径）
+    static let leftBracket = 33
+    /// 右方括号 → 加粗（历史口径）
+    static let rightBracket = 30
+    /// 小键盘加号
+    static let keypadPlus = 69
+    /// 小键盘减号
+    static let keypadMinus = 78
+
+    /// 键码 → 字符（nil 表示不是符号键，交给系统字符）
+    static func text(for keyCode: Int) -> String? {
+        switch keyCode {
+        case equal: return "="
+        case minus, keypadMinus: return "-"
+        case leftBracket: return "["
+        case rightBracket: return "]"
+        case keypadPlus: return "+"
+        default: return nil
         }
     }
 }

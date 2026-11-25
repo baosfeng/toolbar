@@ -83,8 +83,11 @@ func runSnipAnnotationStyleResolverTests() {
     // 透明度派生：只改 alpha，不动 RGB
     let translucent = SnipAnnotationColor.blue.withAlpha(0.3)
     assertEqual(translucent.alpha, 0.3, "透明度按参数生效")
-    assertEqual(SnipAnnotationColorHex.hex(translucent), SnipAnnotationColorHex.hex(.blue),
+    // RGB 编码里不含 alpha（8 位 hex 才带），调色板比对走 rgbHex
+    assertEqual(SnipAnnotationColorHex.rgbHex(translucent), SnipAnnotationColorHex.rgbHex(.blue),
                 "改透明度不影响 RGB")
+    assertEqual(SnipAnnotationColorHex.hex(translucent), SnipAnnotationColorHex.rgbHex(.blue) + "4D",
+                "8 位 hex 的 alpha 段按 0.3 编码（0.3 × 255 ≈ 77 = 0x4D）")
     assertEqual(SnipAnnotationColor.blue.withAlpha(2).alpha, 1, "透明度上界夹到 1")
     assertEqual(SnipAnnotationColor.blue.withAlpha(-1).alpha, 0, "透明度下界夹到 0")
 

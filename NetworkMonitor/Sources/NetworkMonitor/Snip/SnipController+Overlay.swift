@@ -17,7 +17,8 @@ extension SnipController {
         let initialStyle = SnipAnnotationStyleResolver.style(
             colorHex: storage.string(forKey: SnipPreferenceKey.annotationColor),
             lineWidth: (storage.object(forKey: SnipPreferenceKey.annotationLineWidth) as? Double).map { CGFloat($0) },
-            dashed: storage.bool(forKey: SnipPreferenceKey.annotationDashed))
+            dashed: storage.bool(forKey: SnipPreferenceKey.annotationDashed),
+            text: SnipTextStylePreference.load(storage: storage))
         // 工具条配置来自设置页：文字提示档、组顺序、组显隐、常驻工具、动作按钮显隐
         let toolbarConfiguration = SnipToolBarConfigurationResolver.load(storage: storage)
         overlays = result.map { captured in
@@ -35,9 +36,12 @@ extension SnipController {
         // （此前设置页写了这三个键却无人消费，等于「设了不生效」）
         for window in overlays {
             window.overlayView.onStylePersist = { [weak self] style in
-                self?.storage.set(SnipAnnotationColorHex.hex(style.color), forKey: SnipPreferenceKey.annotationColor)
-                self?.storage.set(Double(style.lineWidth), forKey: SnipPreferenceKey.annotationLineWidth)
-                self?.storage.set(style.dashed, forKey: SnipPreferenceKey.annotationDashed)
+                guard let self else { return }
+                // hex 现在带 alpha（不透明时仍是 6 位）：半透明笔下次截图才是半透明
+                storage.set(SnipAnnotationColorHex.hex(style.color), forKey: SnipPreferenceKey.annotationColor)
+                storage.set(Double(style.lineWidth), forKey: SnipPreferenceKey.annotationLineWidth)
+                storage.set(style.dashed, forKey: SnipPreferenceKey.annotationDashed)
+                SnipTextStylePreference.save(style.text, storage: storage)
             }
         }
         // 先装键盘兜底再上屏：上屏瞬间按下的键（双击热键、抢手速按 Esc）也要能被接住

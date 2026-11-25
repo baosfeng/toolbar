@@ -44,6 +44,7 @@ func runSnipSuites() {
     runSnipKeyboardWiringTests()
     runSnipRightClickTests()
     runSnipLineWidthTests()
+    runSnipAnnotationCustomizationTests()  // 文字字号/字重/字体族独立、线宽连续值、颜色 alpha 持久、取色器 HSV 换算
     runPinKeyCommandTests()
     runSnipAnnotationConstraintTests()
     runSnipAnnotationStyleResolverTests()

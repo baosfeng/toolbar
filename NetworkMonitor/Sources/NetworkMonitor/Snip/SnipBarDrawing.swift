@@ -115,6 +115,49 @@ enum SnipBarDrawing {
         ring.stroke()
     }
 
+    /// 画棋盘格底（透明度条、半透明色点下面垫一层，才看得出「这里是透明的」）
+    ///
+    /// 格子边长与两档灰度复用贴图窗的 PinBoardBackgroundResolver，
+    /// 两处棋盘格看起来必须是同一套（同一屏里两种格子会显得像画错了）。
+    static func drawChecker(in rect: CGRect, in context: CGContext) {
+        let cell = PinBoardBackgroundResolver.cellSize
+        guard cell > 0 else { return }
+        let light = NSColor(white: PinBoardBackgroundResolver.Tone.light, alpha: 1)
+        let dark = NSColor(white: PinBoardBackgroundResolver.Tone.dark, alpha: 1)
+        let columns = Int((rect.width / cell).rounded(.up))
+        let rows = Int((rect.height / cell).rounded(.up))
+        for row in 0..<max(rows, 0) {
+            for column in 0..<max(columns, 0) {
+                let isLight = PinBoardBackgroundResolver.isLightCell(column: column, row: row)
+                context.setFillColor((isLight ? light : dark).cgColor)
+                context.fill(CGRect(x: rect.minX + CGFloat(column) * cell,
+                                    y: rect.minY + CGFloat(row) * cell,
+                                    width: cell,
+                                    height: cell))
+            }
+        }
+    }
+
+    /// 画一个文字样本（字号档 / 加粗开关 / 字体族都用它）
+    ///
+    /// 用「写在格子里的一两个字符」而不是图标：字号与加粗本身就是该被看见的差异，
+    /// 换成图标用户还得靠悬停气泡才知道点了会变成多大。
+    static func drawTextSample(_ text: String, size: CGFloat, bold: Bool,
+                               in rect: CGRect, alpha: CGFloat) {
+        let font: NSFont = bold
+            ? .boldSystemFont(ofSize: size)
+            : .systemFont(ofSize: size)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white.withAlphaComponent(alpha),
+        ]
+        let string = text as NSString
+        let bounds = string.size(withAttributes: attributes)
+        string.draw(at: CGPoint(x: rect.midX - bounds.width / 2,
+                                y: rect.midY - bounds.height / 2),
+                    withAttributes: attributes)
+    }
+
     /// 画一档线宽（一条按线宽值加粗的短横线）
     static func drawWidth(_ width: CGFloat, in rect: CGRect, isSelected: Bool) {
         let lineRect = CGRect(x: rect.minX + 5,

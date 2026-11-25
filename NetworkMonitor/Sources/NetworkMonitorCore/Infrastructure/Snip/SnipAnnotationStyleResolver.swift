@@ -19,25 +19,53 @@ public enum SnipAnnotationStyleResolver {
     ///
     /// - Parameters:
     ///   - colorHex: 偏好里的颜色 hex（未设置或解析不出时回落默认红）
-    ///   - lineWidth: 偏好里的线宽（未设置时回落默认值，异常值夹到 1...40）
+    ///   - lineWidth: 偏好里的线宽（未设置时回落默认值，异常值夹到可选范围）
     ///   - dashed: 偏好里的线型（默认实线）
+    ///   - text: 文字样式（字号 / 字重 / 字体族）；缺省时沿用旧口径「字号由线宽推导」
     public static func style(colorHex: String?,
                              lineWidth: CGFloat?,
-                             dashed: Bool) -> SnipAnnotationStyle {
+                             dashed: Bool,
+                             text: SnipTextStyle = SnipTextStyle()) -> SnipAnnotationStyle {
         let color = color(fromHex: colorHex) ?? .red
-        let width = lineWidth.map { min(max($0, 1), 40) } ?? defaultLineWidth
-        return SnipAnnotationStyle(color: color, lineWidth: width, dashed: dashed)
+        var width = lineWidth.map { min(max($0, 1), 40) } ?? defaultLineWidth
+        width = SnipLineWidthRange.clamp(width)
+        return SnipAnnotationStyle(color: color, lineWidth: width, dashed: dashed, text: text)
     }
 
-    /// hex → 颜色；只接受 #RRGGBB（含或不含前导 #），其余一律视为无效
+    /// hex → 颜色；接受 #RRGGBB 与 #RRGGBBAA（含或不含前导 #），其余一律视为无效
+    ///
+    /// 8 位形式的引入原因：颜色透明度过去只存在于二级面板，回写偏好时只写 RGB，
+    /// 于是「调好的半透明笔」下次截图又变成不透明。带上 alpha 才谈得上持久化。
     public static func color(fromHex hex: String?) -> SnipAnnotationColor? {
         guard let hex else { return nil }
         var text = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if text.hasPrefix("#") { text.removeFirst() }
-        guard text.count == 6, text.allSatisfy({ $0.isHexDigit }) else { return nil }
+        guard text.count == 6 || text.count == 8,
+              text.allSatisfy({ $0.isHexDigit }) else { return nil }
         let value = UInt32(text, radix: 16) ?? 0
-        return SnipAnnotationColor(red: CGFloat((value >> 16) & 0xFF) / 255,
-                                   green: CGFloat((value >> 8) & 0xFF) / 255,
-                                   blue: CGFloat(value & 0xFF) / 255)
+        let hasAlpha = text.count == 8
+        let red = (value >> (hasAlpha ? 24 : 16)) & 0xFF
+        let green = (value >> (hasAlpha ? 16 : 8)) & 0xFF
+        let blue = (value >> (hasAlpha ? 8 : 0)) & 0xFF
+        let alpha = hasAlpha ? value & 0xFF : 0xFF
+        return SnipAnnotationColor(red: CGFloat(red) / 255,
+                                   green: CGFloat(green) / 255,
+                                   blue: CGFloat(blue) / 255,
+                                   alpha: CGFloat(alpha) / 255)
+    }
+}
+
+// MARK: - 线宽范围（Core 侧唯一口径）
+
+/// 线宽上下限 —— UI 与渲染 / 解析共用的同一份范围
+///
+/// 放在 Core 是因为解析器要用它夹值，而 UI 目标里的 SnipLineWidthStepper
+/// 也引用它：两边各写一遍 1...40 迟早分叉。
+public enum SnipLineWidthRange {
+    public static let range: ClosedRange<CGFloat> = 1...40
+
+    public static func clamp(_ width: CGFloat) -> CGFloat {
+        guard width.isFinite else { return 4 }
+        return min(max(width, range.lowerBound), range.upperBound)
     }
 }

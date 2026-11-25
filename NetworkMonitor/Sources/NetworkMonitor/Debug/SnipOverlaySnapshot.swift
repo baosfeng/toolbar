@@ -29,6 +29,9 @@ enum SnipOverlaySnapshot {
             renderToFile(at: directory.appendingPathComponent("overlay-small-selection.png"),
                          phase: .smallSelection)
             renderToFile(at: directory.appendingPathComponent("overlay-top-label.png"), phase: .topLabel)
+            // 本轮新增的两块自定义面板：文字样式盘（字号 / 加粗 / 字体）与自绘取色板
+            renderToFile(at: directory.appendingPathComponent("overlay-text-panel.png"), phase: .textPanel)
+            renderToFile(at: directory.appendingPathComponent("overlay-color-picker.png"), phase: .colorPicker)
             NSApp.terminate(nil)
         }
     }
@@ -40,6 +43,10 @@ enum SnipOverlaySnapshot {
         case smallSelection
         /// 选区贴住画布上沿：尺寸标签翻进选区内部、三角改朝上（A4 取证）
         case topLabel
+        /// 文字工具选中时弹出的「文字样式」盘（字号档 / 加粗 / 字体族）
+        case textPanel
+        /// 颜色盘末尾「自定义」打开的自绘取色板（色相 + 饱和度方块 + 透明度）
+        case colorPicker
     }
 
     /// 取证用的工具条配置：与默认配置一致（悬停提示档），保证图面对应真实默认外观
@@ -82,6 +89,23 @@ enum SnipOverlaySnapshot {
             view.debugHover(atLocalPoint: CGPoint(x: 430, y: 340))
         case .topLabel:
             view.debugApplySelection(CGRect(x: 220, y: 0, width: 560, height: 200))
+        case .textPanel:
+            view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            view.debugAddAnnotation(SnipAnnotation(kind: .text,
+                                                   start: CGPoint(x: 265, y: 200),
+                                                   end: CGPoint(x: 265, y: 200),
+                                                   text: "字号与线宽已解耦",
+                                                   style: SnipAnnotationStyle(color: .yellow,
+                                                                              lineWidth: 4,
+                                                                              text: SnipTextStyle(fontSize: 28))))
+            view.toolBarDidChangeTool(.text)
+            view.debugOpenPanel(.textStyles(sizes: SnipTextStyle.fontSizePresets,
+                                            bold: false,
+                                            family: .system))
+        case .colorPicker:
+            view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            view.toolBarDidChangeTool(.rectangle)
+            view.debugOpenColorPicker()
         }
 
         let container = SnapshotBackdropView(frame: NSRect(origin: .zero, size: canvasSize))

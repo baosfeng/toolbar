@@ -119,6 +119,56 @@ public struct SnipSelectionState: Equatable, Sendable {
         rect = rect.insetBy(dx: inset, dy: inset)
     }
 
+    // MARK: - 单边扩缩（Snipaste 的 Ctrl/Shift + 方向键语义）
+
+    /// 四条边里的一条 —— 单边扩缩的方向
+    public enum Edge: Equatable, Sendable {
+        case left, right, up, down
+    }
+
+    /// 把**对应那条边**向外推 delta（其余三边不动）
+    ///
+    /// 与 `expand(by:)` 的区别：那个是四边同时外扩（保持中心），
+    /// 而 Snipaste 的 Ctrl+方向键是「只动那一条边」。截图时常要精确地
+    /// 「右边再多带 1 像素」，四边同扩会把另一侧的像素也带进来。
+    ///
+    /// - Parameter bounds: 可选的屏幕范围，扩到屏幕外时按它裁住（不会扩出可视区）
+    public mutating func expand(edge: Edge, by delta: CGFloat, within bounds: CGRect? = nil) {
+        guard phase == .selected, delta > 0 else { return }
+        var next = rect
+        switch edge {
+        case .left: next.origin.x -= delta; next.size.width += delta
+        case .right: next.size.width += delta
+        case .up: next.origin.y -= delta; next.size.height += delta
+        case .down: next.size.height += delta
+        }
+        if let bounds {
+            next = next.intersection(bounds)
+            guard !next.isNull else { return }
+        }
+        rect = next
+    }
+
+    /// 把**对应那条边**向内收 delta（其余三边不动），不小于最小边长
+    public mutating func shrink(edge: Edge, by delta: CGFloat, within bounds: CGRect? = nil) {
+        guard phase == .selected, delta > 0 else { return }
+        var next = rect
+        switch edge {
+        case .left: next.origin.x += delta; next.size.width -= delta
+        case .right: next.size.width -= delta
+        case .up: next.origin.y += delta; next.size.height -= delta
+        case .down: next.size.height -= delta
+        }
+        // 判 size 而不是 .width：CGRect 的 .width 会把负宽标准化成正数，
+        // 用 .width 判会让「缩过头」的矩形被当成合法值写回去（实测 10pt 缩 100pt 变 90pt）。
+        guard next.size.width >= minimumSide, next.size.height >= minimumSide else { return }
+        if let bounds {
+            next = next.intersection(bounds)
+            guard !next.isNull else { return }
+        }
+        rect = next
+    }
+
     /// 回到未开始
     public mutating func reset() {
         phase = .idle

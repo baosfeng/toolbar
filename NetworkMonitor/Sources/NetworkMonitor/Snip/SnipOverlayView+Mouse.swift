@@ -44,6 +44,12 @@ extension SnipOverlayView {
         pointer = point
         // 二级面板展开时，点面板外等于「收起面板」：不把这一下当成新建选区，
         // 否则用户想关面板却顺手把选区清掉了
+        // 取色板与二级面板一样：点面板外 = 收起，且不把这一下当成新建选区
+        if let picker = colorPicker {
+            if picker.frame.contains(point) { return }
+            closeColorPicker()
+            return
+        }
         if let panel = toolPanel {
             if panel.frame.contains(point) { return }
             closeToolPanel()

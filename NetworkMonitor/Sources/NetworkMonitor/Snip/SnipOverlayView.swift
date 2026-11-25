@@ -84,14 +84,19 @@ final class SnipOverlayView: NSView {
     /// 正在绘制的标注
     var draftAnnotation: SnipAnnotation?
     /// 后续图元使用的样式
+    ///
+    /// 变更统一走 `applyStyle(_:)`：工具条同步、偏好回写、选中文字实时改样式
+    /// 三件事都在那一处收口，避免散着赋值漏掉某个消费方。
     var currentStyle = SnipAnnotationStyle()
     /// 样式变更回写（由编排层注入：把颜色 / 线宽 / 实虚线落进偏好，下次截图还是这支笔）
     var onStylePersist: ((SnipAnnotationStyle) -> Void)?
     /// 标注工具条
     var toolbarView: SnipToolBarView?
-    /// 二级面板（工具 / 颜色 / 线宽）；nil = 未展开
+    /// 二级面板（工具 / 颜色 / 线宽 / 文字样式）；nil = 未展开
     /// 放宽为 internal：标注扩展文件（+Annotation）负责创建与收起
     var toolPanel: SnipToolPanelView?
+    /// 自绘取色板；nil = 未展开
+    var colorPicker: SnipColorPickerView?
     /// 工具条是否可见（空格切换）
     var toolbarVisible = true
     /// 文字输入框
@@ -102,6 +107,8 @@ final class SnipOverlayView: NSView {
     }
     /// 文字输入锚点（本地点坐标）
     var textEditingAnchor: CGPoint = .zero
+    /// 正在编辑已存在的文字标注时它的下标；nil = 新建
+    var textEditingIndex: Int?
     /// 当前选中的标注下标（文字缩放 / 旋转用）
     var selectedAnnotationIndex: Int?
     /// 首帧重绘尝试次数（只在拿不到绘图上下文时自增，用于终止重试）
@@ -254,7 +261,16 @@ final class SnipOverlayView: NSView {
         case .adjustLineWidth(let delta):
             // 官方口径是「编辑模式时」调粗细：没有进标注状态就放行，别把按键吃掉又无反应
             guard activeTool != nil, state.phase == .selected else { return false }
+            // 当前工具是文字时，同一组键调的是字号而不是线宽（两根不同的旋钮）
+            if activeTool == .text, adjustTextFontSize(by: delta) { return true }
             stepLineWidth(by: delta)
+        case .adjustFontSize(let delta):
+            guard activeTool == .text, state.phase == .selected else { return false }
+            return adjustTextFontSize(by: delta)
+        case .toggleTextBold:
+            guard activeTool == .text, state.phase == .selected else { return false }
+            currentStyle.text.bold.toggle()
+            toolBarDidChangeStyle(currentStyle)
         case .deleteSelectedAnnotation:
             // 官方二次编辑：选中态按 Del 删掉该形状；没有选中就放行，交给系统
             guard deleteSelectedAnnotation() else { return false }

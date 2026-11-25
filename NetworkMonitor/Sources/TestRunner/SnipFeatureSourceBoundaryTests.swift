@@ -18,7 +18,9 @@ func testSnipFeatureSourceBoundaries() {
     let movedFiles = ["ScreenCaptureService.swift", "SnipPasteboardImageWriter.swift",
                       "SnipFileWriter.swift", "VisionTextRecognizer.swift",
                       "SnipHotKeyPreferences.swift", "SnipPreferenceKey.swift",
-                      "SnipKeyBridge.swift", "HotKeyRegistry.swift"]
+                      "SnipKeyBridge.swift", "HotKeyRegistry.swift",
+                      // 文字样式的偏好读写：要用 SnipPreferenceKey，只能在功能层
+                      "SnipTextStylePreference.swift"]
 
     // 1) App target 里不再有这些文件，新 target 里只此一份
     let appSnipFiles = Set(snipFeatureSwiftFiles(in: sourcesRoot.appendingPathComponent("NetworkMonitor/Snip")))
