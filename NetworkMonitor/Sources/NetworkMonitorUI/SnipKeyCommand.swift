@@ -33,6 +33,13 @@ public enum SnipKeyCommand: Equatable {
     case clearAnnotations
     /// 调整画笔粗细：delta 为正加粗、为负变细（官方 1 / 2 与 [ / ]）
     case adjustLineWidth(delta: Int)
+    /// 调整文字字号：delta 为正放大、为负缩小（文字工具下的 - / = 或 9 / 0）
+    ///
+    /// 与 adjustLineWidth 分开：Snipaste 里线宽与字号是两根旋钮，
+    /// 当前工具是文字时按同一组键应该调字号，不该把笔调粗。
+    case adjustFontSize(delta: Int)
+    /// 切换文字加粗
+    case toggleTextBold
     /// 删除当前选中的标注（官方二次编辑的 Del）
     case deleteSelectedAnnotation
     /// 保存选区；quick 为 true 表示快速保存到默认目录
@@ -102,6 +109,10 @@ public enum SnipKeyCommandResolver {
         // 不能因为键码恰好等于覆盖层的「切窗口检测 / 显隐工具条」就被吃掉
         // （早期实现把键码表放在最前面，截图界面里 ⌘Tab 与 ⌘空格直接失效）。
         if modifiers.contains(.command) {
+            // ⌘ + 方向键 = 扩大对应那条边 1px（官方 Ctrl+方向，Mac 对应 ⌘）。
+            // 方向键在 ⌘ 通道里必须显式接住：否则会落到「⌘ 只认字母」的兜底分支，
+            // 表现为「官方文档里写的 ⌘+方向 毫无反应」。
+            if let edge = resolveArrow(dx: 0, dy: 0, keyCode: keyCode) { return edge }
             return resolveCommandLetter(characters: characters, modifiers: modifiers)
         }
 
@@ -136,7 +147,26 @@ public enum SnipKeyCommandResolver {
         // 截图覆盖层里的 1 / 2 不旋转，旋转属于贴图窗（另一个窗口，键位不冲突）。
         case "[", "1": return .adjustLineWidth(delta: -1)
         case "]", "2": return .adjustLineWidth(delta: 1)
+        // 连续微调：等号加粗 / 减号变细（与 [ ] 并存，Snipaste 用户两边习惯都有）
+        case "=": return .adjustLineWidth(delta: 1)
+        case "-": return .adjustLineWidth(delta: -1)
+        // 文字工具下的字号快捷键：9 / 0 与 - / = 同义（9 缩小、0 放大）
+        case "9": return .adjustFontSize(delta: -1)
+        case "0": return .adjustFontSize(delta: 1)
+        // 加粗开关：B（Bold 的直觉映射）
+        case "b": return .toggleTextBold
         default: return .none
+        }
+    }
+
+    /// 方向键 → 微调命令（⌘ 通道复用；非 ⌘ 通道在 switch 里另有分支）
+    private static func resolveArrow(dx: CGFloat, dy: CGFloat, keyCode: Int) -> SnipKeyCommand? {
+        switch keyCode {
+        case KeyCode.leftArrow: return .nudge(dx: -1, dy: 0)
+        case KeyCode.rightArrow: return .nudge(dx: 1, dy: 0)
+        case KeyCode.downArrow: return .nudge(dx: 0, dy: 1)
+        case KeyCode.upArrow: return .nudge(dx: 0, dy: -1)
+        default: return nil
         }
     }
 

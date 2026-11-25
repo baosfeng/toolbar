@@ -2,29 +2,6 @@ import AppKit
 import NetworkMonitorCore
 import NetworkMonitorUI
 
-// MARK: - 覆盖层回调
-
-@MainActor
-protocol SnipOverlayViewDelegate: AnyObject {
-    /// 用户按 Esc 或右键取消
-    func overlayViewDidCancel(_ view: SnipOverlayView)
-    /// 用户回车确认（本地点坐标）
-    func overlayView(_ view: SnipOverlayView, didConfirm rect: CGRect)
-    /// 用户要求切换「截图里是否包含鼠标指针」
-    func overlayViewDidToggleCursor(_ view: SnipOverlayView)
-    /// 用户要求保存选区（本地点坐标）；quick 为 true 表示快速保存
-    func overlayView(_ view: SnipOverlayView, didRequestSave rect: CGRect, quick: Bool)
-    /// 用户要求把选区贴到屏幕（本地点坐标）
-    func overlayView(_ view: SnipOverlayView, didRequestPin rect: CGRect)
-    /// 用户要求对选区做 OCR 文字识别（本地点坐标）
-    func overlayView(_ view: SnipOverlayView, didRequestTextRecognition rect: CGRect)
-    /// 输入框（文字 / 尺寸）开始或结束编辑
-    ///
-    /// 覆盖层要把这个信号同步给系统层按键通道：编辑态下白名单键必须放行，
-    /// 否则输入框里的 a / 退格 / 回车会被当作截图指令吞掉（打不进字、删不掉）。
-    func overlayView(_ view: SnipOverlayView, didChangeTextEditing isEditing: Bool)
-}
-
 // MARK: - 截图覆盖层
 
 /// 单屏截图覆盖层 — 画截图、暗化、选区、手柄，并处理鼠标与键盘
@@ -51,7 +28,8 @@ final class SnipOverlayView: NSView {
     /// 截图像素采样器（取色与放大镜共用）
     var sampler: SnipPixelSampler?
     /// 取色展示格式，Shift 切换
-    private(set) var colorFormat: SnipPixelColor.DisplayFormat = .hex
+    /// 放宽为 internal(set)：鼠标扩展文件（+Mouse）的 flagsChanged 要切换它
+    var colorFormat: SnipPixelColor.DisplayFormat = .hex
     /// 放宽为 internal：动作扩展文件要恢复上次区域
     let lastSelection: CGRect?
     /// 放宽为 internal：动作扩展文件要按逗号 / 句号循环
@@ -84,14 +62,19 @@ final class SnipOverlayView: NSView {
     /// 正在绘制的标注
     var draftAnnotation: SnipAnnotation?
     /// 后续图元使用的样式
+    ///
+    /// 变更统一走 `applyStyle(_:)`：工具条同步、偏好回写、选中文字实时改样式
+    /// 三件事都在那一处收口，避免散着赋值漏掉某个消费方。
     var currentStyle = SnipAnnotationStyle()
     /// 样式变更回写（由编排层注入：把颜色 / 线宽 / 实虚线落进偏好，下次截图还是这支笔）
     var onStylePersist: ((SnipAnnotationStyle) -> Void)?
     /// 标注工具条
     var toolbarView: SnipToolBarView?
-    /// 二级面板（工具 / 颜色 / 线宽）；nil = 未展开
+    /// 二级面板（工具 / 颜色 / 线宽 / 文字样式）；nil = 未展开
     /// 放宽为 internal：标注扩展文件（+Annotation）负责创建与收起
     var toolPanel: SnipToolPanelView?
+    /// 自绘取色板；nil = 未展开
+    var colorPicker: SnipColorPickerView?
     /// 工具条是否可见（空格切换）
     var toolbarVisible = true
     /// 文字输入框
@@ -102,6 +85,8 @@ final class SnipOverlayView: NSView {
     }
     /// 文字输入锚点（本地点坐标）
     var textEditingAnchor: CGPoint = .zero
+    /// 正在编辑已存在的文字标注时它的下标；nil = 新建
+    var textEditingIndex: Int?
     /// 当前选中的标注下标（文字缩放 / 旋转用）
     var selectedAnnotationIndex: Int?
     /// 首帧重绘尝试次数（只在拿不到绘图上下文时自增，用于终止重试）
@@ -113,12 +98,27 @@ final class SnipOverlayView: NSView {
     var onFirstFrameRendered: (() -> Void)?
     /// 是否有输入框正在编辑（此时按键要让给输入框）
     var hasActiveTextInput: Bool { sizeEditor != nil || textEditor != nil }
+    /// 是否允许滚轮调数值（设置页可关；缺键即开）
+    /// 滚轮已被塞进四种语义，不给整体开关的话，习惯拿它做别的操作的用户只能忍。
+    var scrollAdjustEnabled = true
+    /// 操作提示（首次进标注态浮 3 秒；看过就不再打扰）
+    lazy var hints = SnipHintsPresenter(
+        hostView: { [unowned self] in self },
+        selectionRect: { [unowned self] in self.state.selection },
+        bounds: { [unowned self] in self.bounds },
+        onShown: { [unowned self] in self.onHintsShown?() })
+    /// 看过提示后回写偏好（由编排层注入）
+    var onHintsShown: (() -> Void)?
     /// 本次按下时的落点（用于区分单击选窗与拖拽选区）
     /// 放宽为 internal：动作扩展文件（+Actions 的单击选窗判定）要读写
     var pressPoint: CGPoint?
     /// 本次按下时悬停的窗口（松手且位移很小时用它成立整窗选区）
     /// 放宽为 internal：动作扩展文件（+Actions 的单击选窗判定）要读写
     var pressedWindow: SnipWindowInfo?
+
+    /// 数值旋钮控制器（线宽 / 字号 / 透明度 / 马赛克 / 模糊 / 放大镜）
+    /// 数值调整自成一套行为，塞进本类扩展会让同族合计门禁告警；装配见 Snip/Numeric/。
+    lazy var numeric = makeNumericController()
 
     init(frame: NSRect,
          screenshot: CGImage,
@@ -170,7 +170,6 @@ final class SnipOverlayView: NSView {
         tracking = area
     }
 
-
     // MARK: - 键盘
 
     /// Esc 先被 AppKit 的「取消」链路吃掉，不会进 keyDown
@@ -218,6 +217,13 @@ final class SnipOverlayView: NSView {
         case .toggleCursor:
             delegate?.overlayViewDidToggleCursor(self)
         case .toggleToolBar:
+            // 拖拽中按空格 = 切「移动选区」（Snipaste 高级技巧）；其余时候仍是工具条开关。
+            // 已在移动模式时必须继续吃掉：按住不放的重复 keyDown 会让工具条疯狂闪烁。
+            if state.isSpaceMoving { return true }
+            if state.phase == .dragging, state.enterSpaceMove() {
+                needsDisplay = true
+                return true
+            }
             toolbarVisible.toggle()
             // 工具条一起消失，二级面板不能独自留在屏上
             closeToolPanel()
@@ -254,7 +260,16 @@ final class SnipOverlayView: NSView {
         case .adjustLineWidth(let delta):
             // 官方口径是「编辑模式时」调粗细：没有进标注状态就放行，别把按键吃掉又无反应
             guard activeTool != nil, state.phase == .selected else { return false }
+            // 当前工具是文字时，同一组键调的是字号而不是线宽（两根不同的旋钮）
+            if activeTool == .text, adjustTextFontSize(by: delta) { return true }
             stepLineWidth(by: delta)
+        case .adjustFontSize(let delta):
+            guard activeTool == .text, state.phase == .selected else { return false }
+            return adjustTextFontSize(by: delta)
+        case .toggleTextBold:
+            guard activeTool == .text, state.phase == .selected else { return false }
+            currentStyle.text.bold.toggle()
+            toolBarDidChangeStyle(currentStyle)
         case .deleteSelectedAnnotation:
             // 官方二次编辑：选中态按 Del 删掉该形状；没有选中就放行，交给系统
             guard deleteSelectedAnnotation() else { return false }
@@ -268,13 +283,6 @@ final class SnipOverlayView: NSView {
             return false
         }
         return true
-    }
-
-    override func flagsChanged(with event: NSEvent) {
-        if event.modifierFlags.contains(.shift) {
-            colorFormat = colorFormat == .hex ? .rgb : .hex
-            needsDisplay = true
-        }
     }
 
     // MARK: - 输入框编辑态

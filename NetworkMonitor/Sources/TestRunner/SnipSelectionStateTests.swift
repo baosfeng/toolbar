@@ -76,6 +76,37 @@ func runSnipSelectionStateTests() {
     assertEqual(mover.rect, CGRect(x: 5, y: -3, width: 50, height: 50), "键盘移动整块")
 
     // 扩缩
+    // 单边扩缩（Snipaste 的 Ctrl/Shift + 方向键）：只动对应那条边
+    var edged = SnipSelectionState()
+    edged.begin(at: CGPoint(x: 10, y: 10))
+    edged.drag(to: CGPoint(x: 110, y: 60))
+    edged.end()
+    let before = edged.rect
+    edged.expand(edge: .right, by: 1)
+    assertEqual(edged.rect.maxX, before.maxX + 1, "右边扩 1px")
+    assertEqual(edged.rect.minX, before.minX, "扩右边不动左边")
+    assertEqual(edged.rect.minY, before.minY, "扩右边不动上边")
+    edged.shrink(edge: .left, by: 1)
+    assertEqual(edged.rect.minX, before.minX + 1, "左边收 1px")
+    edged.expand(edge: .down, by: 1)
+    assertEqual(edged.rect.maxY, before.maxY + 1, "下边扩 1px")
+
+    // 屏幕裁剪：扩到可视区外时被裁住，不会扩出屏幕
+    var bounded = SnipSelectionState()
+    bounded.begin(at: CGPoint(x: 0, y: 0))
+    bounded.drag(to: CGPoint(x: 100, y: 100))
+    bounded.end()
+    bounded.expand(edge: .left, by: 10, within: CGRect(x: 0, y: 0, width: 200, height: 200))
+    assertEqual(bounded.rect.minX, 0, "左扩被屏幕左边界裁住")
+
+    // 缩边越界时整条边不动（不会缩成负尺寸）
+    var edgeTiny = SnipSelectionState()
+    edgeTiny.begin(at: CGPoint(x: 10, y: 10))
+    edgeTiny.drag(to: CGPoint(x: 20, y: 20))
+    edgeTiny.end()
+    edgeTiny.shrink(edge: .right, by: 100)
+    assertEqual(edgeTiny.rect.width, 10, "缩边越界时整条边不动")
+
     mover.expand(by: 5)
     assertEqual(mover.rect, CGRect(x: 0, y: -8, width: 60, height: 60), "向外扩大四边")
     mover.shrink(by: 10)
@@ -85,4 +116,30 @@ func runSnipSelectionStateTests() {
     state.reset()
     assertEqual(state.phase, .idle, "重置回空闲")
     assertEqual(state.selection == nil, true, "重置后无选区")
+
+    // MARK: 拖拽中按空格切移动选区（Snipaste 高级技巧）
+    var spaceDrag = SnipSelectionState()
+    spaceDrag.begin(at: CGPoint(x: 100, y: 100))
+    spaceDrag.drag(to: CGPoint(x: 200, y: 180))
+    assertEqual(spaceDrag.rect, CGRect(x: 100, y: 100, width: 100, height: 80), "拖拽中矩形跟随")
+    assertEqual(spaceDrag.isSpaceMoving, false, "未按空格时不是移动模式")
+    assertEqual(spaceDrag.enterSpaceMove(), true, "拖拽中按空格进入移动模式")
+    assertEqual(spaceDrag.isSpaceMoving, true, "已进入移动模式")
+    spaceDrag.spaceMove(to: CGPoint(x: 150, y: 150))   // 第一下只定锚
+    spaceDrag.spaceMove(to: CGPoint(x: 170, y: 160))   // 之后按位移平移
+    assertEqual(spaceDrag.rect.origin, CGPoint(x: 120, y: 110), "整块选区跟着光标平移")
+    assertEqual(spaceDrag.rect.size, CGSize(width: 100, height: 80), "移动不改变选区尺寸")
+    spaceDrag.exitSpaceMove(at: CGPoint(x: 500, y: 500))
+    assertEqual(spaceDrag.isSpaceMoving, false, "松开空格退出移动模式")
+    spaceDrag.drag(to: CGPoint(x: 600, y: 560))
+    assertEqual(spaceDrag.rect, CGRect(x: 500, y: 500, width: 100, height: 60), "退出后继续正常拉边（锚点已重钉）")
+    spaceDrag.end()
+    assertEqual(spaceDrag.phase, .selected, "松手成立选区")
+
+    // 已成形的选区不该再进入空格模式（它本来就能拖内部移动）
+    var settled = SnipSelectionState()
+    settled.begin(at: CGPoint(x: 10, y: 10))
+    settled.drag(to: CGPoint(x: 60, y: 60))
+    settled.end()
+    assertEqual(settled.enterSpaceMove(), false, "已成立的选区不进入空格移动模式")
 }

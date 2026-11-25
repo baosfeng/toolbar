@@ -21,9 +21,11 @@ public enum SnipAnnotationColorNaming {
     ]
 
     /// 颜色 → 中文名；不在调色板里时返回「自定义色」
+    ///
+    /// 按 RGB 比对（`rgbHex`）：hex 现在会把 alpha 一起编码，
+    /// 若拿带 alpha 的 8 位串去比对，半透明的红会被叫成「自定义色」。
     public static func name(for color: SnipAnnotationColor) -> String {
-        let hex = SnipAnnotationColorHex.hex(color)
-        return palette.first { $0.hex.caseInsensitiveCompare(hex) == .orderedSame }?.name ?? "自定义色"
+        name(forHex: SnipAnnotationColorHex.rgbHex(color))
     }
 
     /// hex → 中文名（设置页按存储里的 hex 直接取名）

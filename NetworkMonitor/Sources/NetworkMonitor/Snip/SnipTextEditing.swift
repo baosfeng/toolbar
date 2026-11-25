@@ -13,13 +13,23 @@ extension SnipOverlayView {
     // MARK: - 文字输入
 
     /// 在点击位置弹出输入框，回车落字
-    func beginTextEditing(at point: CGPoint) {
+    ///
+    /// - Parameter editing: 传入已存在的标注下标时进入「改文字」而不是「新建」。
+    ///   文字标注写错一个字只能删了重画是这个工具最常被抱怨的点之一。
+    func beginTextEditing(at point: CGPoint, editing index: Int? = nil) {
         guard textEditor == nil else { return }
         textEditingAnchor = point
+        textEditingIndex = index
         let field = SizeEditorField(frame: CGRect(x: point.x, y: point.y, width: 220, height: 24))
-        field.stringValue = ""
+        if let index, annotationStack.annotations.indices.contains(index) {
+            field.stringValue = annotationStack.annotations[index].text
+        } else {
+            field.stringValue = ""
+        }
         field.placeholderString = "输入文字，回车确认"
-        field.font = .systemFont(ofSize: 13)
+        // 输入框字号跟落字字号一致：13pt 的小框里写 40pt 的大字，
+        // 用户在输入时看到的是「很小的字」，落字后突然变大，很难预判排版
+        field.font = .systemFont(ofSize: min(max(textInputFontSize, 12), 24))
         field.bezelStyle = .roundedBezel
         field.focusRingType = .none
         field.target = self
@@ -28,26 +38,46 @@ extension SnipOverlayView {
         addSubview(field)
         replaceTextEditor(field)
         window?.makeFirstResponder(field)
+        field.selectText(nil)
         needsDisplay = true
+    }
+
+    /// 输入框里用的字号：跟当前笔的落字字号走，但夹到一个能编辑的区间
+    private var textInputFontSize: CGFloat {
+        currentStyle.text.fontSize ?? max(currentStyle.lineWidth * 5, 14)
     }
 
     @objc func commitTextEditing() {
         guard let field = textEditor else { return }
         let content = field.stringValue
+        let editingIndex = textEditingIndex
+        textEditingIndex = nil
         field.removeFromSuperview()
         replaceTextEditor(nil)
         window?.makeFirstResponder(self)
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
+            // 改成空 = 删掉这条文字（改文字时把内容清空是一种自然的「删掉」表达）
+            if let editingIndex, annotationStack.annotations.indices.contains(editingIndex) {
+                annotationStack.remove(at: editingIndex)
+                selectedAnnotationIndex = nil
+            }
             needsDisplay = true
             return
         }
-        let annotation = SnipAnnotation(kind: .text,
-                                        start: textEditingAnchor,
-                                        end: textEditingAnchor,
-                                        text: trimmed,
-                                        style: currentStyle)
-        annotationStack.add(annotation)
+        if let editingIndex, annotationStack.annotations.indices.contains(editingIndex) {
+            // 改文字：保留原有位置、缩放与旋转，只换内容
+            var annotation = annotationStack.annotations[editingIndex]
+            annotation.text = trimmed
+            annotationStack.replace(at: editingIndex, with: annotation)
+        } else {
+            let annotation = SnipAnnotation(kind: .text,
+                                            start: textEditingAnchor,
+                                            end: textEditingAnchor,
+                                            text: trimmed,
+                                            style: currentStyle)
+            annotationStack.add(annotation)
+        }
         needsDisplay = true
     }
 

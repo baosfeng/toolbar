@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 覆盖层的小标签与放大镜绘制
 //
@@ -64,9 +65,20 @@ enum SnipLabelDrawing {
 @MainActor
 enum SnipMagnifierDrawing {
 
-    /// 放大镜边长与采样跨度（点）
+    /// 放大镜边长（点）
     static let side: CGFloat = 120
-    static let span: CGFloat = 15
+
+    /// 基准采样跨度（点）—— 8× 时一格代表 15 点
+    static let baseSpan: CGFloat = 15
+
+    /// 由放大倍数推出采样跨度：跨度 = 边长 ÷ 倍数
+    ///
+    /// 之前跨度是写死的 15（等于固定 8×）。现在倍数可调，跨度必须跟着算，
+    /// 否则"把倍数调大"只会让同一个跨度在更小的框里铺开，什么都不会放大。
+    static func span(for zoom: CGFloat) -> CGFloat {
+        let safeZoom = max(zoom, 1)
+        return side / safeZoom
+    }
 
     /// 一次绘制需要的全部输入（从覆盖层取，绘制本身不碰视图状态）
     struct State {
@@ -80,6 +92,12 @@ enum SnipMagnifierDrawing {
         let displayOrigin: CGPoint
         /// 取色展示格式（Shift 切换）
         let colorFormat: SnipPixelColor.DisplayFormat
+        /// 放大倍数（2–16×，选区阶段滚轮可调）
+        ///
+        /// 倍率与采样跨度是同一件事的两种说法：跨度 15pt 铺满 120pt 的框就是 8×。
+        /// 用"倍数"当旋钮而不是直接改跨度，是因为用户脑子里想的是"看得多大"，
+        /// 而不是"这一格代表几个点"。
+        var zoom: CGFloat = SnipNumericParam.magnifierZoom.defaultValue
     }
 
     /// 在鼠标旁绘制像素放大镜
@@ -95,7 +113,7 @@ enum SnipMagnifierDrawing {
         origin.y = min(max(origin.y, 0), max(bounds.height - side, 0))
 
         let scale = CGFloat(state.screenshot.width) / max(bounds.width, 1)
-        let span = Self.span
+        let span = Self.span(for: state.zoom)
         let centerX = (pointer.x * scale).rounded()
         let centerY = (pointer.y * scale).rounded()
         let srcRect = CGRect(x: centerX - (span * scale) / 2,

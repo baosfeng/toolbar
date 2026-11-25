@@ -13,6 +13,24 @@ public enum SnipPreferenceKey {
     public static let annotationLineWidth = "snip.annotationLineWidth"
     /// 标注默认线型：实线 / 虚线（官方专业版「虚线/点线」能力，默认实线）
     public static let annotationDashed = "snip.annotationDashed"
+    /// 文字标注字号（缺键 = 沿用旧口径「由线宽推导」，老偏好零迁移）
+    public static let annotationTextFontSize = "snip.annotation.textFontSize"
+    /// 文字标注是否加粗
+    public static let annotationTextBold = "snip.annotation.textBold"
+    /// 文字标注字体族（SnipTextFamily 的 rawValue）
+    public static let annotationTextFamily = "snip.annotation.textFamily"
+    /// 马赛克块边长（像素，2…32；缺键 = 14，与 SnipMosaicProcessor 的既有常量一致）
+    public static let annotationMosaicBlock = "snip.annotation.mosaicBlock"
+    /// 高斯模糊半径（像素，1…40；缺键 = 14）
+    public static let annotationBlurRadius = "snip.annotation.blurRadius"
+    /// 截图里是否用滚轮调数值（缺键 = 开）
+    ///
+    /// 滚轮一旦被我们塞进三四种语义（调粗细 / 调透明度 / 缩放图形 / 调放大镜），
+    /// 就必须给一条整体关闭的通路——否则习惯用滚轮做别的操作的用户只能忍。
+    /// 官方也有同款开关（`disable_mouse_scroll`，issue #2607 就是用户在找它）。
+    public static let scrollAdjustEnabled = "snip.scrollAdjustEnabled"
+    /// 是否已经展示过标注操作提示（缺键 = 没看过；看过就不再打扰）
+    public static let annotationHintsShown = "snip.annotation.hintsShown"
     /// 图片文件贴图时优先显示图像（关闭则直接贴路径文本）
     public static let pinDisplayImageFiles = "snip.pinDisplayImageFiles"
     /// 可被恢复的已关闭贴图数（默认 1，范围 1...10）

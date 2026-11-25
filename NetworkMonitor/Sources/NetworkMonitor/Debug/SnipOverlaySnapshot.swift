@@ -29,6 +29,14 @@ enum SnipOverlaySnapshot {
             renderToFile(at: directory.appendingPathComponent("overlay-small-selection.png"),
                          phase: .smallSelection)
             renderToFile(at: directory.appendingPathComponent("overlay-top-label.png"), phase: .topLabel)
+            // 本轮新增的两块自定义面板：文字样式盘（字号 / 加粗 / 字体）与自绘取色板
+            renderToFile(at: directory.appendingPathComponent("overlay-text-panel.png"), phase: .textPanel)
+            renderToFile(at: directory.appendingPathComponent("overlay-color-picker.png"), phase: .colorPicker)
+            // 本轮：数值读数气泡 + 画笔样式盘（含「输入数值…」格）
+            renderToFile(at: directory.appendingPathComponent("overlay-numeric-hud.png"), phase: .numericHUD)
+            renderToFile(at: directory.appendingPathComponent("overlay-style-panel.png"), phase: .stylePanel)
+            // 首次进标注态的操作提示（⌘ / ⌥ / ⌃ / ⇧ 四条组合键的唯一可见入口）
+            renderToFile(at: directory.appendingPathComponent("overlay-hints.png"), phase: .hints)
             NSApp.terminate(nil)
         }
     }
@@ -40,6 +48,16 @@ enum SnipOverlaySnapshot {
         case smallSelection
         /// 选区贴住画布上沿：尺寸标签翻进选区内部、三角改朝上（A4 取证）
         case topLabel
+        /// 文字工具选中时弹出的「文字样式」盘（字号档 / 加粗 / 字体族）
+        case textPanel
+        /// 颜色盘末尾「自定义」打开的自绘取色板（色相 + 饱和度方块 + 透明度）
+        case colorPicker
+        /// 调完线宽后跟随光标的数值读数（本轮「任意可调」的反馈层）
+        case numericHUD
+        /// 画笔样式盘：线宽档 + −/+ + 线型 + 五档透明度 + 「输入数值…」
+        case stylePanel
+        /// 首次进标注态的操作提示（看过一次后不再出现）
+        case hints
     }
 
     /// 取证用的工具条配置：与默认配置一致（悬停提示档），保证图面对应真实默认外观
@@ -82,6 +100,39 @@ enum SnipOverlaySnapshot {
             view.debugHover(atLocalPoint: CGPoint(x: 430, y: 340))
         case .topLabel:
             view.debugApplySelection(CGRect(x: 220, y: 0, width: 560, height: 200))
+        case .textPanel:
+            view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            view.debugAddAnnotation(SnipAnnotation(kind: .text,
+                                                   start: CGPoint(x: 265, y: 200),
+                                                   end: CGPoint(x: 265, y: 200),
+                                                   text: "字号与线宽已解耦",
+                                                   style: SnipAnnotationStyle(color: .yellow,
+                                                                              lineWidth: 4,
+                                                                              text: SnipTextStyle(fontSize: 28))))
+            view.toolBarDidChangeTool(.text)
+            view.debugOpenPanel(.textStyles(sizes: SnipTextStyle.fontSizePresets,
+                                            bold: false,
+                                            family: .system))
+        case .colorPicker:
+            view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            view.toolBarDidChangeTool(.rectangle)
+            view.debugOpenColorPicker()
+        case .numericHUD:
+            view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            view.toolBarDidChangeTool(.rectangle)
+            view.debugHover(atLocalPoint: CGPoint(x: 430, y: 330))
+            view.debugShowNumericHUD(.lineWidth, value: 12, intent: .coarse)
+        case .stylePanel:
+            view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            view.toolBarDidChangeTool(.rectangle)
+            view.debugOpenPanel(.styles(widths: SnipLineWidthStepper.widths,
+                                        dashes: SnipToolBarView.dashes,
+                                        alphas: SnipToolBarView.alphas))
+        case .hints:
+            view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            // 新用户视角：偏好里还没写过「看过了」，进标注态就会浮出提示
+            view.hints.alreadyShown = false
+            view.toolBarDidChangeTool(.rectangle)
         }
 
         let container = SnapshotBackdropView(frame: NSRect(origin: .zero, size: canvasSize))

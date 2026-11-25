@@ -70,7 +70,7 @@ public enum SnipAnnotationRenderer {
         let trimmed = annotation.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let fontSize = annotation.fontSize
-        let font = CTFontCreateWithName("PingFang SC" as CFString, fontSize, nil)
+        let font = textFont(size: fontSize, style: annotation.style.text)
         let attributes: [NSAttributedString.Key: Any] = [
             kCTFontAttributeName as NSAttributedString.Key: font,
             kCTForegroundColorAttributeName as NSAttributedString.Key: annotation.style.color.cgColor
@@ -125,6 +125,39 @@ public enum SnipAnnotationRenderer {
         context.textPosition = .zero
         CTLineDraw(line, context)
         context.restoreGState()
+    }
+
+    /// 文字标注的字体：按字体族与字重挑一个系统字体
+    ///
+    /// 中文字重走 system font 的 traits 才能真的加粗（PingFang 的粗体是另一条字重轴），
+    /// 因此这里不直接 `CTFontCreateWithName("PingFang SC Bold")`，而是拿系统字体再叠 trait。
+    public static func textFont(size: CGFloat, style: SnipTextStyle) -> CTFont {
+        var attributes: [CFString: Any] = [kCTFontSizeAttribute: size]
+        if let family = Self.familyName(for: style.family) {
+            attributes[kCTFontFamilyNameAttribute] = family
+        }
+        if style.bold {
+            attributes[kCTFontTraitsAttribute] = [kCTFontWeightTrait: 0.4]
+        }
+        let descriptor = CTFontDescriptorCreateWithAttributes(attributes as CFDictionary)
+        // 族名不存在时 CTFont 会回落到系统默认字体，不会返回 nil，因此这里不必再判空
+        let base = CTFontCreateWithFontDescriptor(descriptor, size, nil)
+        guard style.bold else { return base }
+        // 字重 trait 在部分族上不生效（族只有 Regular 一档时描述符会被忽略），
+        // 因此再加一道 symbolic traits 复制：这是 AppKit / CoreText 里真正会切字形的路径。
+        return CTFontCreateCopyWithSymbolicTraits(base, size, nil, .boldTrait, .boldTrait) ?? base
+    }
+
+    /// 字体族 → 系统里必然存在的族名；nil 表示「不指定族，用系统默认」
+    ///
+    /// 都选随 macOS 一起安装的中文字体：第三方字体在别人机器上不存在会让字号与换行口径全都变。
+    public static func familyName(for family: SnipTextFamily) -> String? {
+        switch family {
+        case .system: return nil
+        case .rounded: return "Yuanti SC"
+        case .monospaced: return "Menlo"
+        case .serif: return "Songti SC"
+        }
     }
 
     /// 文字在给定字号下的包围盒（单行）

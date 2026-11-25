@@ -76,24 +76,47 @@ extension SnipOverlayView {
 
     // MARK: - 画笔粗细
 
-    /// 按档位步进画笔粗细，并回灌一级工具条与二级面板
-    func stepLineWidth(by delta: Int) {
-        let next = SnipLineWidthStepper.step(from: currentStyle.lineWidth, by: delta)
-        guard abs(next - currentStyle.lineWidth) > 0.0001 else { return }
-        currentStyle.lineWidth = next
-        toolbarView?.updateStyle(currentStyle)
+    /// 步进画笔粗细（线宽这根旋钮的唯一入口）
+    ///
+    /// 交给 SnipNumeric 统一处理：连续步进（不再吸附 [2,4,8]）、落偏好、
+    /// 同步到选中图形、弹数值读数 —— 四件事此前一件都没做对。
+    @discardableResult
+    func stepLineWidth(by delta: Int, intent: SnipNumericIntent = .coarse) -> Bool {
+        numeric.adjust(.lineWidth, steps: delta, intent: intent)
+    }
+
+    /// 调整文字字号：没有显式字号时从「线宽推导出来的那个值」起跳
+    ///
+    /// 返回 true 表示真的改了（调用方据此决定按键是否放行）。
+    /// 步进口径交给 SnipNumeric：字号过去按「当前字号的 10%」步进（小字 1pt、大字 4pt），
+    /// 同样是按一次键，行为跟着字号大小变 —— 用户没法建立肌肉记忆。
+    @discardableResult
+    func adjustTextFontSize(by delta: Int, intent: SnipNumericIntent = .coarse) -> Bool {
+        guard numeric.adjust(.fontSize, steps: delta, intent: intent) else { return false }
+        // 选中了一条文字标注时同步改它：用户按了字号键却看不到变化是最费解的空操作
+        applyStyleToSelectedAnnotation { annotation in
+            annotation.style.text.fontSize = self.currentStyle.text.fontSize
+        }
+        return true
+    }
+
+    /// 把 currentStyle 的一部分改到当前选中的标注上（样式热更新）
+    ///
+    /// 二次编辑的最小闭环：选中 → 改样式 → 立刻看见。只改选中项，
+    /// 不动其它图元，也不把这次改动作成新的可撤销步骤（撤销栈只记「加了什么」）。
+    func applyStyleToSelectedAnnotation(_ mutate: (inout SnipAnnotation) -> Void) {
+        guard let index = selectedAnnotationIndex,
+              annotationStack.annotations.indices.contains(index) else { return }
+        var annotation = annotationStack.annotations[index]
+        mutate(&annotation)
+        annotationStack.replace(at: index, with: annotation)
         needsDisplay = true
     }
 
-    /// 标注模式下的滚轮调粗细；返回 true 表示已消费这次滚轮
-    ///
-    /// 文字字号那条通路优先：选中文字时滚轮仍改字号（早于本函数的判定）。
-    func handleStyleScroll(_ event: NSEvent) -> Bool {
-        guard selectedAnnotationIndex == nil else { return false }
-        guard activeTool != nil, state.phase == .selected else { return false }
-        let delta = event.scrollingDeltaY
-        guard abs(delta) > 0.01 else { return true }
-        stepLineWidth(by: delta > 0 ? 1 : -1)
+    /// 画笔透明度的唯一入口（⌃+滚轮、面板透明度格、设置页共用）
+    @discardableResult
+    func stepOpacity(by delta: Int, intent: SnipNumericIntent = .coarse) -> Bool {
+        guard numeric.adjust(.opacity, steps: delta, intent: intent) else { return false }
         return true
     }
 

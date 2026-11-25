@@ -38,15 +38,29 @@ public struct SnipAnnotationStyle: Equatable, Sendable {
     public var filled: Bool
     /// 是否用虚线
     public var dashed: Bool
+    /// 文字标注的独立样式（字号 / 字重 / 字体族）
+    ///
+    /// 与 lineWidth 解耦：线宽只管描边，字号不再由它推导。
+    /// 缺省 fontSize 为 nil，仍按旧口径 `max(lineWidth * 5, 14)` 回退，老偏好零迁移。
+    public var text: SnipTextStyle
+    /// 马赛克 / 模糊的强度（每条标注带自己的值）
+    ///
+    /// 放在样式里而不是全局常量：画好的马赛克不该因为用户后来调粗而整张变样。
+    /// 缺省值与 `SnipMosaicProcessor` 的既有常量一致，老标注观感零变化。
+    public var effect: SnipEffectStyle
 
     public init(color: SnipAnnotationColor = .red,
                 lineWidth: CGFloat = 3,
                 filled: Bool = false,
-                dashed: Bool = false) {
+                dashed: Bool = false,
+                text: SnipTextStyle = SnipTextStyle(),
+                effect: SnipEffectStyle = SnipEffectStyle()) {
         self.color = color
         self.lineWidth = lineWidth
         self.filled = filled
         self.dashed = dashed
+        self.text = text
+        self.effect = effect
     }
 }
 
@@ -135,9 +149,13 @@ public struct SnipAnnotation: Equatable, Sendable {
         SnipSelectionGeometry.normalize(from: start, to: end)
     }
 
-    /// 文字字号：由当前线宽推出来，再乘缩放倍数
+    /// 文字字号：优先用独立字号，缺失时回落旧口径「由线宽推导」，再乘缩放倍数
+    ///
+    /// fontScale 保留下来是因为「选中文字后滚轮缩放」是一个独立的临时手势，
+    /// 它与「这支笔的基准字号」是两件事：前者只作用于这一条标注，后者作用于下一笔。
     public var fontSize: CGFloat {
-        max(style.lineWidth * 5, 14) * fontScale
+        let base = style.text.fontSize ?? max(style.lineWidth * 5, 14)
+        return max(base * fontScale, 1)
     }
 
     /// 是否小到可以丢弃（误触）

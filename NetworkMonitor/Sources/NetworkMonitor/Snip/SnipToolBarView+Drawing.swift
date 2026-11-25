@@ -80,7 +80,15 @@ extension SnipToolBarView {
             let widthRect = configuration.labelMode.showsPersistentLabel
                 ? CGRect(x: rect.midX - 12, y: rect.minY + 12, width: 24, height: 24)
                 : rect
-            SnipBarDrawing.drawWidth(style.lineWidth, in: widthRect, isSelected: true)
+            if selectedTool == .text {
+                // 文字工具下这一格是「字号」，画一个随档位缩放的「A」：
+                // 仍画一条粗细线会让用户以为点它还是改线宽
+                let size = min(max((style.text.fontSize ?? style.lineWidth * 5) * 0.5, 10), 20)
+                SnipBarDrawing.drawTextSample("A", size: size, bold: style.text.bold,
+                                              in: widthRect, alpha: 1)
+            } else {
+                SnipBarDrawing.drawWidth(style.lineWidth, in: widthRect, isSelected: true)
+            }
         case .action(let action):
             // 可用性由覆盖层灌进来的栈状态决定；置灰项只降档，不隐藏（用户要能看见它存在）
             drawAction(action, in: rect, alpha: alpha,
@@ -186,7 +194,15 @@ extension SnipToolBarView {
         case .tool(let tool): return tool.displayName
         case .more: return "更多"
         case .color: return SnipAnnotationColorNaming.name(for: style.color)
-        case .width: return "线宽 \(Int(style.lineWidth.rounded()))"
+        // 文字工具下这一格是字号：标签与气泡必须跟着换口径，
+        // 否则「画的是 A、写的是线宽」自相矛盾
+        case .width:
+            // 常显数值用 SnipNumericParam.format：与读数气泡同一份格式化，
+            // 不会出现「条上写 12、气泡写 12.0 pt」两种口径
+            if selectedTool == .text {
+                return "字号" + SnipNumericParam.fontSize.format(style.text.fontSize ?? style.lineWidth * 5)
+            }
+            return "线宽" + SnipNumericParam.lineWidth.format(style.lineWidth)
         case .action: return nil
         }
     }
@@ -201,6 +217,11 @@ extension SnipToolBarView {
         case .color:
             return "颜色 · \(SnipAnnotationColorNaming.name(for: style.color))"
         case .width:
+            if selectedTool == .text {
+                let size = Int((style.text.fontSize ?? style.lineWidth * 5).rounded())
+                return "文字样式 · 字号 \(size) pt" + (style.text.bold ? " · 加粗" : "")
+                    + " · " + style.text.family.displayName
+            }
             return "线宽 · \(Int(style.lineWidth.rounded())) pt"
         case .action(let action):
             return "\(action.title)  \(action.shortcutText)"

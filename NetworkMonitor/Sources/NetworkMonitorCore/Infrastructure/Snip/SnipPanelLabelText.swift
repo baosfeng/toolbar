@@ -22,6 +22,11 @@ public enum SnipPanelLabelText {
         dashed ? "虚线" : "实线"
     }
 
+    /// 字号文案（如「20 pt」）—— 与线宽同一套取整规则，避免 20 与 20.0 两种写法并存
+    public static func size(_ value: CGFloat) -> String {
+        width(value)
+    }
+
     /// 透明度文案
     public static func alpha(_ value: CGFloat) -> String {
         switch value {

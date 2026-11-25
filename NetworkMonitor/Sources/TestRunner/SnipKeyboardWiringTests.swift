@@ -32,7 +32,6 @@ func runSnipKeyboardWiringTests() {
         "private(set) var sizeEditor: SizeEditorField? {",
         "    didSet { textEditingDidChange() }",
         "}",
-        "func overlayView(_ view: SnipOverlayView, didChangeTextEditing isEditing: Bool)",
         "delegate?.overlayView(self, didChangeTextEditing: hasActiveTextInput)",
         "private func textEditingDidChange() { }",
         "func replaceTextEditor(_ field: SizeEditorField?) {",
@@ -66,9 +65,12 @@ func runSnipKeyboardWiringTests() {
         "    }",
         "}",
     ].joined(separator: "\n")
+    // 协议已从覆盖层主文件拆到独立文件：契约断言扫那一份
+    let delegateOK = "func overlayView(_ view: SnipOverlayView, didChangeTextEditing isEditing: Bool)"
     let healthy = [SnipKeyboardWiringGuard.keyboardFile: keyboardOK,
                    SnipKeyboardWiringGuard.overlayFile: overlayOK,
                    SnipKeyboardWiringGuard.windowFile: windowOK,
+                   SnipKeyboardWiringGuard.delegateFile: delegateOK,
                    SnipKeyboardWiringGuard.editingFile: editingOK]
     assertEqual(SnipKeyboardWiringGuard.violations(sources: healthy), [], "健康接线无命中")
 
@@ -143,6 +145,7 @@ func runSnipKeyboardWiringTests() {
     for path in [SnipKeyboardWiringGuard.keyboardFile,
                  SnipKeyboardWiringGuard.overlayFile,
                  SnipKeyboardWiringGuard.windowFile,
+                 SnipKeyboardWiringGuard.delegateFile,
                  SnipKeyboardWiringGuard.editingFile] {
         let url = root.appendingPathComponent(path)
         guard let text = try? String(contentsOf: url, encoding: .utf8) else {
