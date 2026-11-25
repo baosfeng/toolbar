@@ -43,10 +43,18 @@ extension TokenPaneView {
         daySegment.isHidden = range != .today
         viewAction.isHidden = range == .d30
         daySegment.select(hourScope.rawValue, notify: false)
-        viewAction.update(title: "切：" + (hourView == .stack ? "对比" : "堆叠"))
+        // 两个切换按钮走图标态：图标形状跟着「当前是什么」变，toolTip 写明「点击变成什么」。
+        // 改前它们各写一行「切：X」文字，占掉 meta 行约 92pt（用户反馈「下面的字很占空间」）。
+        viewAction.update(symbolName: hourView == .stack ? "chart.line.uptrend.xyaxis" : "chart.bar.fill",
+                          fallbackTitle: hourView == .stack ? "对比" : "堆叠",
+                          toolTip: TokenHoverTips.toggleHint(hourView: hourView),
+                          accessibility: TokenHoverTips.toggleHint(hourView: hourView))
         hourTitle.stringValue = model.bucketTitle
         hourMeta.stringValue = model.bucketMeta
-        hourAction.update(title: "切：" + (metric == .total ? "请求数" : "总量"))
+        hourAction.update(symbolName: metric == .total ? "chart.bar.xaxis" : "sum",
+                          fallbackTitle: metric == .total ? "请求数" : "总量",
+                          toolTip: TokenHoverTips.metricHint(metric: metric),
+                          accessibility: TokenHoverTips.metricHint(metric: metric))
 
         // 对比态只在今日/近 7 天成立（近 30 天没有对照窗口），与 Core 的 bucketLegend 口径同条件
         let comparing = hourView == .compare && range != .d30
@@ -64,6 +72,7 @@ extension TokenPaneView {
                         pairMetric: metric == .request ? .request : .output,
                         // 整屏主图才画左侧刻度 + 网格（二级页小图不画，宽度不够）
                         showsScale: true,
+                        isHourBuckets: range == .today,
                         accessibility: model.bucketTitle + "，每根柱可点开该时段详情")
         hourAxis.update(labels: axisLabels(for: model),
                         leadingInset: hourBars.scaleGutter)

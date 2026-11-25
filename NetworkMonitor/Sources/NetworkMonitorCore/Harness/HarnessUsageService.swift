@@ -53,6 +53,8 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
     var snapshotRefreshQueued = false
     /// 状态变化回调
     private var stateObserver: (@Sendable (HarnessIndexingState) -> Void)?
+    /// 上一次真正通知观察者的时刻（`setState` 的节流基准；nil = 还没通知过）
+    private var lastStateNotifyAt: Date?
 
     /// 数据源可用性
     public var availability: HarnessSourceAvailability { scanner.availability }
@@ -171,14 +173,27 @@ public final class HarnessUsageService: @unchecked Sendable, HarnessUsageServici
 
     // MARK: - 状态
 
-    /// 更新状态并同步到缓存快照，再通知观察者
+    /// 更新状态并同步到缓存快照，**按 `HarnessStateNotifyPolicy` 决定要不要通知观察者**
+    ///
+    /// 旧实现每次进度回调（scanner 每读 500 行一次）都通知，观察者接到就整页 render ——
+    /// 用户看到的就是「每次进入 Token 页都快速刷新一下」。现在：
+    /// - 状态种类变化（idle / indexing / ready / failed）必通知：UI 靠它切显隐；
+    /// - 同种类的纯进度按 500ms 合并：数字仍在动，但不逐次全页重排。
+    /// 快照本身仍逐次更新（`with(indexingState:)`），只是不广播。
     func setState(_ newState: HarnessIndexingState) {
         lock.lock()
+        let previous = currentState
         currentState = newState
         if let cached = cachedSnapshot {
             cachedSnapshot = cached.with(indexingState: newState)
         }
-        let observer = stateObserver
+        let now = nowProvider()
+        let notify = HarnessStateNotifyPolicy.shouldNotify(previous: previous,
+                                                           next: newState,
+                                                           lastNotifiedAt: lastStateNotifyAt,
+                                                           now: now)
+        if notify { lastStateNotifyAt = now }
+        let observer = notify ? stateObserver : nil
         lock.unlock()
         observer?(newState)
     }

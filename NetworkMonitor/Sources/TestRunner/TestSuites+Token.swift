@@ -28,6 +28,9 @@ func runTokenSuites() {
     runTokenPresentationTests()
     runTokenRangeConsistencyTests()
     runTokenHoverTipTests()
+    // 主图柱形悬停（用户原话「鼠标放上去也没任何的反应」）+ 切页抖动三条判据
+    runTokenBarsHoverTests()
+    runTokenPaneStabilityTests()
     runTokenScreenTests()
     runTokenDistroTotalsTests()
     runThemeTokenTests()

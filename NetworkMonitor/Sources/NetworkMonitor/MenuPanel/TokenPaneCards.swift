@@ -233,15 +233,26 @@ final class TokenFamilyCardView: TokenCardRow {
         }
         setAccessibilityLabel(card.title + "详情，" + card.value + " " + card.unit)
         setAccessibilityValue(accessibility)
+        // 悬停给该族口径（缓存读 / 未缓存 / 输出 / 请求数四者最容易混淆的是「请求数不进总量」）
+        toolTip = TokenHoverTips.familyCardHint(metric: card.metric)
     }
 }
 
-/// 行内文字按钮（「切：请求数」「切：分线」）
+/// 卡头小按钮：文字式（「14 天 ›」）与图标式（主图形态 / 指标切换）两种
+///
+/// 为什么主图那两个从「切：对比」「切：请求数」改成图标：用户反馈「下面的字很占空间」，
+/// 而主图卡 meta 行宽度只有约 296pt。
+/// 实测（NSButton.fittingSize，9.5pt chipFont）：「切：对比」42pt +「切：请求数」52pt
+/// + 间距 6pt = **100pt**；改成 20pt 的 SF Symbol 后两个按钮 40pt + 间距 4pt = **44pt**，
+/// 净省 **56pt**（56%），语义搬进 toolTip 与无障碍标签，一个字也没丢。
 final class TokenTextButton: NSButton {
 
     var onClick: (() -> Void)?
 
-    init(title: String) {
+    /// 图标模式下的固定宽度约束（切回文字模式要摘掉，否则「14 天 ›」会被压成 20pt）
+    private var iconWidth: NSLayoutConstraint?
+
+    init(title: String, toolTip: String? = nil) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         self.title = title
@@ -252,7 +263,18 @@ final class TokenTextButton: NSButton {
         setButtonType(.momentaryChange)
         target = self
         action = #selector(handleClick)
+        self.toolTip = toolTip
         setAccessibilityLabel(title)
+    }
+
+    /// 图标式初始化：只画一个 SF Symbol，语义由 toolTip + 无障碍标签承载
+    ///
+    /// - Parameter fallbackTitle: 系统取不到该符号时退回的短文字（不给就会变成一个空白按钮）
+    convenience init(symbolName: String, fallbackTitle: String,
+                     toolTip: String, accessibility: String) {
+        self.init(title: fallbackTitle)
+        update(symbolName: symbolName, fallbackTitle: fallbackTitle,
+               toolTip: toolTip, accessibility: accessibility)
     }
 
     @available(*, unavailable)
@@ -260,8 +282,45 @@ final class TokenTextButton: NSButton {
 
     @objc private func handleClick() { onClick?() }
 
-    func update(title: String) {
+    /// 图标态：title 清空、只留图（宽度固定 20pt，高度跟随行）
+    ///
+    /// 不说「切：」这两个字也不丢信息：toolTip 写清「当前什么、点击变成什么」，
+    /// 读屏标签写同一句，键盘用户与鼠标用户拿到的是同一份说明。
+    func update(symbolName: String, fallbackTitle: String,
+                toolTip: String, accessibility: String) {
+        let config = NSImage.SymbolConfiguration(pointSize: TokenPaneStyle.textButtonFont.pointSize,
+                                                 weight: .semibold)
+        let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+        self.toolTip = toolTip
+        setAccessibilityLabel(accessibility)
+        guard let symbol else {
+            // 符号不存在（更老的系统 / 拼错名字）：退回短文字，绝不留下一个看不见的空白按钮
+            image = nil
+            imagePosition = .noImage
+            iconWidth?.isActive = false
+            iconWidth = nil
+            title = fallbackTitle
+            return
+        }
+        title = ""
+        image = symbol
+        imagePosition = .imageOnly
+        if iconWidth == nil {
+            let width = widthAnchor.constraint(equalToConstant: 20)
+            width.isActive = true
+            iconWidth = width
+        }
+    }
+
+    func update(title: String, toolTip: String? = nil) {
+        // 切回文字模式：摘掉图标宽度约束、清图，否则文字被 20pt 硬宽裁掉
+        iconWidth?.isActive = false
+        iconWidth = nil
+        image = nil
+        imagePosition = .noImage
         self.title = title
+        self.toolTip = toolTip
         setAccessibilityLabel(title)
     }
 }

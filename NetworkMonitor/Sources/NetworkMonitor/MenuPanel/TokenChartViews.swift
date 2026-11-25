@@ -20,7 +20,8 @@ final class TokenBarsView: NSView {
 
     var onSelect: ((Int) -> Void)?
 
-    private var buckets: [TokenBucket] = []
+    // 跨文件访问（`TokenBarsView+Hover` 的悬停命中要读列数与单列数据）故去掉 private
+    var buckets: [TokenBucket] = []
     private var previous: [TokenBucket] = []
     private var cumulative: [Double] = []
     private var shape: Shape = .stack
@@ -31,6 +32,14 @@ final class TokenBarsView: NSView {
     private var scaleMax: Int?
     /// 是否画左侧刻度（0 / 中值 / 峰值）与 4 条水平网格虚线（用量屏主图开；二级页小图不开）
     private var showsScale = false
+    /// 桶是否为小时桶（今日 24 桶 = true；按天 = false）—— 只影响悬停文案里的「小时 / 天」
+    ///
+    /// 跨文件访问（`TokenBarsView+Hover` 读）故去掉 private。
+    var isHourBuckets = true
+    /// 当前悬停的列（nil = 没有悬停）—— 画的时候在该列描一道边，鼠标落在哪根柱上一眼可见
+    var hoveredIndex: Int?
+    /// 悬停追踪区（每次 updateTrackingAreas 重建，先摘旧的）
+    var trackingAreaRef: NSTrackingArea?
 
     /// 刻度栏最小宽度（窄刻度不白占宽度）
     static let minScaleGutter: CGFloat = 22
@@ -59,8 +68,10 @@ final class TokenBarsView: NSView {
                 pairMetric: TokenMetric = .request,
                 scaleMax: Int? = nil,
                 showsScale: Bool = false,
+                isHourBuckets: Bool = true,
                 accessibility: String) {
         self.buckets = buckets
+        self.isHourBuckets = isHourBuckets
         self.previous = previous
         self.cumulative = cumulative
         self.shape = shape
@@ -71,6 +82,9 @@ final class TokenBarsView: NSView {
         // 刻度栏宽度跟着这批刻度的最长标签走：标签宽了栏跟着宽，不被裁；窄了不白占
         if showsScale { scaleGutter = Self.gutterWidth(for: resolvedScale()) }
         setAccessibilityLabel(accessibility)
+        // 数据换了：旧列号可能越界，先清掉悬停态再重画（不清会画出不存在的提亮列）
+        hoveredIndex = nil
+        toolTip = nil
         needsDisplay = true
     }
 
@@ -115,6 +129,17 @@ final class TokenBarsView: NSView {
 
         if showsCumulative, cumulative.count == count {
             drawCumulative(columnWidth: columnWidth, gap: gap, count: count)
+        }
+
+        // 悬停列描一道边（画在最上层，柱体颜色不动）：
+        // 只用一个视觉信号——不叠色、不改透明度，主题换了也不用重调
+        if let hoveredIndex, hoveredIndex < count {
+            let column = columnRect(index: hoveredIndex, gap: gap, columnWidth: columnWidth)
+            TokenPaneStyle.accentText.withAlphaComponent(0.55).setStroke()
+            let outline = NSBezierPath(roundedRect: column.insetBy(dx: 0.5, dy: 0.5),
+                                       xRadius: 2, yRadius: 2)
+            outline.lineWidth = 1
+            outline.stroke()
         }
     }
 

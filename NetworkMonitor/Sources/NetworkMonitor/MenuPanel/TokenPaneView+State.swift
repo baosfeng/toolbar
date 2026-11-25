@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - Token 页状态机与二级页入口（TokenPaneView 扩展）
 
@@ -9,9 +10,42 @@ import NetworkMonitorCore
 /// 二级页只改显隐与状态，不碰数据，返回时按当前状态重渲染主面板。
 extension TokenPaneView {
 
+    // MARK: - 数据更新
+
+    /// 注入一帧快照（数据入口：面板 updateToken 与重扫回执都走这里）
+    func update(_ snapshot: HarnessUsageSnapshot) {
+        self.snapshot = snapshot
+        noteIndexingWindow(for: snapshot)
+        // 有内容的一帧直接留档：下一帧若为空（重扫清了索引）就拿它顶住整屏
+        if !TokenComparison.isEmpty(snapshot) { retainedSnapshot = snapshot }
+        applyStateMachine()
+    }
+
+    /// 维护「本轮索引开始时刻」：从非索引 → 索引时记一次，索引结束就清掉
+    ///
+    /// 延迟显示「索引中 …」按这个时刻算（见 `TokenPaneDisplayPolicy`），
+    /// 否则索引一开跑就显形，快速索引时会看到文字闪一下。
+    private func noteIndexingWindow(for snapshot: HarnessUsageSnapshot) {
+        if snapshot.indexingState.isIndexing {
+            if indexingStartedAt == nil { indexingStartedAt = SnapshotClock.now }
+        } else {
+            indexingStartedAt = nil
+        }
+    }
+
     // MARK: - 状态切换
 
     func applyStateMachine() {
+        // 索引把快照推成空帧（重扫先清索引）时，先用上一帧内容顶住：
+        // 否则一秒内会经历「内容 → 骨架 → 内容」两次整屏跳变，正是用户说的「闪一下」。
+        // 顶住时仍带上新的索引状态，页头照常写「索引中 …」，信息不丢。
+        if let current = snapshot,
+           TokenPaneDisplayPolicy.prefersRetainedFrame(isEmpty: TokenComparison.isEmpty(current),
+                                                       isIndexing: current.indexingState.isIndexing,
+                                                       hasRetainedContent: retainedSnapshot != nil),
+           let retained = retainedSnapshot {
+            snapshot = retained.with(indexingState: current.indexingState)
+        }
         // 按来源报状态：未安装 / 目录不可读 / 无会话由收窄后的快照自己给出，
         // 不合并成一句「暂无数据」
         guard let snapshot = scopedSnapshot else { return }
@@ -69,7 +103,11 @@ extension TokenPaneView {
         } else if durableNote != nil {
             // 常驻提示（重扫过程 / 回执）优先：它在下一轮索引开始时才被清掉
             applyDurableNote()
-        } else if indexing, let progress {
+        } else if indexing, let progress,
+                  TokenPaneDisplayPolicy.showsIndexNote(isIndexing: indexing,
+                                                        startedAt: indexingStartedAt,
+                                                        now: SnapshotClock.now) {
+            // 延迟 1s 才把会话数改写成进度：快速索引时页头那一格一个字都不该变
             setIndexNote("索引中 \(progress.completedFiles)/\(progress.totalFiles)"
                 + " · " + String(progress.linesRead) + " 行", isWarning: false)
         } else {

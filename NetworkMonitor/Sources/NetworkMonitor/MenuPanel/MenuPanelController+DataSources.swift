@@ -58,7 +58,7 @@ extension MenuPanelController {
 
     // MARK: - Token
 
-    /// Token 页刷新：先渲染已有快照，再后台按需索引（首轮索引不阻塞面板）
+    /// Token 页刷新：先渲染已有快照，再按新鲜度闸门决定要不要排一轮索引（首轮索引不阻塞面板）
     ///
     /// 快照是内存里的加锁读，但仍放到后台取用：主线程在任何路径上都不再碰数据库队列；
     /// 顺手让服务判断「有未计入快照的写入」时补算一次（无脏数据即零查询）。
@@ -70,6 +70,7 @@ extension MenuPanelController {
             harnessUsage.refreshSnapshotIfDirty()
             Task { @MainActor in
                 guard self.tokenRequests.accepts(sequence) else { return }
+                self.lastTokenScanAt = snapshot.lastScanAt
                 self.content.updateToken(snapshot, notifySize: false)
                 // 异步渲染晚于打开时的强制算高：内容落定后补一次强制重算。
                 // Token 页的可交互行数（高度签名）不随数值变化，非强制通道不会触发重算，
@@ -77,6 +78,19 @@ extension MenuPanelController {
                 if self.popover.isShown { self.updateContentSize(force: true) }
             }
         }
+        pullTokenIfStale()
+    }
+
+    /// 按新鲜度闸门决定要不要排一轮索引
+    ///
+    /// 切页（`menuPanelViewDidSelectTab`）与首屏（`refreshToken`）都只走这一条：
+    /// 改前两处各调一次 `refreshIfNeeded()`，一次切页排两次请求，且刚扫完也要再扫一遍。
+    func pullTokenIfStale(now: Date = Date()) {
+        guard let harnessUsage else { return }
+        guard TokenPaneRefreshGate.shouldRefresh(indexedAt: lastTokenScanAt,
+                                                requestedAt: lastTokenRequestAt,
+                                                now: now) else { return }
+        lastTokenRequestAt = now
         harnessUsage.refreshIfNeeded()
     }
 }

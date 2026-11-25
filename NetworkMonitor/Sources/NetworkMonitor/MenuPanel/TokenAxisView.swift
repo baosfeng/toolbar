@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorCore
 
 // MARK: - 坐标轴行
 
@@ -28,6 +29,8 @@ final class TokenAxisView: NSView {
         self.labels = labels
         self.leadingInset = leadingInset
         setAccessibilityLabel(labels.filter { !$0.isEmpty }.joined(separator: "，"))
+        // 悬停给时间口径：合理的一天/小时边界按上海时区切，与页头提示同源（见 TokenTimeZoneNote）
+        toolTip = labels.isEmpty ? nil : "横轴时间：" + TokenTimeZoneNote.text
         needsDisplay = true
     }
 

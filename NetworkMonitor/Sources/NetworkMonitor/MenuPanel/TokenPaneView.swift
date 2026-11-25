@@ -54,6 +54,15 @@ final class TokenPaneView: MenuPanelPaneView {
 
     /// 最近一帧快照（渲染 / 二级页共用，跨文件访问故为 internal）
     var snapshot: HarnessUsageSnapshot?
+    /// 最近一帧**有数据**的快照 —— 索引中途快照为空时拿它顶一帧
+    ///
+    /// 用户原话里「快速地刷新一下」有一部分来自：切页 / 重扫把快照推到空帧，
+    /// 状态机立刻切成骨架（整屏换掉），下一帧数据回来又切回内容 —— 一秒内两次整屏跳变。
+    /// 有上一帧内容时优先继续显示它（页头会写「索引中 …」说明数据在更新），
+    /// 只有真的从没见过数据（首轮冷启）才落到骨架。
+    var retainedSnapshot: HarnessUsageSnapshot?
+    /// 本轮索引第一次被看到的时刻（延迟显示「索引中 …」的计时起点）
+    var indexingStartedAt: Date?
     /// 当前来源收窄后的快照 —— 状态机 / 两屏 / 二级页的唯一数据入口
     ///
     /// 收窄是全同形的（日/时桶、项目/模型、可用性诊断都在内），所以「跟随来源」不必
@@ -115,12 +124,20 @@ final class TokenPaneView: MenuPanelPaneView {
                                         color: TokenPaneStyle.secondaryText)
     let hourMeta = MenuPanelLabel.text("", font: TokenPaneStyle.metaNumberFont,
                                        color: TokenPaneStyle.tertiaryText)
-    let hourAction = TokenTextButton(title: "切：请求数")
+    /// 主图指标切换（三段总量 / 请求数）—— 图标按钮，语义在 toolTip 与读屏标签里
+    ///
+    /// 改前是「切：请求数」这类文字（≈ 48pt 文字宽），与另一个「切：对比」合计占掉
+    /// meta 行约 92pt；改成 20pt 图标后两位共约 46pt，省下的宽度留给累计数值。
+    let hourAction = TokenTextButton(symbolName: "chart.bar.xaxis", fallbackTitle: "请求数",
+                                     toolTip: TokenHoverTips.metricHint(metric: .total),
+                                     accessibility: TokenHoverTips.metricHint(metric: .total))
     let daySegment = TokenSegmentedControl(titles: TokenHourScope.allCases.map { $0.title })
-    /// 主图形态切换（堆叠 / 对比）——收成单按钮，省掉第二个分段控件的宽度
-    let viewAction = TokenTextButton(title: "切：对比")
+    /// 主图形态切换（堆叠 / 对比）—— 图标按钮；一个按钮同时承载「当前是什么 / 点成什么」
+    let viewAction = TokenTextButton(symbolName: "chart.line.uptrend.xyaxis", fallbackTitle: "对比",
+                                     toolTip: TokenHoverTips.toggleHint(hourView: .stack),
+                                     accessibility: TokenHoverTips.toggleHint(hourView: .stack))
     /// 进「天趋势」二级页（原先靠用量屏的趋势卡承担，两屏收敛后改由主图卡头承担）
-    let trendAction = TokenTextButton(title: "14 天 ›")
+    let trendAction = TokenTextButton(title: "14 天 ›", toolTip: TokenHoverTips.trendHint())
     let hourBars = TokenBarsView()
     let hourAxis = TokenAxisView()
     let hourLegend = TokenLegendRowView()
@@ -213,13 +230,6 @@ final class TokenPaneView: MenuPanelPaneView {
         // 不可用态的「去设置」也要能键盘到达，否则键盘用户看到失败原因却没有任何出口
         if !unavailableView.isHidden { rows.append(unavailableView.actionRow) }
         return rows
-    }
-
-    // MARK: - 数据更新
-
-    func update(_ snapshot: HarnessUsageSnapshot) {
-        self.snapshot = snapshot
-        applyStateMachine()
     }
 
     // MARK: - 屏切换

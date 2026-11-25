@@ -84,6 +84,12 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     var clipboardRequests = LatestRequestGate()
     /// Token 快照刷新请求闸门（同上）
     var tokenRequests = LatestRequestGate()
+    /// 最近一次索引完成时刻（切页新鲜度闸门的输入，取自快照的 lastScanAt）
+    ///
+    /// 放宽为 internal：数据源绑定扩展（+DataSources）读写，同模块内无其他调用方。
+    var lastTokenScanAt: Date?
+    /// 上一次真正排过索引请求的时刻（同上；只有它挡住「索引跑到一半又连点切页」）
+    var lastTokenRequestAt: Date?
     /// 主线程看门狗（心跳打点见 tick 与 sendEvent 路径）
     let watchdog = MainThreadWatchdog()
 

@@ -54,6 +54,12 @@ final class TokenCacheHitStripView: TokenCardRow {
         setAccessibilityLabel("缓存命中率 " + page.ringText + "%，缓存读 " + page.cacheReadText
             + "，未缓存输入 " + page.uncachedText + "，" + page.saveRatioLabel + " "
             + page.saveRatioText + "。可打开缓存的详细页")
+        // 悬停给命中率算法（分母是什么最容易看错）：文案口径在 Core，视图只搬运
+        let tip = TokenHoverTips.cacheHitHint(rateText: page.ringText, subline: page.heroSub)
+        toolTip = tip
+        for view in [ring as NSView, hitValue, hitUnit, readCell, uncachedCell, savedCell] {
+            view.toolTip = tip
+        }
     }
 }
 

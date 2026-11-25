@@ -84,6 +84,12 @@ final class TokenHeroView: NSView {
         let spoken: String = [hero.title, hero.value, hero.unit, hero.delta, hero.clock]
             .joined(separator: "，")
         setAccessibilityLabel(spoken)
+        // 悬停给口径：Hero 是全界面最大的一行字，也是「这个数到底怎么算」最该被解释的一处；
+        // 文案由 Core 的 TokenHoverTips 生成（读屏与鼠标拿到同一句，两处不会各说一套）
+        toolTip = TokenHoverTips.heroHint(title: hero.title, delta: hero.hasDelta ? hero.delta : "")
+        for label in [titleLabel, valueLabel, unitLabel, deltaLabel, clockLabel] {
+            label.toolTip = toolTip
+        }
     }
 
 #if DEBUG
