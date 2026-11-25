@@ -35,13 +35,26 @@ final class PinWindow: NSPanel {
     private let container = PinContentView(frame: .zero)
     private(set) var currentImage: CGImage
     /// 100% 尺寸（点）
-    private(set) var baseSize: CGSize
-    private(set) var currentScale: CGFloat = 1
+    ///
+    /// 跨文件可见性说明：缩放与透明度收在 PinWindow+Scroll.swift（滚轮 / 键位 / 中键共用），
+    /// 那条路径要写这两个值，故去掉 private(set) 放宽为 internal。
+    var baseSize: CGSize
+    var currentScale: CGFloat = 1
     private(set) var isThumbnail = false
     /// 棋盘底开关（本窗当前状态；缺键即关，右键菜单切一次即落盘）
     private(set) var isBoardBackgroundEnabled = false
     /// 当前图是否含透明像素 —— 建窗时与每次换图时算一次，绘制路径不重复整图扫描
     private var currentImageHasAlpha = false
+
+    /// 当前是否处于「按住拖动移动窗口」会话（拖动中一律不响应滚轮）
+    ///
+    /// 由 PinContentView 在按下 / 抬起时置位：拖动与滚轮在物理上可能同时发生
+    /// （机械滚轮在拖动时会被带出抖动事件），叠在一起用户看到的就是
+    /// 「我移动贴图的时候，贴图的透明度还会发生变化，越来越透明了」。
+    /// 跨文件可见性说明：置位在 PinWindow+Scroll.swift 的 setDraggingWindow，
+    /// 跨文件时 private(set) 的 setter 不可达，故整个属性放宽为 internal（只此一处写入）。
+    var isDraggingWindow = false
+
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -125,30 +138,6 @@ final class PinWindow: NSPanel {
         }
     }
 
-    // MARK: - 滚轮：缩放 / 透明度
-
-    override func scrollWheel(with event: NSEvent) {
-        if event.modifierFlags.contains(.control) {
-            adjustAlpha(by: event.scrollingDeltaY * 0.03)
-        } else {
-            // 以鼠标为锚缩放（Snipaste 口径）：光标底下那个内容点缩放后保持不动
-            setScale(currentScale * (1 + event.scrollingDeltaY * 0.02), anchor: NSEvent.mouseLocation)
-        }
-    }
-
-    /// 缩放贴图
-    ///
-    /// - Parameter anchor: 屏幕坐标锚点；传 nil 表示以窗口中心为锚，
-    ///   键盘 + / - 与缩略图开关走这条，行为与「以中心缩放」的旧实现逐点一致。
-    ///   滚轮传鼠标位置，锚点下的内容点缩放前后落在同一处。
-    func setScale(_ scale: CGFloat, anchor: CGPoint? = nil) {
-        let clamped = min(max(scale, 0.1), 10)
-        guard abs(clamped - currentScale) > 0.0001 else { return }
-        currentScale = clamped
-        applySize(CGSize(width: baseSize.width * clamped, height: baseSize.height * clamped),
-                  anchor: anchor)
-    }
-
     /// 复制该贴图的来源纯文本到剪贴板（官方 ⌘⇧C）
     ///
     /// 没有来源文本时不静默：贴图窗不是文本来源（例如截图像素贴图），
@@ -171,7 +160,7 @@ final class PinWindow: NSPanel {
     /// 中键是「恢复满不透明」的临时动作，回落默认值会让设过 0.5 的用户再也回不到 100%。
     func resetSizeAndAlpha() {
         isThumbnail = false
-        alphaValue = 1
+        setAlpha(1)
         setScale(1)
     }
 
@@ -212,10 +201,6 @@ final class PinWindow: NSPanel {
     func invert() {
         guard let inverted = SnipImageTransform.inverted(currentImage) else { return }
         applyImage(inverted)
-    }
-
-    func adjustAlpha(by delta: CGFloat) {
-        alphaValue = min(max(alphaValue + delta, 0.1), 1)
     }
 
     // MARK: - 棋盘底
@@ -259,7 +244,9 @@ final class PinWindow: NSPanel {
     ///
     /// 原点口径只有一份（PinZoomAnchor）：锚点为 nil 时按窗口中心换算，
     /// 与旧实现「中心不变」逐点等价；滚轮缩放传鼠标位置，锚点下的内容点不动。
-    private func applySize(_ size: CGSize, anchor: CGPoint? = nil) {
+    /// 跨文件可见性说明：缩放 / 透明度都在 PinWindow+Scroll.swift，
+    /// 那条路径改完尺寸要回到这里换算原点，故放宽为 internal。
+    func applySize(_ size: CGSize, anchor: CGPoint? = nil) {
         let origin = PinZoomAnchor.origin(frame: frame, newSize: size, anchor: anchor)
         setFrame(CGRect(origin: origin, size: size), display: true)
     }

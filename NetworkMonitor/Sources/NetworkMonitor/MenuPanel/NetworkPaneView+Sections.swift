@@ -1,6 +1,7 @@
 import AppKit
 import NetworkMonitorCore
 import NetworkMonitorDesign
+import NetworkMonitorUI
 
 // MARK: - 网络页区块装配（从 NetworkPaneView.swift 拆出：单文件体积门禁）
 
@@ -12,53 +13,87 @@ extension NetworkPaneView {
 
     // MARK: 区块装配
 
-    /// 速率区：左侧大数字（下行）+ 右侧次数字（上行），各带一条折线
+    /// 速率区：下行一行、上行一行，各占整行宽
+    ///
+    /// 改前是「下行左列 / 上行右列」两列并排 + 中间弹性 spacer，两条折线各 84pt：
+    /// 面板内容宽 296pt 时折线只占最左/最右一小段，中间空出约 200pt
+    /// （用户口径「实时线条太短、中间大量空白」）。现在每行 = 文本列（固定宽）+ 折线（吃满剩余），
+    /// 宽度口径在 NetworkMonitorUI 的 NetworkHeroLayout，视图只按它给的常量建约束。
     func makeHeroRow() -> NSView {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
 
-        let downColumn = NSStackView()
-        downColumn.orientation = .vertical
-        downColumn.alignment = .leading
-        downColumn.spacing = 2
-
-        downColumn.addArrangedSubview(MenuPanelLabel.section("实时下行"))
-        let downValueRow = NSStackView()
-        downValueRow.orientation = .horizontal
-        downValueRow.alignment = .lastBaseline
-        downValueRow.spacing = 2
-        downValueRow.addArrangedSubview(downValueLabel)
-        downValueRow.addArrangedSubview(downUnitLabel)
-        downColumn.addArrangedSubview(downValueRow)
-        downColumn.addArrangedSubview(downSparkline)
-
-        let upColumn = NSStackView()
-        upColumn.orientation = .vertical
-        upColumn.alignment = .trailing
-        upColumn.spacing = 2
-        upColumn.addArrangedSubview(MenuPanelLabel.section("上行"))
-        let upValueRow = NSStackView()
-        upValueRow.orientation = .horizontal
-        upValueRow.alignment = .lastBaseline
-        upValueRow.spacing = 2
-        upValueRow.addArrangedSubview(upValueLabel)
-        upValueRow.addArrangedSubview(upUnitLabel)
-        upColumn.addArrangedSubview(upValueRow)
-        upColumn.addArrangedSubview(upSparkline)
-
-        let row = NSStackView(views: [downColumn, MenuPanelLabel.spacer(), upColumn])
-        row.orientation = .horizontal
-        row.alignment = .bottom
-        row.spacing = 12
-        row.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(row)
-        NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            row.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            row.topAnchor.constraint(equalTo: container.topAnchor),
-            row.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        let stack = NSStackView(views: [
+            makeSpeedRow(title: "实时下行",
+                         value: downValueLabel, unit: downUnitLabel, sparkline: downSparkline),
+            makeSpeedRow(title: "上行",
+                         value: upValueLabel, unit: upUnitLabel, sparkline: upSparkline),
         ])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        // 两行之间不再留间距：两行化本身让 Hero 高了约 13pt（实测面板需求高 511 → 524pt，
+        // 超过 520pt 外框上限会出滚动条）。间距 2→0 与文本列内 2→0 合计让回 6pt，
+        // 实测落回 518pt；间距改用「标签与数值本来就分开写」的层级来区分，不靠留白
+        stack.spacing = 0
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: container.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        for subview in stack.arrangedSubviews {
+            subview.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
         return container
+    }
+
+    /// 单行速率：左侧「分区标签 + 数值 + 单位」文本列（固定宽），右侧折线吃满剩余宽度
+    ///
+    /// 文本列固定宽而不是自适应：数值每秒刷新（"999 KB/s" ↔ "1.0 MB/s"）宽度会变，
+    /// 自适应会让折线左边界每秒跳一次。固定宽取值见 NetworkHeroLayout.textColumnWidth。
+    func makeSpeedRow(title: String,
+                      value: NSTextField,
+                      unit: NSTextField,
+                      sparkline: MenuPanelSparklineView) -> NSView {
+        let row = NSView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let textColumn = NSStackView(views: [
+            MenuPanelLabel.section(title),
+            NSStackView(views: [value, unit]),
+        ])
+        textColumn.orientation = .vertical
+        textColumn.alignment = .leading
+        // 标签与数值紧贴（见上方 spacing 的说明：两行化后要省下 6pt 才不顶出 520pt 外框）
+        textColumn.spacing = 0
+        textColumn.translatesAutoresizingMaskIntoConstraints = false
+        // 数值行水平：大数字与单位基线对齐
+        (textColumn.arrangedSubviews.last as? NSStackView)?.alignment = .lastBaseline
+        (textColumn.arrangedSubviews.last as? NSStackView)?.spacing = 2
+
+        row.addSubview(textColumn)
+        row.addSubview(sparkline)
+        let minimumWidth = sparkline.widthAnchor.constraint(
+            greaterThanOrEqualToConstant: NetworkHeroLayout.minimumSparklineWidth)
+        minimumWidth.priority = NSLayoutConstraint.Priority.defaultHigh
+        NSLayoutConstraint.activate([
+            textColumn.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            textColumn.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            textColumn.widthAnchor.constraint(equalToConstant: NetworkHeroLayout.textColumnWidth),
+
+            sparkline.leadingAnchor.constraint(equalTo: textColumn.trailingAnchor,
+                                               constant: NetworkHeroLayout.gap),
+            sparkline.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+            sparkline.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            // 最小宽度用 750：面板极窄时宁可让文本列被压缩，也不让这条约束和两侧定位打架
+            minimumWidth,
+
+            row.heightAnchor.constraint(greaterThanOrEqualTo: textColumn.heightAnchor),
+            row.heightAnchor.constraint(greaterThanOrEqualTo: sparkline.heightAnchor),
+        ])
+        return row
     }
 
     /// 今日流量卡片：两行数值 + 两条占比轨道

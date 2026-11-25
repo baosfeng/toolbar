@@ -241,13 +241,20 @@ final class MenuPanelSparklineView: NSView {
         didSet { needsDisplay = true }
     }
 
-    init(lineColor: NSColor) {
+    /// 折线高度（宽度不再写死）
+    ///
+    /// 改前宽度写死 84pt、外面靠弹性 spacer 撑开，两条折线各占一小段、中间留下大块空白；
+    /// 现在宽度由外部约束给（整行剩余宽），高度也由调用方按版式预算给，
+    /// 口径见 NetworkMonitorUI 的 NetworkHeroLayout。
+    init(lineColor: NSColor, height: CGFloat = 20) {
         self.lineColor = lineColor
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
+        // 横向可拉伸：整行宽度里文本列之外的部分全归折线
+        setContentHuggingPriority(.defaultLow, for: .horizontal)
+        setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 84),
-            heightAnchor.constraint(equalToConstant: 20),
+            heightAnchor.constraint(equalToConstant: height),
         ])
         setAccessibilityRole(.image)
         setAccessibilityLabel("速率趋势")

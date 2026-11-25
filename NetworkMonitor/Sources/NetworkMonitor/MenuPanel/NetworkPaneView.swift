@@ -16,8 +16,11 @@ final class NetworkPaneView: MenuPanelPaneView {
     let upValueLabel = MenuPanelLabel.text("0", font: MenuPanelStyle.sideValueFont, color: MenuPanelStyle.upColor)
     let upUnitLabel = MenuPanelLabel.text("B/s", font: MenuPanelStyle.heroUnitFont,
                                                   color: MenuPanelStyle.secondaryText)
-    let downSparkline = MenuPanelSparklineView(lineColor: MenuPanelStyle.downColor)
-    let upSparkline = MenuPanelSparklineView(lineColor: MenuPanelStyle.upColor)
+    // 折线高度按 Hero 版式预算取（比改前的 20pt 矮一档，见 NetworkHeroLayout.sparklineHeight）
+    let downSparkline = MenuPanelSparklineView(lineColor: MenuPanelStyle.downColor,
+                                               height: NetworkHeroLayout.sparklineHeight)
+    let upSparkline = MenuPanelSparklineView(lineColor: MenuPanelStyle.upColor,
+                                             height: NetworkHeroLayout.sparklineHeight)
 
     // MARK: 今日流量
 

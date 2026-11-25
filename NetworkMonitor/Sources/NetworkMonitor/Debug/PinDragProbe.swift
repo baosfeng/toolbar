@@ -44,12 +44,17 @@ enum PinDragProbe {
         print("🔎 拖动会话开始：窗口原点=\(origin)，鼠标=\(mouse)")
     }
 
-    /// 拖动过程中的每一帧（只打印首帧与末帧，避免刷屏）
-    static func recordDragFrame(_ frame: CGRect) {
+    /// 拖动过程中的每一帧（只打印首帧与每 20 帧，避免刷屏）
+    ///
+    /// 同时记下本帧的窗口不透明度：用户反馈「移动贴图时越来越透明」，
+    /// 若拖动路径真的碰了 alphaValue，这里会打出「alpha 0.86 → 0.84 …」的下降序列；
+    /// 若一直等于建窗时的默认值，就证明拖动与透明度无关（回归时也靠这一行判红）。
+    static func recordDragFrame(_ frame: CGRect, alpha: CGFloat) {
         guard isRequested else { return }
         dragFrameCount += 1
         if dragFrameCount == 1 || dragFrameCount % 20 == 0 {
-            print("🔎 拖动第 \(dragFrameCount) 帧：frame=\(frame.origin) \(frame.size)")
+            print("🔎 拖动第 \(dragFrameCount) 帧：frame=\(frame.origin) \(frame.size)"
+                + " alpha=\(String(format: "%.3f", Double(alpha)))")
         }
     }
 

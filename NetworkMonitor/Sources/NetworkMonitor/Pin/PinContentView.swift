@@ -76,6 +76,8 @@ final class PinContentView: NSView {
     /// 记下起始位置，真正的位移在 mouseDragged 里算
     private func beginDrag() {
         guard let window else { return }
+        // 拖动会话置位：贴图窗据此在 scrollWheel 里忽略滚轮（用户反馈拖动时会越来越透明）
+        (window as? PinWindow)?.setDraggingWindow(true)
         dragSession = PinDragSession(startOrigin: window.frame.origin,
                                      startMouse: NSEvent.mouseLocation)
 #if DEBUG
@@ -93,12 +95,19 @@ final class PinContentView: NSView {
         guard session.isDragBeyondThreshold(mouse: mouse) else { return }
         window.setFrameOrigin(session.origin(forMouse: mouse))
 #if DEBUG
-        PinDragProbe.recordDragFrame(window.frame)
+        // 拖动只改原点，**不得**动 alphaValue（用户反馈「拖动时越来越透明」，这里逐帧采样自证）
+        PinDragProbe.recordDragFrame(window.frame, alpha: window.alphaValue)
 #endif
     }
 
     override func mouseUp(with event: NSEvent) {
-        dragSession = nil
+        endDrag()
         super.mouseUp(with: event)
+    }
+
+    /// 结束拖动会话（抬起时复位；不复位的话下次进来滚轮会被永久忽略）
+    private func endDrag() {
+        dragSession = nil
+        (window as? PinWindow)?.setDraggingWindow(false)
     }
 }
