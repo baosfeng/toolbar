@@ -141,6 +141,36 @@ final class SettingsPageStack: NSStackView {
         append(note, gapBefore: gap, kind: .note)
     }
 
+    // MARK: 滚动定位
+
+    /// 把内容里的某个视图滚进可视区
+    ///
+    /// 为什么需要：关于页内容实测约 880pt、可视 540pt，安装卡在页面最底部——
+    /// 用户点「下载并安装」时进度区落在视口外，等于「加了进度但看不见」。
+    ///
+    /// 坐标口径：滚动的是本视图所在的 NSScrollView，传进 `scrollToVisible` 的矩形必须
+    /// 是 **clipView 坐标系**（它的原点随滚动移动），所以先 convert 到 contentView。
+    /// 先 `layoutSubtreeIfNeeded()` 是必须的：进度区从 0 高切到 52pt 的同一跑里
+    /// 约束还没算完，此刻 convert 出来的是旧几何，会滚到错的位置。
+    func scrollToVisible(_ view: NSView, animated: Bool = true) {
+        guard let scrollView = enclosingScrollView else { return }
+        layoutSubtreeIfNeeded()
+        let clipView = scrollView.contentView
+        var target = clipView.convert(view.bounds, from: view)
+        // 上下各留 8pt，避免目标刚好贴住视口边缘（贴边的卡片看起来像被切掉了）
+        target = target.insetBy(dx: 0, dy: -8)
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.18
+                context.allowsImplicitAnimation = true
+                clipView.animator().scrollToVisible(target)
+            }
+        } else {
+            clipView.scrollToVisible(target)
+            scrollView.reflectScrolledClipView(clipView)
+        }
+    }
+
     // MARK: 私有
 
     /// 追加到内容栈并设定「与上一个元素的间距」

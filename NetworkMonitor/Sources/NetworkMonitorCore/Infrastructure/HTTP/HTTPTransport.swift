@@ -52,6 +52,23 @@ public typealias HTTPErrorMapper = @Sendable (HTTPFailure) -> any Error
 /// - 非 2xx / 传输失败一律经 endpoint.errorMapper（缺省用 HTTPTransportDefaults.error）。
 public protocol HTTPTransport: Sendable {
     func send<Response: Sendable>(_ endpoint: Endpoint<Response>) async throws -> Response
+
+    /// 带字节进度的下载 —— 返回值与 `send` 完全一致，只是中途多报进度
+    ///
+    /// 默认实现直接退回 `send`（旧替身无需实现即可编译，进度为空也不影响正确性）；
+    /// 真实实现覆写成流式，见 `URLSessionHTTPTransport.download`。
+    ///
+    /// - Parameter progress: 已接收字节与总量（总量 nil = 服务端没给 Content-Length）
+    func download(_ endpoint: Endpoint<Data>,
+                  progress: @Sendable (_ received: Int64, _ total: Int64?) -> Void) async throws -> Data
+}
+
+public extension HTTPTransport {
+    /// 默认退回原子实现 —— 「不实现也能编译」是这条协议的兼容契约
+    func download(_ endpoint: Endpoint<Data>,
+                  progress: @Sendable (_ received: Int64, _ total: Int64?) -> Void) async throws -> Data {
+        try await send(endpoint)
+    }
 }
 
 // MARK: - URLSession 实现
@@ -94,6 +111,87 @@ public final class URLSessionHTTPTransport: HTTPTransport {
             throw map(endpoint, .response(boxed))
         }
         return try endpoint.decoder(data)
+    }
+
+    // MARK: 流式下载
+
+    /// 流式下载 —— 唯一需要「中途可观测」的出网点（更新安装包）
+    ///
+    /// 为什么不是 delegate：`URLSession.bytes(for:)` 在 macOS 12 起可用（本项目最低 14），
+    /// 不需要 NSObject 子类、不破坏本类型的值语义，取消语义由 `AsyncBytes.task` 承担。
+    ///
+    /// 坑（实测必须这么写）：**非 2xx 的流式响应会污染字节计数**。状态码在
+    /// `bytes(for:)` 返回时就已经拿到，所以先判状态码：非 2xx 时只读前 64KB 用来取
+    /// 错误体文案，然后立刻停止读取并走 `errorMapper` —— 绝不能把 403 页面当成安装包累加。
+    public func download(_ endpoint: Endpoint<Data>,
+                         progress: @Sendable (_ received: Int64, _ total: Int64?) -> Void) async throws -> Data {
+        let request = makeRequest(endpoint)
+        let bytes: URLSession.AsyncBytes
+        let response: URLResponse
+        do {
+            (bytes, response) = try await session.bytes(for: request)
+        } catch {
+            logger.warning("\(endpoint.label) 请求网络失败：\(HTTPLogRedaction.url(endpoint.url)) — \(error.localizedDescription)")
+            throw map(endpoint, .transport(HTTPTransportFailure.make(error)))
+        }
+        guard let http = response as? HTTPURLResponse else {
+            logger.warning("\(endpoint.label) 响应不是 HTTP：\(HTTPLogRedaction.url(endpoint.url))")
+            throw map(endpoint, .notHTTP)
+        }
+        // 分母优先取服务端声明，其次留给调用方（清单里的 byteCount）兜底
+        let expected: Int64? = http.expectedContentLength > 0 ? http.expectedContentLength : nil
+
+        guard (200..<300).contains(http.statusCode) else {
+            let body = await Self.drainPrefix(bytes, limit: 64 * 1024)
+            let boxed = HTTPResponse(data: body,
+                                     statusCode: http.statusCode,
+                                     headers: Self.lowercasedHeaders(http),
+                                     message: HTTPErrorBody.message(from: body))
+            logger.warning("\(endpoint.label) 请求失败：\(HTTPLogRedaction.url(endpoint.url)) — HTTP \(boxed.statusCode) \(HTTPLogRedaction.headers(boxed.headers))")
+            throw map(endpoint, .response(boxed))
+        }
+
+        // 分块累积：逐字节 append 到 Data 对 12MB 的包太慢，先攒进 [UInt8] 再整块追加
+        var buffer: [UInt8] = []
+        buffer.reserveCapacity(64 * 1024)
+        var result = Data()
+        if let expected { result.reserveCapacity(Int(min(expected, 64 * 1024 * 1024))) }
+        var received: Int64 = 0
+        progress(0, expected)
+        do {
+            for try await byte in bytes {
+                buffer.append(byte)
+                guard buffer.count >= 64 * 1024 else { continue }
+                result.append(contentsOf: buffer)
+                received += Int64(buffer.count)
+                buffer.removeAll(keepingCapacity: true)
+                progress(received, expected)
+            }
+        } catch {
+            logger.warning("\(endpoint.label) 下载中断：\(HTTPLogRedaction.url(endpoint.url)) — \(error.localizedDescription)")
+            throw map(endpoint, .transport(HTTPTransportFailure.make(error)))
+        }
+        if !buffer.isEmpty {
+            result.append(contentsOf: buffer)
+            received += Int64(buffer.count)
+        }
+        progress(received, expected ?? received)
+        return result
+    }
+
+    /// 只读前 `limit` 字节（非 2xx 时取错误体；读完即释放流，不把整页错误页收进内存）
+    private static func drainPrefix(_ bytes: URLSession.AsyncBytes, limit: Int) async -> Data {
+        var buffer: [UInt8] = []
+        buffer.reserveCapacity(min(limit, 8 * 1024))
+        do {
+            for try await byte in bytes {
+                buffer.append(byte)
+                if buffer.count >= limit { break }
+            }
+        } catch {
+            // 读错误体失败不影响判定：状态码已经拿到，错误体只是可选的补充文案
+        }
+        return Data(buffer)
     }
 
     // MARK: 请求构造

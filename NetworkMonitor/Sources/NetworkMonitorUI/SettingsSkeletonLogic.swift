@@ -39,6 +39,17 @@ public enum SettingsSkeletonMetrics {
     /// 行上下内边距
     public static let rowPaddingY: CGFloat = 2
 
+    // MARK: 安装进度区（关于页）
+
+    /// 下载进度条高度（比 1pt 分隔线明显、又不抢 32pt 行高）
+    public static let progressBarHeight: CGFloat = 6
+    /// 下载进度条圆角（= 高度的一半，两端半圆）
+    public static let progressBarRadius: CGFloat = 3
+    /// 进度区高度下限（阶段行 14 + 条 6 + 详情行 14 + 三处间距 10 + 上下内边距 8）
+    ///
+    /// 为什么固定：它随百分比位数变化会让整张卡跳高跳低；宁可留一点余量。
+    public static let progressAreaHeight: CGFloat = 52
+
     // MARK: 内容区与侧栏
 
     /// 内容区左右内边距

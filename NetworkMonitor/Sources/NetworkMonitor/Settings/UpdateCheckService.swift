@@ -30,6 +30,15 @@ final class UpdateCheckService {
     var latestNotes: String { latestRelease?.notes ?? "" }
     /// 安装状态（界面唯一安装状态源）
     private(set) var installState: UpdateInstallState = .idle
+    /// 展开阶段子步骤（挂载 / 拷贝 / 卸载；nil = 不在展开段）
+    private(set) var installSubStep: UpdateUnpackStep?
+    /// 本机要下载的安装包（关于页「安装包」行的数据源；未命中新版本为 nil）
+    var latestPackage: UpdatePackageTarget? {
+        guard let release = latestRelease else { return nil }
+        return try? UpdatePackageLocator.target(for: release, architecture: architecture)
+    }
+    /// 下载进度节流闸门（引用类型、内部加锁：字节回调在后台线程，读它不能跨隔离）
+    private let progressGate = UpdateProgressGate()
     /// 状态变化回调（关于页登记；页面切走即释放，不会累积）
     var onStateChange: (() -> Void)?
     /// 安装状态变化回调
@@ -129,6 +138,8 @@ final class UpdateCheckService {
         guard let installer, let release = latestRelease else { return }
         guard !installState.stage.isBusy else { return }
         installState = UpdateInstallState(stage: .downloading)
+        installSubStep = nil
+        progressGate.reset()
         notifyInstall()
         Task {
             do {
@@ -138,8 +149,20 @@ final class UpdateCheckService {
                     Task { @MainActor in
                         self.apply(phase)
                     }
+                } downloadProgress: { progress in
+                    // 字节回调在后台线程、按网络包频率到达：先就地节流（丢弃 90%），
+                    // 再只剩 ≤10 次/秒进主线程 —— 否则设置窗口在安装期滚不动
+                    let now = Date()
+                    guard self.progressGate.shouldEmit(now: now) else { return }
+                    Task { @MainActor in
+                        self.apply(progress)
+                    }
+                } subStep: { step in
+                    Task { @MainActor in
+                        self.apply(step)
+                    }
                 }
-                installState = UpdateInstallState(stage: .readyToRelaunch)
+                installState = installState.moving(to: .readyToRelaunch)
                 notifyInstall()
                 // 先让界面把「即将重启 + 需重新授权」显示出来，再退出
                 try? await Task.sleep(for: .seconds(0.6))
@@ -147,7 +170,10 @@ final class UpdateCheckService {
             } catch {
                 let reason = (error as? UpdateInstallError)?.userMessage ?? error.localizedDescription
                 logger.error("更新安装失败：\(reason)")
-                installState = UpdateInstallState(stage: .failed, failureReason: reason)
+                // 保住「卡在哪一段」：只有一句原因时用户不知道是下载挂了还是换包挂了
+                installState = UpdateInstallState.failing(reason,
+                                                          at: installState.stage,
+                                                          progress: installState.progress)
                 notifyInstall()
             }
         }
@@ -158,7 +184,7 @@ final class UpdateCheckService {
 
     // MARK: 私有
 
-    /// Core 的阶段 → 界面阶段
+    /// Core 的阶段 → 界面阶段（保留已拿到的下载进度与子步骤）
     private func apply(_ phase: UpdateInstallPhase) {
         let stage: UpdateInstallStage
         switch phase {
@@ -167,7 +193,26 @@ final class UpdateCheckService {
         case .installing: stage = .installing
         case .readyToRelaunch: stage = .readyToRelaunch
         }
-        installState = UpdateInstallState(stage: stage)
+        // 跨阶段时清掉子步骤：否则「卸载 dmg」会残留到「替换应用」那一行上
+        if stage != .verifying { installSubStep = nil }
+        installState = installState.moving(to: stage)
+        notifyInstall()
+    }
+
+    /// 下载字节进度 → 状态（只改进度字段，不动阶段）
+    private func apply(_ progress: UpdateDownloadProgress) {
+        installState = UpdateInstallState(stage: installState.stage,
+                                          failureReason: installState.failureReason,
+                                          requiresManualInstall: installState.requiresManualInstall,
+                                          progress: progress,
+                                          failedAt: installState.failedAt)
+        notifyInstall()
+    }
+
+    /// 展开子步骤 → 状态
+    private func apply(_ step: UpdateUnpackStep) {
+        guard installSubStep != step else { return }
+        installSubStep = step
         notifyInstall()
     }
 
@@ -215,5 +260,17 @@ final class UpdateCheckService {
 protocol UpdateInstallRunning: Sendable {
     func install(_ release: UpdateRelease,
                  _ architecture: UpdateArchitecture,
-                 _ progress: @escaping @Sendable (UpdateInstallPhase) -> Void) async throws -> URL
+                 _ progress: @escaping @Sendable (UpdateInstallPhase) -> Void,
+                 downloadProgress: @escaping @Sendable (UpdateDownloadProgress) -> Void,
+                 subStep: @escaping @Sendable (UpdateUnpackStep) -> Void) async throws -> URL
+}
+
+extension UpdateInstallRunning {
+    /// 只关心阶段的旧调用口径（测试与探针用；真实安装走五个参数那条）
+    func install(_ release: UpdateRelease,
+                 _ architecture: UpdateArchitecture,
+                 _ progress: @escaping @Sendable (UpdateInstallPhase) -> Void) async throws -> URL {
+        try await install(release, architecture, progress,
+                          downloadProgress: { _ in }, subStep: { _ in })
+    }
 }

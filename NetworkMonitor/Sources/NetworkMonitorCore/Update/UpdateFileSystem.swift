@@ -20,6 +20,31 @@ public protocol UpdateInstallFileSystem: Sendable {
     func appBundles(in directory: URL) -> [URL]
     func moveItem(at source: URL, to destination: URL) throws
     func copyItem(at source: URL, to destination: URL) throws
+
+    /// 带子步骤上报的解压 —— 写成协议要求而不是扩展方法：扩展方法走静态分发，
+    /// 经 `any UpdateInstallFileSystem` 调用时会解析到默认实现，真实实现的上报就丢了
+    func unzip(_ archive: URL, into directory: URL,
+               step: (@Sendable (UpdateUnpackStep) -> Void)?) throws
+    /// 带子步骤上报的挂载（同理由：必须是协议要求才走得到真实实现）
+    func mountDiskImage(_ image: URL, into directory: URL,
+                        step: (@Sendable (UpdateUnpackStep) -> Void)?) throws -> URL
+}
+
+// MARK: - 展开子步骤
+
+/// 展开阶段里可对外上报的子步骤 —— 每个都是一次真实等待（hdiutil / ditto）
+///
+/// 为什么值得单列：挂载 dmg 与拷贝 16MB 的包在慢盘上各要 1–3 秒，
+/// 而这一段此前只有一个「正在校验安装包…」，用户看到的就是「卡住不动」。
+public enum UpdateUnpackStep: String, Equatable, Sendable {
+    /// 挂载 dmg
+    case mountingDiskImage
+    /// 把挂载卷里的 .app 拷到暂存目录
+    case copyingApp
+    /// 卸载 dmg
+    case detachingDiskImage
+    /// ditto 解压 zip（旧发布通道）
+    case unzipping
 }
 
 // MARK: - 按形态展开
@@ -31,16 +56,39 @@ extension UpdateInstallFileSystem {
     /// zip 只用于兼容 1.29 及更早的发布，旧包解压出来是「一览-arm64.app」，
     /// 装进「应用程序」会带上架构后缀 —— 这正是换 dmg 的原因。
     public func expand(_ package: URL, into directory: URL) throws -> URL {
+        try expand(package, into: directory, step: nil)
+    }
+
+    /// 带子步骤上报的展开（安装器走这条）
+    public func expand(_ package: URL,
+                       into directory: URL,
+                       step: (@Sendable (UpdateUnpackStep) -> Void)?) throws -> URL {
         switch UpdatePackageKind(name: package.lastPathComponent) {
         case .diskImage:
-            return try mountDiskImage(package, into: directory)
+            return try mountDiskImage(package, into: directory, step: step)
         case .zip:
-            try unzip(package, into: directory)
+            try unzip(package, into: directory, step: step)
             guard let app = appBundles(in: directory).first else {
                 throw UpdateInstallError.appNotFound(package.lastPathComponent)
             }
             return app
         }
+    }
+
+    /// 带子步骤的 unzip —— 默认退回不带 step 的实现（旧替身因此零改动）
+    ///
+    /// 这两个方法在协议里是**要求**（不是纯扩展方法）：要求进 witness table，
+    /// 真实实现覆写后经 `any UpdateInstallFileSystem` 调用才会走到；
+    /// 扩展里的默认值只服务「不想上报子步骤」的替身。
+    public func unzip(_ archive: URL, into directory: URL,
+                      step: (@Sendable (UpdateUnpackStep) -> Void)?) throws {
+        try unzip(archive, into: directory)
+    }
+
+    /// 带子步骤的挂载 —— 默认退回不带 step 的实现（旧替身零改动）
+    public func mountDiskImage(_ image: URL, into directory: URL,
+                               step: (@Sendable (UpdateUnpackStep) -> Void)?) throws -> URL {
+        try mountDiskImage(image, into: directory)
     }
 }
 
@@ -78,6 +126,13 @@ public struct LocalUpdateInstallFileSystem: UpdateInstallFileSystem {
 
     /// 用系统 ditto 解压：它保留资源叉与符号链接，unzip 会丢掉签名相关信息
     public func unzip(_ archive: URL, into directory: URL) throws {
+        try unzip(archive, into: directory, step: nil)
+    }
+
+    /// 带子步骤上报的解压（真实实现）
+    public func unzip(_ archive: URL, into directory: URL,
+                      step: (@Sendable (UpdateUnpackStep) -> Void)?) throws {
+        step?(.unzipping)
         try runTool("/usr/bin/ditto", ["-x", "-k", archive.path, directory.path], label: "ditto 解压")
     }
 
@@ -88,14 +143,25 @@ public struct LocalUpdateInstallFileSystem: UpdateInstallFileSystem {
     /// - readonly：绝不写挂载卷（写失败会把卷卡在只读状态）；
     /// - detach 必须在任何路径上执行：否则用户会看到一堆「一览」卷堆在桌面上。
     public func mountDiskImage(_ image: URL, into directory: URL) throws -> URL {
+        try mountDiskImage(image, into: directory, step: nil)
+    }
+
+    /// 挂载 dmg → 拷贝 .app → 卸载（三段各报一次子步骤）
+    ///
+    /// 三段都是真实等待：慢盘上挂载 1–2 秒、拷 16MB 包 1–3 秒、卸载 0.2–1 秒。
+    /// 卸载回调发生在 detach **之前**（用户看到「正在卸载」时卷还在，紧接着就消失）。
+    public func mountDiskImage(_ image: URL, into directory: URL,
+                               step: (@Sendable (UpdateUnpackStep) -> Void)?) throws -> URL {
         let mountPoint = directory.appendingPathComponent("mnt", isDirectory: true)
         try createDirectory(at: mountPoint)
+        step?(.mountingDiskImage)
         try runTool("/usr/bin/hdiutil",
                     ["attach", "-nobrowse", "-readonly", "-noautoopen", "-quiet",
                      "-mountpoint", mountPoint.path, image.path],
                     label: "dmg 挂载")
         defer {
             // 卸载失败只记日志：包已经拷出来了，留着挂载点比让安装失败好
+            step?(.detachingDiskImage)
             do {
                 try runTool("/usr/bin/hdiutil", ["detach", mountPoint.path, "-quiet"], label: "dmg 卸载")
             } catch {
@@ -108,6 +174,7 @@ public struct LocalUpdateInstallFileSystem: UpdateInstallFileSystem {
         let destination = directory.appendingPathComponent(app.lastPathComponent, isDirectory: true)
         // 用 ditto 拷贝而不是 FileManager.copyItem：前者保留扩展属性与符号链接，
         // 后者会让包内签名相关的元数据变形（挂载卷上的包拷下来尤其明显）
+        step?(.copyingApp)
         try runTool("/usr/bin/ditto", [app.path, destination.path], label: "dmg 拷贝")
         return destination
     }

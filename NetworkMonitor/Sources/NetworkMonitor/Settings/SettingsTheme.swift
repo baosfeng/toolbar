@@ -108,6 +108,15 @@ enum SettingsTheme {
     /// 控件高（下拉 / 按钮 / 分段）
     static let controlHeight: CGFloat = 22
 
+    // MARK: - 进度区（关于页安装卡，数值转发度量层）
+
+    /// 下载进度条高度
+    static let progressBarHeight = SettingsSkeletonMetrics.progressBarHeight
+    /// 下载进度条圆角
+    static let progressBarRadius = SettingsSkeletonMetrics.progressBarRadius
+    /// 进度区高度下限
+    static let progressAreaHeight = SettingsSkeletonMetrics.progressAreaHeight
+
     // MARK: - 字号（窗口档；字号是 AppKit 类型，故留在本层）
 
     /// 页头标题（17pt 粗）
@@ -131,6 +140,8 @@ enum SettingsTheme {
     static let rowValueFont = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .regular)
     /// 行值强调（11.5pt 等宽半粗）
     static let rowValueStrongFont = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold)
+    /// 行副名强调（11pt semibold）—— 阶段清单里「当前这一段」用它，其余用 rowSubtitleFont
+    static let rowSubtitleStrongFont = NSFont.systemFont(ofSize: 11, weight: .semibold)
     /// 页尾说明（11pt）
     static let noteFont = NSFont.systemFont(ofSize: 11, weight: .regular)
     /// 侧栏导航项（12pt；选中加粗一档）

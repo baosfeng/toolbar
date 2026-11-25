@@ -89,20 +89,44 @@ public final class UpdateInstaller: Sendable {
     }
 
     /// 执行安装；成功返回新包路径（调用方随后退出进程）
+    ///
+    /// 两条进度通道各管一件事，不要合并：
+    /// - `progress`：**阶段**（下载 / 校验 / 安装 / 待重启），低频、界面用来切状态；
+    /// - `downloadProgress`：**字节**，高频（网络包频率），调用方必须自己节流后再投主线程；
+    /// - `subStep`：展开阶段的子步骤（挂载 / 拷贝 / 卸载），用来解释「校验」这一段为什么还没结束。
     @discardableResult
     public func install(release: UpdateRelease,
                         host: UpdateInstallHost,
                         architecture: UpdateArchitecture,
-                        progress: (@Sendable (UpdateInstallPhase) -> Void)? = nil) async throws -> URL {
+                        progress: (@Sendable (UpdateInstallPhase) -> Void)? = nil,
+                        downloadProgress: (@Sendable (UpdateDownloadProgress) -> Void)? = nil,
+                        subStep: (@Sendable (UpdateUnpackStep) -> Void)? = nil) async throws -> URL {
         let package = try UpdatePackageLocator.target(for: release, architecture: architecture)
         progress?(.downloading)
+        // 分母先取清单里的 byteCount：服务端不给 Content-Length（CDN 分块 / 重定向）时
+        // 仍然能画出确定态进度条，否则用户只能看一条转圈
+        let declaredTotal = package.byteCount
+        // 字节回调是 @Sendable：速度采样器必须放在引用容器里（Swift 6 不允许闭包改外部 var）
+        let meter = UpdateDownloadMeter()
         let data: Data
         do {
-            data = try await downloader.downloadPackage(from: package.url)
+            data = try await downloader.downloadPackage(from: package.url) { received, total in
+                guard let downloadProgress else { return }
+                downloadProgress(meter.record(received: received,
+                                              total: total ?? declaredTotal))
+            }
         } catch let error as UpdateInstallError {
             throw error
         } catch {
             throw UpdateInstallError.downloadFailed(error.localizedDescription)
+        }
+        if let downloadProgress {
+            // 收尾补一拍满格：最后一个 64KB 块可能没触发上报，界面会停在 97% 就跳到「校验」
+            downloadProgress(UpdateDownloadProgress(
+                receivedBytes: Int64(data.count),
+                totalBytes: Int64(data.count),
+                bytesPerSecond: 0,
+                estimatedSecondsRemaining: 0))
         }
         logger.info("更新安装：已下载 \(package.name)（\(data.count) 字节）")
 
@@ -126,7 +150,7 @@ public final class UpdateInstaller: Sendable {
         try fileSystem.write(data, to: archive)
         let newApp: URL
         do {
-            newApp = try fileSystem.expand(archive, into: staging)
+            newApp = try fileSystem.expand(archive, into: staging, step: subStep)
         } catch let error as UpdateInstallError {
             throw error
         } catch {

@@ -98,10 +98,14 @@ extension UpdateInstaller: UpdateInstallRunning {
 
     func install(_ release: UpdateRelease,
                  _ architecture: UpdateArchitecture,
-                 _ progress: @escaping @Sendable (UpdateInstallPhase) -> Void) async throws -> URL {
+                 _ progress: @escaping @Sendable (UpdateInstallPhase) -> Void,
+                 downloadProgress: @escaping @Sendable (UpdateDownloadProgress) -> Void,
+                 subStep: @escaping @Sendable (UpdateUnpackStep) -> Void) async throws -> URL {
         try await install(release: release,
                           host: .current(),
                           architecture: architecture,
-                          progress: progress)
+                          progress: progress,
+                          downloadProgress: downloadProgress,
+                          subStep: subStep)
     }
 }

@@ -75,6 +75,17 @@ public protocol UpdatePackageDownloading: Sendable {
     func downloadPackage(from url: URL) async throws -> Data
 }
 
+public extension UpdatePackageDownloading {
+    /// 带字节进度的下载 —— 默认退回原子实现
+    ///
+    /// 为什么默认实现挂在**新方法**上而不是旧方法：旧方法是协议要求，替身已经实现；
+    /// 新方法给默认实现后，测试替身一行都不用改，只有真实下载器覆写成流式。
+    func downloadPackage(from url: URL,
+                         progress: (@Sendable (Int64, Int64?) -> Void)?) async throws -> Data {
+        try await downloadPackage(from: url)
+    }
+}
+
 /// 基于统一传输层的下载实现
 public final class UpdatePackageDownloader: UpdatePackageDownloading {
 
@@ -97,7 +108,14 @@ public final class UpdatePackageDownloader: UpdatePackageDownloading {
         self.transport = transport
     }
 
+    /// 不带进度的下载（协议要求）—— 直接走原子实现
     public func downloadPackage(from url: URL) async throws -> Data {
+        try await downloadPackage(from: url, progress: nil)
+    }
+
+    /// 带字节进度的下载（流式覆写）
+    public func downloadPackage(from url: URL,
+                                progress: (@Sendable (Int64, Int64?) -> Void)?) async throws -> Data {
         let endpoint = Endpoint<Data>(method: .get,
                                       url: url,
                                       headers: ["Accept": "application/octet-stream"],
@@ -108,7 +126,8 @@ public final class UpdatePackageDownloader: UpdatePackageDownloading {
                                       label: "安装包下载",
                                       decoder: { $0 },
                                       errorMapper: Self.mapFailure)
-        return try await transport.send(endpoint)
+        guard let progress else { return try await transport.send(endpoint) }
+        return try await transport.download(endpoint, progress: progress)
     }
 
     /// 传输失败 → 安装错误（与检查失败同一套中文口径）

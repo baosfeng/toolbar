@@ -25,22 +25,31 @@ final class SettingsAboutPane: SettingsPaneView {
     private let quitRow = SettingsRowView(title: "退出 \(AppIdentity.displayName)")
 
     // MARK: 检查更新区
+    //
+    // 以下成员由 private 放宽为 internal：DEBUG 取证打印搬到了
+    // SettingsAboutPane+Support.swift（与主文件同一个类，只是文件不同）。
 
     private let currentRow = SettingsRowView(title: "当前版本")
     private let latestRow = SettingsRowView(title: "最新版本")
+    private let publishedRow = SettingsRowView(title: "发布时间")
+    private let packageRow = SettingsRowView(title: "安装包")
     private let statusRow = SettingsRowView(title: "状态")
-    private let notesRow = SettingsAboutNotesRow()
+    let notesRow = SettingsAboutNotesRow()
     private let releaseRow = SettingsRowView(title: "发布页")
-    private let installCard = SettingsAboutInstallCard()
+    let installCard = SettingsAboutInstallCard()
 
-    private let currentVersionLabel = MenuPanelLabel.text("—", font: SettingsTheme.rowValueFont,
+    let currentVersionLabel = MenuPanelLabel.text("—", font: SettingsTheme.rowValueFont,
                                                           color: SettingsTheme.textSecondary)
-    private let latestVersionLabel = MenuPanelLabel.text("—", font: SettingsTheme.rowValueFont,
+    let latestVersionLabel = MenuPanelLabel.text("—", font: SettingsTheme.rowValueFont,
                                                          color: SettingsTheme.textSecondary)
-    private let statusLabel = MenuPanelLabel.text("", font: SettingsTheme.rowValueFont,
+    let publishedLabel = MenuPanelLabel.text("—", font: SettingsTheme.rowValueFont,
+                                                     color: SettingsTheme.textSecondary)
+    let packageLabel = MenuPanelLabel.text("—", font: SettingsTheme.rowValueFont,
+                                                   color: SettingsTheme.textSecondary)
+    let statusLabel = MenuPanelLabel.text("", font: SettingsTheme.rowValueFont,
                                                   color: SettingsTheme.textSecondary)
-    private let checkButton = NSButton()
-    private let releaseButton = NSButton()
+    let checkButton = NSButton()
+    let releaseButton = NSButton()
 
     init(updateCheck: UpdateCheckService) {
         self.updateCheck = updateCheck
@@ -79,6 +88,8 @@ final class SettingsAboutPane: SettingsPaneView {
     private func buildUpdateCard() {
         configureValueLabel(currentVersionLabel)
         configureValueLabel(latestVersionLabel)
+        configureValueLabel(publishedLabel)
+        configureValueLabel(packageLabel)
         configureValueLabel(statusLabel)
 
         configureActionButton(checkButton, title: "检查更新", action: #selector(checkForUpdates))
@@ -94,12 +105,15 @@ final class SettingsAboutPane: SettingsPaneView {
 
         currentRow.trailingStack.addArrangedSubview(currentVersionLabel)
         latestRow.trailingStack.addArrangedSubview(latestVersionLabel)
+        publishedRow.trailingStack.addArrangedSubview(publishedLabel)
+        packageRow.trailingStack.addArrangedSubview(packageLabel)
         statusRow.trailingStack.addArrangedSubview(statusLabel)
         statusRow.trailingStack.addArrangedSubview(checkButton)
         releaseRow.trailingStack.addArrangedSubview(releaseButton)
 
         let updateCard = SettingsCardView()
-        [currentRow, latestRow, statusRow, notesRow, releaseRow].forEach(updateCard.addRow)
+        [currentRow, latestRow, publishedRow, packageRow, statusRow, notesRow, releaseRow]
+            .forEach(updateCard.addRow)
         page.addCard(updateCard, sectionTitle: "检查更新")
         page.addNote("启动后每 24 小时最多自动查询一次；手动点「检查更新」不受限制。" + "新版本说明在固定高度区域里滚动，完整内容见发布页。")
 
@@ -161,6 +175,17 @@ final class SettingsAboutPane: SettingsPaneView {
         checkButton.isEnabled = presentation.canCheck
         checkButton.setAccessibilityLabel(presentation.checkButtonTitle)
 
+        // 发布时间 / 安装包：Core 早就解析出来了，之前一个都没上界面（用户说的「看不到更新的信息」）
+        publishedLabel.stringValue = Self.dateText(updateCheck.latestRelease?.publishedAt)
+        if let package = updateCheck.latestPackage {
+            packageLabel.stringValue = Self.packageText(package)
+            packageLabel.toolTip = package.sha256.map { "SHA-256 \($0)" }
+            packageLabel.setAccessibilityHelp(package.sha256.map { "SHA-256 \($0)" })
+        } else {
+            packageLabel.stringValue = "—"
+            packageLabel.toolTip = nil
+        }
+
         // 说明区：有新版本时按分块渲染原始 body；没有新版本保持占位口径（—）
         let rawNotes = updateCheck.latestNotes
         let hasNotes = !UpdateNotes.blocks(rawNotes).isEmpty
@@ -169,14 +194,29 @@ final class SettingsAboutPane: SettingsPaneView {
     }
 
     /// 安装状态 → 安装卡（按钮可用性 = 有新版本 + 支持安装 + 不在执行中）
+    ///
+    /// 进入执行态时把安装卡滚进视口：关于页内容约 880pt、可视 540pt，安装卡在最底部，
+    /// 不滚的话用户点完「下载并安装」看到的仍是原来那一屏 —— 进度区在视口外等于没做。
     private func refreshInstallSection() {
         let hasUpdate: Bool
         if case .available = updateCheck.state { hasUpdate = true } else { hasUpdate = false }
-        installCard.update(state: updateCheck.installState,
+        let state = updateCheck.installState
+        installCard.update(state: state,
+                           subStep: updateCheck.installSubStep,
                            hasUpdate: hasUpdate,
                            canInstall: updateCheck.canInstall,
                            autoInstallEnabled: updateCheck.autoInstallEnabled)
+        let busy = state.stage.isBusy || state.stage == .readyToRelaunch
+        if busy, !wasInstalling {
+            // 滚动目标必须是真正挂在页面上的那张卡：installCard 是外层容器，只有它的
+            // .card 进了视图树与滚动区，传外层容器会拿不到 enclosingScrollView（不滚）
+            page.scrollToVisible(installCard.card)
+        }
+        wasInstalling = busy
     }
+
+    /// 上一拍是否处于安装态（滚动定位只在 false → true 那一次触发，否则每拍都会重置滚动位置）
+    private var wasInstalling = false
 
     // MARK: - 动作
 
@@ -237,47 +277,8 @@ final class SettingsAboutPane: SettingsPaneView {
         SettingsControlChrome.applyStandardHeight(to: button)
     }
 
-    // MARK: - 版本
+    // MARK: - 行值格式 / 版本 / 取证
 
-    private static var shortVersion: String {
-        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "—"
-    }
-
-    private static var buildVersion: String {
-        (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "—"
-    }
-
-    // MARK: - 取证
-
-#if DEBUG
-    /// 快照 / 探针取证：把「检查更新」区可见文本、说明区行数与四个按钮的无障碍信息打出来
-    ///
-    /// 离屏快照看不出滚动区里的内容与按钮的可读名，取证以这里打印的真值为准。
-    func debugLogUpdateSection(_ tag: String) {
-        print("[update-probe][\(tag)] 当前版本=\(currentVersionLabel.stringValue)"
-              + " | 最新版本=\(latestVersionLabel.stringValue)"
-              + " | 状态=\(statusLabel.stringValue)"
-              + " | 说明区 \(notesRow.notesView.debugProbeText)")
-        print("[update-probe][\(tag)] 安装卡 \(installCard.debugProbeText)")
-        debugLogButton("checkButton", checkButton, tag: tag)
-        debugLogButton("releaseButton", releaseButton, tag: tag)
-        debugLogButton("installButton", installCard.installButton, tag: tag)
-    }
-
-    /// 按钮的读屏真值：role / label / 是否是无障碍元素 / 能否键盘聚焦 / 有没有 press 动作
-    private func debugLogButton(_ name: String, _ button: NSButton, tag: String) {
-        print("[update-probe][\(tag)] \(name) title=\(button.title)"
-              + " role=\(button.accessibilityRole()?.rawValue ?? "nil")"
-              + " isElement=\(button.isAccessibilityElement())"
-              + " label=\(button.accessibilityLabel() ?? "nil")"
-              + " enabled=\(button.isEnabled)"
-              + " keyboard=\(button.acceptsFirstResponder)"
-              + " press=\(button.responds(to: NSSelectorFromString("accessibilityPerformPress")))")
-    }
-
-    /// 取证：从无障碍层按一次「检查更新」，证明按钮默认动作真的走到 action
-    func debugPerformAccessibilityPress() {
-        checkButton.accessibilityPerformPress()
-    }
-#endif
+    // 已拆到 SettingsAboutPane+Support.swift（单文件 15 KiB 门禁）：
+    // dateText / packageText / shortVersion / buildVersion 与 DEBUG 取证打印。
 }
