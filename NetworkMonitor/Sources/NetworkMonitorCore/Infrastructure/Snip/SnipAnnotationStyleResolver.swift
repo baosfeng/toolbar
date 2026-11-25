@@ -22,14 +22,17 @@ public enum SnipAnnotationStyleResolver {
     ///   - lineWidth: 偏好里的线宽（未设置时回落默认值，异常值夹到可选范围）
     ///   - dashed: 偏好里的线型（默认实线）
     ///   - text: 文字样式（字号 / 字重 / 字体族）；缺省时沿用旧口径「字号由线宽推导」
+    /// - Parameter effect: 马赛克 / 模糊强度；缺省值 14/14，与既有常量一致
     public static func style(colorHex: String?,
                              lineWidth: CGFloat?,
                              dashed: Bool,
-                             text: SnipTextStyle = SnipTextStyle()) -> SnipAnnotationStyle {
+                             text: SnipTextStyle = SnipTextStyle(),
+                             effect: SnipEffectStyle = SnipEffectStyle()) -> SnipAnnotationStyle {
         let color = color(fromHex: colorHex) ?? .red
         var width = lineWidth.map { min(max($0, 1), 40) } ?? defaultLineWidth
         width = SnipLineWidthRange.clamp(width)
-        return SnipAnnotationStyle(color: color, lineWidth: width, dashed: dashed, text: text)
+        return SnipAnnotationStyle(color: color, lineWidth: width, dashed: dashed,
+                                   text: text, effect: effect)
     }
 
     /// hex → 颜色；接受 #RRGGBB 与 #RRGGBBAA（含或不含前导 #），其余一律视为无效

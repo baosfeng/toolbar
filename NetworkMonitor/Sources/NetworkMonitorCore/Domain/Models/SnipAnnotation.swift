@@ -43,17 +43,24 @@ public struct SnipAnnotationStyle: Equatable, Sendable {
     /// 与 lineWidth 解耦：线宽只管描边，字号不再由它推导。
     /// 缺省 fontSize 为 nil，仍按旧口径 `max(lineWidth * 5, 14)` 回退，老偏好零迁移。
     public var text: SnipTextStyle
+    /// 马赛克 / 模糊的强度（每条标注带自己的值）
+    ///
+    /// 放在样式里而不是全局常量：画好的马赛克不该因为用户后来调粗而整张变样。
+    /// 缺省值与 `SnipMosaicProcessor` 的既有常量一致，老标注观感零变化。
+    public var effect: SnipEffectStyle
 
     public init(color: SnipAnnotationColor = .red,
                 lineWidth: CGFloat = 3,
                 filled: Bool = false,
                 dashed: Bool = false,
-                text: SnipTextStyle = SnipTextStyle()) {
+                text: SnipTextStyle = SnipTextStyle(),
+                effect: SnipEffectStyle = SnipEffectStyle()) {
         self.color = color
         self.lineWidth = lineWidth
         self.filled = filled
         self.dashed = dashed
         self.text = text
+        self.effect = effect
     }
 }
 

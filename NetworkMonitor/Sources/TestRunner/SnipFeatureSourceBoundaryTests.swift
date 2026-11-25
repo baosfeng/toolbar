@@ -20,7 +20,9 @@ func testSnipFeatureSourceBoundaries() {
                       "SnipHotKeyPreferences.swift", "SnipPreferenceKey.swift",
                       "SnipKeyBridge.swift", "HotKeyRegistry.swift",
                       // 文字样式的偏好读写：要用 SnipPreferenceKey，只能在功能层
-                      "SnipTextStylePreference.swift"]
+                      "SnipTextStylePreference.swift",
+                      // 马赛克 / 模糊强度的偏好读写：同上，要用 SnipPreferenceKey
+                      "SnipEffectStylePreference.swift"]
 
     // 1) App target 里不再有这些文件，新 target 里只此一份
     let appSnipFiles = Set(snipFeatureSwiftFiles(in: sourcesRoot.appendingPathComponent("NetworkMonitor/Snip")))

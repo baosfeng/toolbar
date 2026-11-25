@@ -27,6 +27,16 @@ protocol SnipToolBarViewDelegate: AnyObject {
     ///   - content: 面板内容
     ///   - anchor: 触发按钮在覆盖层坐标里的矩形（面板据此定位）
     func toolBarDidRequestPanel(_ content: SnipPanelContent, anchor: CGRect)
+    /// 在工具条的数值按钮上滚动滚轮（Snipaste 口径：指针停在那颗按钮上直接滚）
+    /// - Parameters:
+    ///   - param: 该按钮当前代表哪个参数
+    ///   - steps: 滚了几格（正 = 变大）
+    ///   - intent: ⌘ 快调 / ⌥ 精调
+    func toolBarDidScrollNumeric(_ param: SnipNumericParam,
+                                 steps: Int,
+                                 intent: SnipNumericIntent)
+    /// 双击数值按钮 = 复位到该参数的默认值
+    func toolBarDidResetNumeric(_ param: SnipNumericParam)
 }
 
 // MARK: - 标注工具条
@@ -92,8 +102,12 @@ final class SnipToolBarView: NSView {
     static let widths: [CGFloat] = SnipLineWidthStepper.widths
     /// 实线 / 虚线两档
     static let dashes: [Bool] = [false, true]
-    /// 颜色透明度三档：不透明 / 半透明 / 淡
-    static let alphas: [CGFloat] = [1.0, 0.6, 0.3]
+    /// 颜色透明度五档：0% / 25% / 50% / 75% / 100%
+    ///
+    /// 此前只有 3 档（1.0 / 0.6 / 0.3），用户要 80% 近似不透明或 15% 近乎看不见都无处可去。
+    /// 扩到 5 档而不是做成滑杆：盘面只能摆格子，而 5 档已经覆盖「很淡 / 淡 / 半 / 浓 / 实」；
+    /// 想要任意值走 ⌃ + 滚轮或「输入数值…」格，那两条都是连续的。
+    static let alphas: [CGFloat] = [1.0, 0.75, 0.5, 0.25, 0.0]
 
     // MARK: 布局结果（每次重算，bounds 变化后仍然对齐）
 
@@ -112,6 +126,9 @@ final class SnipToolBarView: NSView {
     var isPanelOpen = false { didSet { if isPanelOpen != oldValue { needsDisplay = true } } }
     /// 放宽为 internal：悬停跟踪在排版扩展文件里安装与移除
     var hoverTracking: NSTrackingArea?
+    /// 数值按钮上的滚轮余量（触控板与鼠标共用归一化，见 SnipScrollStepper）
+    /// 放宽为 internal：交互扩展文件（SnipBarInteraction）的滚轮累加要读写
+    var numericScrollAccumulator = SnipScrollStepper()
 
     override var isFlipped: Bool { true }
 
@@ -138,47 +155,8 @@ final class SnipToolBarView: NSView {
 
 
 
-    // MARK: - 交互
-
-    override func mouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        // 置灰的动作不响应点击（item(at:) 已按可用性过滤，这里再兜一层）
-        guard let hit = item(at: point), isEnabled(hit) else { return }
-        switch hit {
-        case .tool(let tool):
-            selectedTool = (selectedTool == tool) ? nil : tool
-            delegate?.toolBarDidChangeTool(selectedTool)
-        case .more:
-            delegate?.toolBarDidRequestPanel(.tools(configuration.overflowTools), anchor: visibleRect(of: hit))
-        case .color:
-            delegate?.toolBarDidRequestPanel(.colors(Self.colors), anchor: visibleRect(of: hit))
-        case .width:
-            // 选中文字工具时这个入口弹的是「文字样式」（字号 / 加粗 / 字体），
-            // 其余情况才是画笔样式（线宽 / 虚线 / 颜色 Alpha）。
-            // 为什么不拆成两个按钮：文字标注时线宽对结果几乎无影响，而字号是刚需，
-            // 复用同一个入口让工具条保持 4 个高频工具 + 4 个动作的既有宽度。
-            if selectedTool == .text {
-                delegate?.toolBarDidRequestPanel(.textStyles(sizes: SnipTextStyle.fontSizePresets,
-                                                             bold: style.text.bold,
-                                                             family: style.text.family),
-                                                 anchor: visibleRect(of: hit))
-            } else {
-                delegate?.toolBarDidRequestPanel(.styles(widths: Self.widths,
-                                                         dashes: Self.dashes,
-                                                         alphas: Self.alphas),
-                                                 anchor: visibleRect(of: hit))
-            }
-        case .action(let action):
-            delegate?.toolBarDidPerform(action)
-        }
-    }
-
-    /// 命中项在「可视条坐标」里的矩形（覆盖层按它定位二级面板，不含气泡区偏移）
-    private func visibleRect(of item: SnipBarItem) -> CGRect {
-        let rect = itemRects.first { $0.item == item }?.rect ?? .zero
-        return rect.offsetBy(dx: -barOriginX, dy: -barOriginY)
-    }
-
     /// 可视条在视图内的左边界（恒为 0：整条宽度就是条宽）
-    private var barOriginX: CGFloat { 0 }
+    /// 可视条在视图内的左边界（恒为 0：整条宽度就是条宽）
+    /// 放宽为 internal：交互扩展文件（SnipBarInteraction）的命中矩形要换算
+    var barOriginX: CGFloat { 0 }
 }

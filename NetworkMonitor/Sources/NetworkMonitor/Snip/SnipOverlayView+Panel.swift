@@ -105,6 +105,14 @@ extension SnipOverlayView {
             currentStyle.lineWidth = widths[index]
             toolBarDidChangeStyle(currentStyle)
         case .styles(let widths, let dashes, let alphas):
+            // 末尾「输入…」格：就地弹输入框，面板收起（输入框要独占键盘）
+            if content.numericInputSlotIndex == index {
+                // 输入框贴在面板原来的位置（面板坐标即覆盖层坐标，两者是兄弟子视图）
+                let panelFrame = toolPanel?.frame ?? .zero
+                closeToolPanel()
+                numeric.beginEditing(.lineWidth, anchor: panelFrame, parent: self)
+                return
+            }
             applyStylePanelItem(widths: widths, dashes: dashes, alphas: alphas, index: index)
             // 样式面板是可多次调整的盘面，不像工具/颜色那样点一次就收起
             return
@@ -126,13 +134,13 @@ extension SnipOverlayView {
                                      alphas: [CGFloat],
                                      index: Int) {
         if widths.indices.contains(index) {
-            currentStyle.lineWidth = widths[index]
+            // 档位格只是快捷项：点它 = 把线宽设成这个值（与滚轮/按键同一条写入路径）
+            _ = numeric.assign(.lineWidth, value: widths[index], showsHUD: false)
         } else {
             let afterWidths = index - widths.count
             if afterWidths < SnipPanelContent.stylesStepCount {
                 // −/+ 连续微调：在任意线宽上按 1pt 走，不吸附档位
-                currentStyle.lineWidth = SnipLineWidthStepper.continuousStep(
-                    from: currentStyle.lineWidth, by: afterWidths == 0 ? -1 : 1)
+                _ = numeric.adjust(.lineWidth, steps: afterWidths == 0 ? -1 : 1, intent: .coarse)
             } else {
                 let offset = afterWidths - SnipPanelContent.stylesStepCount
                 if dashes.indices.contains(offset) {
@@ -140,8 +148,10 @@ extension SnipOverlayView {
                 } else {
                     let alphaIndex = offset - dashes.count
                     if alphas.indices.contains(alphaIndex) {
-                        // 透明度只改颜色的 alpha 分量，RGB 保持用户选的那支色
-                        currentStyle.color = currentStyle.color.withAlpha(alphas[alphaIndex])
+                        // 透明度只改颜色的 alpha 分量，RGB 保持用户选的那支色。
+                        // 走 assignNumeric 而不是直接写 color：那条路径会夹取量化并弹读数，
+                        // 与滚轮 / ⌃+滚轮 是同一条写入路径，不会出现「面板点到 0.3 但显示 30%」这类分叉。
+                        _ = numeric.assign(.opacity, value: alphas[alphaIndex], showsHUD: false)
                     }
                 }
             }
@@ -158,7 +168,8 @@ extension SnipOverlayView {
                                          family: SnipTextFamily,
                                          index: Int) {
         if sizes.indices.contains(index) {
-            currentStyle.text.fontSize = SnipTextStyle.clampFontSize(sizes[index])
+            // 字号档同理：点它 = 把基准字号设成该值（与 0/9 键、滚轮同一条路径）
+            _ = numeric.assign(.fontSize, value: sizes[index], showsHUD: false)
         } else if index == sizes.count {
             currentStyle.text.bold.toggle()
         } else {

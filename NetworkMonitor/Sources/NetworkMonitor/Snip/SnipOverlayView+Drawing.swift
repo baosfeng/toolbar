@@ -115,7 +115,8 @@ extension SnipOverlayView {
             pointer: pointer,
             bounds: bounds,
             displayOrigin: displayOrigin,
-            colorFormat: colorFormat))
+            colorFormat: colorFormat,
+            zoom: numeric.session.magnifierZoom))
     }
 
 }

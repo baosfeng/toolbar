@@ -36,6 +36,9 @@ public struct SnipSelectionState: Equatable, Sendable {
     private var adjustHandle: Handle?
     private var adjustOrigin: CGRect = .zero
     private var adjustPointer: CGPoint = .zero
+    /// 拖拽中按空格进入「移动选区」时的锚：矩形快照与按下位置
+    private var spaceAnchorRect: CGRect?
+    private var spaceAnchorPoint: CGPoint = .zero
 
     public init() {}
 
@@ -59,9 +62,51 @@ public struct SnipSelectionState: Equatable, Sendable {
 
     public mutating func end() {
         guard phase == .dragging else { return }
+        spaceAnchorRect = nil
         let isValid = rect.width >= minimumSide && rect.height >= minimumSide
         phase = isValid ? .selected : .idle
         if !isValid { rect = .zero }
+    }
+
+    // MARK: - 拖拽中按空格切「移动选区」（Snipaste 高级技巧）
+
+    /// 拖拽过程中按下空格 → 进入「移动已有选区」模式
+    ///
+    /// 官方口径：「不要松开鼠标，按下空格键即进入移动选区模式」。
+    /// 动机很实在：拉选区拉到一半发现位置偏了，松手重来要丢掉刚对好的边。
+    ///
+    /// 只在 dragging 阶段生效：已成立的选区本来就能拖内部移动，不需要这条通路。
+    /// - Returns: 是否真的进入了移动模式
+    @discardableResult
+    public mutating func enterSpaceMove() -> Bool {
+        guard phase == .dragging, spaceAnchorRect == nil else { return false }
+        guard rect.width >= minimumSide || rect.height >= minimumSide else { return false }
+        spaceAnchorRect = rect
+        spaceAnchorPoint = .zero
+        return true
+    }
+
+    /// 是否处于「拖拽中按空格移动」模式
+    public var isSpaceMoving: Bool { spaceAnchorRect != nil }
+
+    /// 移动模式下跟随光标平移（第一次调用以当前点作为锚）
+    public mutating func spaceMove(to point: CGPoint) {
+        guard let anchorRect = spaceAnchorRect else { return }
+        if spaceAnchorPoint == .zero {
+            spaceAnchorPoint = point
+            return
+        }
+        rect = anchorRect.offsetBy(dx: point.x - spaceAnchorPoint.x,
+                                   dy: point.y - spaceAnchorPoint.y)
+    }
+
+    /// 退出移动模式（空格松开）：把拖拽锚点重新钉在当前位置，
+    /// 之后的拖拽继续从这个矩形往外拉，而不是跳回按空格前的原始起点
+    public mutating func exitSpaceMove(at point: CGPoint) {
+        guard spaceAnchorRect != nil else { return }
+        spaceAnchorRect = nil
+        spaceAnchorPoint = .zero
+        dragAnchor = point
     }
 
     /// 直接成立一个选区（窗口检测点选时使用）

@@ -67,7 +67,12 @@ extension SnipToolPanelView {
         let alphaIndex = offset - dashes.count
         if alphas.indices.contains(alphaIndex) {
             SnipBarDrawing.drawAlphaDot(alpha: alphas[alphaIndex], in: rect, isSelected: isSelected)
+            return
         }
+        // 末尾「输入…」格：键盘符号表达"精确输入"，比写一个放不下的「输入」二字更清楚
+        SnipBarDrawing.drawSymbol("keyboard", in: rect,
+                                  alpha: isSelected ? 1 : 0.72,
+                                  description: "输入精确数值")
     }
 
     /// 文字样式盘的单项：字号「A」样本（按档位放大）、加粗「B」、字体族首字

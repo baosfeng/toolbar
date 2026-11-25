@@ -293,5 +293,25 @@ extension SnipOverlayView {
         state.end()
         needsDisplay = true
     }
+
+    /// 仅 DEBUG：程序化弹出数值读数气泡（离屏取证用）
+    ///
+    /// 气泡由 DispatchWorkItem 控制淡出，离屏渲染没有主循环跑它的入场动画，
+    /// 因此取证时直接把 alpha 拉满、只核对文案与避让几何。
+    func debugShowNumericHUD(_ param: SnipNumericParam, value: CGFloat, intent: SnipNumericIntent) {
+        numeric.hud = numeric.hud ?? {
+            let view = SnipNumericHUDView()
+            addSubview(view)
+            return view
+        }()
+        numeric.hud?.show(SnipNumericHUD.Entry(param: param, value: value, intent: intent))
+        numeric.hud?.alphaValue = 1
+        numeric.hud?.isHidden = false
+        let size = numeric.hud?.frame.size ?? .zero
+        numeric.hud?.frame.origin = SnipNumericHUD.origin(size: size,
+                                                         cursor: pointer,
+                                                         bounds: bounds)
+        needsDisplay = true
+    }
     #endif
 }

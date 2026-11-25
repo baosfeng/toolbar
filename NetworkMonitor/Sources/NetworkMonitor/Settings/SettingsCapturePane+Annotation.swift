@@ -88,26 +88,8 @@ extension SettingsCapturePane {
         card.addRow(widthRow)
         card.addRow(dashRow)
         card.addRow(fontSizeRow)
+        addEffectStyleRows(to: card)
         page.addCard(card, sectionTitle: "标注")
-    }
-
-    /// 调色板色块 — 22pt 圆形；选中态 2pt 强调色描边，未选中 1pt 分隔线（白色块在浅色下可见）
-    private func buildColorButtons() {
-        for (index, entry) in Self.palette.enumerated() {
-            let button = NSButton(title: "", target: self, action: #selector(colorChanged(_:)))
-            button.isBordered = false
-            button.wantsLayer = true
-            button.layer?.cornerRadius = 11
-            button.layer?.backgroundColor = NSColor(srgbRed: entry.color.red,
-                                                    green: entry.color.green,
-                                                    blue: entry.color.blue,
-                                                    alpha: entry.color.alpha).cgColor
-            button.tag = index
-            button.widthAnchor.constraint(equalToConstant: 22).isActive = true
-            button.heightAnchor.constraint(equalToConstant: 22).isActive = true
-            button.setAccessibilityLabel("标注默认颜色：\(entry.name)")
-            colorButtons.append(button)
-        }
     }
 
     // MARK: - 回灌
@@ -123,9 +105,12 @@ extension SettingsCapturePane {
         dashedSwitch?.state = storage.bool(forKey: SnipPreferenceKey.annotationDashed) ? .on : .off
 
         let text = SnipTextStylePreference.load(storage: storage)
+        // 字号显示的应当是「这支笔真正会用的字号」：缺键时回落到线宽推导值，
+        // 而不是显示一个隐藏的 20 —— 用户点一下 stepper 才会把 20 写成绝对值，前后不一致。
         let fontSize = text.fontSize ?? max(width * 5, 14)
         fontSizeControl?.doubleValue = Double(fontSize)
         fontSizeValueLabel?.stringValue = SnipPanelLabelText.width(fontSize)
+        refreshEffectStyleRows()
     }
 
     /// 调色板选中态

@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorUI
 
 // MARK: - 标注交互与工具条
 
@@ -22,6 +23,21 @@ extension SnipOverlayView: SnipToolBarViewDelegate {
         // 否则「更多」按钮的高亮与图标停在旧状态
         toolbarView?.selectedTool = tool
         needsDisplay = true
+    }
+
+    /// 工具条数值按钮上滚动：调那个数值（与滚轮在画布上、按键三条通路同一实现）
+    func toolBarDidScrollNumeric(_ param: SnipNumericParam,
+                                 steps: Int,
+                                 intent: SnipNumericIntent) {
+        _ = numeric.adjust(param, steps: steps, intent: intent)
+    }
+
+    /// 双击工具条数值按钮 = 回到该参数的默认值
+    ///
+    /// 复位的是「这支笔」而不是选中图形：与 Snipaste「中键单击贴图 = 100%」同构，
+    /// 属于"把当前旋钮恢复出厂"，不动已经画好的东西。
+    func toolBarDidResetNumeric(_ param: SnipNumericParam) {
+        _ = numeric.reset(param)
     }
 
     func toolBarDidChangeStyle(_ style: SnipAnnotationStyle) {

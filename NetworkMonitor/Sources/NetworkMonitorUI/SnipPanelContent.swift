@@ -34,6 +34,13 @@ public enum SnipPanelContent: Equatable {
     /// 画笔样式盘面里「−/+」两个连续微调项占的格子数
     public static let stylesStepCount = 2
 
+    /// 盘面末尾固定多出来的「输入…」格数
+    ///
+    /// 档位格与 ±1 的连续微调都到不了「我要 13pt」这种具体值。
+    /// 与其在工具条上挂一个看不见的数字框，不如在盘面尾部给一格：点它就地弹输入框，
+    /// 与「点选区尺寸标签输入 800x600」是同一套交互，用户已经会了。
+    public static let numericInputSlotCount = 1
+
     /// 颜色盘末尾固定多出来的「自定义…」格数
     public static let colorCustomSlotCount = 1
 
@@ -46,6 +53,7 @@ public enum SnipPanelContent: Equatable {
         case .widths(let items): return items.count
         case .styles(let widths, let dashes, let alphas):
             return widths.count + Self.stylesStepCount + dashes.count + alphas.count
+                + Self.numericInputSlotCount
         case .textStyles(let sizes, _, _):
             // 字号档 + 加粗一项 + 字体族若干
             return sizes.count + 1 + SnipTextFamily.allCases.count
@@ -105,13 +113,30 @@ public enum SnipPanelContent: Equatable {
             let offset = afterWidths - Self.stylesStepCount
             if dashes.indices.contains(offset) { return SnipPanelLabelText.dash(dashes[offset]) }
             let alphaIndex = offset - dashes.count
-            return alphas.indices.contains(alphaIndex) ? SnipPanelLabelText.alpha(alphas[alphaIndex]) : ""
+            if alphas.indices.contains(alphaIndex) {
+                return SnipPanelLabelText.alpha(alphas[alphaIndex])
+            }
+            // 末尾一格 = 精确输入：档位与 ±1 都到不了「我要 13pt」
+            return "输入数值…"
         case .textStyles(let sizes, let bold, _):
             if sizes.indices.contains(index) { return "字号 " + SnipPanelLabelText.size(sizes[index]) }
             if index == sizes.count { return bold ? "取消加粗" : "加粗" }
             let familyIndex = index - sizes.count - 1
             let families = SnipTextFamily.allCases
             return families.indices.contains(familyIndex) ? families[familyIndex].displayName : ""
+        }
+    }
+
+    /// 样式盘里「输入…」格的序号（nil = 这个盘面没有输入格）
+    ///
+    /// 做成计算属性而不是让调用方自己数：条目数一旦增删，索引偏移最容易错位，
+    /// 而错位表现出来是「点了输入却弹出一个透明度」这类难查的现象。
+    public var numericInputSlotIndex: Int? {
+        switch self {
+        case .styles(let widths, let dashes, let alphas):
+            return widths.count + Self.stylesStepCount + dashes.count + alphas.count
+        default:
+            return nil
         }
     }
 

@@ -32,6 +32,9 @@ enum SnipOverlaySnapshot {
             // 本轮新增的两块自定义面板：文字样式盘（字号 / 加粗 / 字体）与自绘取色板
             renderToFile(at: directory.appendingPathComponent("overlay-text-panel.png"), phase: .textPanel)
             renderToFile(at: directory.appendingPathComponent("overlay-color-picker.png"), phase: .colorPicker)
+            // 本轮：数值读数气泡 + 画笔样式盘（含「输入数值…」格）
+            renderToFile(at: directory.appendingPathComponent("overlay-numeric-hud.png"), phase: .numericHUD)
+            renderToFile(at: directory.appendingPathComponent("overlay-style-panel.png"), phase: .stylePanel)
             NSApp.terminate(nil)
         }
     }
@@ -47,6 +50,10 @@ enum SnipOverlaySnapshot {
         case textPanel
         /// 颜色盘末尾「自定义」打开的自绘取色板（色相 + 饱和度方块 + 透明度）
         case colorPicker
+        /// 调完线宽后跟随光标的数值读数（本轮「任意可调」的反馈层）
+        case numericHUD
+        /// 画笔样式盘：线宽档 + −/+ + 线型 + 五档透明度 + 「输入数值…」
+        case stylePanel
     }
 
     /// 取证用的工具条配置：与默认配置一致（悬停提示档），保证图面对应真实默认外观
@@ -106,6 +113,17 @@ enum SnipOverlaySnapshot {
             view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
             view.toolBarDidChangeTool(.rectangle)
             view.debugOpenColorPicker()
+        case .numericHUD:
+            view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            view.toolBarDidChangeTool(.rectangle)
+            view.debugHover(atLocalPoint: CGPoint(x: 430, y: 330))
+            view.debugShowNumericHUD(.lineWidth, value: 12, intent: .coarse)
+        case .stylePanel:
+            view.debugApplySelection(CGRect(x: 220, y: 150, width: 560, height: 340))
+            view.toolBarDidChangeTool(.rectangle)
+            view.debugOpenPanel(.styles(widths: SnipLineWidthStepper.widths,
+                                        dashes: SnipToolBarView.dashes,
+                                        alphas: SnipToolBarView.alphas))
         }
 
         let container = SnapshotBackdropView(frame: NSRect(origin: .zero, size: canvasSize))

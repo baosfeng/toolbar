@@ -19,6 +19,10 @@ public enum SnipPreferenceKey {
     public static let annotationTextBold = "snip.annotation.textBold"
     /// 文字标注字体族（SnipTextFamily 的 rawValue）
     public static let annotationTextFamily = "snip.annotation.textFamily"
+    /// 马赛克块边长（像素，2…32；缺键 = 14，与 SnipMosaicProcessor 的既有常量一致）
+    public static let annotationMosaicBlock = "snip.annotation.mosaicBlock"
+    /// 高斯模糊半径（像素，1…40；缺键 = 14）
+    public static let annotationBlurRadius = "snip.annotation.blurRadius"
     /// 图片文件贴图时优先显示图像（关闭则直接贴路径文本）
     public static let pinDisplayImageFiles = "snip.pinDisplayImageFiles"
     /// 可被恢复的已关闭贴图数（默认 1，范围 1...10）

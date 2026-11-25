@@ -24,6 +24,8 @@ enum SnipKeyboardWiringGuard {
     static let windowFile = "Snip/SnipOverlayWindow.swift"
     /// 输入框与编辑态接线的收口文件（文字输入 + 编辑态信号都在这儿）
     static let editingFile = "Snip/SnipTextEditing.swift"
+    /// delegate 契约所在文件（协议已从 SnipOverlayView 主文件拆出，契约在哪就要扫到哪）
+    static let delegateFile = "Snip/SnipOverlayViewDelegate.swift"
 
     /// 允许写编辑态的函数名：桥接层自己的 setEditing + 编排层唯一的 setKeyboardEditing
     static let editingWriters = ["setEditing", "setKeyboardEditing"]
@@ -59,7 +61,8 @@ enum SnipKeyboardWiringGuard {
         var issues: [SnipKeyboardWiringIssue] = []
         issues.append(contentsOf: keyboardIssues(sources[keyboardFile]))
         issues.append(contentsOf: wiringIssues(sources[editingFile] ?? "", path: editingFile))
-        issues.append(contentsOf: overlayIssues(sources[overlayFile]))
+        issues.append(contentsOf: overlayIssues(sources[overlayFile],
+                                                delegateSource: sources[delegateFile]))
         issues.append(contentsOf: windowIssues(sources[windowFile]))
         return issues.sorted { ($0.path, $0.line) < ($1.path, $1.line) }
     }
@@ -138,7 +141,8 @@ enum SnipKeyboardWiringGuard {
     }
 
     /// 覆盖层：两个输入框都要 private(set) + didSet 通知，信号生产侧不能靠自觉
-    private static func overlayIssues(_ raw: String?) -> [SnipKeyboardWiringIssue] {
+    private static func overlayIssues(_ raw: String?,
+                                     delegateSource: String?) -> [SnipKeyboardWiringIssue] {
         guard let raw else { return [] }
         let lines = codeLines(raw)
         var issues: [SnipKeyboardWiringIssue] = []
@@ -169,8 +173,9 @@ enum SnipKeyboardWiringGuard {
                     reason: "\(name) 的 didSet 必须调用 textEditingDidChange()（否则编辑态传不出去）"))
             }
         }
-        // delegate 契约与通知调用各至少一处
-        if !lines.contains(where: { $0.contains("didChangeTextEditing isEditing:") }) {
+        // delegate 契约在独立文件里（协议已从主文件拆出），契约与调用各至少一处
+        let delegateLines = codeLines(delegateSource ?? "")
+        if !delegateLines.contains(where: { $0.contains("didChangeTextEditing isEditing:") }) {
             issues.append(SnipKeyboardWiringIssue(path: overlayFile, line: 1,
                                                   reason: "delegate 里缺 didChangeTextEditing 契约"))
         }

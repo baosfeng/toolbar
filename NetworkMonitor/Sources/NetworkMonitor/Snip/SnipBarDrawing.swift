@@ -104,12 +104,27 @@ enum SnipBarDrawing {
         }
     }
 
-    /// 画透明度样本：一个越透明越淡的圆点 + 白色描边环（纯白背景上也能看出边界）
+    /// 透明度档的圆点 —— 圆点底下垫棋盘格
+    ///
+    /// 为什么必须垫：白底上画 100% / 75% / 50% / 25% / 0% 五个白色圆点，
+    /// 前四个只是「灰一点的圆」，0% 那格干脆什么都没有 —— 用户看不出"这一档是透明的"，
+    /// 反而以为是没画出来。棋盘格是"透明"的通用视觉符号（贴图窗的棋盘底同一套色值）。
     static func drawAlphaDot(alpha: CGFloat, in rect: CGRect, isSelected: Bool) {
-        let dotRect = rect.insetBy(dx: 8, dy: 8)
+        let dotRect = rect.insetBy(dx: 6, dy: 6)
+        let path = NSBezierPath(ovalIn: dotRect)
+        if let context = NSGraphicsContext.current?.cgContext {
+            context.saveGState()
+            path.addClip()
+            // 圆点只有 28pt，用贴图窗那套 8pt 格子只剩 3×3，五档看起来一模一样。
+            // 这里用 4pt 小格：格纹本身成为「透明」的密度信号，档位越低格纹露出越多。
+            drawChecker(in: dotRect, in: context, cell: 4,
+                        lightTone: 0.62, darkTone: 0.42)
+            context.restoreGState()
+        }
         NSColor.white.withAlphaComponent(min(max(alpha, 0), 1)).setFill()
-        NSBezierPath(ovalIn: dotRect).fill()
-        NSColor.white.withAlphaComponent(isSelected ? 0.95 : 0.45).setStroke()
+        path.fill()
+        // 环在低透明度档上要更亮，否则 0% 那格只剩一圈几乎看不见的淡边
+        NSColor.white.withAlphaComponent(isSelected ? 0.95 : 0.55).setStroke()
         let ring = NSBezierPath(ovalIn: dotRect.insetBy(dx: -1, dy: -1))
         ring.lineWidth = isSelected ? 1.5 : 1
         ring.stroke()
@@ -117,13 +132,18 @@ enum SnipBarDrawing {
 
     /// 画棋盘格底（透明度条、半透明色点下面垫一层，才看得出「这里是透明的」）
     ///
-    /// 格子边长与两档灰度复用贴图窗的 PinBoardBackgroundResolver，
-    /// 两处棋盘格看起来必须是同一套（同一屏里两种格子会显得像画错了）。
-    static func drawChecker(in rect: CGRect, in context: CGContext) {
-        let cell = PinBoardBackgroundResolver.cellSize
+    /// 格子边长与两档灰度默认复用贴图窗的 PinBoardBackgroundResolver，
+    /// 同一屏里两处棋盘格必须是同一套（否则看起来像画错了）。
+    /// - Parameters:
+    ///   - cell: 格子边长；透明圆点用更小的格
+    ///   - lightTone / darkTone: 两档灰度；透明圆点用中灰（近白棋盘上盖白笔几乎无差别）
+    static func drawChecker(in rect: CGRect, in context: CGContext,
+                            cell: CGFloat = PinBoardBackgroundResolver.cellSize,
+                            lightTone: CGFloat = PinBoardBackgroundResolver.Tone.light,
+                            darkTone: CGFloat = PinBoardBackgroundResolver.Tone.dark) {
         guard cell > 0 else { return }
-        let light = NSColor(white: PinBoardBackgroundResolver.Tone.light, alpha: 1)
-        let dark = NSColor(white: PinBoardBackgroundResolver.Tone.dark, alpha: 1)
+        let light = NSColor(white: lightTone, alpha: 1)
+        let dark = NSColor(white: darkTone, alpha: 1)
         let columns = Int((rect.width / cell).rounded(.up))
         let rows = Int((rect.height / cell).rounded(.up))
         for row in 0..<max(rows, 0) {

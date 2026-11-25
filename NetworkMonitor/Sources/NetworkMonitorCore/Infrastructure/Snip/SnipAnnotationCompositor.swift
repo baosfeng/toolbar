@@ -45,9 +45,12 @@ public enum SnipAnnotationCompositor {
         let processed: CGImage?
         switch annotation.kind {
         case .mosaic:
-            processed = SnipMosaicProcessor.pixelated(base, in: clamped)
+            // 强度取自这条标注自己的样式：画好的马赛克不该因为后来调粗而整张变样
+            processed = SnipMosaicProcessor.pixelated(base, in: clamped,
+                                                      blockSize: annotation.style.effect.mosaicBlock)
         case .blur:
-            processed = SnipMosaicProcessor.blurred(base, in: clamped)
+            processed = SnipMosaicProcessor.blurred(base, in: clamped,
+                                                    radius: annotation.style.effect.blurRadius)
         default:
             processed = nil
         }

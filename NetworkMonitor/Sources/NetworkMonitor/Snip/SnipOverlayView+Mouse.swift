@@ -85,7 +85,12 @@ extension SnipOverlayView {
         pointer = point
         if handleAnnotationMouseDragged(to: point, lockingShift: event.modifierFlags.contains(.shift)) { return }
         if state.phase == .dragging {
-            state.drag(to: point)
+            // 拖拽中按过空格 = 移动选区而不是继续拉边（Snipaste 高级技巧同款）
+            if state.isSpaceMoving {
+                state.spaceMove(to: point)
+            } else {
+                state.drag(to: point)
+            }
         } else {
             state.adjust(to: point, lockingAspect: event.modifierFlags.contains(.shift))
         }
@@ -109,19 +114,34 @@ extension SnipOverlayView {
         handleRightClick()
     }
 
-    /// 滚轮：选中文字时改字号，处于标注模式时改画笔粗细（官方把滚轮列为调粗细的通路之一）
-    override func scrollWheel(with event: NSEvent) {
-        if handleStyleScroll(event) { return }
-        guard let index = selectedAnnotationIndex,
-              annotationStack.annotations.indices.contains(index) else {
-            super.scrollWheel(with: event)
+    /// 松开空格 = 退出「移动选区」，把拖拽锚点钉在当前位置，继续往外拉仍然连贯
+    ///
+    /// 空格是普通键不是修饰键，收不到 flagsChanged，只能靠 keyUp 判定松手。
+    /// 拖拽过程中 AppKit 仍会把 keyUp 送到覆盖层（它此时是 first responder）。
+    override func keyUp(with event: NSEvent) {
+        if event.keyCode == 49, state.isSpaceMoving {
+            state.exitSpaceMove(at: pointer)
+            needsDisplay = true
             return
         }
-        var annotation = annotationStack.annotations[index]
-        let next = min(max(annotation.fontScale + event.scrollingDeltaY * 0.03, 0.4), 5)
-        guard abs(next - annotation.fontScale) > 0.001 else { return }
-        annotation.fontScale = next
-        annotationStack.replace(at: index, with: annotation)
-        needsDisplay = true
+        super.keyUp(with: event)
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        if event.modifierFlags.contains(.shift) {
+            colorFormat = colorFormat == .hex ? .rgb : .hex
+            needsDisplay = true
+        }
+    }
+
+    /// 滚轮：唯一入口交给数值调整（见 SnipNumericController）
+    ///
+    /// 早期这里是两条互相打架的通路：handleStyleScroll 走档位吸附、
+    /// 下面这段走「选中文字改 fontScale」。结果是同一个滚轮在两种状态下
+    /// 手感完全不同（一个有档位、一个 3% 连续），而且都不落偏好。
+    /// 现在统一成「选了什么就调什么」，步长与范围都来自 SnipNumericParam。
+    override func scrollWheel(with event: NSEvent) {
+        if numeric.handleScroll(event) { return }
+        super.scrollWheel(with: event)
     }
 }

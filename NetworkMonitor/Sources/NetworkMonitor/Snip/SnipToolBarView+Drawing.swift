@@ -197,10 +197,12 @@ extension SnipToolBarView {
         // 文字工具下这一格是字号：标签与气泡必须跟着换口径，
         // 否则「画的是 A、写的是线宽」自相矛盾
         case .width:
+            // 常显数值用 SnipNumericParam.format：与读数气泡同一份格式化，
+            // 不会出现「条上写 12、气泡写 12.0 pt」两种口径
             if selectedTool == .text {
-                return "字号 " + Int((style.text.fontSize ?? style.lineWidth * 5).rounded()).description
+                return "字号" + SnipNumericParam.fontSize.format(style.text.fontSize ?? style.lineWidth * 5)
             }
-            return "线宽 \(Int(style.lineWidth.rounded()))"
+            return "线宽" + SnipNumericParam.lineWidth.format(style.lineWidth)
         case .action: return nil
         }
     }

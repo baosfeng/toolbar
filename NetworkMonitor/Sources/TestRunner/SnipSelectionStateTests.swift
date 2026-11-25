@@ -116,4 +116,30 @@ func runSnipSelectionStateTests() {
     state.reset()
     assertEqual(state.phase, .idle, "重置回空闲")
     assertEqual(state.selection == nil, true, "重置后无选区")
+
+    // MARK: 拖拽中按空格切移动选区（Snipaste 高级技巧）
+    var spaceDrag = SnipSelectionState()
+    spaceDrag.begin(at: CGPoint(x: 100, y: 100))
+    spaceDrag.drag(to: CGPoint(x: 200, y: 180))
+    assertEqual(spaceDrag.rect, CGRect(x: 100, y: 100, width: 100, height: 80), "拖拽中矩形跟随")
+    assertEqual(spaceDrag.isSpaceMoving, false, "未按空格时不是移动模式")
+    assertEqual(spaceDrag.enterSpaceMove(), true, "拖拽中按空格进入移动模式")
+    assertEqual(spaceDrag.isSpaceMoving, true, "已进入移动模式")
+    spaceDrag.spaceMove(to: CGPoint(x: 150, y: 150))   // 第一下只定锚
+    spaceDrag.spaceMove(to: CGPoint(x: 170, y: 160))   // 之后按位移平移
+    assertEqual(spaceDrag.rect.origin, CGPoint(x: 120, y: 110), "整块选区跟着光标平移")
+    assertEqual(spaceDrag.rect.size, CGSize(width: 100, height: 80), "移动不改变选区尺寸")
+    spaceDrag.exitSpaceMove(at: CGPoint(x: 500, y: 500))
+    assertEqual(spaceDrag.isSpaceMoving, false, "松开空格退出移动模式")
+    spaceDrag.drag(to: CGPoint(x: 600, y: 560))
+    assertEqual(spaceDrag.rect, CGRect(x: 500, y: 500, width: 100, height: 60), "退出后继续正常拉边（锚点已重钉）")
+    spaceDrag.end()
+    assertEqual(spaceDrag.phase, .selected, "松手成立选区")
+
+    // 已成形的选区不该再进入空格模式（它本来就能拖内部移动）
+    var settled = SnipSelectionState()
+    settled.begin(at: CGPoint(x: 10, y: 10))
+    settled.drag(to: CGPoint(x: 60, y: 60))
+    settled.end()
+    assertEqual(settled.enterSpaceMove(), false, "已成立的选区不进入空格移动模式")
 }

@@ -119,60 +119,102 @@
 - 复用现有自绘链路（在 `SnipOverlayView.draw` 里画，状态放 view），不新建窗口、不抢焦点；
 - 工具条上的当前值**同时**常显（不依赖悬停）——现在只有悬停气泡（`SnipToolBarView+Drawing.swift:208-227`）。
 
-### 5.5 代码结构（按项目分层放，别堆进视图）
+### 5.5 代码结构（落地后的实际分层）
 
-| 新文件 | 目标 | 内容 |
-|---|---|---|
-| `NetworkMonitorUI/SnipNumericParam.swift` | UI | 参数枚举（lineWidth / fontSize / opacity / mosaicBlock / blurRadius / magnifierZoom / selectionNudge），每 case 给范围 / 最小单位 / 默认 / 单位后缀 / 显示格式 / 偏好键 |
-| `NetworkMonitorUI/SnipNumericStepper.swift` | UI | `step(value:param:delta:intent:)` 纯函数：夹取 + 量化 + 按意图换步长 |
-| `NetworkMonitorUI/SnipNumericIntent.swift` | UI | 修饰键 → 意图的**唯一**映射（⇧ = fast、⌥ = fine、否则 coarse），含「同一修饰键不得两义」断言 |
-| `NetworkMonitorUI/SnipScrollStepper.swift` | UI | §5.3 的余量累加纯函数 |
-| `NetworkMonitorUI/SnipNumericHUD.swift` | UI | HUD 文案与几何（离屏可测），视图只负责画 |
-| `NetworkMonitorCore/.../SnipNumericPreference.swift` | Core | 五个新偏好键的读写与缺键回落（老偏好零迁移） |
+**纯口径（`NetworkMonitorUI`，TestRunner 直接断言）**
 
-视图侧只在 `SnipOverlayView+Editing.swift` 的 `stepLineWidth` / `handleStyleScroll` 两个入口接一次，**不在 scrollWheel 里写 if 链**——现有 `SnipRightClickIntent` 就是「纯函数判定 + 视图执行」的范式，照抄即可。
+| 文件 | 内容 |
+|---|---|
+| `SnipNumericParam.swift` | 参数枚举（lineWidth / fontSize / opacity / mosaicBlock / blurRadius / magnifierZoom），每 case 给范围 / 最小单位 / 量化粒度 / 默认 / 单位 / 显示格式 |
+| `SnipNumericIntent.swift` | 修饰键 → 意图的**唯一**映射（⌘ = fast、⌥ = fine、否则 coarse），含角标文案 |
+| `SnipNumericStepper.swift` | `step(_:param:steps:intent:)`：夹取 + 量化 + 按意图换步长 |
+| `SnipScrollStepper.swift` | 余量累加（鼠标一格 = 1 步、触控板够阈值才走、惯性尾不消费、单次最多 8 步） |
+| `SnipNumericHUD.swift` | 读数文案与避让几何 |
+| `SnipNumericInput.swift` | 输入框解析（`12` / `12pt` / `60%` / 非法返回 nil） |
+| `SnipNumericSession.swift` | 一次截图的数值会话状态（滚轮余量 / 放大镜倍数 / 正在输入哪个参数） |
+
+**Core（可被功能层与 UI 共用）**
+
+| 文件 | 内容 |
+|---|---|
+| `SnipEffectStyle.swift` | 马赛克粒度 / 模糊强度（带在每条标注的 `style.effect` 上，画好的不随后续调整变样） |
+| `SnipAnnotationScaler.swift` | ⇧ + 滚轮的整体缩放（以包围盒中心为锚，轨迹类与文字不参与） |
+
+**App（`Sources/NetworkMonitor/Snip/Numeric/`，自成一族）**
+
+| 文件 | 内容 |
+|---|---|
+| `SnipNumericController.swift` | 数值旋钮的唯一所有者：读值 / 写值 / 步进 / 滚轮四路分流 / 改选中图形 |
+| `SnipNumericController+HUD.swift` | 读数显示与淡出、就地输入框的弹出与提交 |
+| `SnipNumericHUDView.swift` | 读数气泡的自绘视图（monospacedDigit，读屏有 label） |
+| `SnipNumericWiring.swift` | 把覆盖层状态用闭包接给控制器（控制器不反向持有视图类型） |
+| `SnipBarNumericInteraction.swift` / `SnipBarInteraction.swift` | 工具条上「命中的那颗按钮代表哪个参数」与滚轮 / 双击判定 |
+
+**为什么控制器是独立类而不是 `SnipOverlayView+扩展`**：同族合计门禁只允许变小，
+按「类名 + 职责」继续堆扩展正是它要拦的形态。控制器自成一族（`Snip/Numeric/`），
+覆盖层只留一个 `lazy var numeric` 与一行转发，主文件因此从 350 行回到 307 行。
 
 ## 六、人性化交互清单（20 条 · 我们已有 / 缺）
 
 | # | 模式 | Snipaste 做法 | 我们 |
 |---|---|---|---|
-| 1 | 同一数值多通路等价 | 滚轮 / `1``2` / `[``]` | ✅ 有，但要修成不吸附 |
+| 1 | 同一数值多通路等价 | 滚轮 / `1``2` / `[``]` | ✅ 滚轮 + 键位 + 面板格 + 工具条按钮 + 输入框五条，全部走同一份 `SnipNumericStepper` |
 | 2 | 光标编码当前值 | 光标图案随笔宽变化 | ❌ 覆盖层全程无 `NSCursor` 设定 |
-| 3 | 常显当前值 | 工具条数值标签 | ❌ 只有悬停气泡 |
-| 4 | 调整瞬间 HUD | 放大镜内坐标与操作提示 | ❌ |
-| 5 | 拖动中按空格切移动 | 拉框不松手按空格 = 平移选区 | ❌ |
+| 3 | 常显当前值 | 工具条数值标签 | ✅ 常驻标签档走 `SnipNumericParam.format`，与读数气泡同一份格式 |
+| 4 | 调整瞬间 HUD | 放大镜内坐标与操作提示 | ✅ `SnipNumericController+HUD`：光标旁 1.2s 淡出，带「精调 / 快调」角标 |
+| 5 | 拖动中按空格切移动 | 拉框不松手按空格 = 平移选区 | ✅ `SnipSelectionState.enterSpaceMove` / `spaceMove` / `exitSpaceMove` |
 | 6 | ⇧ 约束几何 | 矩形→正方、椭圆→圆、线→45° | ✅ `SnipAnnotationConstraint` |
 | 7 | 右键 = 收笔，非编辑态才中止 | 编辑态右键结束当前图形 | ✅ `SnipRightClickIntent` |
 | 8 | Esc 逐层退出 | 文字编辑中 Esc 只结束输入 | ⚠️ 待核 |
-| 9 | 双击 / 中键复位 | 贴图中键 = 100%+100% | ⚠️ 贴图有，标注数值无 |
-| 10 | 数值直接打字输入 | 点尺寸数字 → 输入 | ✅ 选区有（`SnipSizeInput`）、数值没有 |
+| 9 | 双击 / 中键复位 | 贴图中键 = 100%+100% | ✅ 双击工具条数值按钮回默认值（贴图中键复位此前已有） |
+| 10 | 数值直接打字输入 | 点尺寸数字 → 输入 | ✅ 样式盘末格「输入数值…」+ `SnipNumericInput` 解析（`12pt` / `60%`） |
 | 11 | 分形状记忆样式 | 「为不同标注形状分别记忆颜色」 | ❌ 全局一个 `currentStyle` |
 | 12 | 一次手势 = 一次撤销 | 拖动/滚轮连续调整合并为一条 | ❌ 撤销栈只记「加了什么」 |
 | 13 | 可整体关闭某条通路 | 「禁用鼠标滚轮功能」 | ❌ |
 | 14 | 吸附/阈值按 DPI 归一 | `20 × DPI` / `80 × DPI` | ⚠️ 部分写死点数 |
 | 15 | 数值预设 + 命名 | 自定义截图对话框 `1280 720 720p` | ❌ |
 | 16 | 多笔尖槽位（Pro） | 1–5 个笔尖各自记忆粗细 | ❌ |
-| 17 | 语义冲突有仲裁 | 「窗口 + 工具 + 选中 + 控件」四级派发 | ✅ 有纯函数先例，滚轮尚未接入 |
+| 17 | 语义冲突有仲裁 | 「窗口 + 工具 + 选中 + 控件」四级派发 | ✅ 滚轮走四级派发（⇧ 缩放 / ⌃ 透明度 / 选中改这一条 / 工具改参数 / 空手调放大镜） |
 | 18 | 危险操作二次确认 | 关闭多张贴图前确认 | ⚠️ 贴图已有部分 |
 | 19 | 可恢复的破坏性操作 | 关闭贴图入恢复池 | ✅ |
 | 20 | 单位可切 px / pt | 专业版 px/dip 切换 | ❌ 一律点数 |
 
+## 六之二、落地进度（第 0 + 1 批已完成）
+
+| 能力 | 状态 | 落点 |
+|---|---|---|
+| 线宽连续（去吸附） | 已落地 | `SnipNumericStepper` 统一步进；`SnipLineWidthStepper.step` 降级为面板快捷项的取值 |
+| 调完落偏好 / 改选中图形 | 已落地 | 写入只有 `SnipNumericController.write` 一条路径 → `toolBarDidChangeStyle`（回灌 + `onStylePersist`） |
+| 滚轮三档意图 | 已落地 | `SnipNumericIntent`：⌘ ×8、⌥ ×0.5、默认 ×1 |
+| 滚轮归一化 | 已落地 | `SnipScrollStepper`：触控板够阈值才走、惯性尾不消费、单次最多 8 步 |
+| 数值读数 HUD | 已落地 | `SnipNumericController+HUD` + `SnipNumericHUDView`，1.2s 淡出、贴光标避让 |
+| 精确输入 | 已落地 | 样式盘末格「输入数值…」+ `SnipNumericInput` |
+| 双击复位 | 已落地 | 工具条数值按钮（线宽 / 字号 / 透明度）双击回默认值 |
+| 工具条按钮上滚轮 | 已落地 | `SnipBarNumericInteraction`：线宽按钮 = 线宽/字号、颜色按钮 = 透明度 |
+| 透明度 3 档 → 5 档 | 已落地 | `SnipToolBarView.alphas = [1.0, 0.75, 0.5, 0.25, 0.0]`，圆点垫棋盘底 |
+| 马赛克粒度 / 模糊强度 | 已落地 | `SnipEffectStyle` 带在每条标注上；设置页两行 + 选中对应工具时滚轮可调 |
+| 放大镜倍率 | 已落地 | `SnipMagnifierDrawing.span(for:)`；选区阶段滚轮 2–16× |
+| ⇧ + 滚轮缩放选中图形 | 已落地 | `SnipAnnotationScaler`（中心为锚、轨迹类不参与） |
+| 拖拽中按空格切移动选区 | 已落地 | `SnipSelectionState.enterSpaceMove` / `spaceMove` / `exitSpaceMove`；空格在拖拽期不再切工具条 |
+
+**仍未做**（第 2/3 批）：光标图案跟笔宽变化、一次手势合并撤销、操作提示浮层、滚轮总开关、按形状记忆样式、多笔尖槽、数值预设命名、px/pt 双单位、选区手柄阈值可配。
+
 ## 七、落地批次（每批独立可验收）
 
-**第 0 批 · 地基（不动交互外观，先把「任意」变成可能）**
+**第 0 批 · 地基 —— ✅ 已完成**
 - `SnipLineWidthStepper.step` 改为连续步进（去吸附，档位表降级为面板快捷项）；
 - 修 `stepLineWidth` 不落偏好、不改选中标注（缺口 6）；
 - 落 §5.3～§5.5 的五个纯函数与 HUD 骨架；
 - 单测：范围夹取、步长 ×1/×8/×0.5、滚轮余量累加、修饰键唯一语义断言。
 - 验收：`swift run TestRunner` 全绿 + 离屏快照对比（工具条、面板、选区外观零变化）。
 
-**第 1 批 · 任意可调（用户点名的那件事）**
+**第 1 批 · 任意可调 —— ✅ 已完成**
 - 线宽 / 字号 / 透明度 接上「滚轮 + ⇧ + ⌥ + 输入框 + 双击复位 + HUD」；
 - 透明度 3 格扩到 5 格（0/25/50/75/100%），取色板 alpha 条保留；
 - 马赛克粒度、模糊强度、放大镜倍率三个死值接上入口（选中对应工具时滚轮改）。
 - 验收：每个参数走一遍四通道，HUD 文案与工具条常显一致；录屏取证。
 
-**第 2 批 · 人性化交互**
+**第 2 批 · 人性化交互 —— 部分完成（⇧ 缩放 / 空格移动已落地；其余待做）**
 - ⇧ + 滚轮缩放选中矩形/椭圆（对齐 Snipaste v2.11）；
 - 空格拖拽中切移动选区；
 - 一次手势合并撤销；

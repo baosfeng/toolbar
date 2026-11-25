@@ -149,11 +149,15 @@ func runSnipAnnotationCustomizationTests() {
 
     // 画笔盘：线宽档之间插入了两个「−/+」，索引不能错位
     let stylePanel = SnipPanelContent.styles(widths: [2, 4], dashes: [false, true], alphas: [1])
-    assertEqual(stylePanel.itemCount, 2 + SnipPanelContent.stylesStepCount + 2 + 1, "画笔盘条目数")
+    assertEqual(stylePanel.itemCount,
+                2 + SnipPanelContent.stylesStepCount + 2 + 1 + SnipPanelContent.numericInputSlotCount,
+                "画笔盘条目数（档位 + −/+ + 线型 + 透明度 + 输入）")
     assertEqual(stylePanel.itemTitle(at: 2), "线宽 −1", "档位之后第一格是减一")
     assertEqual(stylePanel.itemTitle(at: 3), "线宽 +1", "第二格是加一")
     assertEqual(stylePanel.itemTitle(at: 4), "实线", "线型排在加减之后")
     assertEqual(stylePanel.itemTitle(at: 6), "不透明", "透明度排在最后")
+    assertEqual(stylePanel.itemTitle(at: 7), "输入数值…", "末格是精确输入")
+    assertEqual(stylePanel.numericInputSlotIndex, 7, "输入格索引 = 条目数 - 1")
 
     print("✅ 标注自定义测试通过")
 }

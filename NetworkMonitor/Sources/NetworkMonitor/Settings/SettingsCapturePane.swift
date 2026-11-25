@@ -47,7 +47,15 @@ final class SettingsCapturePane: SettingsPaneView, SettingsNotificationEventHost
     var widthValueLabel: NSTextField?
     var dashedSwitch: NSSwitch?
     var fontSizeControl: NSStepper?
+    /// 马赛克粒度步进器（像素块边长）
+    var mosaicControl: NSStepper?
+    /// 模糊强度步进器（高斯半径）
+    var blurControl: NSStepper?
     var fontSizeValueLabel: NSTextField?
+    /// 马赛克粒度的数值文本
+    var mosaicValueLabel: NSTextField?
+    /// 模糊强度的数值文本
+    var blurValueLabel: NSTextField?
     var colorButtons: [NSButton] = []
     private var hotKeyRecorders: [SnipHotKeyAction: HotKeyRecorderView] = [:]
 
