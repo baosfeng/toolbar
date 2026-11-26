@@ -18,6 +18,7 @@ func runPaneSuites() {
     runSettingsDirectoryTests()
     runMenuPanelMetricsTests()
     runPaneValueFormattingTests()
+    runNetworkHeroLayoutTests()  // 网络页 Hero：折线吃满整行宽度（改前写死 84pt + 中间空白）
     runPaneCardLayoutTests()
     runPaneValueSizingTests()
     runMenuBarDisplayTests()

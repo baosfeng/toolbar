@@ -81,6 +81,11 @@ enum MenuPanelSnapshot {
         for tab in MenuPanelTab.allCases {
             let panel = makeMenuPanel(tab: tab, items: items, tokenSnapshot: tokenSnapshot)
             let needed = panel.desiredContentHeight
+            // 需求高度进日志：改版式时用它核「是否顶出 520pt 外框滚动条」，
+            // 以及各页内容预算（PaneHeightBudget）到底用掉多少
+            // 探针输出走 stdout：logger.info 进 OSLog，命令行取不到（取证通道与 PinDragProbe 同待遇）
+            print("🔎 快照 \(tab.fileNameSuffix) 页需求高度=\(Int(needed.rounded(.up)))pt"
+                + "（预算 \(Int(PaneHeightBudget.paneBudget(hasHeader: true, hasBand: true)))pt）")
             let height = min(max(needed, 180), MenuPanelStyle.maxHeight)
             let size = NSSize(width: MenuPanelStyle.panelWidth, height: height.rounded(.up))
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
@@ -88,6 +93,17 @@ enum MenuPanelSnapshot {
                 let url = directory.appendingPathComponent(
                     "menu-\(tab.fileNameSuffix)\(unitFileSuffix)\(appearanceFileSuffix)-\(suffix).png")
                 render(view: panel, size: size, appearanceName: appearance, to: url)
+            }
+            // 折线实测宽度取证：改前两条各写死 84pt、中间留大块空白，
+            // 改后应从文本列右侧一路铺到内容区右边界。render 内部已 layout 完成，
+            // 出栈后 frame 仍在，直接读即可（不需再进渲染闭包）。
+            if tab == .network {
+                let network = panel.networkPane
+                let down = network.downSparkline.frame.width
+                let up = network.upSparkline.frame.width
+                print("🔎 网络页折线实测宽度：下行 \(Int(down.rounded()))pt / 上行 \(Int(up.rounded()))pt"
+                    + "（内容宽 \(Int(MenuPanelStyle.contentWidth))pt，"
+                    + "折线起点 x=\(Int(network.downSparkline.frame.minX.rounded()))pt）")
             }
             // 系统页内容高于 520pt 视口：另出一张「滚到底」，让底部状态带可核验
             if tab == .system, needed > MenuPanelStyle.maxHeight {

@@ -55,6 +55,7 @@ func runSnipSuites() {
     runPinMenuOrderMoveTests()  // 贴图菜单顺序：分隔线落位 / 上下移动 / 偏好读写不写回
     runPinDefaultAlphaTests()  // 贴图默认透明度：设置页写入 → 新贴图窗生效（缺键 1 / 越界钳制）
     runPinDragSessionTests()
+    runPinScrollAdjustmentTests()  // 滚轮换算：拖动/惯性闸 + 按设备步长 + 钳制
     runPinZoomAnchorTests()  // 滚轮缩放以鼠标为锚：锚点归一化位置不变 / 缺省锚点仍是窗口中心
     runPinBoardBackgroundTests()  // 棋盘底：含 alpha 才画 + 开关缺键即关
     runSnipFeatureBoundaryTests()  // 截图服务层拆成 NetworkMonitorFeatureSnip：端口注入 / 写盘与选档 / 热键归一化 / 源码边界

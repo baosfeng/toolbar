@@ -3,8 +3,8 @@ Clipboard/ClipboardCardView 802 6
 Clipboard/ClipboardPanelController 611 6
 Clipboard/ClipboardPanelView 542 2
 Debug/DrawnUIProbe 415 3
-Debug/MenuPanelSnapshot 611 6
-Debug/PinDragProbe 388 3
+Debug/MenuPanelSnapshot 627 6
+Debug/PinDragProbe 393 3
 Debug/TokenPaneSnapshot 1029 8
 Discovery/UdpDiscoveryService 425 2
 DrawnUI/DrawnRowList 540 2
@@ -13,7 +13,7 @@ Harness/HarnessUsageService 377 2
 MenuPanel/BillingDetailPaneView 326 2
 MenuPanel/MenuPanelController 971 7
 MenuPanel/MenuPanelView 834 7
-MenuPanel/NetworkPaneView 561 3
+MenuPanel/NetworkPaneView 599 3
 MenuPanel/SystemDetailPaneView 831 6
 MenuPanel/SystemPaneView 622 4
 MenuPanel/TokenDetailPages 571 4
@@ -28,7 +28,7 @@ NetworkMonitorFeatureClipboard/PasteboardWatcher 466 3
 NetworkMonitorFeatureSmoothScroll/ScrollSmoothingEngine 507 3
 NetworkMonitorFeatureSystemMetrics/SystemMonitor 370 2
 Numeric/SnipNumericController 369 2
-Pin/PinWindow 361 2
+Pin/PinWindow 425 3
 Service/TransferService 1395 8
 Settings/SettingsCapturePane 734 4
 Settings/SettingsClipboardPane 607 4
@@ -42,6 +42,6 @@ Settings/SettingsWindow 583 3
 Snip/SnipController 1324 7
 Snip/SnipOverlayView 1418 7
 Snip/SnipToolBarView 455 3
-TestRunner/TestSuites 387 8
+TestRunner/TestSuites 389 8
 Token/TokenDerive 705 4
 Transfer/TransferController 383 2
