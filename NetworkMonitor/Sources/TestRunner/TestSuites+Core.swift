@@ -41,6 +41,7 @@ func runCoreSuites() {
     runUpdateInstallFlowTests()  // 安装流程：沙箱替换 + 六条失败回滚（不碰 /Applications）
     runUpdateInstallProgressTests() // 安装进度：节流 / 滑动窗口速度 / 阶段清单四态 / 详情文案
     runUpdateManifestTests()     // 静态清单：schema / 下载目标 / 包形态 / 校验和
+    runUpdatePlatformPackageTests() // 清单 platforms 表：按架构取包 / 缺架构回落 universal
     runDatabaseReadQueueTests()
     runDatabaseQueueWaitTests()
     runLatestRequestGateTests()

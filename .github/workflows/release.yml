@@ -1,13 +1,18 @@
 name: Release
 
-# 发版产物只有三个文件：
-#   Yilan-<版本>.dmg     —— universal（arm64 + x86_64 双架构），挂载后是「一览.app」
-#   SHA256SUMS.txt       —— dmg 的校验和（shasum -a 256 -c 可验）
-#   update.json          —— 自动更新器的静态更新通道（见 Scripts/make-update-manifest.py）
+# 发版产物是五个文件（三个 dmg + 校验和 + 更新清单）：
+#   Yilan-<版本>.dmg           —— universal（arm64 + x86_64 双架构），默认给不知道芯片的人
+#   Yilan-<版本>-arm64.dmg     —— 只含 arm64，体积约为 universal 的一半
+#   Yilan-<版本>-x86_64.dmg    —— 只含 x86_64，Intel 用户不必下整包
+#   SHA256SUMS.txt             —— 三个 dmg 的校验和（shasum -a 256 -c 可验）
+#   update.json                —— 自动更新器的静态更新通道（见 Scripts/make-update-manifest.py）
 #
-# 为什么不再发 zip：zip 解压出来是构建目录里的包名「一览-arm64.app」，用户拖进
-# 「应用程序」后包名就带上了架构后缀 —— 这正是用户反馈的问题。主流 macOS 项目
-# （Stats / IINA / Rectangle）都只发一个不带架构后缀的 dmg。
+# 三个 dmg 挂载后都是「一览.app」：包名进了「应用程序」就是最终名字，用户不该看到架构信息。
+# 为什么不再发 zip：zip 解压出来是构建目录里的包名「一览-arm64.app」，拖进「应用程序」
+# 就带上了架构后缀 —— 这正是用户反馈的问题，localhost 预览与 CI 都改走 make-dmg.sh。
+#
+# 为什么还要单架构包：universal 装到哪台机器上都对，但每个用户都白下了一半别人的架构；
+# 更新器按清单 platforms 表挑自己那一片，下载体积直接减半。
 #
 # 为什么发版要两台 runner：随包携带的 zstd / libzstd 是 Homebrew 二进制（单架构），
 # 必须在各自的架构机器上打出来，再合并成 universal；单机合并拼不出双架构。
@@ -118,7 +123,7 @@ jobs:
           if-no-files-found: error
 
   universal:
-    name: Universal dmg
+    name: Universal + per-arch dmgs
     needs: package
     runs-on: macos-26
     timeout-minutes: 20
@@ -142,10 +147,13 @@ jobs:
         with:
           path: artifacts
 
-      # 合并 + 重新签名 + 打 dmg（与本地预览共用同一支脚本，签名实现见 lib-signing.sh）
-      # 合并会破坏两个单架构包的签名，这里重新签一次 —— 同样是发布产物，
-      # 同样要求证书（否则 universal dmg 会盖过两个单架构包，又变回 ad-hoc）
-      - name: Merge to universal and build dmg
+      # 合并 + 重新签名 + 打三个 dmg（universal 给手动下载，两个单架构给自动更新器按架构分流）
+      #
+      # 合并会破坏两个单架构包已有的签名，这里重新签一次 —— 同样是发布产物，
+      # 同样要求证书（REQUIRE_SIGNING_CERT=1：缺证书就红，不许悄悄发 ad-hoc）。
+      # 单架构包直接从解包出来的两个 app 打，不重新构建：合并只是积木，
+      # 两份原件本来就是各自架构的完整包，重打一遍 dmg 比走第二遍构建便宜得多
+      - name: Merge to universal and build dmgs
         env:
           SIGN_IDENTITY: ${{ secrets.SIGNING_IDENTITY || 'NetworkMonitor Local Signing' }}
           REQUIRE_SIGNING_CERT: "1"
@@ -161,6 +169,12 @@ jobs:
             --x86_64 "$PWD/dist/一览-x86_64.app" \
             --out "$PWD/dist/一览.app" \
             --dmg "$PWD/dist/Yilan-${VERSION}.dmg"
+          # 卷名后缀只影响侧栏显示（同时挂三个卷时不撞名），不改变包内名字
+          for arch in arm64 x86_64; do
+            bash NetworkMonitor/Scripts/make-dmg.sh \
+              "dist/一览-${arch}.app" "dist/Yilan-${VERSION}-${arch}.dmg" "$arch"
+          done
+          ls -lh dist/*.dmg
 
       # 合并自证：主可执行文件与随包资源都必须是双架构
       # （zstd / libzstd 单架构时 Intel 用户的 Token 页会静默降级，不能放过）
@@ -194,8 +208,43 @@ jobs:
           test -L "$mountpoint/Applications" || { echo "dmg 里缺少「应用程序」快捷方式" >&2; exit 1; }
           actual=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
             "$mountpoint/一览.app/Contents/Info.plist")
-          echo "dmg 内版本：$actual（期望 ${VERSION}）"
+          echo "dmg 内版本：${actual}（期望 ${VERSION}）"
           [ "$actual" = "${VERSION}" ] || { echo "dmg 内版本与 tag 不一致" >&2; exit 1; }
+
+      # 单架构包自证的三件事，任一错都必须是红而不是发出去：
+      # 1) 挂载后是「一览.app」而不是「一览-arm64.app」（用户反馈过的老问题，只能靠实挂验证）；
+      # 2) 版本对得上 tag（错版本装上去更新器会拒装或反复提示更新）；
+      # 3) lipo -archs 只含本架构 —— 打包脚本若回落到「本机构建」，Intel 包会悄悄变成 arm64 包
+      - name: Verify per-arch dmgs
+        run: |
+          set -euo pipefail
+          source NetworkMonitor/version.env
+          # 中途 exit 1 时也要卸载：残留挂载会占着设备，后面的 dmg 挂不上
+          mounted=""
+          cleanup() {
+            [ -z "$mounted" ] || hdiutil detach "$mounted" -quiet >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          for arch in arm64 x86_64; do
+            dmg="dist/Yilan-${VERSION}-${arch}.dmg"
+            echo "=== $dmg"
+            mountpoint="$(mktemp -d)/mnt"
+            mkdir -p "$mountpoint"
+            hdiutil attach -nobrowse -readonly -noautoopen -quiet -mountpoint "$mountpoint" "$dmg"
+            mounted="$mountpoint"
+            test -d "$mountpoint/一览.app" || { echo "$dmg 里没有「一览.app」（包名不能带架构后缀）" >&2; exit 1; }
+            test -L "$mountpoint/Applications" || { echo "$dmg 里缺少「应用程序」快捷方式" >&2; exit 1; }
+            actual=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+              "$mountpoint/一览.app/Contents/Info.plist")
+            echo "包内版本：${actual}（期望 ${VERSION}）"
+            [ "$actual" = "${VERSION}" ] || { echo "$dmg 内版本与 tag 不一致" >&2; exit 1; }
+            bin="$mountpoint/一览.app/Contents/MacOS/一览"
+            archs=$(lipo -archs "$bin")
+            echo "包内可执行架构：${archs}（期望只含 ${arch}）"
+            [ "$archs" = "$arch" ] || { echo "${dmg} 的架构不是纯 ${arch}（实际 ${archs}）" >&2; exit 1; }
+            hdiutil detach "$mountpoint" -quiet
+            mounted=""
+          done
 
       - name: Checksums
         working-directory: dist
@@ -245,7 +294,7 @@ jobs:
         run: |
           set -uo pipefail
           notes_file="release-notes.md"
-          printf '%s\n\n' '**下载**：唯一产物 `Yilan-<版本>.dmg` 是 universal 包（Apple Silicon 与 Intel 同一份），挂载后把「一览」拖进「应用程序」即可。应用为本地签名（未公证），首次打开请右键「打开」。' > "$notes_file"
+          printf '%s\n\n' '**下载**：`Yilan-<版本>.dmg` 是 universal 包（Apple Silicon 与 Intel 同一份，拿不准就选它）；`Yilan-<版本>-arm64.dmg` / `Yilan-<版本>-x86_64.dmg` 是单架构包，体积约一半。三个包挂载后都是「一览.app」，拖进「应用程序」即可。应用为本地签名（未公证），首次打开请右键「打开」。' > "$notes_file"
           if bash NetworkMonitor/Scripts/generate-release-notes.sh --tag "$TAG" >> "$notes_file"; then
             echo "::notice::release notes 已由脚本生成"
           else
@@ -260,16 +309,21 @@ jobs:
           echo "----------------------------"
 
       # update.json 与发布说明必须同源：用户看到的「新版本说明」就是 Release 正文那段，
-      # 更新器读到的也是这段，正文改一次两边一起变
+      # 更新器读到的也是这段，正文改一次两边一起变。
+      #
+      # 三个 dmg 按名字显式点名而不是 ls 取第一个：清单里 asset / platforms 各自关乎哪一份包，
+      # 名字挑错就是「Intel 用户下到 arm64 包」，生成器只认 Yilan-<版本>[-<arch>].dmg 的严格形状
       - name: Generate update manifest
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          dmg="$(ls artifacts/Yilan-*.dmg | head -1)"
+          version="${TAG#v}"
           python3 NetworkMonitor/Scripts/make-update-manifest.py \
             --tag "$TAG" \
-            --dmg "$dmg" \
+            --dmg "artifacts/Yilan-${version}.dmg" \
+            --platform-dmg "arm64=artifacts/Yilan-${version}-arm64.dmg" \
+            --platform-dmg "x86_64=artifacts/Yilan-${version}-x86_64.dmg" \
             --notes-file release-notes.md \
             --out artifacts/update.json \
             --repo "${GITHUB_REPOSITORY}" \
@@ -282,7 +336,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          name: 一览 ${{ inputs.tag || github.ref_name }} · Apple Silicon + Intel 通用包
+          name: 一览 ${{ inputs.tag || github.ref_name }} · 通用包 + Apple Silicon / Intel 单架构包
           body_path: release-notes.md
           files: |
             artifacts/*.dmg

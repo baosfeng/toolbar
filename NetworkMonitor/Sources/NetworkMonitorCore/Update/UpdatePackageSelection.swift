@@ -2,10 +2,11 @@ import Foundation
 
 // MARK: - 安装架构
 
-/// 安装架构 —— 只用于「旧发布回退」时挑 zip，新发布是 universal 单一包，不需要选
+/// 安装架构 —— 决定「这次下哪一个包」
 ///
-/// 为什么留着它：1.29 及更早的发布只有 Yilan-<arch>.app.zip 两个单架构包，
-/// 用户从这些版本升级到第一个 universal 版本时，安装器仍要能按架构挑对包。
+/// 两处都要它：
+/// - 1.32 起的清单按架构各给一个单架构 dmg（少下一半体积）；
+/// - 1.29 及更早的发布只有 Yilan-<arch>.app.zip 两个单架构 zip，旧用户升级时要能挑对。
 public enum UpdateArchitecture: String, Equatable, Sendable, CaseIterable {
     /// Apple Silicon
     case arm64
@@ -40,9 +41,11 @@ public enum UpdateAssetSelector {
 
 /// 安装目标 —— 到底要下载哪一个文件
 ///
-/// 三种来源收敛成一种形状：
-/// - 静态清单（新发布）：唯一 universal dmg，带 SHA-256；
-/// - 旧发布 API：按架构挑出的 zip，没有校验和（GitHub 当时不返回 digest）。
+/// 四种来源收敛成一种形状：
+/// - 静态清单 + 本机架构条目（1.32 起）：单架构 dmg，带 SHA-256；
+/// - 静态清单其他情况：universal dmg，带 SHA-256；
+/// - 旧发布 API：按架构挑出的 zip，没有校验和（GitHub 当时不返回 digest）；
+/// - API 回退里已出现 dmg 的发布（1.30 / 1.31）：那个 dmg，GitHub 的 digest 当校验和。
 public struct UpdatePackageTarget: Equatable, Sendable {
     /// 资产名（Yilan-1.30.0.dmg / Yilan-arm64.app.zip）
     public let name: String
@@ -86,10 +89,10 @@ public enum UpdatePackageKind: String, Equatable, Sendable {
 /// 从发布里定位要下载的安装包 —— 名字 + 下载地址都有才算可用
 public enum UpdatePackageLocator {
 
-    /// 清单通道优先；清单不可用（回退 API）时按「dmg 优先，再按架构选旧 zip」取包
+    /// 清单通道优先（本机架构那份 → universal 那份）；清单不可用（回退 API）时按「dmg 优先，再按架构选旧 zip」取包
     public static func target(for release: UpdateRelease,
                               architecture: UpdateArchitecture) throws -> UpdatePackageTarget {
-        if let artifact = release.artifact {
+        if let artifact = release.artifact(for: architecture) {
             return UpdatePackageTarget(name: artifact.name,
                                        url: artifact.url,
                                        sha256: artifact.sha256,

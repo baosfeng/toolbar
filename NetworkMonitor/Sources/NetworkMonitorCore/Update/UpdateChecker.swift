@@ -17,20 +17,31 @@ public struct UpdateRelease: Equatable, Sendable {
     public let publishedAt: Date?
     /// 附件清单（旧发布的安装包 zip；按架构各一个）
     public let assets: [UpdateAsset]
-    /// 静态清单给出的唯一安装包（universal dmg）
+    /// 静态清单给出的 universal 安装包
     ///
     /// 新发布都走清单通道，这里必有值；为 nil 只可能来自「旧发布回退 API」，
     /// 那时按本机架构从 assets 里挑 zip（兼容 1.29 及更早的发布）。
     public let artifact: UpdateArtifact?
+    /// 清单按架构给出的单包（1.32 起才有；空 = 这份清单只有 universal 包）
+    public let platformArtifacts: [UpdateArchitecture: UpdateArtifact]
 
     public init(tagName: String, htmlURL: URL?, notes: String, publishedAt: Date?,
-                assets: [UpdateAsset] = [], artifact: UpdateArtifact? = nil) {
+                assets: [UpdateAsset] = [], artifact: UpdateArtifact? = nil,
+                platformArtifacts: [UpdateArchitecture: UpdateArtifact] = [:]) {
         self.tagName = tagName
         self.htmlURL = htmlURL
         self.notes = notes
         self.publishedAt = publishedAt
         self.assets = assets
         self.artifact = artifact
+        self.platformArtifacts = platformArtifacts
+    }
+
+    /// 本机该下的包：优先清单里本架构那份，其次 universal 那份（nil = 只能走 assets）
+    ///
+    /// 回落而不是报错：清单漏一个架构键的代价不该是「这批用户彻底升不了级」。
+    public func artifact(for architecture: UpdateArchitecture) -> UpdateArtifact? {
+        platformArtifacts[architecture] ?? artifact
     }
 
     /// 资产名清单（选择本机架构包 / 报错文案用）

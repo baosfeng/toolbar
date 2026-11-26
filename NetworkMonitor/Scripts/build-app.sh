@@ -6,13 +6,15 @@
 # - 默认：按本机架构构建，产物 dist/<APP_BUNDLE_NAME>.app，构建完部署到 /Applications；
 # - ARCH=arm64|x86_64：指定架构构建，产物 dist/<APP_BUNDLE_NAME>-<arch>.app，不部署
 #   （只用于交叉验证与排查，CI 的测试矩阵走这条）；
-# - UNIVERSAL=1：**发版标准路径**。两个架构各用独立 scratch 并行构建，再用 lipo 合并成
-#   一个 dist/<APP_BUNDLE_NAME>.app（单包双架构）。主流 macOS 开源项目都只发这一种包，
-#   用户不需要判断自己是什么芯片。
+# - UNIVERSAL=1：本机预览 universal 包。两个架构各用独立 scratch 并行构建，再用 lipo 合并成
+#   一个 dist/<APP_BUNDLE_NAME>.app（单包双架构）。**正式发版不走这条**：随包携带的 zstd /
+#   libzstd 是本机 Homebrew 单架构二进制，单机合并拼不出双架构，发版由 CI 两台 runner 各打
+#   一个单架构包（见 .github/workflows/release.yml）。
 #
-# 发版产物：UNIVERSAL=1 MAKE_DMG=1 在 universal 包之上再产出 dist/Yilan-<版本>.dmg
+# 预览产物：UNIVERSAL=1 MAKE_DMG=1 在 universal 包之上再产出 dist/Yilan-<版本>.dmg
 # （挂载后是「一览.app」+ 拖到「应用程序」的快捷方式；不再发 zip——zip 解压出来的包名
-# 会带上架构后缀，用户看到的就成了「一览-arm64.app」）。
+# 会带上架构后缀，用户看到的就成了「一览-arm64.app」）。正式发版另外还出两个单架构 dmg，
+# 供自动更新器按架构分流，三份都由 Scripts/make-dmg.sh 打。
 #
 # 注意：下面两条构建命令都追加了 --build-system 参数（取值 native）。本机只装了 Command Line Tools
 # （无 Xcode.app），默认的 swiftbuild/XCBuild 后端在 session 初始化阶段就会失败
