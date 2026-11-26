@@ -12,10 +12,18 @@ private final class PermissionStateStubProvider: SystemPermissionProviding {
 
     private(set) var snapshot: SystemPermissionSnapshot
     var appPath: String { "/Applications/\(AppIdentity.displayName).app" }
+    /// 取证用的签名提示（nil = 不显示提示带；要出「签名已变化」那张图时传真值）
+    var signingNotice: SigningIdentityNotice?
+    /// 取证用的签名形态（nil = 按 ad-hoc 口径）
+    var isCertificateSigned: Bool?
     private var observers: [UUID: (SystemPermissionSnapshot) -> Void] = [:]
 
-    init(snapshot: SystemPermissionSnapshot) {
+    init(snapshot: SystemPermissionSnapshot,
+         signingNotice: SigningIdentityNotice? = nil,
+         isCertificateSigned: Bool? = nil) {
         self.snapshot = snapshot
+        self.signingNotice = signingNotice
+        self.isCertificateSigned = isCertificateSigned
     }
 
     @discardableResult func refresh() -> SystemPermissionSnapshot { snapshot }

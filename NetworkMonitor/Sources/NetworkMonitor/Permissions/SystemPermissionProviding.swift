@@ -16,6 +16,14 @@ protocol SystemPermissionProviding: AnyObject {
     /// 应用包绝对路径（引导文案与 Finder 定位共用）
     var appPath: String { get }
 
+    /// 签名身份变化提示（nil = 首启动 / 没变化，页面据此决定要不要显示提示带）
+    ///
+    /// 为什么挂在权限协议上而不是单独一个服务：提示带要的正是「签名变了 + 哪些权限现在没授权」
+    /// 这一对信息，拆成两个来源必然出现「有提示没清单」或反之。
+    var signingNotice: SigningIdentityNotice? { get }
+    /// 当前包是否证书签名（未读到签名身份时为 nil，调用方按 ad-hoc 口径回退）
+    var isCertificateSigned: Bool? { get }
+
     /// 重新读取五类权限（静默，不弹系统框）
     @discardableResult
     func refresh() -> SystemPermissionSnapshot

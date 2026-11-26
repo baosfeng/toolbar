@@ -25,11 +25,19 @@ final class SystemPermissionCenter {
     private(set) var snapshot: SystemPermissionSnapshot = .allUnknown
     /// 快照变化回调（链路据此同步副作用并通知 UI）
     var onSnapshotChanged: ((SystemPermissionSnapshot) -> Void)?
+    /// 签名身份变化提示回调（权限页据此决定提示带显隐；首启动不触发）
+    var onSigningNoticeChanged: ((SigningIdentityNotice?) -> Void)?
 
     private let captureService: any SnipCaptureServicing
     private let notifications: any NotificationServicing
     private let launchAtStartup: LaunchAtStartupService
     private let logger: LoggingService
+    /// 上次启动的签名身份（判「是不是升级换身份导致授权失配」的唯一历史来源）
+    private let signingHistory: SigningIdentityPreferences
+    /// 本次启动读到的签名身份（nil = 读不到，此时不比较、不提示）
+    private(set) var signingIdentity: SigningIdentity?
+    /// 签名身份变化提示（只在启动期比对成功且真变了时非 nil）
+    private(set) var signingNotice: SigningIdentityNotice?
     /// 应用包路径（引导文案与「在 Finder 中显示」共用）
     let appPath: String
     /// 登录项最近一次注册失败的回滚说明（显示在卡下警示句里）
@@ -41,11 +49,13 @@ final class SystemPermissionCenter {
          notifications: any NotificationServicing,
          launchAtStartup: LaunchAtStartupService = LaunchAtStartupService(),
          appPath: String = Bundle.main.bundleURL.path,
+         signingHistory: SigningIdentityPreferences = SigningIdentityPreferences(storage: AppContext.shared.storage),
          logger: LoggingService = AppContext.shared.logger) {
         self.captureService = captureService
         self.notifications = notifications
         self.launchAtStartup = launchAtStartup
         self.appPath = appPath
+        self.signingHistory = signingHistory
         self.logger = logger
         self.notificationState = SystemPermissionSnapshot
             .notificationState(from: notifications.authorizationState)
@@ -67,6 +77,28 @@ final class SystemPermissionCenter {
         let snapshot = readSnapshot()
         publish(snapshot)
         return snapshot
+    }
+
+    /// 读当前签名身份并与上次记录比对（启动期调用一次，幂等）
+    ///
+    /// 为什么只在启动期做：签名身份在一次进程生命周期里不会变（TCC 也是按进程启动时
+    /// 读到的 CDHash 判的），每次刷新都读一遍 SecCode 纯属浪费；而「变了」这件事
+    /// 只在「新包第一次启动」那一瞬有意义。
+    ///
+    /// 读不到签名身份（未打包的 swift run）时什么都不做：不写历史、不造提示，
+    /// 否则下次启动会把「读不到」当成一次真实变化。
+    func reconcileSigningIdentity() {
+        guard let identity = SigningIdentityReader.current(logger: logger) else { return }
+        signingIdentity = identity
+        signingNotice = signingHistory.reconcile(current: identity)
+        if let notice = signingNotice {
+            logger.warning("签名身份已变化（\(notice.identity.kind.rawValue)）："
+                           + "已授权项可能全部失配，需在系统权限页重新确认")
+        } else {
+            logger.info("签名身份：\(identity.kind.rawValue)（与上次记录一致或首启动）")
+        }
+        onSigningNoticeChanged?(signingNotice)
+        refresh()
     }
 
     /// 检测中 → 异步回填：先把五行置「检测中」，再等通知授权回调回来填真值

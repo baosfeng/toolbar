@@ -15,6 +15,11 @@ import NetworkMonitorUI
 final class SettingsAboutPane: SettingsPaneView {
 
     private let updateCheck: UpdateCheckService
+    /// 当前包是否证书签名（由组合根从权限链路读；nil = 读不到，按 ad-hoc 口径保守回退）
+    ///
+    /// 为什么由外部传：签名身份的唯一读取点在权限中心，关于页自己再读一次就会出现
+    /// 「系统权限页说证书签名、关于页说 ad-hoc」这种两处不一致。
+    private let isCertificateSigned: Bool?
 
     // MARK: 应用卡
 
@@ -42,8 +47,9 @@ final class SettingsAboutPane: SettingsPaneView {
     private let checkButton = NSButton()
     private let releaseButton = NSButton()
 
-    init(updateCheck: UpdateCheckService) {
+    init(updateCheck: UpdateCheckService, isCertificateSigned: Bool? = nil) {
         self.updateCheck = updateCheck
+        self.isCertificateSigned = isCertificateSigned
         super.init(section: .about)
     }
 
@@ -114,7 +120,9 @@ final class SettingsAboutPane: SettingsPaneView {
         installCard.autoSwitch.target = self
         installCard.autoSwitch.action = #selector(toggleAutoInstall)
         page.addCard(installCard.card, sectionTitle: "安装")
-        page.addNote("安装会把新版本下载到临时目录、校验版本后替换当前应用包并重启。" + "\(AppIdentity.displayName) 当前使用 ad-hoc 签名：替换后 cdhash 变化，" + "屏幕录制 / 辅助功能 / 输入监控与登录项可能需要重新授权。")
+        // 文案按实际签名态分叉：证书签名下「替换即失权」这句是错的（DR 认证书、不认 cdhash），
+        // 照抄 ad-hoc 口径会让用户以为每次升级都要重授权
+        page.addNote(SigningIdentityText.installNote(isCertificateSigned: isCertificateSigned ?? false))
         refreshInstallSection()
     }
 

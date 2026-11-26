@@ -47,6 +47,9 @@ final class SystemPermissionChain: SystemPermissionProviding {
 
     var snapshot: SystemPermissionSnapshot { center.snapshot }
     var appPath: String { center.appPath }
+    var signingNotice: SigningIdentityNotice? { center.signingNotice }
+    /// 读不到签名身份时返回 nil：调用方按 ad-hoc 口径回退（保守写法，不谎称「证书签名」）
+    var isCertificateSigned: Bool? { center.signingIdentity?.isCertificateSigned }
 
     // MARK: 动作
 
@@ -114,6 +117,9 @@ final class SystemPermissionChain: SystemPermissionProviding {
     /// 登记只是 best-effort：实测本应用已在 LaunchServices 库里、系统设置清单里也有它，
     /// 这里补一次是为了「新机器 / 手工拷包」那种确实没登记的场景，失败只记日志。
     func bootstrap() {
+        // 先比对签名身份再读权限：提示带要的是「签名变了」与「哪些权限现在没授权」的同一份快照，
+        // 顺序反了会先画一帧没有提示带的页面，用户点进系统权限页时反而看不到
+        center.reconcileSigningIdentity()
         let snapshot = refresh()
         logger.info("系统权限快照：\(snapshot.summaryLabel)")
         LaunchServicesRegistrar.registerInBackground(appPath: center.appPath, logger: logger)

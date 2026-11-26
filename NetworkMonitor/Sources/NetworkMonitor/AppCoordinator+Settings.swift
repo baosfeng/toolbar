@@ -91,7 +91,7 @@ extension AppCoordinator {
             guard let self, let updateCheck = self.updateCheck else {
                 return Self.unavailable(.about, message: "更新检查服务尚未就绪。")
             }
-            return SettingsAboutPane(updateCheck: updateCheck)
+            return SettingsAboutPane(updateCheck: updateCheck, isCertificateSigned: self.permissionChain?.isCertificateSigned)
         })
     }
 
