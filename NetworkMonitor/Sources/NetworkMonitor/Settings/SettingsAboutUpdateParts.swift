@@ -1,4 +1,5 @@
 import AppKit
+import NetworkMonitorCore
 import NetworkMonitorDesign
 import NetworkMonitorUI
 
@@ -61,6 +62,8 @@ final class SettingsAboutInstallCard: NSView {
 
     /// 标题行 / 安装行 / 说明行挂在这张卡上（外层容器只为把它与页面宽度对齐）
     let card = SettingsCardView()
+    /// 进度区（idle 时整块隐藏，不占高度）
+    let progressRow = SettingsAboutProgressRow()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -107,6 +110,8 @@ final class SettingsAboutInstallCard: NSView {
         ])
 
         card.addRow(statusRow)
+        // 进度区是「安装」行的延续（同一件事的量化），不画分隔线
+        card.addContinuationRow(progressRow)
         card.addRow(autoRow)
         card.addRow(noteContainer)
     }
@@ -117,7 +122,12 @@ final class SettingsAboutInstallCard: NSView {
     /// 按安装状态刷新（文案口径全部在 `UpdateInstallText`）
     ///
     /// - Parameter hasUpdate: 是否发现新版本（没有新版本时按钮置灰但仍可见，避免按钮忽隐忽现）
-    func update(state: UpdateInstallState, hasUpdate: Bool, canInstall: Bool, autoInstallEnabled: Bool) {
+    func update(state: UpdateInstallState,
+                subStep: UpdateUnpackStep?,
+                hasUpdate: Bool,
+                canInstall: Bool,
+                autoInstallEnabled: Bool) {
+        progressRow.update(state: state, subStep: subStep)
         let line = UpdateInstallText.statusLine(state)
         statusLabel.stringValue = line ?? (hasUpdate ? "有新版本可安装" : "没有可安装的新版本")
         statusLabel.textColor = state.stage == .failed ? SettingsTheme.warnInk : SettingsTheme.textSecondary
@@ -137,7 +147,8 @@ final class SettingsAboutInstallCard: NSView {
                      "button=\(installButton.title)",
                      "enabled=\(installButton.isEnabled)",
                      "auto=\(autoSwitch.state == .on)",
-                     "note=\(footnoteLabel.stringValue)"]
+                     "note=\(footnoteLabel.stringValue)",
+                     "progress=[\(progressRow.debugProbeText)]"]
         return parts.joined(separator: " ")
     }
     #endif

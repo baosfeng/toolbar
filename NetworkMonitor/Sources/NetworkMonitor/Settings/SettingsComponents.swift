@@ -87,6 +87,17 @@ final class SettingsCardView: NSView {
         }
     }
 
+    /// 追加一行延续行 —— 不补分隔线（它是上一行的下半部分，不是新的设置项）
+    ///
+    /// 用例：安装卡里「安装」行下方的进度区。它在 idle 态整块隐藏，
+    /// 若照常补分隔线，隐藏后卡片里会留一条没人认领的横线。
+    /// 单独开一个方法而不是给 addRow 加带默认值的参数：后者会让全仓
+    /// 数组 forEach(卡片.addRow) 这类方法引用出现重载歧义（实测 32 条编译错误）。
+    func addContinuationRow(_ row: NSView) {
+        rows.addArrangedSubview(row)
+        row.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
+    }
+
     /// 追加一行（自动在行间补分隔线）
     func addRow(_ row: NSView) {
         if !rows.arrangedSubviews.isEmpty {

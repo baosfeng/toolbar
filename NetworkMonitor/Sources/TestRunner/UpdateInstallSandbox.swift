@@ -129,6 +129,13 @@ final class FakeFileSystem: UpdateInstallFileSystem, @unchecked Sendable {
 
     func write(_ data: Data, to url: URL) throws { try data.write(to: url) }
 
+    /// 带子步骤的解压：先报一次 unzipping，再走原路径（测试顺带能断言子步骤）
+    func unzip(_ archive: URL, into directory: URL,
+               step: (@Sendable (UpdateUnpackStep) -> Void)?) throws {
+        step?(.unzipping)
+        try unzip(archive, into: directory)
+    }
+
     func unzip(_ archive: URL, into directory: URL) throws {
         guard let name = unpackedAppName else {
             throw UpdateInstallError.unpackFailed("测试：压缩包结构不对")
@@ -140,10 +147,19 @@ final class FakeFileSystem: UpdateInstallFileSystem, @unchecked Sendable {
 
     /// dmg 挂载替身：与 zip 走同一份「产出包」，测试不依赖 hdiutil
     func mountDiskImage(_ image: URL, into directory: URL) throws -> URL {
+        try mountDiskImage(image, into: directory, step: nil)
+    }
+
+    /// 带子步骤的挂载替身：完整走一遍「挂载 → 拷贝 → 卸载」三次上报
+    func mountDiskImage(_ image: URL, into directory: URL,
+                        step: (@Sendable (UpdateUnpackStep) -> Void)?) throws -> URL {
+        step?(.mountingDiskImage)
         try unzip(image, into: directory)
         guard let app = appBundles(in: directory).first else {
             throw UpdateInstallError.appNotFound(image.lastPathComponent)
         }
+        step?(.copyingApp)
+        step?(.detachingDiskImage)
         return app
     }
 

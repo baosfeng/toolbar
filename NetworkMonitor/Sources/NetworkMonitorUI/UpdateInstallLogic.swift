@@ -1,4 +1,5 @@
 import Foundation
+import NetworkMonitorCore
 
 // MARK: - 失败原因
 
@@ -18,7 +19,7 @@ public typealias UpdateInstallFailureText = String
 public enum UpdateInstallStage: Equatable, Sendable {
     /// 未开始
     case idle
-    /// 正在下载 zip
+    /// 正在下载安装包（dmg，旧发布回退 zip）
     case downloading
     /// 正在校验（解压 + 应用结构 + 版本号）
     case verifying
@@ -46,13 +47,43 @@ public struct UpdateInstallState: Equatable, Sendable {
     public let failureReason: UpdateInstallFailureText?
     /// 是否走「手动安装」路线（自动安装不可用时的唯一出口）
     public let requiresManualInstall: Bool
+    /// 下载字节进度（仅下载段有值；进到后面的阶段要保留，进度条才不会突然消失）
+    public let progress: UpdateDownloadProgress?
+    /// 失败时卡在哪一段（nil = 不知道 / 还没失败）—— 只有一句原因时用户不知道「卡在哪」
+    public let failedAt: UpdateInstallStage?
 
     public init(stage: UpdateInstallStage,
                 failureReason: UpdateInstallFailureText? = nil,
-                requiresManualInstall: Bool = false) {
+                requiresManualInstall: Bool = false,
+                progress: UpdateDownloadProgress? = nil,
+                failedAt: UpdateInstallStage? = nil) {
         self.stage = stage
         self.failureReason = failureReason
         self.requiresManualInstall = requiresManualInstall
+        self.progress = progress
+        self.failedAt = failedAt
+    }
+
+    /// 从本状态换到新阶段，**保留**已拿到的下载进度
+    ///
+    /// 为什么要留：下载完切到「校验」时把进度清掉，进度条会从满格跳回空，
+    /// 用户会以为重头开始；保留满格才是「这一段做完了」的正确表达。
+    public func moving(to next: UpdateInstallStage) -> UpdateInstallState {
+        UpdateInstallState(stage: next,
+                           requiresManualInstall: requiresManualInstall,
+                           progress: progress)
+    }
+
+    /// 失败态 —— 带上「卡在哪一段」与已下载进度
+    public static func failing(_ reason: String,
+                               at stage: UpdateInstallStage?,
+                               progress: UpdateDownloadProgress? = nil,
+                               requiresManualInstall: Bool = false) -> UpdateInstallState {
+        UpdateInstallState(stage: .failed,
+                           failureReason: reason,
+                           requiresManualInstall: requiresManualInstall,
+                           progress: progress,
+                           failedAt: stage)
     }
 
     /// 未开始且可自动安装
@@ -62,7 +93,7 @@ public struct UpdateInstallState: Equatable, Sendable {
         UpdateInstallState(stage: .failed, failureReason: reason, requiresManualInstall: true)
     }
 
-    /// 失败态
+    /// 失败态（不带阶段 —— 调用点不知道卡在哪时用）
     public static func failed(_ reason: String) -> UpdateInstallState {
         UpdateInstallState(stage: .failed, failureReason: reason)
     }
@@ -95,7 +126,22 @@ public enum UpdateInstallText {
             if state.requiresManualInstall {
                 return "需手动安装（\(reason)）"
             }
+            // 带上「卡在哪一段」：只有一句原因时用户分不清是网络挂了还是换包挂了
+            if let stuck = state.failedAt, let title = stageTitle(stuck) {
+                return "安装失败（\(title)阶段：\(reason)）"
+            }
             return "安装失败（\(reason)）"
+        }
+    }
+
+    /// 阶段名（失败话术里当定语用；idle / failed 没有名字）
+    private static func stageTitle(_ stage: UpdateInstallStage) -> String? {
+        switch stage {
+        case .downloading: return "下载"
+        case .verifying: return "校验"
+        case .installing: return "替换"
+        case .readyToRelaunch: return "重启"
+        case .idle, .failed: return nil
         }
     }
 
