@@ -22,6 +22,8 @@ func runPaneSuites() {
     runPaneCardLayoutTests()
     runPaneValueSizingTests()
     runMenuBarDisplayTests()
+    // 菜单栏 17 项前缀（完整 / 短标签 / 逐项自定义）与计数类单位分派
+    runMenuBarLabelTests()
     runSettingsOrderTests()
     runPaneHeightBudgetTests()
     runPaneAssemblyTests()

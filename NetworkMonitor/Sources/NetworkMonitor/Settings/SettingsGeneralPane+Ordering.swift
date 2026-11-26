@@ -1,22 +1,24 @@
 import AppKit
 import NetworkMonitorCore
 
-// MARK: - 通用设置页（可排序三块：菜单栏指标 / 面板分页 / 显示方式）
+// MARK: - 通用设置页（可排序两块 + 显示方式卡接线）
 
 /// 从主文件拆出的「可排序」部分 —— 守住单文件 15 KiB 门禁
 ///
-/// 三张卡片的顺序偏好：
+/// 两块可排序卡片：
 /// - 菜单栏指标 → `SettingsOrderKey.menuBarMetrics`（改完发 `AppEvents.menuBarDisplayChanged`，状态栏立刻重排）
 /// - 面板分页 → `SettingsOrderKey.panelTabs`（改完发 `AppEvents.panelTabsChanged`，面板分段条重排）
-/// - 显示方式（模板 / 密度 / 单位 / 布局 / 间隔）不可排序，单独一卡，避免和可排序行混放
+///
+/// 「菜单栏显示方式」不可排序，已独立成卡 `SettingsMenuBarDisplayStyleCard`
+/// （模板 / 密度 / 单位 / **标签** / 布局 + 逐项自定义），本文件只负责 addCard 与 refresh。
 extension SettingsGeneralPane {
 
     // MARK: - 构建
 
-    /// 追加三张卡片（在 `buildContent` 里调用）
+    /// 追加三块（在 `buildContent` 里调用）
     func buildOrderableCards() {
         buildMenuBarMetricsCard()
-        buildMenuBarDisplayStyleCard()
+        page.addCard(displayStyleCard.card, sectionTitle: "菜单栏显示方式")
         buildPanelTabsCard()
     }
 
@@ -76,76 +78,22 @@ extension SettingsGeneralPane {
                      trailingAccessory: ordered.resetButton)
     }
 
-    /// 菜单栏显示方式 —— 普通卡片（模板 / 密度 / 单位 / 布局 / 间隔，全部是单选，无顺序语义）
-    private func buildMenuBarDisplayStyleCard() {
-        let card = SettingsCardView()
-
-        let template = NSSegmentedControl(labels: Self.templateTitles, trackingMode: .selectOne,
-                                          target: self, action: #selector(menuBarTemplateChanged))
-        template.tag = 0
-        template.font = SettingsTheme.rowTitleFont
-        SettingsControlChrome.applyStandardHeight(to: template)
-        templateControl = template
-        let templateRow = SettingsRowView(title: "快捷模板", subtitle: "只改显示哪些指标，不改上面排好的顺序")
-        templateRow.trailingStack.addArrangedSubview(template)
-        card.addRow(templateRow)
-
-        densityControl.addItems(withTitles: MenuBarDensity.allCases.map(\.rawValue))
-        densityControl.target = self
-        densityControl.action = #selector(menuBarDensityChanged)
-        densityControl.setAccessibilityLabel("菜单栏密度")
-        densityControl.font = SettingsTheme.rowTitleFont
-        SettingsControlChrome.applyStandardHeight(to: densityControl)
-        let densityRow = SettingsRowView(title: "密度")
-        densityRow.trailingStack.addArrangedSubview(densityControl)
-        card.addRow(densityRow)
-
-        // 菜单栏单位档：custom 目前没有自定义单位表（按 short 回落），
-        // 直接标在标题里，避免用户选了「自定义」却看不到任何变化
-        unitControl2.addItems(withTitles: MenuBarUnitStyle.allCases.map(\.title))
-        unitControl2.target = self
-        unitControl2.action = #selector(menuBarUnitChanged)
-        unitControl2.setAccessibilityLabel("菜单栏单位")
-        unitControl2.font = SettingsTheme.rowTitleFont
-        SettingsControlChrome.applyStandardHeight(to: unitControl2)
-        unit2Row.trailingStack.addArrangedSubview(unitControl2)
-        card.addRow(unit2Row)
-
-        layoutControl.addItems(withTitles: MenuBarLayout.allCases.map(\.rawValue))
-        layoutControl.target = self
-        layoutControl.action = #selector(menuBarLayoutChanged)
-        layoutControl.setAccessibilityLabel("菜单栏布局")
-        layoutControl.font = SettingsTheme.rowTitleFont
-        SettingsControlChrome.applyStandardHeight(to: layoutControl)
-        let layoutRow = SettingsRowView(title: "布局")
-        layoutRow.trailingStack.addArrangedSubview(layoutControl)
-        card.addRow(layoutRow)
-
-
-        page.addCard(card, sectionTitle: "菜单栏显示方式")
-        page.addNote("刷新节拍不在这里：它由「外观 → 渲染帧率」统一决定（标准 1 秒 / 极致 0.5 秒 / "
-                     + "省电 2 秒）——同一维度的两个旋钮并存，会出现「选了省电还是 1 秒刷」。")
-    }
-
     // MARK: - 刷新
 
-    /// 把偏好灌回可排序三块的控件（`refresh()` 里调用）
-    func refreshOrderableControls() {
+    /// 指标开关的勾选态同步（模板切换后由显示方式卡回调，`refresh()` 也走这里）
+    func syncMetricToggles() {
         for (toggle, metric) in metricByToggle {
             toggle.state = displayPreferences.enabledMetrics.contains(metric) ? .on : .off
         }
+    }
+
+    /// 把偏好灌回可排序两块与显示方式卡（`refresh()` 里调用）
+    func refreshOrderableControls() {
+        syncMetricToggles()
         for (toggle, tab) in tabByToggle {
             toggle.state = panelTabPreferences.visibleTabs.contains(tab) ? .on : .off
         }
-        // 模板选中段回灌：点完模板再进设置页时不能显示成「默认」（-1 = 与应用内模板名不匹配）
-        if let templateControl {
-            templateControl.selectedSegment = Self.templateNames.firstIndex(of: displayPreferences.template) ?? -1
-        }
-        if let i = MenuBarDensity.allCases.firstIndex(of: displayPreferences.density) { densityControl.selectItem(at: i) }
-        if let i = MenuBarUnitStyle.allCases.firstIndex(of: displayPreferences.unitStyle) { unitControl2.selectItem(at: i) }
-        unit2Row.update(subtitle: Self.menuBarUnitSubtitle(displayPreferences.unitStyle))
-        // 刷新节拍不在这里回灌：它由渲染档接管（见卡片说明），本卡不再有 interval 控件
-        if let i = MenuBarLayout.allCases.firstIndex(of: displayPreferences.layout) { layoutControl.selectItem(at: i) }
+        displayStyleCard.refresh()
     }
 
     /// 菜单栏单位行副标题 —— 直接写出各档的实际效果，避免「选了自定义却看不出变化」
@@ -157,31 +105,6 @@ extension SettingsGeneralPane {
         }
     }
 
-    // MARK: - 动作（菜单栏显示方式）
-
-    @objc private func menuBarDensityChanged() {
-        let idx = densityControl.indexOfSelectedItem
-        guard MenuBarDensity.allCases.indices.contains(idx) else { return }
-        displayPreferences.density = MenuBarDensity.allCases[idx]
-        AppEvents.postMenuBarDisplayChanged()
-    }
-
-    @objc private func menuBarUnitChanged() {
-        let idx = unitControl2.indexOfSelectedItem
-        guard MenuBarUnitStyle.allCases.indices.contains(idx) else { return }
-        displayPreferences.unitStyle = MenuBarUnitStyle.allCases[idx]
-        unit2Row.update(subtitle: Self.menuBarUnitSubtitle(displayPreferences.unitStyle))
-        AppEvents.postMenuBarDisplayChanged()
-    }
-
-    @objc private func menuBarLayoutChanged() {
-        let idx = layoutControl.indexOfSelectedItem
-        guard MenuBarLayout.allCases.indices.contains(idx) else { return }
-        displayPreferences.layout = MenuBarLayout.allCases[idx]
-        AppEvents.postMenuBarDisplayChanged()
-    }
-
-
     // MARK: - 动作（菜单栏指标 / 面板分页）
 
     @objc private func menuBarMetricToggled(_ sender: NSSwitch) {
@@ -189,17 +112,6 @@ extension SettingsGeneralPane {
         displayPreferences.setMetric(metric, enabled: sender.state == .on)
         // 至少保留一项：存储侧已拦，这里把界面勾选态拉回真实值
         sender.state = displayPreferences.enabledMetrics.contains(metric) ? .on : .off
-        AppEvents.postMenuBarDisplayChanged()
-    }
-
-    @objc private func menuBarTemplateChanged() {
-        let index = templateControl?.selectedSegment ?? 0
-        guard Self.templateNames.indices.contains(index) else { return }
-        displayPreferences.applyTemplate(Self.templateNames[index])
-        // 同步 toggle（模板只改显示集合，顺序保持用户排布）
-        for (toggle, metric) in metricByToggle {
-            toggle.state = displayPreferences.enabledMetrics.contains(metric) ? .on : .off
-        }
         AppEvents.postMenuBarDisplayChanged()
     }
 
