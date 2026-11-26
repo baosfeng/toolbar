@@ -24,6 +24,7 @@ extension TokenDetailPaneView {
         // 三段堆叠按「当日最大单桶总量」归一，否则柱高会溢出卡片
         bars.update(buckets: buckets, shape: .stack, showsCumulative: false,
                     scaleMax: buckets.map { $0.total }.max() ?? 1,
+                    isHourBuckets: true,
                     accessibility: hourScope.title + " 24 小时三段堆叠柱，每根柱可点开该小时详情")
         bars.heightAnchor.constraint(equalToConstant: TokenPaneStyle.detailChartHeight).isActive = true
 
@@ -47,6 +48,7 @@ extension TokenDetailPaneView {
         pairBars.update(buckets: buckets, previous: other, shape: .pair, showsCumulative: false,
                         scaleMax: max(buckets.map { $0.request }.max() ?? 0,
                                       other.map { $0.request }.max() ?? 0),
+                        isHourBuckets: true,
                         accessibility: "今日与昨日同时段请求数对比折线（实线今日、虚线昨日）")
         pairBars.heightAnchor.constraint(equalToConstant: 40).isActive = true
         let pairCard = TokenBoxView()

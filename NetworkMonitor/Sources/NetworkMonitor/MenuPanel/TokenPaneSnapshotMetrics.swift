@@ -21,8 +21,13 @@ extension TokenPaneView {
             if let label = view as? NSTextField { return label.intrinsicContentSize.width }
             return view.fittingSize.width
         }
+        // 卡头两个切换按钮已改成图标（title 为空）：落盘文本取 toolTip，
+        // 否则台账上两行是空串，看不出「这里原先是文字、现在是什么语义」
         func text(_ view: NSView) -> String {
-            (view as? NSTextField)?.stringValue ?? (view as? NSButton)?.title ?? ""
+            if let label = view as? NSTextField { return label.stringValue }
+            guard let button = view as? NSButton else { return "" }
+            let mark = button.image != nil ? "[icon] " : ""
+            return mark + (button.title.isEmpty ? (button.toolTip ?? "") : button.title)
         }
         let items: [(String, NSView)] = [
             ("head-hourTitle", hourTitle),

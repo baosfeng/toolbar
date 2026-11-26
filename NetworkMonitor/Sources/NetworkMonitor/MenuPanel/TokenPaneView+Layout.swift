@@ -140,7 +140,9 @@ extension TokenPaneView {
                                           viewAction, hourAction, trendAction])
         metaRow.orientation = .horizontal
         metaRow.alignment = .centerY
-        metaRow.spacing = 6
+        // 图标按钮之间 4pt（文字态时 6pt 是为了不让「切：A 切：B」粘成一句；
+        // 图标本来就有留白，4pt 已经分得开，再宽就白占 meta 行）
+        metaRow.spacing = 4
 
         for row in [headRow, metaRow, hourBars, hourAxis, hourLegend] {
             hourCard.body.addArrangedSubview(row)

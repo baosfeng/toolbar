@@ -184,6 +184,7 @@ enum TokenPaneSnapshot {
         }
         if let tokenSnapshot {
             writeBarMetrics(directory: directory, snapshot: tokenSnapshot)
+            writeHoverTips(directory: directory, snapshot: tokenSnapshot)
             writeKeyRowMetrics(directory: directory, snapshot: tokenSnapshot)
         }
         writeSegmentMetrics(directory: directory)

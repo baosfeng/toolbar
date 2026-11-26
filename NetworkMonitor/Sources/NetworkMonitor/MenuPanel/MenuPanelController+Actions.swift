@@ -89,9 +89,10 @@ extension MenuPanelController: MenuPanelViewDelegate {
         if view.didAssembleCurrentPane {
             refreshPaneFirstDisplay(view.currentTab)
         }
-        // 切到 Token 页时按需增量刷新（服务内部串行、不重入；数据未变则快速返回）
+        // 切到 Token 页时按需增量刷新 —— 走新鲜度闸门（60s 内刚扫过就直接复用，
+        // 首次装配的那一次已由 firstDisplay → refreshToken 排过，闸门保证不会排第二次）
         if view.currentTab == .token {
-            harnessUsage?.refreshIfNeeded()
+            pullTokenIfStale()
         }
         // 切到系统页：立即采一帧再渲染，避免看到上一次打开时的旧值
         if view.currentTab == .system {
