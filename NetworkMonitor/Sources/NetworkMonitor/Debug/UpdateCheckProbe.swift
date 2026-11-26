@@ -148,7 +148,6 @@ private final class MainThreadGapTicker {
         timer = nil
     }
 }
-#endif
 
 // MARK: - 安装进度取证（仅 DEBUG）
 
@@ -245,3 +244,4 @@ enum UpdateInstallStateProbe {
         }
     }
 }
+#endif
