@@ -5,6 +5,7 @@ Clipboard/ClipboardPanelView 542 2
 Debug/DrawnUIProbe 415 3
 Debug/MenuPanelSnapshot 627 6
 Debug/PinDragProbe 393 3
+Debug/SettingsSnapshot 306 2
 Debug/TokenPaneSnapshot 1029 8
 Discovery/UdpDiscoveryService 425 2
 DrawnUI/DrawnRowList 540 2

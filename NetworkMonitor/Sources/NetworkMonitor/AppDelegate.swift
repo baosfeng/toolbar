@@ -63,6 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // 仅 DEBUG：NM_UPDATE_PROBE=live|failure 时跑一次更新检查并打印状态 / 界面文案
         UpdateCheckProbe.runIfRequested(coordinator: coordinator)
+        // 仅 DEBUG：NM_UPDATE_PROBE=states 时把关于页打进四段安装态并逐态截图
+        UpdateInstallStateProbe.runIfRequested(coordinator: coordinator)
         // 仅 DEBUG：NM_THEME_HOT_PROBE=<目录> 时验证「切主题 → 设置窗口重绘」链路并退出
         SettingsThemeHotProbe.runIfRequested(settings: coordinator.settingsWindow)
         // 仅 DEBUG：NM_APPEARANCE_EVIDENCE=1 时打印三档 / 三主题的运行时结构并退出

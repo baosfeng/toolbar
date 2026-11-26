@@ -81,6 +81,7 @@ enum SettingsSnapshot {
         captureTokenMaintenanceStates(directory: directory, settings: settings)
         captureFirstOpen(directory: directory, settings: settings)
         captureScrolledGeneral(directory: directory, settings: settings)
+        captureScrolledGeneralDisplayStyle(directory: directory, settings: settings)
     }
 
     /// Token 页「清理历史数据」的范围选择与二次确认（本轮新增交互的状态证据）

@@ -149,3 +149,99 @@ private final class MainThreadGapTicker {
     }
 }
 #endif
+
+// MARK: - 安装进度取证（仅 DEBUG）
+
+/// 安装进度取证 —— 把关于页打进四段安装态并逐态截图
+///
+/// 为什么需要它：真实安装链路上「下载」只有几秒、「校验/换包」是毫秒级，
+/// 想用真机截图抓中间态几乎不可能（而且会真的替换应用包）。
+/// 这里直接注入 `UpdateInstallState`，走的是**生产同一套** `SettingsAboutProgressRow` 渲染路径。
+///
+/// 触发：`NM_UPDATE_PROBE=states NM_UPDATE_PROBE_SHOTS=/tmp/upd <包内可执行>`
+@MainActor
+enum UpdateInstallStateProbe {
+
+    static func runIfRequested(coordinator: AppCoordinator) {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["NM_UPDATE_PROBE"] == "states" else { return }
+        guard let service = coordinator.updateCheck else {
+            print("[update-probe] ❌ 更新检查服务未装配")
+            exit(1)
+        }
+        guard let settings = coordinator.settingsWindow else {
+            print("[update-probe] ❌ 设置窗口未装配")
+            exit(1)
+        }
+        let shots = environment["NM_UPDATE_PROBE_SHOTS"]
+            .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+        let release = UpdateRelease(
+            tagName: "v1.32.0",
+            htmlURL: URL(string: "https://github.com/baosfeng/toolbar/releases/tag/v1.32.0"),
+            notes: "### 新增\n\n- 更新下载进度可视化：字节进度、速度、剩余时间与阶段清单\n- 菜单栏指标支持短标签与逐项自定义前缀\n\n### 修复\n\n- 修复额度页首次进入图表不显示\n- 修复 Token 页每次进入整页重渲\n",
+            publishedAt: Date(timeIntervalSince1970: 1_794_729_600),
+            artifact: UpdateArtifact(name: "Yilan-1.32.0-arm64.dmg",
+                                     url: URL(string: "https://example.invalid/x.dmg")!,
+                                     sha256: "e80146b9cc5b5ee1639fb8946847a95c0697f89b0c483f553763f6a449cd0aec",
+                                     byteCount: 12_792_314))
+
+        let states: [(String, UpdateInstallState, UpdateUnpackStep?)] = [
+            ("idle", .idle, nil),
+            ("downloading", UpdateInstallState(
+                stage: .downloading,
+                progress: UpdateDownloadProgress(receivedBytes: 5_100_000,
+                                                 totalBytes: 12_792_314,
+                                                 bytesPerSecond: 2_100_000,
+                                                 estimatedSecondsRemaining: 3.7)), nil),
+            ("verifying", UpdateInstallState(
+                stage: .verifying,
+                progress: UpdateDownloadProgress(receivedBytes: 12_792_314,
+                                                 totalBytes: 12_792_314)).moving(to: .verifying),
+             .copyingApp),
+            ("installing", UpdateInstallState(
+                stage: .installing,
+                progress: UpdateDownloadProgress(receivedBytes: 12_792_314,
+                                                 totalBytes: 12_792_314)).moving(to: .installing), nil),
+            ("failed", UpdateInstallState.failing("下载不完整（网络中断）",
+                                                  at: .downloading,
+                                                  progress: UpdateDownloadProgress(
+                                                    receivedBytes: 5_100_000,
+                                                    totalBytes: 12_792_314)),
+                                              nil),
+        ]
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            settings.show(section: .about)
+            try? await Task.sleep(for: .milliseconds(400))
+            for (name, state, step) in states {
+                service.debugInjectInstallState(state, release: release, subStep: step)
+                guard let view = settings.prepareForSnapshot(.about),
+                      let about = settings.currentPaneForSnapshot as? SettingsAboutPane else { continue }
+                about.refresh()
+                about.debugLogUpdateSection(name)
+                if let shots {
+                    try? FileManager.default.createDirectory(at: shots, withIntermediateDirectories: true)
+                    for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+                        let suffix = appearance == .aqua ? "light" : "dark"
+                        MenuPanelSnapshot.render(
+                            view: view,
+                            size: SettingsTheme.windowSize,
+                            appearanceName: appearance,
+                            to: shots.appendingPathComponent("settings-about-\(name)-\(suffix).png"))
+                    }
+                    if let scrolled = settings.prepareForSnapshotScrolledToBottom(.about) {
+                        MenuPanelSnapshot.render(
+                            view: scrolled,
+                            size: SettingsTheme.windowSize,
+                            appearanceName: .aqua,
+                            to: shots.appendingPathComponent("settings-about-\(name)-scrolled-light.png"))
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(120))
+            }
+            print("[update-probe] 安装态取证完成 shots=\(shots?.path ?? "nil")")
+            exit(0)
+        }
+    }
+}
