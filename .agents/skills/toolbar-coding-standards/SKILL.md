@@ -26,7 +26,8 @@ description: 本项目（toolbar / 一览）专属编码规范：架构原则、
 - 构建：`cd NetworkMonitor && swift build --disable-sandbox --build-system native`（本机只有 Command Line Tools，默认后端初始化即失败，统一追加该参数）
 - 测试：`cd NetworkMonitor && swift run --disable-sandbox --build-system native TestRunner`（须显示「🎉 所有测试通过！」）
 - 打包：`cd NetworkMonitor && ./Scripts/build-app.sh`（部署到 /Applications 并自动启动）；
-  发版预览用 `UNIVERSAL=1 MAKE_DMG=1 ./Scripts/build-app.sh release`（universal 包 + `dist/Yilan-<版本>.dmg`）
+  发版预览用 `UNIVERSAL=1 MAKE_DMG=1 ./Scripts/build-app.sh release`（universal 包 + `dist/Yilan-<版本>.dmg`；
+  单机预览只出这一个包，正式发版由 CI 再补两个单架构 dmg）
 
 ## 必读文档（操作前）
 
@@ -189,9 +190,12 @@ main.swift → AppDelegate → AppCoordinator（组合根，唯一允许 new 具
   由 `release.sh` 同步）
 - 小改动（bug 修复/文档）→ 修订号 +1；新功能 → 次版本 +1；破坏性变更 → 主版本 +1
 - 发版流程：全部测试通过 → `Scripts/release.sh <版本>`（门禁 → CI 闸门 → bump → 提交 → 打 tag
-  → 跟 Release → 核对 dmg / SHA256SUMS / update.json 三个资产）
-- 产物是**单一 universal `.dmg`**（不再发 zip：zip 解压出来的包名会带架构后缀）；发版矩阵先各出
-  单架构包再合并，zstd / libzstd 这类 Homebrew 二进制必须在各自架构的机器上打出来才能双架构
+  → 跟 Release → 核对五个资产：三个 dmg + SHA256SUMS / update.json）
+- 产物是**三个 `.dmg`**：universal（给手动下载，用户零判断）+ arm64 / x86_64 单架构（供自动更新器
+  按清单 `platforms` 表分流，各约省一半体积）。三份都由 `Scripts/make-dmg.sh` 打，
+  **挂载后包名一律是不带架构后缀的「一览.app」**（不再发 zip：zip 解压出来的包名会带架构后缀）
+- 发版矩阵先各出单架构包再合并，zstd / libzstd 这类 Homebrew 二进制必须在各自架构的机器上打出来
+  才能双架构。改清单结构时记住向后兼容：`asset` 字段只增不减，旧更新器只认它
 
 ## 代码查询规范
 

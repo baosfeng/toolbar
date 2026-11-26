@@ -35,6 +35,11 @@ public struct UpdateArtifact: Equatable, Sendable {
 ///
 /// 清单里同时带下载地址与 SHA-256，更新器一次请求就能拿到「要不要更新 + 下哪个 + 怎么验」，
 /// 不再像以前那样：先查 API 知道版本 → 再从资产列表里挑本机架构的 zip。
+///
+/// 从 1.32 起清单多一张 `platforms` 表：同一版本按架构各给一个单架构 dmg，
+/// 用户只下自己那一半（实测体积少一半）。`asset` 仍是 universal 那份、字段不变，
+/// 它同时承担两个作用：旧版本（只认 asset）照常升级；清单缺本机架构时回落到它，
+/// 宁可多下几兆也不能出现「新版本但装不上」。
 public struct UpdateManifest: Equatable, Sendable {
     /// 清单格式版本（不认识的大版本直接判失败，避免半懂地解析出新字段）
     public let schemaVersion: Int
@@ -50,8 +55,10 @@ public struct UpdateManifest: Equatable, Sendable {
     public let pageURL: URL?
     /// 发布说明正文（未截断）
     public let notes: String
-    /// 要下载的安装包
+    /// 要下载的安装包（universal 那份：旧版本与「缺本机架构」时的回落）
     public let artifact: UpdateArtifact
+    /// 按架构给出的单包（1.32 起的清单才有；空表示这份清单只有 universal 包）
+    public let platformArtifacts: [UpdateArchitecture: UpdateArtifact]
 
     public init(schemaVersion: Int,
                 tag: String,
@@ -60,7 +67,8 @@ public struct UpdateManifest: Equatable, Sendable {
                 minimumSystemVersion: String?,
                 pageURL: URL?,
                 notes: String,
-                artifact: UpdateArtifact) {
+                artifact: UpdateArtifact,
+                platformArtifacts: [UpdateArchitecture: UpdateArtifact] = [:]) {
         self.schemaVersion = schemaVersion
         self.tag = tag
         self.version = version
@@ -69,6 +77,15 @@ public struct UpdateManifest: Equatable, Sendable {
         self.pageURL = pageURL
         self.notes = notes
         self.artifact = artifact
+        self.platformArtifacts = platformArtifacts
+    }
+
+    /// 本机架构对应的包；清单没给这一架构时回落到 universal 包
+    ///
+    /// 回落而不是报错：清单是发布侧手写的 JSON，漏一个架构键的代价不该是
+    /// 「这批用户彻底升不了级」——他们只是多下几兆。
+    public func artifact(for architecture: UpdateArchitecture) -> UpdateArtifact {
+        platformArtifacts[architecture] ?? artifact
     }
 }
 
@@ -85,9 +102,9 @@ public enum UpdateManifestParser {
     /// - Note: typed throws（SE-0413）：失败种类封闭在 UpdateCheckError 里，
     ///   新增抛出点若不属于这个错误域，编译期即报红。
     public static func manifest(fromJSON data: Data) throws(UpdateCheckError) -> UpdateManifest {
-        let payload: Payload
+        let payload: ManifestPayload
         do {
-            payload = try JSONDecoder().decode(Payload.self, from: data)
+            payload = try JSONDecoder().decode(ManifestPayload.self, from: data)
         } catch {
             throw UpdateCheckError.invalidResponse("更新清单不是预期 JSON")
         }
@@ -101,14 +118,9 @@ public enum UpdateManifestParser {
         guard let version = payload.version, !version.isEmpty else {
             throw UpdateCheckError.invalidResponse("更新清单缺少 version")
         }
-        guard let asset = payload.asset, let name = asset.name, let urlString = asset.url,
-              let url = URL(string: urlString) else {
+        guard let asset = payload.asset, let artifact = UpdateManifestPackages.artifact(from: asset) else {
             throw UpdateCheckError.invalidResponse("更新清单缺少可用的下载地址")
         }
-        let artifact = UpdateArtifact(name: name,
-                                      url: url,
-                                      sha256: asset.sha256?.lowercased(),
-                                      byteCount: asset.byteCount)
         return UpdateManifest(schemaVersion: payload.schemaVersion,
                               tag: tag,
                               version: version,
@@ -116,7 +128,8 @@ public enum UpdateManifestParser {
                               minimumSystemVersion: payload.minimumSystemVersion,
                               pageURL: payload.pageURL.flatMap { URL(string: $0) },
                               notes: payload.notes ?? "",
-                              artifact: artifact)
+                              artifact: artifact,
+                              platformArtifacts: UpdateManifestPackages.artifacts(from: payload.platforms))
     }
 
     /// JSON → 界面用的 UpdateRelease
@@ -126,38 +139,19 @@ public enum UpdateManifestParser {
     public static func release(fromJSON data: Data) throws(UpdateCheckError) -> UpdateRelease {
         try manifest(fromJSON: data).release
     }
-
-    /// 清单的 JSON 子集（字段缺失一律按「没给」处理，必填项在上面逐条判）
-    private struct Payload: Decodable {
-        let schemaVersion: Int
-        let tag: String?
-        let version: String?
-        let publishedAt: String?
-        let minimumSystemVersion: String?
-        let pageURL: String?
-        let notes: String?
-        let asset: Asset?
-
-        struct Asset: Decodable {
-            let name: String?
-            let url: String?
-            let sha256: String?
-            let byteCount: Int64?
-            let architecture: String?
-        }
-    }
 }
 
 // MARK: - 汇成界面模型
 
 extension UpdateManifest {
-    /// 清单 → UpdateRelease（assets 留空：下载对象已经收敛成唯一 artifact）
+    /// 清单 → UpdateRelease（assets 留空：下载对象已收敛成 artifact + 按架构的包表）
     public var release: UpdateRelease {
         UpdateRelease(tagName: tag,
                       htmlURL: pageURL,
                       notes: notes,
                       publishedAt: publishedAt,
                       assets: [],
-                      artifact: artifact)
+                      artifact: artifact,
+                      platformArtifacts: platformArtifacts)
     }
 }

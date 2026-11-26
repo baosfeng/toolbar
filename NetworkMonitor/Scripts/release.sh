@@ -10,10 +10,12 @@
 #   Scripts/release.sh 1.30.0 --dry-run      # 只做检查，不改任何文件
 #   Scripts/release.sh 1.30.0 --skip-ci-gate # 跳过 CI 闸门（不推荐）
 #
-# 发版产物（由 .github/workflows/release.yml 产出，只有一个安装包）：
-#   Yilan-<版本>.dmg —— universal（arm64 + x86_64），挂载后是「一览.app」
-#   SHA256SUMS.txt   —— dmg 校验和
-#   update.json      —— 自动更新器的静态更新通道
+# 发版产物（由 .github/workflows/release.yml 产出，共五个资产）：
+#   Yilan-<版本>.dmg          —— universal（arm64 + x86_64），挂载后是「一览.app」
+#   Yilan-<版本>-arm64.dmg    —— 只含 arm64
+#   Yilan-<版本>-x86_64.dmg   —— 只含 x86_64
+#   SHA256SUMS.txt            —— 三个 dmg 的校验和
+#   update.json               —— 自动更新器的静态更新通道
 # 版本号只在 NetworkMonitor/version.env 改（本脚本自动改），不要再手改别处。
 
 set -euo pipefail
@@ -37,7 +39,8 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) DRY_RUN=1; shift ;;
         --skip-ci-gate) SKIP_CI=1; shift ;;
-        -h|--help) sed -n "2,13p" "$0"; exit 0 ;;
+        # 帮助正文的行号范围要覆盖到「发版产物」那几行：范围写死时每加一条资产说明就会被截断
+        -h|--help) sed -n "2,19p" "$0"; exit 0 ;;
         -*) echo "未知参数：$1" >&2; exit 2 ;;
         *) VERSION="$1"; shift ;;
     esac
@@ -95,7 +98,7 @@ if [ "$SKIP_CI" = "0" ] && command -v ghops > /dev/null && [ "$DRY_RUN" = "0" ];
     head_sha=$(git rev-parse HEAD)
     remote_sha=$(git ls-remote --heads "$REMOTE" "refs/heads/$BRANCH" | awk "{print \$1}")
     if [ "$head_sha" != "$remote_sha" ]; then
-        fail "本地 HEAD 还没推到远端（本地 $head_sha / 远端 $remote_sha）：先 push 并等 CI 绿"
+        fail "本地 HEAD 还没推到远端（本地 ${head_sha} / 远端 ${remote_sha}）：先 push 并等 CI 绿"
     fi
     checks=$(ghops api GET "/repos/$REPO/commits/$head_sha/check-runs" 2>/dev/null || true)
     if printf "%s" "$checks" | grep -q "\"conclusion\": *\"failure\""; then
@@ -155,10 +158,13 @@ for _ in $(seq 1 40); do
         *completed/success*)
             say "   校验发布资产…"
             assets=$(ghops api GET "/repos/$REPO/releases/tags/$TAG" 2>/dev/null | tr "," "\n" | grep '"name"' || true)
-            for need in "Yilan-${VERSION}.dmg" "SHA256SUMS.txt" "update.json"; do
+            # 三个 dmg 一个都不能少：少一个单架构包，更新清单的 platforms 表就发不出去（生成器会 fail），
+            # 少 universal 则手动下载的人在「不知道自己的芯片该选哪个」时没有默认选项
+            for need in "Yilan-${VERSION}.dmg" "Yilan-${VERSION}-arm64.dmg" \
+                        "Yilan-${VERSION}-x86_64.dmg" "SHA256SUMS.txt" "update.json"; do
                 printf "%s" "$assets" | grep -q "\"${need}\"" || fail "发布里缺少资产 ${need}（发版没走完，别当成功）"
             done
-            say "   ✅ 资产齐全：Yilan-${VERSION}.dmg / SHA256SUMS.txt / update.json"
+            say "   ✅ 资产齐全：Yilan-${VERSION}.dmg / Yilan-${VERSION}-arm64.dmg / Yilan-${VERSION}-x86_64.dmg / SHA256SUMS.txt / update.json"
             say "✅ 发布完成：https://github.com/$REPO/releases/tag/$TAG"
             say "   记得同步 docs/发版记录.md 台账"
             exit 0 ;;

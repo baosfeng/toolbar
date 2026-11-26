@@ -18,6 +18,9 @@
 #   <dmg>  可选，挂载后是「一览.app」+ 指向「应用程序」的快捷方式
 
 set -euo pipefail
+# --help 里要 sed 回读本文件：cd 之后再喂相对 $0 会找不到（$0 是调用方目录下的相对路径），
+# 所以进 cd 之前先把自身绝对路径算出来
+SELF_PATH="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 cd "$(dirname "$0")/.."
 
 APP_BUNDLE_ID="com.bsfeng.yilan"
@@ -48,7 +51,7 @@ while [ $# -gt 0 ]; do
         --x86_64) X86_APP="$2"; shift 2 ;;
         --out) OUT_APP="$2"; shift 2 ;;
         --dmg) DMG_PATH="$2"; shift 2 ;;
-        -h|--help) sed -n "2,20p" "$0"; exit 0 ;;
+        -h|--help) sed -n "2,18p" "$SELF_PATH"; exit 0 ;;
         *) echo "未知参数：$1" >&2; exit 2 ;;
     esac
 done
@@ -105,19 +108,11 @@ merge_universal_macho() {
 # 用户拖进「应用程序」后包名就带上了架构后缀，多版本并存时还会互相覆盖；
 # dmg 挂载后是干净的「一览.app」+「应用程序」快捷方式，拖过去即可。
 # 同一份 dmg 也是自动更新器下载的对象（人机共用一份产物）。
+#
+# 具体实现只在 make-dmg.sh 一处：发版还要给两个单架构包各打一个 dmg，
+# 三处各写一份 hdiutil 参数必然漂移（包名后缀、卷名、文件系统任一不一致都是用户侧事故）。
 make_dmg() {
-    local app_dir="$1"
-    local dmg_path="$2"
-    local staging
-    staging="$(mktemp -d "${TMPDIR:-/tmp}/yilan-dmg.XXXXXX")"
-    cp -R "$app_dir" "$staging/${APP_BUNDLE_NAME}.app"
-    ln -s /Applications "$staging/Applications"
-    rm -f "$dmg_path"
-    # UDZO = 只读压缩卷；HFS+ 兼容所有仍支持本应用的 macOS 版本
-    hdiutil create -volname "${APP_DISPLAY_NAME} ${VERSION}" \
-        -srcfolder "$staging" -ov -format UDZO -fs HFS+ -quiet "$dmg_path" >/dev/null
-    rm -rf "$staging"
-    say "已生成 ${dmg_path}（$(du -h "$dmg_path" | cut -f1)）"
+    bash Scripts/make-dmg.sh "$1" "$2"
 }
 
 say "1/4 以 arm64 包为基底复制到 ${OUT_APP}"

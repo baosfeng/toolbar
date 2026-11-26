@@ -40,6 +40,7 @@ func runCoreSuites() {
     runUpdateInstallLogicTests() // 安装纯逻辑：架构选择 / 版本校验 / 状态文案 / 自动安装偏好
     runUpdateInstallFlowTests()  // 安装流程：沙箱替换 + 六条失败回滚（不碰 /Applications）
     runUpdateManifestTests()     // 静态清单：schema / 下载目标 / 包形态 / 校验和
+    runUpdatePlatformPackageTests() // 清单 platforms 表：按架构取包 / 缺架构回落 universal
     runDatabaseReadQueueTests()
     runDatabaseQueueWaitTests()
     runLatestRequestGateTests()
