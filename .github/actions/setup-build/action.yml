@@ -93,13 +93,14 @@ runs:
         KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
         CERT_PATH="$RUNNER_TEMP/build_certificate.p12"
         CERT_PEM="$RUNNER_TEMP/build_certificate.pem"
+        # 与 build-app.sh 的默认值一致，可用 secret SIGNING_IDENTITY 覆盖
+        SIGN_IDENTITY="${SIGN_IDENTITY:-NetworkMonitor Local Signing}"
         echo -n "$CERT_BASE64" | base64 --decode -o "$CERT_PATH"
         security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
         security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
         security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-        # 不带 -t cert：-t 会把条目类型钉成「证书」，私钥与证书不再配对，
-        # 导进来也只是死条目（实测本机两种写法都能配出身份，但 CI 上留最小的坑）
-        security import "$CERT_PATH" -P "$P12_PASSWORD" -A -f pkcs12 -k "$KEYCHAIN_PATH"
+        # -t cert 是 Apple 官方示例写法：只声明导入的条目类型，私钥会一起进临时钥匙串
+        security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
         security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
         security list-keychain -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
 
@@ -107,7 +108,11 @@ runs:
         # find-identity -v 会报 0 valid identities，codesign 也报 no identity found，
         # 于是打包走到「找不到证书」分支、REQUIRE_SIGNING_CERT=1 直接把发布判红。
         # 本机之所以能用，是因为证书早就在钥匙串里点过「始终信任」。
-        openssl pkcs12 -in "$CERT_PATH" -passin "pass:$P12_PASSWORD" -nokeys -clcerts -out "$CERT_PEM"
+        #
+        # 证书 PEM 从刚导入的钥匙串直接取，不用 openssl 解 p12：
+        # security export 出来的 p12 是 RC2-40-CBC 加密，runner 上的 OpenSSL 3 默认禁用 RC2，
+        # 实测报 "unsupported ... Algorithm (RC2-40-CBC)"，一步就能把整个发布卡死
+        security find-certificate -p -c "$SIGN_IDENTITY" "$KEYCHAIN_PATH" > "$CERT_PEM"
         # 不加 -p 策略限定：GitHub runner 是临时机器，整张证书标成信任根最省事，且不会因策略名写错而失败。
         # 先走系统域（runner 有免密 sudo）；系统域写不进时退到用户域，两道都失败就留到下面断言处报错
         sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$CERT_PEM" \
