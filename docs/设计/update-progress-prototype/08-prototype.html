@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>一览 · 检查更新原型</title>
+<style>
+:root{
+  /* —— 官方 schema 56 槽位（缺一即静默失效；值转发项目角色）—— */
+  --bg:#f2f2f4; --surface:var(--bg); --surface-warm:#ffffff;
+  --fg:#1d1d1f; --fg-2:#3a3a3e; --muted:#525258; --meta:#5c5c63;
+  --border:var(--line); --border-soft:var(--line);
+  --accent:#0071e3; --accent-on:#ffffff; --accent-hover:#0077ed; --accent-active:#0066cc;
+  --success:var(--ok); --warn:var(--warn-ink); --danger:#c0392b;
+  --font-display:-apple-system,"SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --font-body:-apple-system,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --font-mono:"SF Mono",ui-monospace,Menlo,Monaco,monospace;
+  --text-xs:10.5px; --text-sm:11px; --text-base:11.5px; --text-lg:12px;
+  --text-xl:17px; --text-2xl:24px; --text-3xl:32px; --text-4xl:40px;
+  --leading-body:1.47; --leading-tight:1.05; --tracking-display:-.015em;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-8:32px; --space-12:48px;
+  --section-y-desktop:100px; --section-y-tablet:64px; --section-y-phone:40px;
+  --radius-sm:6px; --radius-md:8px; --radius-lg:12px; --radius-pill:999px;
+  --elev-flat:none; --elev-ring:0 0 0 1px var(--line); --elev-raised:0 12px 32px rgba(0,0,0,.08);
+  --focus-ring:0 0 0 4px var(--accent-soft);
+  --motion-fast:150ms; --motion-base:220ms; --ease-standard:cubic-bezier(.28,0,.22,1);
+  --container-max:1024px; --container-gutter-desktop:22px;
+  --container-gutter-tablet:18px; --container-gutter-phone:16px;
+
+  /* —— 项目角色（ThemeCatalog.apple 语义）—— */
+  --win:#ffffff; --sidebar:#ececed; --card:#ffffff; --line:#e3e3e6;
+  --accent-ink:#0060c0; --accent-soft:rgba(0,113,227,.12);
+  --ok:#0a7030; --ok-ink:#086028; --ok-soft:rgba(10,112,48,.12);
+  --warn-ink:#7a4a05; --warn-soft:rgba(122,74,5,.12);
+  --track:#e8e8ed; --track-strong:#d6d6de;
+  --check-ink:#ffffff; --toolbar-on:#0056b3;
+  --radius:9px; --row:32px;
+  --font:var(--font-body);
+  --mono:var(--font-mono);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#1b1b1d; --win:#232326; --sidebar:#1f1f21; --card:#2b2b2f; --line:#3a3a3e;
+    --fg:#f5f5f7; --fg-2:#e2e2e6; --muted:#c2c2c9; --meta:#b8b8bf;
+    --accent:#0a84ff; --accent-ink:#74b9ff; --accent-soft:rgba(10,132,255,.18);
+    --ok:#30d158; --ok-ink:#7ee2a0; --ok-soft:rgba(48,209,88,.16);
+    --warn:#ff9f0a; --warn-ink:#ffc266; --warn-soft:rgba(255,159,10,.16);
+    --track:#3a3a3e; --track-strong:#4a4a50;
+    --check-ink:#0b2413; --toolbar-on:#0a5fbf;
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:var(--font);color:var(--fg);padding:24px;
+  display:flex;flex-direction:column;align-items:center;gap:20px;-webkit-font-smoothing:antialiased}
+.win{width:760px;height:540px;background:var(--win);border-radius:12px;overflow:hidden;
+  display:grid;grid-template-columns:168px 1fr;box-shadow:0 18px 48px rgba(0,0,0,.22),0 0 0 1px var(--line)}
+/* 侧栏 */
+.side{background:var(--sidebar);border-right:1px solid var(--line);padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.side .grp{font-size:10.5px;color:var(--meta);font-weight:600;padding:8px 8px 3px}
+.side .it{font-size:12px;color:var(--fg-2);padding:5px 8px;border-radius:6px;display:flex;justify-content:space-between}
+.side .it.on{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+/* 内容区 */
+.content{display:flex;flex-direction:column;overflow:hidden;position:relative}
+.phead{padding:12px 16px 8px;display:flex;align-items:baseline;justify-content:space-between;flex:0 0 auto;
+  border-bottom:1px solid transparent;background:var(--win);z-index:2}
+.phead h1{font-size:17px;font-weight:700;letter-spacing:-.2px}
+.phead .sub{font-size:11px;color:var(--meta)}
+.scroll{flex:1 1 auto;overflow-y:auto;padding:0 16px 16px}
+.sec{font-size:11.5px;font-weight:600;color:var(--muted);margin:12px 0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:6px 10px}
+.row{min-height:var(--row);display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border-bottom:1px solid var(--line);font-size:12px}
+.row:last-child{border-bottom:none}
+.row .k{color:var(--fg-2);flex:0 0 auto}
+.row .v{flex:0 0 auto;max-width:72%;font-family:var(--mono);font-size:11.5px;color:var(--fg);
+  font-variant-numeric:tabular-nums;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .v.dim{color:var(--muted)}
+.row .v.accent{color:var(--accent-ink);font-weight:600}
+.note{font-size:11px;color:var(--meta);line-height:1.5;margin-top:6px;padding:0 2px}
+/* 进度区（两版共用外壳，内部形态不同） */
+.prog{padding:8px 0 6px;border-bottom:1px solid var(--line)}
+.prog .top{display:flex;align-items:baseline;gap:8px;font-size:11.5px;margin-bottom:6px}
+.prog .top .st{font-weight:600;color:var(--fg)}
+.prog .top .grow{flex:1 1 auto}
+.prog .top .pct{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--accent-ink);font-weight:700;font-size:13px}
+.bar{height:6px;border-radius:3px;background:var(--track);overflow:hidden;position:relative}
+.bar > i{display:block;height:100%;border-radius:3px;background:var(--accent);width:0;
+  transition:width .5s var(--ease-standard)}
+.bar.indet > i{width:34%;background-image:linear-gradient(100deg,var(--accent) 0%,var(--accent-hover) 34%,rgba(255,255,255,.55) 50%,var(--accent-hover) 66%,var(--accent) 100%);
+  background-size:220% 100%;animation:flow 1.5s linear infinite;transition:none}
+@keyframes flow{from{background-position:130% 0}to{background-position:-130% 0}}
+.detail{display:flex;justify-content:space-between;gap:8px;margin-top:6px;font-size:11px;color:var(--muted);
+  font-family:var(--mono);font-variant-numeric:tabular-nums}
+.detail .r{color:var(--meta)}
+
+/* A 版：四段分段条 + 段名刻度 */
+.stagebar{display:flex;gap:3px}
+.seg{flex:1 1 0;height:6px;border-radius:3px;background:var(--track);overflow:hidden;position:relative}
+.seg > i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:3px;background:var(--accent);
+  transition:width .5s var(--ease-standard)}
+.seg.is-done > i{width:100%}
+.seg.is-active{background:var(--accent-soft)}
+.seg.is-active > i{background-image:linear-gradient(100deg,var(--accent) 0%,var(--accent-hover) 34%,rgba(255,255,255,.55) 50%,var(--accent-hover) 66%,var(--accent) 100%);
+  background-size:220% 100%;animation:flow 1.5s linear infinite;transition:none}
+.seg.is-fail > i{width:100%;background:var(--warn-ink)}
+.ticks{display:flex;gap:3px;margin-top:5px}
+.tick{flex:1 1 0;display:flex;align-items:center;gap:4px;min-width:0;font-size:10.5px;line-height:1.2;
+  color:var(--muted);white-space:nowrap;overflow:hidden}
+.tick .gi{width:9px;height:9px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+  border-radius:50%;box-shadow:inset 0 0 0 1px var(--ghost);font-size:8px;line-height:1}
+.tick.is-done{color:var(--fg-2)}
+.tick.is-done .gi{background:var(--ok);box-shadow:none}
+.tick.is-done .gi::after{content:"✓";color:var(--check-ink);font-size:7px;line-height:1}
+.tick.is-active{color:var(--fg);font-weight:600}
+.tick.is-active .gi{box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft)}
+.tick.is-fail{color:var(--warn-ink);font-weight:600}
+.tick.is-fail .gi{background:var(--warn-ink);box-shadow:none}
+.tick.is-fail .gi::after{content:"!";color:var(--check-ink);font-size:7px;font-weight:700;line-height:1}
+.tick .gx{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--muted);font-weight:400}
+
+/* B 版：总条 + 四行清单（每行自己的小进度） */
+.totalhead{display:flex;align-items:baseline;gap:8px;font-size:11.5px;margin-bottom:6px}
+.totalhead .st{font-weight:600;color:var(--fg)}
+.totalhead .grow{flex:1 1 auto}
+.steps{display:flex;flex-direction:column;gap:1px;margin-top:7px}
+.step{display:flex;align-items:center;gap:6px;font-size:11px;line-height:20px;color:var(--muted);min-width:0}
+.step .dot{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--track);flex:0 0 auto;
+  display:grid;place-items:center;font-size:8px;line-height:1}
+.step .nm{flex:0 0 58px;color:var(--fg-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.step .sbar{flex:0 0 92px;height:3px;border-radius:2px;background:var(--track);overflow:hidden}
+.step .sbar > i{display:block;height:100%;width:0;border-radius:2px;background:var(--accent);
+  transition:width .5s var(--ease-standard)}
+.step .sv{flex:0 0 30px;font-family:var(--mono);font-size:9.5px;text-align:right;color:var(--muted)}
+.step .sm{flex:1 1 auto;min-width:0;font-family:var(--mono);font-size:9.5px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.step.is-done .dot{background:var(--ok);border-color:var(--ok)}
+.step.is-done .dot::after{content:"✓";color:var(--check-ink);font-size:8px;line-height:1}
+.step.is-done .nm{color:var(--fg-2)}
+.step.is-done .sv{color:var(--ok-ink);font-weight:600}
+.step.is-active .dot{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.step.is-active .dot::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.step.is-active .nm{color:var(--fg);font-weight:600}
+.step.is-active .sv{color:var(--accent-ink);font-weight:600}
+.step.is-active .sm{color:var(--fg-2)}
+.step.is-active .sbar > i{background-image:linear-gradient(100deg,var(--accent) 0%,var(--accent-hover) 34%,rgba(255,255,255,.55) 50%,var(--accent-hover) 66%,var(--accent) 100%);
+  background-size:220% 100%;animation:flow 1.5s linear infinite;transition:none}
+.step.is-fail .dot{border-color:var(--warn-ink);background:var(--warn-ink)}
+.step.is-fail .dot::after{content:"!";color:var(--check-ink);font-size:8px;font-weight:700;line-height:1}
+.step.is-fail .nm,.step.is-fail .sv{color:var(--warn-ink);font-weight:600}
+.step.is-fail .sbar > i{background:var(--warn-ink)}
+
+/* 失败原因块（两种口径：下载不完整 / 权限不足） */
+.failnote{display:none;gap:7px;margin-top:7px;padding:6px 8px;border-radius:6px;background:var(--warn-soft)}
+body[data-state="failed"] .failnote,
+body[data-state="failed-permission"] .failnote{display:flex}
+.failnote .fi{width:13px;height:13px;flex:0 0 auto;margin-top:1px;border-radius:50%;background:var(--warn-ink);
+  display:grid;place-items:center;font-size:8px;font-weight:700;color:var(--check-ink);line-height:1}
+.failnote .fb{min-width:0}
+.failnote .ft{display:block;font-size:11.5px;font-weight:600;color:var(--warn-ink)}
+.failnote .fr{display:block;font-size:11px;line-height:1.42;color:var(--fg-2);margin-top:1px}
+.failnote .fk{display:block;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+
+/* 按钮 */
+.btns{display:flex;gap:8px;justify-content:flex-end}
+button{font-family:var(--font);font-size:11.5px;padding:4px 12px;border-radius:6px;
+  border:1px solid var(--line);background:var(--card);color:var(--fg-2);cursor:pointer;min-height:22px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-on);font-weight:600}
+button:disabled{background:var(--track);border-color:var(--line);color:var(--muted);cursor:not-allowed}
+/* 说明区 */
+.notes{margin-top:6px;border-top:1px solid var(--line);padding-top:6px}
+.notes[hidden]{display:none}
+.notes .t{font-size:11.5px;color:var(--fg-2);font-weight:600;margin-bottom:4px}
+.notes .box{height:88px;overflow-y:auto;font-size:11px;line-height:1.52;color:var(--muted);padding-right:6px}
+.notes .box h4{font-size:11.5px;color:var(--fg-2);font-weight:600;margin:6px 0 3px}
+.notes .box li{margin-left:14px}
+.notes .box p{margin-bottom:4px}
+/* 状态切换器（原型工具，不属于产品） */
+.toolbar{width:760px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--fg-2)}
+body.shot-mode{padding:0;gap:0}
+body.shot-mode .toolbar{display:none}
+body.shot-mode .win{border-radius:0;box-shadow:none}
+.toolbar b{color:var(--fg);font-weight:600;margin-right:4px}
+.toolbar button{font-size:11px;padding:3px 9px}
+.toolbar button.on{background:var(--toolbar-on);color:var(--accent-on);border-color:var(--toolbar-on);font-weight:600}
+.tag{font-size:10px;padding:1px 5px;border-radius:4px;background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+/* 检查中：只出一条不确定进度条（没有字节可报） */
+.checkingbar{display:none;margin-bottom:0}
+body[data-state="checking"] .checkingbar{display:block}
+body[data-state="checking"] .stagebar,
+body[data-state="checking"] .ticks,
+body[data-state="checking"] .detail{display:none}
+body[data-state="checking"] .progB .steps{display:none}
+body[data-state="checking"] .progB .bar{display:block}
+
+/* 状态机：由 body[data-state] + body[data-variant] 驱动 */
+.progA,.progB{display:none}
+body[data-variant="a"] .progA{display:block}
+body[data-variant="b"] .progB{display:block}
+/* 未检查 / 有新版本（还没开始）不显示进度区；执行中与失败态由 variant 决定显哪一版 */
+body[data-state="idle"] .prog,
+body[data-state="available"] .prog{display:none}
+/* 失败态走自己的配色 */
+body[data-state="failed"] .prog .top .pct,
+body[data-state="failed-permission"] .prog .top .pct{color:var(--warn-ink)}
+body[data-state="failed"] .bar > i,
+body[data-state="failed-permission"] .bar > i{background:var(--warn-ink)}
+@media (prefers-reduced-motion: reduce){
+  .bar.indet > i,.seg.is-active > i,.step.is-active .sbar > i{animation:none}
+  .bar > i,.seg > i,.step .sbar > i{transition:none}
+  .scroll{scroll-behavior:auto}
+}
+</style>
+</head>
+<body data-variant="a" data-state="downloading">
+
+<div class="toolbar" data-od-id="demo-only:state-switcher">
+  <b>形态</b>
+  <button data-set-variant="a" class="on">A · 单条阶段条</button>
+  <button data-set-variant="b">B · 阶段清单</button>
+  <span style="width:14px"></span>
+  <b>状态</b>
+  <button data-set-state="idle">未检查</button>
+  <button data-set-state="checking">检查中</button>
+  <button data-set-state="available">有新版本</button>
+  <button data-set-state="downloading" class="on">下载中 42%</button>
+  <button data-set-state="verifying">校验中</button>
+  <button data-set-state="installing">安装中</button>
+  <button data-set-state="relaunch">待重启</button>
+  <button data-set-state="failed">失败·下载不完整</button>
+  <button data-set-state="failed-permission">失败·权限不足</button>
+</div>
+
+<div class="win">
+  <aside class="side" data-od-id="settings:sidebar">
+    <div class="grp">常规</div>
+    <div class="it">通用</div>
+    <div class="it">外观</div>
+    <div class="grp">功能</div>
+    <div class="it">额度 Provider</div>
+    <div class="it">剪贴板</div>
+    <div class="it">截图与贴图</div>
+    <div class="it">局域网互传</div>
+    <div class="it">通知与音效</div>
+    <div class="it">Token 用量</div>
+    <div class="grp">系统</div>
+    <div class="it">系统权限</div>
+    <div class="it">系统</div>
+    <div class="it on">关于</div>
+  </aside>
+
+  <main class="content" data-od-id="settings:about-pane">
+    <div class="phead">
+      <h1>关于</h1>
+      <div class="sub" id="headSub">1.31.0 · 构建 24</div>
+    </div>
+
+    <div class="scroll" id="scroll">
+      <!-- 应用卡 -->
+      <div class="sec">应用</div>
+      <div class="card">
+        <div class="row"><span class="k">版本</span><span class="v">1.31.0</span></div>
+        <div class="row"><span class="k">构建号</span><span class="v">24</span></div>
+        <div class="row"><span class="k">项目地址</span><span class="v dim">github.com/baosfeng/toolbar</span></div>
+      </div>
+
+      <!-- 更新卡（合并 检查更新 + 安装） -->
+      <div class="sec">更新</div>
+      <div class="card" id="updateCard">
+        <!-- 版本信息：用户说「看不到更新的信息」 -->
+        <div class="row"><span class="k">当前版本</span><span class="v">1.31.0</span></div>
+        <div class="row"><span class="k">最新版本</span><span class="v accent" id="latestV">1.32.0</span></div>
+        <div class="row"><span class="k">发布时间</span><span class="v dim" id="pubAt">2026-11-26 09:12</span></div>
+        <div class="row"><span class="k">安装包</span><span class="v dim" id="pkgInfo">arm64 · 12.2 MB</span></div>
+        <div class="row"><span class="k">完整性</span><span class="v dim" id="shaInfo">SHA-256 · 发布方提供</span></div>
+
+        <!-- 进度区：A 单条四段分段进度条 -->
+        <div class="prog progA">
+          <div class="top">
+            <span class="st" id="stA">正在下载安装包…</span>
+            <span class="grow"></span>
+            <span class="pct" id="pctA">42%</span>
+          </div>
+          <div class="bar indet checkingbar"><i style="width:34%"></i></div>
+          <div class="stagebar" id="barA">
+            <span class="seg" data-seg="downloading"><i></i></span>
+            <span class="seg" data-seg="verifying"><i></i></span>
+            <span class="seg" data-seg="installing"><i></i></span>
+            <span class="seg" data-seg="relaunch"><i></i></span>
+          </div>
+          <div class="ticks" id="ticksA">
+            <span class="tick" data-seg="downloading"><span class="gi"></span>下载</span>
+            <span class="tick" data-seg="verifying"><span class="gi"></span>校验</span>
+            <span class="tick" data-seg="installing"><span class="gi"></span>安装</span>
+            <span class="tick" data-seg="relaunch"><span class="gi"></span>重启</span>
+          </div>
+          <div class="detail">
+            <span id="dlA">已下载 5.1 MB / 12.2 MB</span>
+            <span class="r" id="spA">2.1 MB/s · 剩余约 3 秒</span>
+          </div>
+        </div>
+
+        <!-- 进度区：B 阶段清单（最上方一条总进度 + 四行各自的小进度） -->
+        <div class="prog progB">
+          <div class="totalhead">
+            <span class="st" id="stB">正在下载安装包…</span>
+            <span class="grow"></span>
+            <span class="pct" id="pctB">42%</span>
+          </div>
+          <div class="bar" id="barB"><i style="width:42%"></i></div>
+          <div class="steps">
+            <div class="step" data-step="downloading"><span class="dot"></span><span class="nm">下载安装包</span><span class="sbar"><i></i></span><span class="sv" id="bDl">42%</span><span class="sm" id="bDlMeta">5.1 / 12.2 MB</span></div>
+            <div class="step" data-step="verifying"><span class="dot"></span><span class="nm">校验完整性</span><span class="sbar"><i></i></span><span class="sv" id="bSha">—</span><span class="sm" id="bShaMeta">SHA-256</span></div>
+            <div class="step" data-step="installing"><span class="dot"></span><span class="nm">展开并替换</span><span class="sbar"><i></i></span><span class="sv" id="bExp">—</span><span class="sm" id="bExpMeta">备份后原子换包</span></div>
+            <div class="step" data-step="relaunch"><span class="dot"></span><span class="nm">重启应用</span><span class="sbar"><i></i></span><span class="sv" id="bRst">—</span><span class="sm">open -n</span></div>
+          </div>
+        </div>
+
+        <!-- 失败原因块（两种口径：下载不完整 / 权限不足） -->
+        <div class="failnote" id="failnote" hidden>
+          <span class="fi">!</span>
+          <span class="fb">
+            <b class="ft" id="failTitle">下载不完整</b>
+            <span class="fr" id="failReason">网络中断</span>
+            <span class="fk" id="failKeep">已下载内容保留</span>
+          </span>
+        </div>
+
+        <!-- 操作行：左侧是代价提示，进度文案只在上面的进度区出现一次 -->
+        <div class="row" style="border-bottom:none;padding-top:6px">
+          <span class="k" id="statusText" style="font-size:11px">安装会替换应用包并重启</span>
+          <span class="btns">
+            <button id="btnCheck">检查更新</button>
+            <button class="primary" id="btnInstall">下载中…</button>
+          </span>
+        </div>
+
+        <!-- 新版本说明（只有发现新版本之后才有内容可给） -->
+        <div class="notes" id="notesBlock">
+          <div class="t">新版本说明</div>
+          <div class="box">
+            <h4>新增</h4>
+            <ul>
+              <li>更新下载进度可视化：字节进度、速度、剩余时间与阶段列表</li>
+              <li>菜单栏指标支持短标签与逐项自定义符号</li>
+              <li>额度页图表补齐基线、刻度与粒度正确的悬停文案</li>
+            </ul>
+            <h4>修复</h4>
+            <ul>
+              <li>修复额度页首次进入图表不显示</li>
+              <li>修复 Token 页每次进入整页重渲</li>
+              <li>修复拖动贴图时透明度逐渐降低</li>
+              <li>修复网络页实时折线过短、中间大片空白</li>
+            </ul>
+            <p>完整变更：v1.31.0...v1.32.0</p>
+          </div>
+        </div>
+      </div>
+      <div class="note">启动后每 24 小时最多自动查询一次；手动点「检查更新」不受限制。安装过程不会中断当前使用，失败会保留原版本。</div>
+
+      <!-- 会话卡 -->
+      <div class="sec">会话</div>
+      <div class="card">
+        <div class="row"><span class="k">退出 一览</span><span class="btns"><button>退出</button></span></div>
+      </div>
+      <div class="note">一览 是菜单栏应用：关闭本窗口不会退出。</div>
+    </div>
+  </main>
+</div>
+
+<script>
+// 阶段顺序（与 UpdateInstallStage 一一对应）
+const ORDER = ['downloading', 'verifying', 'installing', 'relaunch'];
+
+/* 六种形态。stage = 当前段 index（-1 = 无阶段）；pct = 当前段百分比；
+   phase = 段内的细分状态（字节 / 展开 / 换包），供刻度右侧小字用 */
+const state = {
+  idle: {
+    stage: -1, pct: null, indet: false,
+    st: '尚未检查', dl: '', sp: '上次检查 3 小时前',
+    hint: '点「检查更新」向发布页查询最新版本',
+    btn: '下载并安装', btnDis: true, checkDis: false, hasNotes: false,
+    latest: '—', pub: '—', pkg: '—', sha: '—', fnote: null,
+  },
+  checking: {
+    stage: -1, pct: null, indet: true,
+    st: '正在检查更新…', dl: '', sp: '查询发布清单 update.json',
+    hint: '只读、匿名，8 秒超时',
+    btn: '下载并安装', btnDis: true, checkDis: true, hasNotes: false,
+    latest: '—', pub: '—', pkg: '—', sha: '—', fnote: null,
+  },
+  available: {
+    stage: -1, pct: null, indet: false,
+    st: '发现新版本 1.32.0', dl: '', sp: '上次检查 刚刚',
+    hint: '下载 12.2 MB，校验后替换应用包并重启',
+    btn: '下载并安装', btnDis: false, checkDis: false, hasNotes: true,
+    latest: '1.32.0', pub: '2026-11-26 09:12',
+    pkg: 'arm64 · 12.2 MB', sha: 'SHA-256 · 发布方提供', fnote: null,
+  },
+  downloading: {
+    stage: 0, pct: 42, indet: true,
+    st: '正在下载安装包…',
+    dl: '已下载 5.1 MB / 12.2 MB', sp: '2.1 MB/s · 剩余约 3 秒',
+    hint: '失败会保留已下载内容，可续传重试',
+    btn: '下载中…', btnDis: true, checkDis: true, hasNotes: true,
+    latest: '1.32.0', pub: '2026-11-26 09:12',
+    pkg: 'arm64 · 12.2 MB', sha: '待下载完成', fnote: null,
+  },
+  verifying: {
+    stage: 1, pct: 100, indet: true,
+    st: '正在校验安装包…',
+    dl: '安装包已下载（12.2 MB）', sp: 'SHASUMS 比对 · 展开 dmg 校验包结构',
+    hint: '校验失败时当前版本一个字节未动',
+    btn: '校验中…', btnDis: true, checkDis: true, hasNotes: true,
+    latest: '1.32.0', pub: '2026-11-26 09:12',
+    pkg: 'arm64 · 12.2 MB', sha: '正在核对 SHA-256', fnote: null,
+  },
+  installing: {
+    stage: 2, pct: 100, indet: true,
+    st: '正在安装（备份当前版本）…',
+    dl: '12.2 MB 已就位', sp: '备份 → 暂存位预演 → 原子换包',
+    hint: '失败会回滚，不会留下半装状态',
+    btn: '安装中…', btnDis: true, checkDis: true, hasNotes: true,
+    latest: '1.32.0', pub: '2026-11-26 09:12',
+    pkg: 'arm64 · 12.2 MB', sha: 'SHA-256 已核对', fnote: null,
+  },
+  relaunch: {
+    stage: 3, pct: null, indet: false,
+    st: '已安装，即将重启',
+    dl: '1.32.0 已就位', sp: '重启后屏幕录制 / 辅助功能可能需重新授权',
+    hint: '应用重启后，屏幕录制 / 辅助功能 / 输入监控可能需要重新授权',
+    btn: '正在重启…', btnDis: true, checkDis: true, hasNotes: true,
+    latest: '1.32.0', pub: '2026-11-26 09:12',
+    pkg: 'arm64 · 12.2 MB', sha: 'SHA-256 已核对', fnote: null,
+  },
+  failed: {
+    stage: 0, pct: 42, indet: false, failAt: 0,
+    st: '安装失败 · 下载不完整',
+    dl: '已下载 5.1 MB / 12.2 MB', sp: '网络中断',
+    hint: '已下载内容已保留，可续传重试',
+    btn: '重试安装', btnDis: false, checkDis: false, hasNotes: true,
+    latest: '1.32.0', pub: '2026-11-26 09:12',
+    pkg: 'arm64 · 12.2 MB', sha: 'SHA-256 未核对',
+    fnote: { t: '下载不完整', r: '网络中断，已下载 5.1 MB / 12.2 MB（当前版本未改动）', k: '已下载内容保留在临时目录，重试从 42% 续传' },
+  },
+  'failed-permission': {
+    stage: 2, pct: 100, indet: false, failAt: 2,
+    st: '安装失败 · 权限不足',
+    dl: '12.2 MB 已下载并校验', sp: '备份当前版本失败',
+    hint: '当前版本未改动，可手动下载或授权后重试',
+    btn: '重试安装', btnDis: false, checkDis: false, hasNotes: true,
+    latest: '1.32.0', pub: '2026-11-26 09:12',
+    pkg: 'arm64 · 12.2 MB', sha: 'SHA-256 已核对',
+    fnote: { t: '没有写入权限', r: '没有写入权限（/Applications 需要管理员权限）', k: '已下载安装包保留，可直接手动安装：打开发布页' },
+  },
+};
+
+function apply(s, v) {
+  document.body.dataset.state = s;
+  document.body.dataset.variant = v;
+  const d = state[s];
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.textContent = val; };
+
+  // —— 顶部文案 ——
+  set('stA', d.st); set('stB', d.st);
+  set('pctA', d.pct === null ? '—' : d.pct + '%');
+  set('pctB', d.pct === null ? '—' : d.pct + '%');
+  set('dlA', d.dl); set('spA', d.sp);
+  set('latestV', d.latest); set('pubAt', d.pub); set('pkgInfo', d.pkg); set('shaInfo', d.sha);
+  set('statusText', d.hint);
+
+  const btn = document.getElementById('btnInstall');
+  btn.textContent = d.btn;
+  btn.disabled = d.btnDis;
+  document.getElementById('btnCheck').disabled = d.checkDis;
+
+  // —— A 版：四段分段条 + 刻度 ——
+  document.querySelectorAll('#barA .seg').forEach((seg, i) => {
+    seg.classList.remove('is-done', 'is-active', 'is-fail');
+    const fill = seg.querySelector('i');
+    let w = 0;
+    if (s === 'failed' && i === d.failAt) seg.classList.add('is-fail');
+    else if (s === 'failed-permission' && i === d.failAt) seg.classList.add('is-fail');
+    else if (d.stage >= 0) {
+      if (i < d.stage) { seg.classList.add('is-done'); w = 100; }
+      else if (i === d.stage) { seg.classList.add('is-active'); w = d.pct === null ? 0 : d.pct; }
+    }
+    if (seg.classList.contains('is-fail')) w = d.pct === null ? 42 : d.pct;
+    fill.style.width = w + '%';
+  });
+  document.querySelectorAll('#ticksA .tick').forEach((tick, i) => {
+    tick.classList.remove('is-done', 'is-active', 'is-fail');
+    if (s === 'failed' && i === d.failAt) { tick.classList.add('is-fail'); }
+    else if (s === 'failed-permission' && i === d.failAt) { tick.classList.add('is-fail'); }
+    else if (d.stage >= 0) {
+      if (i < d.stage) tick.classList.add('is-done');
+      else if (i === d.stage) tick.classList.add('is-active');
+    }
+  });
+
+  // —— B 版：总条 + 四行 ——
+  const barB = document.getElementById('barB');
+  const fillB = barB.querySelector('i');
+  barB.classList.toggle('indet', !!d.indet && s !== 'failed' && s !== 'failed-permission');
+  if (d.stage < 0) fillB.style.width = '0%';
+  else if (d.stage === 0) fillB.style.width = ((d.pct || 0) * 0.25) + '%';
+  else fillB.style.width = (d.stage * 25 + 25) + '%';
+
+  document.querySelectorAll('.step').forEach((el) => {
+    const i = ORDER.indexOf(el.dataset.step);
+    el.classList.remove('is-done', 'is-active', 'is-fail');
+    const sub = el.querySelector('.sbar > i');
+    let w = 0;
+    if ((s === 'failed' || s === 'failed-permission') && i === d.failAt) { el.classList.add('is-fail'); w = d.pct === null ? 42 : d.pct; }
+    else if (d.stage >= 0) {
+      if (i < d.stage) { el.classList.add('is-done'); w = 100; }
+      else if (i === d.stage) { el.classList.add('is-active'); w = d.pct === null ? 100 : d.pct; }
+    }
+    if (sub) sub.style.width = w + '%';
+  });
+  set('bDl', s === 'downloading' ? '42%' : (d.stage > 0 || s === 'failed-permission' ? '100%' : (s === 'failed' ? '42%' : '—')));
+  set('bDlMeta', s === 'downloading' ? '5.1 / 12.2 MB' : (s === 'failed' ? '5.1 / 12.2 MB（已保留）' : (s === 'idle' || s === 'checking' || s === 'available' ? '等待开始' : '12.2 / 12.2 MB')));
+  set('bSha', d.stage > 1 || s === 'failed-permission' ? '100%' : (s === 'failed' ? '—' : (d.stage === 1 ? '校验中' : '—')));
+  set('bShaMeta', d.stage > 1 || s === 'failed-permission' ? 'SHA-256 已核对' : (s === 'failed' ? '未核对' : 'SHA-256'));
+  set('bExp', d.stage > 2 || s === 'failed-permission' ? '100%' : (d.stage === 2 ? '进行中' : '—'));
+  set('bExpMeta', d.stage > 2 || s === 'failed-permission' ? '已备份并换包' : (s === 'failed-permission' ? '写入被拒绝' : '备份后原子换包'));
+  set('bRst', d.stage === 3 ? '准备中' : (d.stage > 3 ? '已完成' : '—'));
+
+  // —— 说明区：没有新版本就没有说明（不让卡片顶着一段无关文案） ——
+  const notes = document.getElementById('notesBlock');
+  if (notes) notes.hidden = !d.hasNotes;
+
+  // —— 失败块 ——
+  const fn = document.getElementById('failnote');
+  if (d.fnote) {
+    fn.hidden = false;
+    set('failTitle', d.fnote.t); set('failReason', d.fnote.r); set('failKeep', d.fnote.k);
+  } else {
+    fn.hidden = true;
+  }
+}
+
+document.querySelectorAll('[data-set-state]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-set-state]').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  apply(b.dataset.setState, document.body.dataset.variant);
+}));
+document.querySelectorAll('[data-set-variant]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-set-variant]').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  apply(document.body.dataset.state, b.dataset.setVariant);
+}));
+
+// URL 参数：?theme=light|dark 强制配色；?state=xxx 设初始状态；#shot 隐藏工具条并滚到更新卡
+const qs = new URLSearchParams(location.search);
+if (qs.get('theme')) document.documentElement.style.colorScheme = qs.get('theme');
+const isShot = location.hash.includes('shot');
+if (isShot) document.body.classList.add('shot-mode');
+
+const initState = qs.get('state') || 'downloading';
+const initVariant = qs.get('variant') || 'a';
+document.querySelectorAll('[data-set-state]').forEach(x => x.classList.toggle('on', x.dataset.setState === initState));
+document.querySelectorAll('[data-set-variant]').forEach(x => x.classList.toggle('on', x.dataset.setVariant === initVariant));
+apply(initState, initVariant);
+
+// 安装期自动滚到更新卡：真实实现走 SettingsPageStack.scrollToVisible（设置页内容已溢出约 290pt）
+function scrollToUpdateCard() {
+  const card = document.getElementById('updateCard');
+  const box = document.getElementById('scroll');
+  if (card && box) box.scrollTop = Math.max(0, card.offsetTop - 16); // 留出「更新」分组标题
+}
+// 只在「真的在执行 / 失败」时把更新卡滚进视野；尚未开始（未检查 / 有新版本）保持顶部
+if (['downloading','verifying','installing','relaunch','failed','failed-permission'].includes(initState)) scrollToUpdateCard();
+</script>
+</body>
+</html>
