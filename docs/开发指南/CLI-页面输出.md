@@ -58,6 +58,7 @@ nmcli page shot --out /tmp/now.png                  # 默认 target=current：�
 - **需要屏幕录制权限**：由发起 nmcli 的终端持有；`nmcli shot` 自检可先验证。
 - **菜单面板可能走 `rectFallback`**：`screencapture -l` 对 layer=25 的 popover 实测会失败，此时按 `CGWindowList` 现查 bounds 矩形截图。
 - **只输出 UI，不输出数据**：要断言数值口径请用 TestRunner 里的纯函数测试，不要把截图当数据源。
+- **截图前会静置 500ms**（`PageCommand.shot`）：窗口尺寸稳定不等于画面对齐 —— 面板与卡片的进场动效（淡入 + 位移 + 卡片错峰）在尺寸定下来的第一帧还没跑完，此时拍到的卡片是半透明的（表现为「某几张卡的卡头颜色发灰」，容易被误判成品牌色没命中）。要更快出图用 `nmcli shot --window <id>` 自己控制时机。
 
 ## 加一个新页面
 
