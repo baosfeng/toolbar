@@ -49,6 +49,39 @@ public enum ClipboardCardGeometry {
                                              starSize: 11, footerRowGap: 1)
     }
 
+    // MARK: 卡片尺寸（随面板高度自适应）
+
+    /// 设计基准卡高：面板高度下限时卡片正好是这个尺寸
+    public static let baseCardHeight: CGFloat = 198
+    /// 设计基准卡宽（与基准卡高同一个比例：176 × 198）
+    public static let baseCardWidth: CGFloat = 176
+    /// 卡片宽高比（宽 / 高）——只由设计基准给出，面板高度变化时按它等比缩放
+    public static var aspectRatio: CGFloat { baseCardWidth / baseCardHeight }
+    /// 卡片区在整卡之外的上下留白合计（卡片在卡片区里垂直居中前先扣掉它；上下各 8pt）
+    public static let cardSlack: CGFloat = 16
+    /// 卡片高度下限 / 上限：再矮就装不下卡头 + 卡身 + 卡脚，再高就退化成「一屏两张」
+    public static let minCardHeight: CGFloat = 150
+    public static let maxCardHeight: CGFloat = 440
+
+    /// 设计基准尺寸
+    public static var baseSize: CGSize {
+        CGSize(width: baseCardWidth, height: baseCardHeight)
+    }
+
+    /// 卡片高度：卡片区高度扣掉上下留白（面板变矮 → 卡变小 → 一屏多几张，Paste 的 Compact Mode 同口径）
+    public static func cardHeight(forCardAreaHeight height: CGFloat) -> CGFloat {
+        let raw = height.isFinite ? height - cardSlack : baseCardHeight
+        return min(max(raw, minCardHeight), maxCardHeight)
+    }
+
+    /// 卡片尺寸：高度自适应当卡片区，宽度按基准宽高比等比给出
+    ///
+    /// 只改尺寸、不改行数口径：卡片永远单行横向排列，一屏能放几张由面板宽与卡宽决定。
+    public static func cardSize(forCardAreaHeight height: CGFloat) -> CGSize {
+        let h = cardHeight(forCardAreaHeight: height).rounded()
+        return CGSize(width: (h * aspectRatio).rounded(), height: h)
+    }
+
     // MARK: 卡头带
 
     /// 卡头带高度 —— 按来源 App 染色的那条横带（贴卡顶、与卡同宽）

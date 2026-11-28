@@ -4,7 +4,7 @@ import NetworkMonitorUI
 
 // MARK: - 面板视图子视图构建（从 ClipboardPanelView 拆出，守住单文件 15 KiB 上限）
 //
-// 只做「建视图 + 接线回调」，布局与状态更新仍在主文件；底部件数计数文本与右键菜单
+// 只做「建视图 + 接线回调」，布局与状态更新仍在主文件；条数计数文本与右键菜单
 // 响应链分发也在此文件，避免主文件继续膨胀。跨文件访问的成员已在主文件放宽为 internal。
 
 extension ClipboardPanelView {
@@ -38,7 +38,7 @@ extension ClipboardPanelView {
     /// 筛选芯片行：点掉一枚芯片 = 删它；点「＋筛选」= 弹候选清单（见 ClipboardFilterMenu）
     ///
     /// 芯片行铺在工具条整宽上（frame 由 layout 给），只在芯片与「＋筛选」按钮处吃鼠标，
-    /// 其余位置放行 —— 它是铺满整行的，若不放行就会挡住搜索框的点击。
+    /// 其余位置放行 —— 它是铺满整行的，若不放行就会挡住搜索框与板胶囊的点击。
     func buildChipRow() {
         chipRowView.onRemove = { [weak self] identifier in
             guard let self else { return }
@@ -72,51 +72,19 @@ extension ClipboardPanelView {
         setFilterTokens([])
     }
 
+    /// 「采集当前剪贴板」：工具条右端两枚图标之一（图标 + tooltip，文案仍进读屏）
     func buildCaptureButton() {
-        captureButton.title = "采集当前剪贴板"
-        captureButton.bezelStyle = .rounded
+        captureButton.isBordered = false
         captureButton.controlSize = .small
-        captureButton.font = NSFont.systemFont(ofSize: 12)
+        captureButton.refusesFirstResponder = true
+        captureButton.image = symbolImage(named: "square.and.arrow.down",
+                                          color: .secondaryLabelColor, pointSize: 13)
+        captureButton.imagePosition = .imageOnly
+        captureButton.toolTip = "采集当前剪贴板"
+        captureButton.setAccessibilityLabel("采集当前剪贴板")
         captureButton.target = self
         captureButton.action = #selector(captureNow)
         addSubview(captureButton)
-    }
-
-    func buildFooter() {
-        countLabel.font = NSFont.systemFont(ofSize: 11)
-        countLabel.textColor = .secondaryLabelColor
-        countLabel.lineBreakMode = .byClipping
-        countLabel.stringValue = ClipboardPanelFooterText.countsLabel(total: 0, pinned: 0)
-        countLabel.setAccessibilityLabel(ClipboardPanelFooterText.countsAccessibilityLabel(total: 0, pinned: 0))
-        addSubview(countLabel)
-
-        stackLabel.font = NSFont.systemFont(ofSize: 11)
-        stackLabel.textColor = .secondaryLabelColor
-        stackLabel.lineBreakMode = .byTruncatingTail
-        stackLabel.isHidden = true
-        addSubview(stackLabel)
-
-        hintLabel.font = NSFont.systemFont(ofSize: 11)
-        hintLabel.textColor = .secondaryLabelColor
-        hintLabel.lineBreakMode = .byTruncatingTail
-        hintLabel.alignment = .right
-        hintLabel.stringValue = Self.keyHint
-        addSubview(hintLabel)
-
-        // 暂停恢复热区：铺在提示行文字上（透明），只在暂停时显示，避免与临时提示抢点击
-        pauseResumeButton.isBordered = false
-        pauseResumeButton.title = ""
-        pauseResumeButton.isHidden = true
-        pauseResumeButton.target = self
-        pauseResumeButton.action = #selector(resumeFromPauseBanner)
-        pauseResumeButton.setAccessibilityLabel("恢复剪贴板采集")
-        addSubview(pauseResumeButton)
-
-        accessibilityButton.isBordered = false
-        accessibilityButton.target = self
-        accessibilityButton.action = #selector(openAccessibilitySettings)
-        applyPermissionStyle(accessibilityGranted: true)
-        addSubview(accessibilityButton)
     }
 
     /// 工具条「?」按钮：键盘快捷键自身没有自述入口，靠它弹出键位浮层
@@ -126,9 +94,8 @@ extension ClipboardPanelView {
         // 不参与焦点环：点「?」后搜索框仍是第一响应者，弹出浮层不打断输入
         helpButton.refusesFirstResponder = true
         // 图标单独按 13pt 配置：10pt 符号在 24pt 按钮里点击目标过小
-        helpButton.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: nil)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
-                .applying(NSImage.SymbolConfiguration(paletteColors: [NSColor.secondaryLabelColor])))
+        helpButton.image = symbolImage(named: "questionmark.circle",
+                                       color: .secondaryLabelColor, pointSize: 13)
         helpButton.imagePosition = .imageOnly
         helpButton.toolTip = "快捷键帮助"
         helpButton.setAccessibilityLabel("快捷键帮助")
@@ -137,9 +104,28 @@ extension ClipboardPanelView {
         addSubview(helpButton)
     }
 
-    /// 底部详情区：内容由控制器在渲染 / 切选中时灌入，视图只负责展示
+    /// 条数计数（「N 条 · 收藏 M」）：工具条右端的一行状态文本，不是按钮
+    func buildCountLabel() {
+        countLabel.font = NSFont.systemFont(ofSize: 10.5)
+        countLabel.textColor = .tertiaryLabelColor
+        countLabel.alignment = .right
+        countLabel.lineBreakMode = .byTruncatingMiddle
+        countLabel.stringValue = ClipboardPanelFooterText.countsLabel(total: 0, pinned: 0)
+        countLabel.setAccessibilityLabel(ClipboardPanelFooterText.countsAccessibilityLabel(total: 0, pinned: 0))
+        addSubview(countLabel)
+    }
+
+    /// 底部状态胶囊：暂停 / 权限 / 提示 / 多选 / 栈进度的唯一出口（不占布局高度）
+    func buildStatusBand() {
+        statusBand.onRequestRestore = { [weak self] in self?.resumeFromPauseBanner() }
+        statusBand.onOpenAccessibility = { [weak self] in self?.openAccessibilitySettings() }
+        addSubview(statusBand)
+    }
+
+    /// 编辑浮层：内容由编辑器在 ⌘E / ⌘N 期间灌入，平时整体隐藏
     func buildDetailStrip() {
         detailStrip.setAccessibilityIdentifier("clipboard.detailStrip")
+        detailStrip.isHidden = true
         addSubview(detailStrip)
     }
 
@@ -167,21 +153,7 @@ extension ClipboardPanelView {
         guideView.isHidden = !visible
         // 引导态独占卡片区：历史为空，卡片流里只有空态文案，隐藏后不与引导文案叠字
         cardFlow.isHidden = visible
-        // 详情区一并让位：历史为空时没有可展示的选中项，留着只会念一句「选中一条查看详情」
-        detailStrip.isHidden = visible
         needsLayout = true
-    }
-
-    /// 权限入口样式：有权限时 10pt muted，无权限时改为 systemOrange 并带警示符号（不得静默）
-    func applyPermissionStyle(accessibilityGranted: Bool) {
-        let color: NSColor = accessibilityGranted ? .secondaryLabelColor : .systemOrange
-        accessibilityButton.attributedTitle = NSAttributedString(
-            string: "辅助功能权限",
-            attributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: color])
-        accessibilityButton.image = accessibilityGranted
-            ? nil
-            : symbolImage(named: "exclamationmark.triangle", color: .systemOrange)
-        accessibilityButton.imagePosition = accessibilityGranted ? .noImage : .imageLeading
     }
 
     /// 卡片流：点击 / 双击动作全部转交控制器，视图不持有业务依赖
@@ -206,18 +178,19 @@ extension ClipboardPanelView {
         addSubview(cardFlow)
     }
 
-    func symbolImage(named name: String, color: NSColor) -> NSImage? {
+    func symbolImage(named name: String, color: NSColor,
+                     pointSize: CGFloat = 10) -> NSImage? {
         guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return nil }
-        let configuration = NSImage.SymbolConfiguration(pointSize: 10, weight: .regular)
+        let configuration = NSImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)
             .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
         return image.withSymbolConfiguration(configuration) ?? image
     }
 
     // MARK: 底部件数统计
 
-    /// 更新底部件数统计「N 条 · 收藏 M」（N = 当前匹配项数，M = 其中收藏数）
+    /// 更新条数统计「N 条 · 收藏 M」（N = 当前匹配项数，M = 其中收藏数）
     ///
-    /// 计数常驻提示行左侧、栈进度标签更左；读屏文案另给完整句子。
+    /// 计数落在工具条右端、栈进度落在状态胶囊；读屏文案另给完整句子。
     func updateCounts(total: Int, pinned: Int) {
         countLabel.isHidden = false
         countLabel.stringValue = ClipboardPanelFooterText.countsLabel(total: total, pinned: pinned)

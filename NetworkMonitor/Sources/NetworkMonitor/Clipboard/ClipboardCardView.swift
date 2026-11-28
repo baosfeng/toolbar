@@ -22,8 +22,8 @@ final class ClipboardCardView: NSView {
 
     // MARK: 令牌
 
-    /// 卡片尺寸（设计规格：176 × 198，动效不改变尺寸）
-    static let cardSize = NSSize(width: 176, height: 198)
+    /// 卡片尺寸不在类型里写死：由卡片流按卡片区高度推出（ClipboardCardGeometry.cardSize），
+    /// 面板变矮 → 卡变小 → 一屏多几张；动效只改位置与透明度，不改尺寸。
     /// 卡片圆角
     static let cornerRadius: CGFloat = 12
     /// 卡片内边距
@@ -36,10 +36,14 @@ final class ClipboardCardView: NSView {
     static let metaFontSize: CGFloat = 11
     /// 卡身与卡头 / 卡脚之间的留白
     static let bodyGap = ClipboardCardGeometry.Metrics.standard.bodyGap
-    /// 正文最大行数（24pt 行高下卡身约 120pt，6 行是既有观感的等价档）
-    static let maxTextLines = 6
+    /// 正文行高（正文 13pt + 2pt 行距；正文最多行数按卡身高度算，不再写死 6 行）
+    static let bodyLineHeight: CGFloat = 15
+    /// 正文最多行数下限（卡再矮也至少给两行）
+    static let minTextLines = 2
     /// 卡脚里元素之间的间距
     static let metaGap: CGFloat = 5
+    /// ⌘N 角标在来源行右侧的预留宽（角标只在 hover / 选中时画，位置恒预留以免文字重排）
+    static let shortcutReserveWidth: CGFloat = 22
     /// 卡脚来源行的小图标尺寸（比卡头的 14 小一档）
     static let appIconSize: CGFloat = 10
     /// 收藏星尺寸
@@ -59,15 +63,9 @@ final class ClipboardCardView: NSView {
     static let backgroundAlpha: CGFloat = 0.72
     /// hover 提亮叠色（白色 6%）
     static let hoverFillAlpha: CGFloat = 0.06
-    /// hover 描边（label 45%）
-    static let hoverStrokeAlpha: CGFloat = 0.45
-    /// 选中叠色（accent 5%）
-    static let selectionFillAlpha: CGFloat = 0.05
     /// 常态描边线宽
     static let borderWidth: CGFloat = 1
-    /// hover 描边线宽
-    static let hoverBorderWidth: CGFloat = 1.5
-    /// 选中描边线宽（2pt：Paste 的选中是明确一整圈，1.5pt 在深色卡面上偏软）
+    /// 选中描边线宽（2pt：Paste 的选中是明确一整圈内描边，不叠色、不缩放）
     static let activeBorderWidth: CGFloat = 2
     /// 阴影不透明度（只在 hover 与选中时出现）
     static let shadowOpacity: Float = 0.12

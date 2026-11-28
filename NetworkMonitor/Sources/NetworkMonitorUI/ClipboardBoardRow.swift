@@ -3,16 +3,17 @@ import Foundation
 
 // MARK: - 板标签行几何（纯逻辑）
 
-/// 板标签行的排版 —— 纯算术，不含 AppKit，视图只做 frame 赋值
+/// 板胶囊的排版 —— 纯算术，不含 AppKit，视图只做 frame 赋值
 ///
-/// 一行三样东西：「全部」+ 各板（色点 + 名称）+ 右侧「＋」新建。放不下时不换行、不压缩单枚标签，
+/// 一节三样东西：「全部」+ 各板（色点 + 名称）+ 右侧「＋」新建。放不下时不换行、不压缩单枚标签，
 /// 把放不下的收进「+N」徽标 —— 「全部」永远排在最左，不会被挤掉。
+///
+/// 位置：改造后它不再是独立的一行，而是**工具条里的第二节**（搜索框右侧）。
+/// 行高由调用方传入（工具条 34pt），胶囊在行内垂直居中。
 public enum ClipboardBoardRow {
 
-    /// 行高：与面板分段同源（ClipboardPanelLayout.boardRowHeight），不另立第二份字面量
-    public static var rowHeight: CGFloat { ClipboardPanelLayout.boardRowHeight }
-    /// 标签胶囊高
-    public static let chipHeight: CGFloat = 20
+    /// 标签胶囊高（工具条 24pt 控件里的饱满胶囊）
+    public static let chipHeight: CGFloat = 22
     /// 标签左右内边距
     public static let chipPaddingX: CGFloat = 8
     /// 标签之间的间距
@@ -95,16 +96,18 @@ public enum ClipboardBoardRow {
     ///   - originX: 行起点（面板左内边距）
     ///   - rowY: 行顶（标签在行内垂直居中）
     ///   - available: 本行可用宽
+    ///   - rowHeight: 所在行的行高（胶囊在行内垂直居中）
     public static func layout(chips: [Chip], originX: CGFloat, rowY: CGFloat,
-                              available: CGFloat) -> Metrics {
+                              available: CGFloat,
+                              rowHeight: CGFloat = ClipboardPanelLayout.toolbarHeight) -> Metrics {
         let wide = max(0, available)
-        guard wide > 0 else {
+        // 连「＋」都放不下时整节让位（宁可没有新建入口，也不把按钮画到搜索框上）
+        guard wide >= addButtonWidth else {
             return Metrics(chips: [], overflow: nil, addButton: .zero, rightEdge: originX)
         }
         let chipY = rowY + (rowHeight - chipHeight) / 2
-        let addButton = CGRect(x: originX + wide - addButtonWidth, y: chipY,
-                               width: addButtonWidth, height: chipHeight)
-        // 标签只用扣掉按钮与一个间距后的宽：按钮贴右，绝不因标签多而消失
+        // 标签只用扣掉按钮与一个间距后的宽：按钮紧随最后一枚标签（Paste 的 ＋ 紧跟 pinboard 标签），
+        // 绝不像条数计数那样飘到右端；标签多到放不下时由下面的徽标兜底，按钮始终在
         let chipsSpace = max(0, wide - addButtonWidth - chipGap)
         var cursor = originX
         var placed: [Placed] = []
@@ -127,7 +130,11 @@ public enum ClipboardBoardRow {
         if dropped > 0, cursor + overflowWidth - originX <= chipsSpace {
             overflow = Placed(id: "overflow", label: "+\(dropped)", colorIndex: nil,
                               frame: CGRect(x: cursor, y: chipY, width: overflowWidth, height: chipHeight))
+            cursor += overflowWidth + chipGap
         }
+        // 「＋」紧跟在标签（或「+N」徽标）之后，且永不越过本节的可用宽
+        let addButton = CGRect(x: max(originX, min(cursor, originX + wide - addButtonWidth)),
+                               y: chipY, width: addButtonWidth, height: chipHeight)
         let rightEdge = max(addButton.maxX, overflow?.frame.maxX ?? originX)
         return Metrics(chips: placed, overflow: overflow, addButton: addButton, rightEdge: rightEdge)
     }

@@ -6,10 +6,11 @@ import NetworkMonitorUI
 
 /// 详情区与面板分段的守门测试
 ///
-/// 背景：悬停全文浮层下线后，完整内容常驻在面板底部。这里钉住三件事：
-/// 1. 详情区高度恒定 —— 有没有选中、正文多长都不改高度，切条目时卡片区不跳；
-/// 2. 内容口径 —— 文本给完整正文、图片给尺寸摘要、无选中给空态文案，元信息拼装不留空档；
-/// 3. 面板分段 —— 四段在给定高度下首尾相接、加起来等于面板高，卡片区仍容得下整卡。
+/// 背景（v2）：详情区不再是常驻段 —— 完整内容走「空格预览」，详情区只在 ⌘E / ⌘N 编辑期间
+/// 作为浮层出现在面板底部。这里钉住三件事：
+/// 1. 详情区高度恒定 —— 编辑浮层的几何与内容口径不变（文本全文 / 图片尺寸 / 元信息拼装）；
+/// 2. 面板分段只剩两段 —— 工具条 + 卡片区，首尾相接、加起来等于面板高；
+/// 3. 卡片尺寸随卡片区高度等比自适应，且守住上下限。
 func runClipboardDetailStripTests() {
     print("🧪 Testing clipboard detail strip & panel sections...")
 
@@ -96,47 +97,45 @@ func runClipboardDetailStripTests() {
     assertEqual(ClipboardItemKindLabel.label(for: rtfItem), "富文本", "RTF 显示为富文本")
     assertEqual(ClipboardItemKindLabel.label(for: textItem), "文本", "纯文本显示为文本")
 
-    // MARK: 面板分段
+    // MARK: 面板分段（v2：只剩工具条 + 卡片区）
 
     assertEqual(ClipboardPanelLayout.minPanelHeight,
-                32 + 26 + 198 + 6 + ClipboardDetailStrip.totalHeight + 24,
-                "下限 = 工具条 + 板标签行 + 整卡 + 留白 + 详情区 + 提示行")
-    assertEqual(ClipboardPanelLayout.defaultPanelHeight, ClipboardPanelLayout.minPanelHeight,
-                "默认高度等于下限：卡片区刚好容下整卡")
+                Double(ClipboardPanelLayout.toolbarHeight
+                       + ClipboardCardGeometry.baseCardHeight + ClipboardCardGeometry.cardSlack),
+                "下限 = 工具条 + 整卡 + 卡片区留白（没有详情区、没有提示行）")
+    assertEqual(ClipboardPanelLayout.defaultPanelHeight > ClipboardPanelLayout.minPanelHeight, true,
+                "默认高度高于下限：卡片按比例长到 240pt 以上")
 
     let size = CGSize(width: 640, height: 400)
     let sections = ClipboardPanelLayout.sections(in: size)
-    assertEqual(sections.toolbar.height, 32, "工具条 32pt")
-    assertEqual(sections.footer.height, 24, "提示行 24pt")
-    assertEqual(sections.detail.height, ClipboardDetailStrip.totalHeight, "详情区高度恒为详情区口径")
-    assertEqual(sections.detail.minY, 400 - 24 - ClipboardDetailStrip.totalHeight,
-                "详情区顶边 = 面板高 − 提示行 − 详情区")
-    assertEqual(sections.footer.minY, 400 - 24, "提示行顶边贴面板底")
-    assertEqual(sections.boardRow.minY, sections.toolbar.maxY, "板标签行紧跟工具条")
-    assertEqual(sections.boardRow.height, ClipboardPanelLayout.boardRowHeight, "板标签行高 26pt")
-    assertEqual(sections.cards.minY, sections.boardRow.maxY, "卡片区紧跟板标签行")
-    assertEqual(sections.cards.maxY, sections.detail.minY, "卡片区底边贴详情区顶边（无缝隙）")
-    assertEqual(sections.cards.height,
-                400 - 32 - ClipboardPanelLayout.boardRowHeight - ClipboardDetailStrip.totalHeight - 24,
-                "卡片区为弹性段（板标签行 26pt 从它身上借）")
-    assertEqual(sections.cards.minX, ClipboardPanelLayout.paddingX, "卡片区左右内缩")
+    assertEqual(sections.toolbar.height, ClipboardPanelLayout.toolbarHeight, "工具条 34pt（单行）")
     assertEqual(sections.toolbar.minX, 0, "工具条整宽（自己管内边距）")
-    assertEqual(sections.detail.minX, 0, "详情区整宽（分隔线横贯面板）")
+    assertEqual(sections.cards.minY, sections.toolbar.maxY, "卡片区紧跟工具条（没有第二行）")
+    assertEqual(sections.cards.height, 400 - ClipboardPanelLayout.toolbarHeight, "卡片区吃掉剩余高度")
+    assertEqual(sections.cards.maxY, 400, "卡片区直抵面板底（没有提示行）")
+    assertEqual(sections.cards.minX, ClipboardPanelLayout.paddingX, "卡片区左右内缩")
+    assertEqual(sections.separatorYs, [ClipboardPanelLayout.toolbarHeight], "只剩工具条底一条分隔线")
 
-    // 四段首尾相接、无重叠
-    assertEqual(sections.toolbar.maxY <= sections.boardRow.minY, true, "工具条与板标签行不重叠")
-    assertEqual(sections.cards.maxY <= sections.detail.minY, true, "卡片区与详情区不重叠")
-    assertEqual(sections.detail.maxY <= sections.footer.minY, true, "详情区与提示行不重叠")
-    assertEqual(sections.footer.maxY, 400, "最后一段贴住面板底")
-
-    // 面板层分隔线只有工具条底与提示行顶两条（详情区顶那条画在详情区自己身上）
-    assertEqual(sections.separatorYs, [32, 376], "面板层分隔线：工具条底 / 提示行顶")
-
-    // 高度只在卡片区变化：面板变高 100pt，详情区与提示行不动
     let taller = ClipboardPanelLayout.sections(in: CGSize(width: 640, height: 500))
-    assertEqual(taller.detail.height, sections.detail.height, "面板变高不改详情区高度")
-    assertEqual(taller.footer.minY, 476, "面板变高后提示行仍贴底")
     assertEqual(taller.cards.height, sections.cards.height + 100, "增量全部给卡片区")
+
+    // MARK: 卡片尺寸随卡片区高度自适应（Paste 的 Compact Mode 同口径）
+
+    assertEqual(ClipboardCardGeometry.cardHeight(forCardAreaHeight: 400),
+                400 - ClipboardCardGeometry.cardSlack, "卡片高 = 卡片区 − 留白")
+    assertEqual(ClipboardCardGeometry.cardHeight(forCardAreaHeight: 120),
+                ClipboardCardGeometry.minCardHeight, "卡片区过矮时卡片不缩到装不下卡头卡脚")
+    assertEqual(ClipboardCardGeometry.cardHeight(forCardAreaHeight: 1000),
+                ClipboardCardGeometry.maxCardHeight, "卡片区过高时卡片有上限")
+    let defaultCard = ClipboardCardGeometry.cardSize(forCardAreaHeight:
+        CGFloat(ClipboardPanelLayout.defaultPanelHeight - ClipboardPanelLayout.toolbarHeight))
+    assertEqual(defaultCard.height > ClipboardCardGeometry.baseCardHeight, true,
+                "默认高度下卡片比设计基准大一档（高度还给了内容）")
+    assertEqual(abs(defaultCard.width / defaultCard.height
+                    - ClipboardCardGeometry.baseCardWidth / ClipboardCardGeometry.baseCardHeight) < 0.01,
+                true, "卡片宽高比不随面板高度变化（等比缩放）")
+    assertEqual(ClipboardCardGeometry.cardSize(forCardAreaHeight: 0).height,
+                ClipboardCardGeometry.minCardHeight, "卡片区为 0 时也给出下限尺寸")
 
     // MARK: 高度夹紧
 
@@ -151,42 +150,9 @@ func runClipboardDetailStripTests() {
     // 默认高度下卡片区容得下整卡
     let defaultSections = ClipboardPanelLayout.sections(
         in: CGSize(width: 640, height: ClipboardPanelLayout.defaultPanelHeight))
-    assertEqual(defaultSections.cards.height >= ClipboardPanelLayout.cardHeight, true,
-                "默认高度下卡片区能露出整卡 198pt")
+    assertEqual(defaultSections.cards.height >= ClipboardCardGeometry.baseCardHeight, true,
+                "默认高度下卡片区能露出整卡")
 
-    // MARK: 提示行列宽分配
-
-    let footer = ClipboardPanelLayout.footerMetrics(width: 640, height: 400,
-                                                    countWidth: 80, stackWidth: 60, permissionWidth: 90)
-    assertEqual(footer.count.minX, ClipboardPanelLayout.paddingX, "计数贴左内边距")
-    assertEqual(footer.stack.minX, footer.count.maxX + ClipboardPanelLayout.toolbarGap, "栈进度紧跟计数")
-    assertEqual(footer.hint.minX, footer.stack.maxX + ClipboardPanelLayout.toolbarGap, "提示紧跟栈进度")
-    assertEqual(footer.hint.maxX, footer.permission.minX - ClipboardPanelLayout.toolbarGap,
-                "提示右边缘在权限入口左侧一个间距处")
-    assertEqual(footer.permission.maxX, 640 - ClipboardPanelLayout.paddingX, "权限入口贴右内边距")
-    assertEqual(footer.permission.minY, 400 - ClipboardPanelLayout.footerHeight
-                + (ClipboardPanelLayout.footerHeight - ClipboardPanelLayout.footerTextHeight) / 2,
-                "提示行文案在 24pt 行内垂直居中")
-    assertEqual(footer.hint.width > 0, true, "常规宽度下提示有空间")
-
-    // 最小面板宽（420）+ 权限入口带警示图标（120）时栈进度让位，计数与提示共享剩余空间
-    let narrowFooter = ClipboardPanelLayout.footerMetrics(width: 420, height: 357,
-                                                          countWidth: 160, stackWidth: 120,
-                                                          permissionWidth: 120)
-    assertEqual(narrowFooter.stack.width, 0, "窄面板 + 宽权限入口时栈进度让位")
-    assertEqual(narrowFooter.count.width, 160, "计数不被压缩（上限 160）")
-    assertEqual(narrowFooter.hint.minX, narrowFooter.count.maxX + ClipboardPanelLayout.toolbarGap,
-                "让位后提示从计数右边缘起（不留空隙）")
-    assertEqual(narrowFooter.hint.minX, narrowFooter.count.maxX + ClipboardPanelLayout.toolbarGap,
-                "让位后提示从计数右边缘起")
-    assertEqual(narrowFooter.hint.width > 0, true, "让位后提示仍有空间")
-
-    // 计数与栈都隐藏时，提示直接从左边距起
-    let emptyFooter = ClipboardPanelLayout.footerMetrics(width: 640, height: 400,
-                                                         countWidth: 0, stackWidth: 0, permissionWidth: 90)
-    assertEqual(emptyFooter.count.width, 0, "隐藏时计数宽 0")
-    assertEqual(emptyFooter.hint.minX, ClipboardPanelLayout.paddingX, "都没有时提示贴左内边距")
-    assertEqual(emptyFooter.permission.width, 90, "权限入口用实测宽")
 
     print("✅ Clipboard detail strip & panel sections works")
 }

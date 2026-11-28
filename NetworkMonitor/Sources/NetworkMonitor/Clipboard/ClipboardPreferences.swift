@@ -42,6 +42,7 @@ final class ClipboardPreferences: Sendable {
         static let quickPaste = "clipboard.quickPasteEnabled"
         static let panelPosition = "clipboard.panelPosition"
         static let panelHeight = "clipboard.panelHeight"
+        static let panelHeightLayout = "clipboard.panelHeightLayout"
         static let maxItems = "clipboard.maxItems"
         static let maxBytes = "clipboard.maxBytes"
         static let retentionDays = "clipboard.retentionDays"
@@ -128,22 +129,42 @@ final class ClipboardPreferences: Sendable {
 
     /// 面板高度可选范围 —— 下限是「卡片区刚好容下整卡」，上限与设置页滑块一致
     ///
-    /// 与分段几何同源（`ClipboardPanelLayout`）：改详情区高度或卡片尺寸时这里自动跟着变，
+    /// 与分段几何同源（ClipboardPanelLayout）：改卡片尺寸时这里自动跟着变，
     /// 设置页滑块与偏好读取共用同一份边界，不会再出现「滑块能拖到裁卡的高度」。
     static let heightRange: ClosedRange<Double> =
         ClipboardPanelLayout.minPanelHeight...ClipboardPanelLayout.maxPanelHeight
 
-    /// 面板高度（默认由分段几何给出：工具条 + 整卡 + 详情区 + 提示行）
+    /// 分段几何版本：2 = 面板只剩「工具条 + 卡片区」（详情区退成编辑浮层、提示行改为状态胶囊）
+    static let panelHeightLayoutVersion = 2
+    /// v1 分段里被删掉的固定高度：详情区 102 + 提示行 24
     ///
-    /// 读出来的值一律夹紧到 `ClipboardPanelLayout` 的上下限：下限保证卡片不被裁、
-    /// 上限与设置页滑块一致；老用户存下的旧高度（没有详情区时的 260）会被抬到新下限。
+    /// 这里刻意写字面量而不是引用现常量 —— 它是**历史分段**的冻结值，跟现在的几何没关系；
+    /// 引用现常量会让「以后调详情区高度」连带改写老用户的迁移结果。
+    private static let legacyChromeHeight: Double = 126
+
+    /// 面板高度（默认由分段几何给出：工具条 + 整卡）
+    ///
+    /// 读出来的值一律夹紧到 ClipboardPanelLayout 的上下限：下限保证卡片不被裁、
+    /// 上限与设置页滑块一致。老用户存下的旧高度含已删除的两段，按同一张卡片来扣减
+    /// （迁移在读取时完成、不回写偏好：同一个存量值每次读都得到同一个结果）。
     var panelHeight: Double {
         get {
-            let value = storage.double(forKey: Key.panelHeight)
-            guard value > 0 else { return ClipboardPanelLayout.defaultPanelHeight }
-            return ClipboardPanelLayout.clampedHeight(value)
+            let stored = storage.double(forKey: Key.panelHeight)
+            guard stored > 0 else { return ClipboardPanelLayout.defaultPanelHeight }
+            return ClipboardPanelLayout.clampedHeight(
+                Self.migratedHeight(stored,
+                                   storedVersion: storage.integer(forKey: Key.panelHeightLayout)))
         }
-        set { storage.set(newValue, forKey: Key.panelHeight) }
+        set {
+            storage.set(newValue, forKey: Key.panelHeight)
+            storage.set(Self.panelHeightLayoutVersion, forKey: Key.panelHeightLayout)
+        }
+    }
+
+    /// 旧分段高度 → 新分段高度：扣掉已删除的详情区与提示行，卡片尺寸保持不变
+    static func migratedHeight(_ stored: Double, storedVersion: Int) -> Double {
+        guard stored > 0, storedVersion < panelHeightLayoutVersion else { return stored }
+        return stored - legacyChromeHeight
     }
 
     // MARK: 图片文字识别

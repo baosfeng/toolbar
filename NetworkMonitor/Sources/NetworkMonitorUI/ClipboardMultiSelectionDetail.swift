@@ -15,6 +15,11 @@ public enum ClipboardMultiSelectionDetail {
                                      isEmpty: false)
     }
 
+    /// 底部状态胶囊里的一行摘要（多选时取代常驻详情区）
+    public static func summaryLine(count: Int) -> String {
+        "已选 \(count) 条 · ⌘⌫ 删除 · Esc 取消"
+    }
+
     /// 批量删除的二次确认提示（首次按下只提示，窗口内再按一次才执行）
     public static func deleteConfirmHint(count: Int) -> String {
         "再按一次 ⌘⌫ 删除选中的 \(count) 条"

@@ -36,6 +36,13 @@ final class ClipboardDetailStripView: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// 编辑浮层的底：它现在压在卡片之上（原来是常驻段、底下没有别的东西），
+    /// 不铺一层近乎不透明的底就会与卡片正文叠字
+    override func draw(_ dirtyRect: NSRect) {
+        PaneCardStyle.cardFill.withAlphaComponent(0.97).setFill()
+        bounds.fill()
+    }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         build()

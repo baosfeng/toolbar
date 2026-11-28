@@ -7,8 +7,11 @@ import NetworkMonitorUI
 
 /// ClipboardCardView 的整卡绘制 —— 一次 draw 画完卡底、描边、卡头带、卡身、卡脚、缩略图与角标
 ///
-/// 层序（自下而上）：卡底 → 常态描边 → hover 提亮 → 选中叠色 → 卡头带 → 卡身 → 卡脚 →
+/// 层序（自下而上）：卡底 → 常态描边 → hover 提亮 → 选中内描边 → 卡头带 → 卡身 → 卡脚 →
 /// 缩略图 → 收藏星 → 栈角标。
+///
+/// 选中态与 hover 态的分工（对标 Paste）：选中 = **2pt 蓝色内描边**，不叠色、不提亮、不缩放；
+/// hover = 只做一层轻微提亮，不再额外加描边 —— 两处都改色会让人分不清「选中」和「指到」。
 /// 版式对标 Paste 的「彩色卡头 + 白卡身 + 卡脚」三段式：
 /// 卡头 26pt（来源色 + 类型 + 相对时间 + App 图标）、卡身（正文 / 缩略图）、
 /// 卡脚（标题 + 来源，上方一条发丝线）。
@@ -24,13 +27,15 @@ extension ClipboardCardView {
                          fill: PaneCardStyle.cardFill,
                          stroke: PaneCardStyle.hairline,
                          lineWidth: Self.borderWidth).draw()
-        layer(inset: Self.hoverBorderWidth / 2, width: Self.hoverBorderWidth,
-              stroke: PaneCardStyle.primaryText.withAlphaComponent(Self.hoverStrokeAlpha),
+        // hover：只轻微提亮（无描边），与选中态彻底分开
+        layer(inset: 0.5, width: 1,
+              stroke: .clear,
               fill: PaneCardStyle.primaryText.withAlphaComponent(Self.hoverFillAlpha),
               alpha: hoverBlend.value).draw()
+        // 选中：2pt 强调色内描边，不叠色
         layer(inset: Self.activeBorderWidth / 2, width: Self.activeBorderWidth,
-              stroke: .controlAccentColor,
-              fill: NSColor.controlAccentColor.withAlphaComponent(Self.selectionFillAlpha),
+              stroke: PaneCardStyle.accentText,
+              fill: nil,
               alpha: selectionBlend.value).draw()
         guard let item else { return }
         drawHeadBand(item: item, in: bounds)

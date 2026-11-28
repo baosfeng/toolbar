@@ -15,7 +15,8 @@ import NetworkMonitorUI
 ///
 /// 拆文件口径：容器与空态在 `ClipboardCardFlowChrome.swift`，缩略图在
 /// `ClipboardCardFlowView+Thumbnails.swift`，动效在 `ClipboardCardFlowView+Motion.swift`。
-/// 全文不再有悬停浮层：选中项的完整内容常驻在面板底部的详情区（`ClipboardDetailStripView`）。
+/// 没有悬停浮层与常驻详情区：完整内容走「空格预览」（ClipboardPreviewLayer）。
+/// 卡片尺寸随卡片区高度自适应（ClipboardCardGeometry.cardSize），始终单行横向排列。
 @MainActor
 final class ClipboardCardFlowView: NSView {
 
@@ -46,8 +47,10 @@ final class ClipboardCardFlowView: NSView {
 
     // 放宽为 internal：滚动跟随扩展（+ScrollFollow）要挂 bounds 观察者
     let scrollView = NSScrollView()
-    private let cardsContainer = ClipboardCardFlowContainer()
-    private let emptyView = ClipboardEmptyStateView(message: "没有匹配的剪贴板条目")
+    /// 放宽为 internal：滚轮折算（+ScrollFollow）要读文档宽度判断有没有可滚的余量
+    let cardsContainer = ClipboardCardFlowContainer()
+    /// 放宽为 internal：滚动容器构建（+ScrollFollow）要把空态挂进卡片容器
+    let emptyView = ClipboardEmptyStateView(message: "没有匹配的剪贴板条目")
 
     /// 视图池：只增不减，靠 isHidden 与内容重设实现复用
     /// （internal：删除动效与进场动效在 ClipboardCardFlowView+Motion.swift 里操作它）
@@ -62,6 +65,8 @@ final class ClipboardCardFlowView: NSView {
     var selectedIDs: Set<UUID> = []
     /// 当前搜索查询（空串 = 不高亮）——每次落地渲染时同步给窗口内每张卡
     private(set) var highlightQuery: String = ""
+    /// 当前卡片尺寸（随卡片区高度自适应；布局时写入，滚动跟随与新建视图都读它）
+    private(set) var cardSize: CGSize = ClipboardCardGeometry.baseSize
 
     /// 设置搜索高亮查询：只在变化时重绘（清空查询即回到无高亮）
     func setHighlightQuery(_ query: String) {
@@ -137,7 +142,10 @@ final class ClipboardCardFlowView: NSView {
     /// 单行横向摆放：卡片 frame 由全局下标决定，容器宽度覆盖全部条目；卡片在可视高度内垂直居中
     func layoutCards() {
         let contentSize = scrollView.contentSize
-        let cardSize = ClipboardCardView.cardSize
+        // 按「滚动视图真正能显示的高度」算：滚动条常显时它会切走底部一条，用 bounds 算会被裁卡脚
+        let visibleHeight = contentSize.height > 1 ? min(bounds.height, contentSize.height) : bounds.height
+        let cardSize = ClipboardCardGeometry.cardSize(forCardAreaHeight: visibleHeight)
+        self.cardSize = cardSize
         let count = visibleCount()
         let cardY = max(0, (contentSize.height - cardSize.height) / 2)
         for (slot, card) in cardViews.enumerated() where slot < count {
@@ -221,7 +229,7 @@ final class ClipboardCardFlowView: NSView {
 
     /// 新建一张卡片视图；回调按视图在池中的槽位换算当前下标（视图复用后下标随之变化）
     private func makeCardView() -> ClipboardCardView {
-        let card = ClipboardCardView(frame: NSRect(origin: .zero, size: ClipboardCardView.cardSize))
+        let card = ClipboardCardView(frame: NSRect(origin: .zero, size: cardSize))
         card.onPin = { [weak self] card in
             guard let self, let index = self.cardViews.firstIndex(where: { $0 === card }) else { return }
             self.onPin?(self.windowStart + index)
@@ -279,20 +287,4 @@ final class ClipboardCardFlowView: NSView {
         onScreenObserver = nil
     }
 
-    // MARK: 子视图构建
-
-    private func buildScrollView() {
-        scrollView.documentView = cardsContainer
-        // 单行横向滚动：只开横向滚动条，纵向滚动保持关闭
-        scrollView.hasHorizontalScroller = true
-        scrollView.drawsBackground = false
-        scrollView.autohidesScrollers = true
-        scrollView.borderType = .noBorder
-        addSubview(scrollView)
-        // 视图池只覆盖 windowStart 起的一段；自由横向滚动时必须把窗口跟着挪过去（见 +ScrollFollow）
-        observeHorizontalScroll()
-
-        emptyView.isHidden = false
-        cardsContainer.addSubview(emptyView)
-    }
 }

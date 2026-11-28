@@ -33,7 +33,7 @@ final class ClipboardBoardRowView: NSView {
     private static var labelFont: NSFont { PaneCardStyle.sectionTitleFont }
     /// 选中标签底色：实底胶囊（对标 Paste 的 Clipboard 选中胶囊）
     private static var selectedFill: NSColor { PaneCardStyle.selectedFill }
-    /// 未选中标签底色：透明 —— 整行靠文字 + 彩色圆点说话，不再铺一层灰
+    /// 未选中标签底色：透明 —— 靠文字 + 彩色圆点说话，不再铺一层灰
     private static var idleFill: NSColor { .clear }
     /// 标签文字色：未选中也用主文字 —— 透明底上再淡就与面板底混了
     private static var labelText: NSColor { PaneCardStyle.primaryText }
@@ -255,15 +255,10 @@ extension ClipboardPanelView {
         needsLayout = true
     }
 
-    /// 布局：标签行铺满面板宽、左右留内边距；矩形分配在 ClipboardBoardRow（纯函数）
+    /// 布局：矩形由工具条统一分配（见 ClipboardPanelLayout.toolbarMetrics），此处只落矩形
     ///
-    /// 行内矩形用的是「本视图自己的坐标」（行顶 = 0），不是面板坐标 —— 传面板 y 会把整行往下推一截。
-    func layoutBoardRow(sections: ClipboardPanelLayout.Sections, width: CGFloat) {
-        boardRowView.frame = sections.boardRow
-        boardRowView.apply(ClipboardBoardRow.layout(
-            chips: boardRowView.layoutChips(),
-            originX: ClipboardPanelLayout.paddingX,
-            rowY: 0,
-            available: max(0, width - ClipboardPanelLayout.paddingX * 2)))
+    /// 矩形用「本视图自己的坐标」（节顶 = 0），不是面板坐标 —— 传面板 y 会把胶囊往下推一截。
+    func layoutBoardRow(_ metrics: ClipboardBoardRow.Metrics) {
+        boardRowView.apply(metrics)
     }
 }

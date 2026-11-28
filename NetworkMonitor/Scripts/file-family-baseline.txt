@@ -1,7 +1,7 @@
-Clipboard/ClipboardCardFlowView 466 4
-Clipboard/ClipboardCardView 803 6
+Clipboard/ClipboardCardFlowView 494 4
+Clipboard/ClipboardCardView 813 6
 Clipboard/ClipboardPanelController 636 7
-Clipboard/ClipboardPanelView 542 2
+Clipboard/ClipboardPanelView 506 2
 Discovery/UdpDiscoveryService 425 2
 DrawnUI/DrawnRowList 489 2
 Harness/HarnessMultiSourceScanner 338 2

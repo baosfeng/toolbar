@@ -18,18 +18,24 @@ func runClipboardBoardRowTests() {
     let wide = ClipboardBoardRow.layout(chips: chips, originX: 10, rowY: 32, available: 620)
     assertEqual(wide.chips.count, 3, "宽裕时三枚标签都排下")
     assertEqual(wide.isTruncated, false, "排得下就不出现「+N」徽标")
-    assertEqual(wide.addButton.maxX, 10 + 620, "「＋」贴行右边缘")
+    assertEqual(wide.addButton.minX, wide.chips[2].frame.maxX + ClipboardBoardRow.chipGap,
+                "「＋」紧跟最后一枚标签（不飘到行右端）")
     assertEqual(wide.addButton.width, ClipboardBoardRow.addButtonWidth, "「＋」定宽")
     assertEqual(wide.chips[1].frame.minX, wide.chips[0].frame.maxX + ClipboardBoardRow.chipGap,
                 "标签之间只隔一个间距")
     assertEqual(wide.chips[0].frame.midY, wide.addButton.midY, "标签与「＋」同一纵向中线")
-    assertEqual(wide.chips[0].frame.midY, 32 + ClipboardBoardRow.rowHeight / 2,
-                "标签在行内垂直居中（行高取自面板分段）")
+    assertEqual(wide.chips[0].frame.midY, 32 + ClipboardPanelLayout.toolbarHeight / 2,
+                "标签在工具条行内垂直居中")
     assertEqual(wide.rightEdge <= 10 + 620, true, "标签行不溢出可用宽")
 
     // 序号与色点：第一枚「全部」不带色点
     assertEqual(wide.chips[0].colorIndex == nil, true, "「全部」不画色点")
     assertEqual(wide.chips[1].colorIndex, 0, "板标签带自己的色板下标")
+
+    // 行高可覆盖：胶囊在传入的行高里垂直居中（工具条 34pt 与独立行同一口径）
+    let inBar = ClipboardBoardRow.layout(chips: chips, originX: 10, rowY: 0,
+                                         available: 620, rowHeight: 34)
+    assertEqual(inBar.chips[0].frame.midY, 34 / 2, "胶囊在 34pt 工具条行内居中")
 
     // 挤的时候：排下 + 徽标里的 = 全部，且「＋」仍在
     let many = (0..<10).map { index in

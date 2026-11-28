@@ -59,47 +59,50 @@ final class ClipboardPanel: NSPanel {
 
 // MARK: - 面板内容视图
 
-/// 剪贴板面板内容视图 — 搜索框、过滤切换、卡片流、底部详情区、栈进度与权限入口
+/// 剪贴板面板内容视图 — 单行工具条 + 卡片流 + 编辑浮层 + 状态胶囊
 ///
-/// 布局（翻转坐标，自上而下）：工具条 32pt → 卡片区（弹性）→ 详情区（常驻，含 1pt 分隔线）→ 提示行 24pt。
-/// 分段算术统一在 `ClipboardPanelLayout`（纯函数，TestRunner 覆盖）：面板高度变化只作用于卡片区，
-/// 详情区与提示行各自定高，切条目时整块面板不会跳。
+/// 版式（翻转坐标，自上而下，对标 Paste 的底部横条）：
+///
+///     工具条 34pt：筛选芯片 → 搜索框 → 板胶囊（全部 / 各板 / ＋）→ 条数 →「?」→ 采集图标
+///     卡片区（弹性）：单行横向滚动，卡片尺寸随卡片区高度自适应
+///
+/// **没有常驻详情区、没有常驻提示行**：完整内容由「空格预览」浮层承担，编辑（⌘E / ⌘N）
+/// 时才把详情区当成一块浮层放到面板底部，暂停 / 权限 / 提示之类走底部状态胶囊。
+/// 分段算术统一在 ClipboardPanelLayout（纯函数，TestRunner 覆盖）。
 @MainActor
 final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
 
-    /// 底部常驻按键提示（设计稿固定文案）
-    static let keyHint = "↑↓ 选择 / ⌘ 粘贴 / ⌘1–9 直选 / Esc 收起 / ⌘P 暂停采集"
+    /// 编辑取消 / 保存后的回落提示（空闲时不再有常驻键位条，所以只写最常用的四条）
+    static let keyHint = "↑↓ 选择 / ⌘1–9 直选 / 空格预览 / Esc 收起"
 
-    /// 点击「采集已暂停」提示行要求切换暂停（由控制器挂到采集服务上）
+    /// 点击「采集已暂停」胶囊要求切换暂停（由控制器挂到采集服务上）
     var onRequestTogglePause: (() -> Void)?
 
     weak var delegate: ClipboardPanelViewDelegate?
 
     /// 以下控件放宽为 internal：子视图构建与尺寸计算在 ClipboardPanelView+Subviews.swift
     let searchField = NSSearchField()
-    /// 筛选芯片行（类型 / 来源 App / 日期，可叠加可单个删除；视图定义见 ClipboardFilterChipRowView）
+    /// 筛选芯片行（类型 / 来源 App / 日期，可叠加可单个删除；与搜索框共用工具条）
     let chipRowView = ClipboardFilterChipRowView()
-    /// 板标签行（全部 / 各板 / ＋新建；视图见 ClipboardBoardRowView，接线见 ClipboardPanelView+Board）
+    /// 板胶囊（全部 / 各板 / ＋新建；工具条里紧跟搜索框）
     let boardRowView = ClipboardBoardRowView()
-    /// 板标签的两个出口（控制器在 ClipboardPanelController 里接）
+    /// 板胶囊的两个出口（控制器在 ClipboardPanelController 与 ClipboardBoardCoordinator 里接）
     var onSelectBoard: ((UUID?) -> Void)?
     var onRequestCreateBoard: ((NSRect) -> Void)?
+    /// 「采集当前剪贴板」（纯图标 + tooltip）
     let captureButton = NSButton()
     /// 工具条「?」快捷键帮助按钮
     let helpButton = NSButton()
     /// 首次引导态 / 快捷键帮助浮层（构建见 ClipboardPanelView+Subviews，视图定义见 ClipboardPanelOverlays）
     let guideView = ClipboardGuideView()
     let helpOverlay = ClipboardShortcutHelpOverlay()
-    /// 底部件数计数（「N 条 · 收藏 M」）
+    /// 卡片数 / 收藏数（工具条右端的状态文本，不是按钮）
     let countLabel = NSTextField(labelWithString: "")
-    let stackLabel = NSTextField(labelWithString: "")
-    let hintLabel = NSTextField(labelWithString: "")
-    /// 「采集已暂停」提示行上的透明恢复热区（构建见 +Subviews，显隐由 revealPauseState 控制）
-    let pauseResumeButton = NSButton()
-    let accessibilityButton = NSButton()
     /// 卡片流（单行横向滚动 + 视图池 + 滑动窗口，见 ClipboardCardFlowView）
     let cardFlow = ClipboardCardFlowView()
-    /// 底部常驻详情区（选中条目的完整内容与元信息，见 ClipboardDetailStripView）
+    /// 底部状态胶囊（暂停 / 权限 / 提示 / 多选 / 栈；浮在卡片之上，不占布局高度）
+    let statusBand = ClipboardPanelStatusBand()
+    /// 编辑浮层（只在 ⌘E / ⌘N 期间出现，覆盖卡片区下沿；平时隐藏）
     let detailStrip = ClipboardDetailStripView()
     /// 两级材质的里层内衬与发丝分隔线层（视图口径与布局接线见 ClipboardPanelChrome.swift）
     let innerMaterial = ClipboardPanelInnerMaterialView()
@@ -114,7 +117,7 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     /// 当前选中下标
     private(set) var selectedIndex = -1
 
-    /// 操作反馈（音效 / 触觉）— 构造器注入，未装配时用 `.silent`（快照与独立预览）
+    /// 操作反馈（音效 / 触觉）— 构造器注入，未装配时用 .silent（快照与独立预览）
     /// 放宽 internal：ClipboardPanelView+Subviews.swift 的卡片流回调要在视图层接触觉
     let feedback: ClipboardFeedback
 
@@ -128,7 +131,6 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         self.feedback = feedback
         super.init(frame: frameRect)
         // 加视图顺序即层次：内衬最先（最底层）→ 分隔线 → 控件与卡片 → 浮层
-        // 分隔线紧跟内衬：与改动前「父视图自绘、所有子视图压在其上」的层次一致，外观不回退
         buildInnerMaterial()
         buildSeparatorLayer()
         buildSearchField()
@@ -136,9 +138,10 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         buildBoardRow()
         buildCaptureButton()
         buildHelpButton()
-        buildFooter()
+        buildCountLabel()
         buildCardFlow()
         buildDetailStrip()
+        buildStatusBand()
         buildOverlays()
     }
 
@@ -148,70 +151,53 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     // MARK: 对外状态更新
 
     /// 重建卡片流：交给卡片流视图做「视图池复用 + 滑动窗口」，此处不建任何卡片
-    ///
-    /// 详情区在同一次渲染里跟着换内容：过滤 / 搜索 / 删除都会改变「当前选中的是谁」。
     func render(items: [ClipboardItem], selectedIndex: Int, selectedIDs: Set<UUID>? = nil) {
         self.selectedIndex = selectedIndex
         let ids = selectedIDs ?? ClipboardCardFlowView.singleSelection(items: items, index: selectedIndex)
         cardFlow.render(items: items, selectedIndex: selectedIndex, selectedIDs: ids)
-        // 多选态详情区没有唯一落点：换成「已选 N 条」摘要，单条详情只在单选时显示
-        guard ids.count <= 1 else {
-            detailStrip.update(summary: ClipboardMultiSelectionDetail.content(count: ids.count))
-            return
-        }
-        detailStrip.update(item: selectedIndex >= 0 && selectedIndex < items.count ? items[selectedIndex] : nil)
+        // 多选摘要改由底部状态胶囊承担（详情区已退成编辑浮层）
+        statusBand.updateMultiSelection(count: ids.count)
     }
 
     /// 仅切换选中态（方向键移动时不重建卡片视图）
     func updateSelection(_ index: Int, item: ClipboardItem?, selectedIDs: Set<UUID>? = nil) {
+        _ = item
         selectedIndex = index
-        cardFlow.updateSelection(index, selectedIDs: selectedIDs
-                                 ?? ClipboardCardFlowView.singleSelection(items: cardFlow.items, index: index))
-        detailStrip.update(item: item)
+        let ids = selectedIDs ?? ClipboardCardFlowView.singleSelection(items: cardFlow.items, index: index)
+        cardFlow.updateSelection(index, selectedIDs: ids)
+        statusBand.updateMultiSelection(count: ids.count)
     }
 
-    /// 多选态：详情区改成「已选 N 条」摘要（单条详情在多选下没有唯一落点）
+    /// 多选态：底部胶囊改成「已选 N 条」摘要（单条详情在空格预览里看）
     func updateMultiSelection(count: Int) {
-        detailStrip.update(summary: ClipboardMultiSelectionDetail.content(count: count))
+        statusBand.updateMultiSelection(count: count)
     }
 
-    /// 更新栈进度（如「堆叠 2 条」；栈空时收起该标签，不占提示行）
+    /// 更新栈进度（如「堆叠 2 条」；栈空时收起，不占位）
     func updateStack(remaining: Int, total: Int) {
-        guard remaining > 0 else {
-            stackLabel.stringValue = ""
-            stackLabel.isHidden = true
-            needsLayout = true
-            return
-        }
-        stackLabel.isHidden = false
-        stackLabel.stringValue = "堆叠 \(remaining) 条"
-        needsLayout = true
+        _ = total
+        statusBand.updateStack(remaining: remaining)
     }
 
     /// 更新辅助功能权限状态（无权限时高亮入口，不得静默）
     func updatePermission(accessibilityGranted: Bool) {
-        applyPermissionStyle(accessibilityGranted: accessibilityGranted)
-        needsLayout = true
+        statusBand.updatePermission(granted: accessibilityGranted)
     }
 
-    /// 底部提示（降级路径必须让用户看见）
+    /// 临时提示（降级路径必须让用户看见）：底部胶囊显示 4 秒后自动收起
     func showHint(_ text: String) {
-        hintLabel.stringValue = text
+        statusBand.showHint(text)
     }
 
-    /// 透出暂停态：提示行常驻「采集已暂停（点此恢复）」，定时暂停带出截止时刻；
-    /// 暂停时给一个覆盖提示行的恢复热区（未暂停时隐藏，不抢提示行的点击）。
+    /// 透出暂停态：胶囊常驻「采集已暂停（点此恢复）」，定时暂停带出截止时刻
     func revealPauseState(_ isPaused: Bool, until pausedUntil: Date = .distantPast, now: Date = Date()) {
         let text = ClipboardPauseLogic.footerHint(isPaused: isPaused, pausedUntil: pausedUntil,
                                                   now: now, idleHint: Self.keyHint)
-        hintLabel.stringValue = text
-        hintLabel.textColor = isPaused ? .systemOrange : .secondaryLabelColor
-        hintLabel.setAccessibilityLabel(isPaused ? "采集已暂停，点按或按 ⌘P 恢复采集" : text)
-        pauseResumeButton.isHidden = !isPaused
-        needsLayout = true
+        statusBand.revealPause(isPaused, text: isPaused ? text : "")
+        statusBand.setAccessibilityLabel(isPaused ? "采集已暂停，点按或按 ⌘P 恢复采集" : "面板状态")
     }
 
-    /// 暂停提示行的点击恢复
+    /// 暂停胶囊的点击恢复
     @objc func resumeFromPauseBanner() { onRequestTogglePause?() }
 
     /// 替换全部筛选芯片（增删 / ⇧Tab 循环 / 清空都走这里）：视图只回传新数组，匹配交给控制器；
@@ -254,34 +240,32 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         let size = bounds.size
         let sections = ClipboardPanelLayout.sections(in: size)
 
-        // 工具条与提示行的列宽分配在 ClipboardPanelLayout（纯函数，TestRunner 覆盖）
+        // 工具条一行的列宽分配在 ClipboardPanelLayout（纯函数，TestRunner 覆盖）
         let toolbar = ClipboardPanelLayout.toolbarMetrics(
             width: size.width,
-            captureWidth: ceil(captureButton.fittingSize.width),
-            chips: chipRowView.layoutChips())
-        chipRowView.frame = NSRect(x: 0, y: 0, width: size.width, height: ClipboardPanelLayout.toolbarHeight)
+            countWidth: countLabel.isHidden ? 0 : Self.measuredWidth(of: countLabel),
+            chips: chipRowView.layoutChips(),
+            boardChips: boardRowView.layoutChips())
+        chipRowView.frame = sections.toolbar
         chipRowView.apply(toolbar.chipRow)
+        boardRowView.frame = sections.toolbar
+        layoutBoardRow(toolbar.boardRow)
         searchField.frame = toolbar.search
-        captureButton.frame = toolbar.capture
+        countLabel.frame = toolbar.count
         helpButton.frame = toolbar.help
-
-        let footer = ClipboardPanelLayout.footerMetrics(
-            width: size.width,
-            height: size.height,
-            countWidth: countLabel.isHidden ? 0 : ceil(countLabel.intrinsicContentSize.width),
-            stackWidth: stackLabel.isHidden ? 0 : ceil(stackLabel.intrinsicContentSize.width),
-            permissionWidth: ceil(accessibilityButton.fittingSize.width))
-        countLabel.frame = footer.count
-        stackLabel.frame = footer.stack
-        hintLabel.frame = footer.hint
-        pauseResumeButton.frame = footer.hint
-        accessibilityButton.frame = footer.permission
-
-        layoutBoardRow(sections: sections, width: size.width)
+        captureButton.frame = toolbar.capture
 
         cardFlow.frame = sections.cards
-        detailStrip.frame = sections.detail
-        // 引导态与卡片区同框（互斥显示）；帮助浮层铺满整个内容区，含工具条与提示行
+        // 详情区退成编辑浮层：贴面板底、覆盖卡片区下沿，只在编辑态出现
+        let detailHeight = ClipboardDetailStrip.totalHeight
+        detailStrip.frame = NSRect(x: 0, y: max(0, size.height - detailHeight),
+                                   width: size.width, height: detailHeight)
+        // 状态胶囊贴面板底、左右各留一个内边距（浮在卡片之上，不占分段高度）
+        statusBand.frame = NSRect(x: ClipboardPanelLayout.paddingX,
+                                  y: max(0, size.height - ClipboardPanelStatusBand.height - 2),
+                                  width: max(0, size.width - ClipboardPanelLayout.paddingX * 2),
+                                  height: ClipboardPanelStatusBand.height)
+        // 引导态与卡片区同框（互斥显示）；帮助浮层铺满整个内容区，含工具条
         guideView.frame = sections.cards
         helpOverlay.frame = bounds
 
@@ -301,5 +285,12 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
 
     @objc func openAccessibilitySettings() {
         delegate?.panelViewDidRequestOpenAccessibilitySettings(self)
+    }
+
+    /// 单行文本的实测宽（按字体量，不靠 intrinsicContentSize：带截断模式的标签会给出偏小的值）
+    static func measuredWidth(of label: NSTextField) -> CGFloat {
+        let font = label.font ?? NSFont.systemFont(ofSize: 10.5)
+        // +6：NSTextField 的 cell 自带一点横向内缩，按裸字宽给框会让「·」被省略号顶掉
+        return ceil((label.stringValue as NSString).size(withAttributes: [.font: font]).width) + 6
     }
 }

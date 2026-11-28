@@ -55,7 +55,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         self.paster = paster; self.stack = stack; self.feedback = feedback
         self.onRequestSettings = onRequestSettings
         self.preferences = preferences; self.logger = logger
-        let rect = NSRect(x: 0, y: 0, width: 640, height: 260)
+        let rect = NSRect(x: 0, y: 0, width: 640, height: ClipboardPanelLayout.defaultPanelHeight)
         self.panel = ClipboardPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel],
                                     backing: .buffered, defer: false)
         self.content = ClipboardPanelView(frame: rect, feedback: feedback)   // 选中切换的触觉由卡片流回调直接打

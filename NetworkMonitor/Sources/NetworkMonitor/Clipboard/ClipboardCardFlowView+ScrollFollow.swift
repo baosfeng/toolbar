@@ -10,6 +10,24 @@ import NetworkMonitorUI
 /// 用户把面板往左拖到第 33 条之后，那一段根本没有卡片视图，看起来就是一片空白。
 extension ClipboardCardFlowView {
 
+    // MARK: 子视图构建
+
+    /// 卡片行的滚动容器 —— 刻意不给常驻滚动条：系统偏好设成「总是显示」时它会永久切走底部
+    /// 十几 pt（卡片缩水 + 面板底部多一条灰带）；滚动改由触控板 / 滚轮 / 方向键承担。
+    func buildScrollView() {
+        scrollView.documentView = cardsContainer
+        scrollView.scrollerStyle = .overlay
+        scrollView.hasHorizontalScroller = false
+        scrollView.drawsBackground = false
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        addSubview(scrollView)
+        observeHorizontalScroll()
+
+        emptyView.isHidden = false
+        cardsContainer.addSubview(emptyView)
+    }
+
     /// 挂 clipView 的 bounds 观察者（buildScrollView 里调用一次）
     func observeHorizontalScroll() {
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -30,7 +48,7 @@ extension ClipboardCardFlowView {
     /// 滚动后仍然是空白）。选中项的可见性由方向键 / 点击 / 打开面板这些主动路径保证。
     func followVisibleRange() {
         guard !items.isEmpty, !isPlayingRemoval else { return }
-        let span = ClipboardCardView.cardSize.width + Self.spacing
+        let span = cardSize.width + Self.spacing
         let offsetX = scrollView.contentView.bounds.minX
         let firstVisible = Int(floor(max(0, offsetX - Self.insetX) / span))
         let capacity = min(ClipboardCardWindowPolicy.windowSize, items.count)
@@ -40,5 +58,23 @@ extension ClipboardCardFlowView {
         setWindowStart(start)
         syncCards()
         needsLayout = true
+    }
+
+    // MARK: 滚轮 → 横向位移
+
+    /// 没有常驻滚动条时，纵向滚轮 / 触控板上下滑折算成「横向翻卡片」；
+    /// 横向手势与没有溢出可滚时原样交给 NSScrollView（免得同一段位移算两遍）
+    override func scrollWheel(with event: NSEvent) {
+        let dy = event.scrollingDeltaY
+        let clip = scrollView.contentView
+        let maxX = max(0, cardsContainer.frame.width - clip.bounds.width)
+        guard abs(event.scrollingDeltaX) < abs(dy), dy != 0, maxX > 0 else {
+            return super.scrollWheel(with: event)
+        }
+        // 精确设备（触控板）的 delta 已是点；传统滚轮一格约 1 行，乘 10 才有手感
+        var origin = clip.bounds.origin
+        origin.x = min(max(0, origin.x - (event.hasPreciseScrollingDeltas ? dy : dy * 10)), maxX)
+        clip.scroll(to: origin)
+        scrollView.reflectScrolledClipView(clip)
     }
 }

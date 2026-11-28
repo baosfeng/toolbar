@@ -56,8 +56,8 @@ enum ClipboardPanelGeometry {
     /// 面板 frame：目标屏 visibleFrame 底部，宽 = width - 40（下限 420），底边距 12pt；
     /// 鼠标位置策略下贴到鼠标附近，并夹紧在可见区域内
     ///
-    /// 高度上限用「屏高 − 上下各 12pt 留白」而不是屏高的三分之一：面板多了一块常驻详情区，
-    /// 按三分之一压扁会让卡片区露不出整卡（卡片 198pt 是设计下限，不能为了贴屏而被裁）。
+    /// 高度上限用「屏高 − 上下各 12pt 留白」而不是屏高的三分之一：按三分之一压扁会让卡片区
+    /// 露不出整卡（面板高度下限就是「工具条 + 整卡」），不能为了贴屏而被裁。
     static func panelFrame(visible: NSRect, panelHeight: Double,
                            position: ClipboardPanelPosition, mouse: NSPoint) -> NSRect {
         let width = max(420, visible.width - 40)
@@ -74,7 +74,10 @@ enum ClipboardPanelGeometry {
 // MARK: - 详情区编辑态接线
 
 /// 面板视图的编辑态转发 — 详情区自己管编辑器，面板只做三件事：
-/// 回答「是否在编辑」、取正文、按编辑态改写底部提示行（别的逻辑一概不在这里）
+/// 回答「是否在编辑」、取正文、按编辑态改写底部状态胶囊（别的逻辑一概不在这里）
+///
+/// 改造后详情区不再是常驻段：它只在编辑期间作为**浮层**出现在面板底部（覆盖卡片区下沿），
+/// 退出编辑即隐藏 —— 高度因此全部还给卡片。完整内容的查看不依赖它，走「空格预览」。
 extension ClipboardPanelView {
 
     /// 详情区是否处于编辑态：面板按键拦截据此把键盘让给编辑器（只留 Esc / ⌘↩）
@@ -83,15 +86,20 @@ extension ClipboardPanelView {
     /// 编辑中的正文（保存时由控制器取走）
     var editingText: String { detailStrip.editingText }
 
-    /// 进入编辑态：正文位置换成编辑器并交出焦点，提示行改成保存 / 取消键位
+    /// 进入编辑态：详情区浮层出现、正文位置换成编辑器并交出焦点
+    ///
+    /// 键位提示由浮层自己的元信息行给（「⌘↩ 保存 · Esc 取消」），不再往状态胶囊里重复一条。
     func beginEditingDetail(text: String, hint: String) {
+        detailStrip.isHidden = false
+        needsLayout = true
         detailStrip.beginEditing(text: text, hint: hint)
-        hintLabel.stringValue = hint
     }
 
-    /// 退出编辑态：正文回到只读展示（提示行由调用方随后改写）
+    /// 退出编辑态：编辑器收起、详情区浮层隐藏（正文不再常驻展示）
     func endEditingDetail(item: ClipboardItem?) {
         detailStrip.endEditing(item: item)
+        detailStrip.isHidden = true
+        needsLayout = true
     }
 }
 

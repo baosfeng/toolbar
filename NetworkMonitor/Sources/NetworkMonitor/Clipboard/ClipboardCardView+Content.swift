@@ -73,11 +73,13 @@ extension ClipboardCardView {
         let monospaced = ClipboardCardTextStyle.isMonospaced(item.preview)
         let text = item.preview.isEmpty ? "（空内容）" : item.preview
         let displayText = ClipboardCardTextStyle.breakable(text, monospaced: monospaced)
+        // 行数随卡身高度自适应：面板变高 → 卡变大 → 一屏少几张但每张能多读几行
         let block = DrawnTextBlock(string: displayText,
                                    font: monospaced ? Self.monospacedBodyFont : Self.bodyFont,
                                    color: PaneCardStyle.primaryText,
                                    lineSpacing: 2,
-                                   maxLines: Self.maxTextLines)
+                                   maxLines: max(Self.minTextLines,
+                                                 Int(body.height / Self.bodyLineHeight)))
         drawBodyHighlight(displayText: displayText, query: highlightQuery, block: block, in: body)
         block.draw(topIn: body)
     }
@@ -136,8 +138,13 @@ extension ClipboardCardView {
 
     // MARK: 收藏星 / 栈角标
 
-    /// 收藏星：始终绘制（star / star.fill），切换收藏态时按弹入曲线缩放
+    /// 收藏星：已收藏常显，其余只在 hover / 选中时出现（与 Paste「卡面不常驻收藏标」同口径）
+    ///
+    /// 渐显按 0.5 截断而不是逐帧透明度：星标是 11pt 小符号，淡入到一半的中间态在 60Hz 下读不出差别，
+    /// 却要每张卡多记一个过渡值；截断同时也保住了「弹入曲线」（starPopBlend）这一层动效。
     func drawStar(item: ClipboardItem, in bounds: CGRect) {
+        let hoverOrSelected = max(hoverBlend.value, selectionBlend.value)
+        guard item.isPinned || hoverOrSelected > 0.5 else { return }
         let rect = ClipboardCardGeometry.starRect(in: bounds)
         let image = DrawnSymbolRun.symbol(named: item.isPinned ? "star.fill" : "star",
                                           color: item.isPinned ? .systemYellow : PaneCardStyle.tertiaryText,

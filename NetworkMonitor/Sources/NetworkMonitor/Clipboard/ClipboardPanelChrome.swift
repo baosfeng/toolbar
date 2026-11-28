@@ -43,7 +43,7 @@ final class ClipboardPanelInnerMaterialView: NSVisualEffectView {
 
 // MARK: - 发丝分隔线
 
-/// 面板发丝分隔线层 — 工具条底部、提示行顶部各一条（设计稿口径）
+/// 面板发丝分隔线层 — 只剩工具条底部一条（设计稿口径：工具条与卡片区之间）
 ///
 /// 内衬作为子视图会盖住父视图自绘的线条，因此分隔线单独成层，紧跟内衬、位于所有控件与卡片之下
 /// （与改动前「父视图自绘在子视图之下」的层次一致，外观不回退）。
@@ -80,8 +80,8 @@ extension ClipboardPanelView {
     /// 按面板边界同步两个装饰层：内衬内缩固定量且不参与布局计算
     ///
     /// - Parameter separatorYs: 面板层分隔线纵坐标（翻转坐标，自上而下）；
-    ///   由 `ClipboardPanelLayout.sections(in:)` 与工具条 / 提示行同源给出，这里不复制高度常量。
-    ///   详情区顶那条线画在详情区视图自己身上（它是详情区高度里的 1pt）。
+    ///   由 ClipboardPanelLayout.sections(in:) 与工具条同源给出，这里不复制高度常量。
+    ///   编辑浮层顶那条线画在详情区视图自己身上（它是详情区高度里的 1pt）。
     func layoutPanelChrome(separatorYs: [CGFloat]) {
         let inset = ClipboardPanelInnerMaterialView.inset
         innerMaterial.frame = bounds.insetBy(dx: inset, dy: inset)
