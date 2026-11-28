@@ -173,6 +173,7 @@ public final class ClipboardPaster {
     /// 写入剪贴板 → 合成 ⌘V 之间的固定延迟（设计规格第 7 节：80ms）
     private static let synthesizeDelay: TimeInterval = 0.08
     /// ⌘V 的虚拟键码（kVK_ANSI_V）
+    // 放宽为 internal：合成按键实现拆在 ClipboardPaster+Synthesis.swift
     private static let keyCodeV: CGKeyCode = 9
 
     private let writer: any ClipboardWriter
@@ -257,6 +258,9 @@ public final class ClipboardPaster {
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.synthesizeDelay * 1_000_000_000))
             guard let self else { return }
+            // 固定延迟只是下限：面板收起后前台 App 的切换是异步的，键盘事件若在切换完成前投递，
+            // 会落到本 App（无窗口接收，直接丢失）——用户看到的就是「点了没粘上，再按一次 ⌘V 才行」。
+            await self.waitUntilFrontmost(bundleID: bundleID)
             let posted = self.synthesizePaste(to: bundleID)
             self.writer.endInternalWrite()
             completion?(posted ? .pasted : .copiedOnly("目标应用已退出，内容已复制，请手动粘贴"))
@@ -277,15 +281,25 @@ public final class ClipboardPaster {
 
     // MARK: 内部实现
 
-    /// 合成 ⌘V：CGEvent 投递到当前前台 App（不做任何拦截改写，见规格第 14 节已知取舍）
+    /// 等目标 App 真正成为前台（最多 0.3s）
     ///
-    /// 无辅助功能权限时系统会静默丢弃事件，此处兜底再校验一次，杜绝「提示已粘贴但其实没粘上」。
+    /// 面板 orderOut 之后前台切换由 WindowServer 异步完成，切换未完成时合成按键会落给本 App
+    /// （没有窗口接收 → 事件丢失）。以「前台 bundleID 已等于目标」为准放行，超时也照发。
+    private func waitUntilFrontmost(bundleID: String) async {
+        let deadline = Date().addingTimeInterval(0.3)
+        while Date() < deadline {
+            if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleID { return }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        logger.warning("目标 App 未在 0.3s 内回到前台，仍尝试合成粘贴：\(bundleID)")
+    }
+
+    /// 合成 ⌘V：CGEvent 投递到当前前台 App（无辅助功能权限时系统会静默丢弃，故再校验一次）
     private func synthesizePaste(to bundleID: String) -> Bool {
         guard AXIsProcessTrusted() else {
             logger.warning("未获得辅助功能权限，跳过合成粘贴（事件会被系统丢弃）")
             return false
         }
-        // 回退缓存的存活校验：目标 App 已退出时只写剪贴板，不合成按键
         guard Self.isApplicationAlive(bundleID: bundleID) else {
             logger.warning("目标应用已退出，跳过合成粘贴")
             return false

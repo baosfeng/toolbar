@@ -226,21 +226,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         content.updatePermission(accessibilityGranted: stack.accessibilityGranted)
     }
 
-    func pasteSelected(asPlainText: Bool) {
-        guard let item = selectedItem else { return }
-        // 先收起面板让出 key，再走「写剪贴板 → 延迟 80ms → 合成 ⌘V」（见 ClipboardPaster）
-        if paster.hasTargetApplication { hide(animated: false) }
-        paster.paste(item, asPlainText: asPlainText) { [weak self] outcome in
-            self?.reportPasteOutcome(outcome)
-        }
-    }
-
-    func copySelected() {
-        guard let item = selectedItem else { return }
-        reportCopyOutcome(paster.copyOnly(item))
-    }
-
-    /// 放宽 internal：复制 / 粘贴的反馈接线在 ClipboardPanelController+Feedback.swift
+    /// 放宽 internal：粘贴 / 复制在 ClipboardPanelController+Paste.swift，反馈接线在 +Feedback
     func handleOutcome(_ outcome: ClipboardPasteOutcome) {
         let message = outcome.message
         guard !message.isEmpty else { return }

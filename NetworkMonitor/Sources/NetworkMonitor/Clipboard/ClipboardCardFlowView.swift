@@ -20,9 +20,10 @@ import NetworkMonitorUI
 final class ClipboardCardFlowView: NSView {
 
     /// 卡片间距（12pt：三段式卡片之间要更多呼吸，10pt 时卡头色带几乎连成一条）
-    private static let spacing: CGFloat = 12
+    // 放宽为 internal：滚动跟随扩展（+ScrollFollow）按同一套间距算窗口起点
+    static let spacing: CGFloat = 12
     /// 卡片流左右内边距
-    private static let insetX: CGFloat = 10
+    static let insetX: CGFloat = 10
     /// 打开面板后预取的图片条目条数（增量规格 2.2 第 4 条）
     static let prefetchImageCount = 12
 
@@ -38,10 +39,13 @@ final class ClipboardCardFlowView: NSView {
     /// 缩略图就绪通知的观察者（主线程回调；deinit 时移除）
     /// nonisolated(unsafe)：deinit 不在主 actor 上，移除观察者需要直接读它
     nonisolated(unsafe) var thumbnailObserver: NSObjectProtocol?
+    /// 横向滚动通知的观察者 —— 视图池窗口必须跟着可视区走，否则用户滚出窗口就是一片空白
+    nonisolated(unsafe) var scrollObserver: NSObjectProtocol?
     /// 面板上屏通知的观察者（每次面板打开播一次卡片错峰进场）
     nonisolated(unsafe) var onScreenObserver: NSObjectProtocol?
 
-    private let scrollView = NSScrollView()
+    // 放宽为 internal：滚动跟随扩展（+ScrollFollow）要挂 bounds 观察者
+    let scrollView = NSScrollView()
     private let cardsContainer = ClipboardCardFlowContainer()
     private let emptyView = ClipboardEmptyStateView(message: "没有匹配的剪贴板条目")
 
@@ -86,6 +90,7 @@ final class ClipboardCardFlowView: NSView {
     nonisolated deinit {
         if let thumbnailObserver { NotificationCenter.default.removeObserver(thumbnailObserver) }
         if let onScreenObserver { NotificationCenter.default.removeObserver(onScreenObserver) }
+        if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
     }
 
     // MARK: 对外接口
@@ -148,6 +153,13 @@ final class ClipboardCardFlowView: NSView {
                                       height: max(contentSize.height, cardSize.height))
         emptyView.frame = cardsContainer.bounds
         refreshShadows()
+    }
+
+    /// 改写窗口起点（滚动跟随扩展用：windowStart 在本文件是 private(set)）
+    ///
+    /// 只有「自由横向滚动」这一条路径该改它；方向键 / 点击 / 打开面板仍走 slideWindow。
+    func setWindowStart(_ value: Int) {
+        windowStart = max(0, value)
     }
 
     /// 把「hover 或选中的可见卡片」交给容器绘制投影（未选中的卡片不投影，避免整屏噪声）
@@ -277,6 +289,8 @@ final class ClipboardCardFlowView: NSView {
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         addSubview(scrollView)
+        // 视图池只覆盖 windowStart 起的一段；自由横向滚动时必须把窗口跟着挪过去（见 +ScrollFollow）
+        observeHorizontalScroll()
 
         emptyView.isHidden = false
         cardsContainer.addSubview(emptyView)
