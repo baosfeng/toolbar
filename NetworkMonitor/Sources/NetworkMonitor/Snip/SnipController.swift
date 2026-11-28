@@ -45,8 +45,18 @@ final class SnipController: SnipOverlayViewDelegate {
     var captures: [SnipCapturedImage] = []
     /// 当前截图是否包含鼠标指针（由反引号键切换）
     private var cursorIncluded = false
-    /// 截图是否正在准备（抓屏 / 抢前台阶段）；用于挡住热键重入
-    private var isStarting = false
+    /// 本次截图是否还在准备中（抓屏 / 抢前台 / 上屏全流程）；用于挡住热键重入
+    ///
+    /// 只在这个异步流程**结束**时复位。早期实现在同步函数里写 `defer { isStarting = false }`，
+    /// 而真正的抓屏在 `Task` 里跑：函数一返回标志就复位，等于没有防重入——
+    /// 连按 N 次热键会叠出 N 批覆盖层，只有最后一批在 `overlays` 里，
+    /// 用户点复制 / 取消只关得掉最后一批，剩下的窗口永远留在屏幕上（「截图界面退不出去」）。
+    private var snipInFlight = false
+    /// 所有创建过的覆盖层窗口（含已被新一批顶替、不在 `overlays` 里的旧批次）
+    ///
+    /// 收尾要能关掉**全部**已上屏的窗口：只遍历 `overlays` 的话，
+    /// 被顶替的旧批次会留在屏幕上成为一层关不掉的遮罩。
+    var spawnedOverlays: [SnipOverlayWindow] = []
     /// 覆盖层键盘兜底监视器（覆盖层存在期间安装）
     /// 放宽为 internal：键盘扩展文件要读写
     var keyboardFallback: Any?
@@ -149,15 +159,17 @@ final class SnipController: SnipOverlayViewDelegate {
             refocusOverlays()
             return
         }
-        // 抓屏是异步的，这段空档里重复按热键会各开一套覆盖层（实测连按会叠出两层，
-        // 按 Esc 只关掉一层，看起来就像「Esc 时灵时不灵」）。这里用一个进行中标志挡住重入。
-        guard !isStarting else {
+        // 抓屏是异步的，这段空档里重复按热键会各开一套覆盖层（实测连按会叠出多层，
+        // 按 Esc / 取消只关掉一批，看起来就像「怎么点都退不出去」）。
+        // 标志必须活到异步流程结束：见 `snipInFlight` 的说明。
+        guard !snipInFlight else {
             logger.info("截图正在准备中，忽略重复触发的截图热键")
             return
         }
-        isStarting = true
-        defer { isStarting = false }
+        snipInFlight = true
         guard captureService.isAuthorized() else {
+            // 提前退出也要放行防重入标志，否则一次「没权限」会让后续热键全部被忽略
+            snipInFlight = false
             SnipPermissionGuide.presentIfNeeded(logger: logger)
             return
         }
@@ -165,6 +177,8 @@ final class SnipController: SnipOverlayViewDelegate {
         // 若等到覆盖层上屏才激活，第一下 Esc / 回车会投给原前台 App 而丢失
         // （实测：不提前抢前台时，每 5 轮会有 1~2 轮首下按键失效）。
         Task { @MainActor in
+            // 全流程结束（成功上屏 / 抓屏失败 / 中途 return）才放行重入
+            defer { snipInFlight = false }
             // 抓屏必须发生在抢前台之前：
             // 1) 先切 .regular / activate 会让原 App 退到后台，菜单面板（NSPopover，transient）
             //    随之收起，紧接着抓屏拍到的就是「面板底下的背景」——用户口径「想截详情页，
@@ -272,29 +286,5 @@ final class SnipController: SnipOverlayViewDelegate {
         dismissOverlays()
     }
 
-    // MARK: - 坐标解析
-
-    /// 放宽为 internal：OCR 扩展文件要用（与复制 / 保存同一套选区解析口径）
-    func capturedFor(_ view: SnipOverlayView) -> SnipCapturedImage? {
-        overlays.first { $0.overlayView === view }.flatMap { window in
-            captures.first { captured in
-                SelectionGeometry.appKitRect(fromCG: captured.display.frame,
-                                             primaryHeight: NSScreen.screens.first?.frame.height ?? 0)
-                    == window.frame
-            }
-        }
-    }
-
-    /// 放宽为 internal：OCR 扩展文件要用（本地点选区 → 捕获图 + 全局矩形）
-    func resolve(capturedFor view: SnipOverlayView,
-                 localRect: CGRect) -> (captured: SnipCapturedImage, globalRect: CGRect)? {
-        guard let captured = capturedFor(view) else {
-            logger.warning("找不到覆盖层对应的捕获图")
-            return nil
-        }
-        let global = localRect.offsetBy(dx: captured.display.frame.minX,
-                                        dy: captured.display.frame.minY)
-        guard global.width >= 1, global.height >= 1 else { return nil }
-        return (captured, global)
-    }
+    // MARK: - 坐标解析（实现在 SnipController+CaptureLookup.swift）
 }

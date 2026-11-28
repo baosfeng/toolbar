@@ -169,7 +169,7 @@ extension SnipController {
     /// 让已存在的覆盖层重新接管键盘（重复按热键、或被别的窗口抢走焦点后）
     func refocusOverlays() {
         guard let window = overlays.first else { return }
-        window.present()
+        window.refocus()
         logger.info("截图进行中，重新接管键盘焦点")
     }
 

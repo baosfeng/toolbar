@@ -11,6 +11,16 @@ extension SnipOverlayView {
     /// 这一轮 draw 拿不到 NSGraphicsContext。早期实现直接 return，needsDisplay 已被清掉，
     /// 覆盖层就一直空白（实测「按截图键毫无反应」的第二个成因）。
     /// 重试上限 6 次，超限后记日志放弃，避免无限重绘把主线程打满。
+    /// 重新上屏前复位「首帧已画过」的状态
+    ///
+    /// 窗口在 init 里换 contentView 时就会画一帧，那时 `onFirstFrameRendered` 还是 nil，
+    /// 于是 `hasRenderedContent` 先被置成 true、回调永远等不到。复位之后 present()
+    /// 装上的回调才能在下一帧真正触发淡入，而不是靠 400ms 超时兜底硬显示。
+    func prepareForPresentation() {
+        hasRenderedContent = false
+        needsDisplay = true
+    }
+
     func scheduleRedrawAfterMissingContext() {
         guard redrawAttempts < 6 else {
             AppContext.shared.logger.warning("截图覆盖层首帧绘制多次失败，放弃重试")

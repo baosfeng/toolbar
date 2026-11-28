@@ -15,6 +15,11 @@ import NetworkMonitorCore
 final class SnipOverlayWindow: NSPanel {
 
     private(set) var overlayView: SnipOverlayView
+    /// 本窗口所在屏幕的 CoreGraphics display id
+    ///
+    /// 与捕获图配对时用它，而不是比 frame：frame 由 CG 坐标翻转得来、
+    /// 又会被 NSWindow 取整，多屏 / 缩放下会差 0.5pt 这一级。
+    let displayID: UInt32
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -38,6 +43,7 @@ final class SnipOverlayWindow: NSPanel {
                                    initialStyle: initialStyle,
                                    toolbarConfiguration: toolbarConfiguration)
         overlayView = view
+        displayID = display.displayID
         // .nonactivatingPanel：窗口可成为 key 而不要求 App 变成前台（见类型注释）
         super.init(contentRect: frame,
                    styleMask: [.borderless, .nonactivatingPanel],
@@ -67,18 +73,29 @@ final class SnipOverlayWindow: NSPanel {
     /// 拿到前台就停。拿不到也不会卡住，仍由本地键盘兜底监视器接住按键。
     ///
     /// 另外「按完热键屏幕闪一下」的成因是：覆盖层上屏的第一帧是空白（back store 未建好），
-    /// 直接以不透明上屏会让用户先看到一块纯色再看到截图内容。这里改成以 alpha 0 上屏
-    /// （照样拿得到 key window 与键盘），首帧真正画好后再淡入 80ms。
+    /// 直接以不透明上屏会让用户先看到一块纯色再看到截图内容。这里改成以近乎全透明的
+    /// alpha 0.01 上屏（照样拿得到 key window 与键盘），首帧真正画好后再淡入 80ms。
 
     @discardableResult
     func present() -> Bool {
         enterInteractiveMode()
-        // 先透明上屏：既拿到 key window 与键盘，又不让用户看到空白帧
-        alphaValue = 0
+        // 先近乎全透明上屏：既拿到 key window 与键盘，又不让用户看到空白帧。
+        // 为什么不是 0：alpha 恰好为 0 的窗口不进合成，AppKit 不会调 draw，
+        // 「首帧画好后淡入」就永远等不到、只能靠 400ms 超时兜底——用户看到的是
+        // 「按了截图键，0.4 秒里屏幕没任何反应」。0.01 仍不可见，但会正常绘制。
+        alphaValue = 0.01
+        // 复位的理由：窗口在 init 里换 contentView 时就已经画过一帧（那时回调还是 nil），
+        // `hasRenderedContent` 已是 true，不重置的话下面这个回调永远不会触发，
+        // 淡入退化成「等 400ms 超时兜底」——用户先看到 0.4 秒透明期，像按了没反应。
+        overlayView.prepareForPresentation()
         overlayView.onFirstFrameRendered = { [weak self] in
             self?.fadeInAfterFirstFrame()
         }
         orderFrontRegardless()
+        // 强制同步绘一帧：alpha 很低的窗口首帧可能被合成器整帧跳过，draw 不进来，
+        // 「首帧回调淡入」就只能等 400ms 超时兜底（用户看到的是「按了没反应」）。
+        // display() 在返回前就把首帧画进 back store，回调也会同步触发。
+        overlayView.display()
         makeKey()
         claimFirstResponderIfNeeded()
         overlayView.needsDisplay = true
@@ -115,6 +132,18 @@ final class SnipOverlayWindow: NSPanel {
     /// 与 App 是否 `.regular` 无关；不切策略就没有 Dock 图标，因此这里只留 activate。
     func enterInteractiveMode() {
         SnipForegroundPolicy.claimForeground()
+    }
+
+    /// 重复按热键 / 焦点被别的窗口抢走时把键盘拿回来
+    ///
+    /// 不走 `present()`：那会重新把 alpha 归零再等首帧，覆盖层会闪一下、
+    /// 连按时每次都要重等 400ms，用户口径就是「按了好几次都没反应」。
+    func refocus() {
+        enterInteractiveMode()
+        alphaValue = 1
+        makeKey()
+        claimFirstResponderIfNeeded()
+        scheduleActivationRetry()
     }
 
     /// 把键盘焦点给覆盖层，但**不抢正在编辑的输入框**

@@ -36,9 +36,9 @@ Settings/SettingsProvidersPane 456 4
 Settings/SettingsTokenPane 308 2
 Settings/SettingsTransferPane 413 3
 Settings/SettingsWindow 446 2
-Snip/SnipController 1299 7
-Snip/SnipOverlayView 1347 7
+Snip/SnipController 1305 7
+Snip/SnipOverlayView 1357 7
 Snip/SnipToolBarView 449 3
-TestRunner/TestSuites 392 8
+TestRunner/TestSuites 393 8
 Token/TokenDerive 705 4
 Transfer/TransferController 383 2

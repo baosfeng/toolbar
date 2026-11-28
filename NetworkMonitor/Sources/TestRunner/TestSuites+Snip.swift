@@ -28,6 +28,7 @@ func runSnipSuites() {
     runSnipTransformTests()
     runSnipPinContentSourceTests()
     runSnipCapturePlannerTests()
+    runSnipCaptureMatchingTests()  // 覆盖层 ↔ 捕获图配对：displayID 优先、frame 漂移不失配、单屏兜底
     runSnipHotKeyMigrationTests()
     runSnipHotKeyPreferencesTests()
     runSnipDockIconPolicyTests()

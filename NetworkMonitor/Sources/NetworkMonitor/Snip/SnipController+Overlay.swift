@@ -8,6 +8,14 @@ extension SnipController {
 
     /// 生成并上屏覆盖层；返回是否拿到键盘焦点
     func presentOverlays(_ result: [SnipCapturedImage]) {
+        // 防御：上一批还挂着说明旧批次被顶替过（连按热键叠出来的），先全部收掉。
+        // 不收掉就会出现「关掉一批、下面还压着一批」——用户口径就是「怎么也退不出去」。
+        if !overlays.isEmpty {
+            logger.warning("截图覆盖层已存在，先收掉旧批次再上屏")
+            dismissOverlays()
+            // dismissOverlays 会清空 captures，这里补回本次结果，否则新一批窗口配不上图
+            captures = result
+        }
         let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
         let windowInfos = captureService.windowInfos()
         let previous = lastSelection
@@ -33,6 +41,7 @@ extension SnipController {
                               toolbarConfiguration: toolbarConfiguration,
                               delegate: self)
         }
+        spawnedOverlays.append(contentsOf: overlays)
         OverlayPreferences.apply(to: overlays, storage: storage, logger: logger)
         // 样式回写：覆盖层里调过的颜色 / 线宽 / 实虚线要落进偏好，下次截图还是这支笔
         for window in overlays {
@@ -80,7 +89,14 @@ extension SnipController {
             window.orderOut(nil)
             window.close()
         }
+        // 旧批次（被新一批顶替、已不在 overlays 里）同样要关：
+        // 它们没有引用挂在编排层，漏关就是一层永远留在屏幕上的遮罩
+        for window in spawnedOverlays where !overlays.contains(where: { $0 === window }) {
+            window.orderOut(nil)
+            window.close()
+        }
         overlays.removeAll()
+        spawnedOverlays.removeAll()
         captures.removeAll()
         removeKeyboardFallback()
         restoreMenuBarPolicy()
