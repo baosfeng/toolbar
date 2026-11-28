@@ -50,7 +50,7 @@ nmcli page shot --out /tmp/now.png                  # 默认 target=current：�
 2. app 侧 `CLIPageBridge`（`Sources/NetworkMonitor/CLI/`）收到后按 target 打开页面；
 3. app 回执 `com.bsfeng.yilan.cli.page.done`，带 **windowNumber**；
 4. nmcli 等窗口尺寸连续两次采样一致（面板有开合动画），再 `screencapture -l<id>`；
-5. 输出 `路径 宽x高 字节 [mode]`，mode 为 `window` 或 `rectFallback`（后者说明系统不让按窗口抓，图里会多出面板阴影外的背景）。
+5. 输出 `<路径> <宽>x<高> <字节>B [<mode>]`，mode 为 `window` 或 `rectFallback`；后者会再补一句 `(via rect fallback)`——说明系统不让按窗口抓，图里会多出面板阴影外的背景（见 `Sources/nmcli/Capture.swift:103-106`）。
 
 ## 限制与已知行为
 
@@ -61,11 +61,27 @@ nmcli page shot --out /tmp/now.png                  # 默认 target=current：�
 
 ## 加一个新页面
 
-1. `NetworkMonitorUI/CLIPageTarget.swift`：`CLIPageTarget` 加 case（或复用 `menu.<tab>` / `settings.<section>` 这种带参数形式）；
-2. 同一文件 `CLIPageChannel.knownMenuTabIDs` / `knownSettingsSectionIDs`：让 `nmcli page list` 能列出来（与 App 层的枚举同源，改枚举时一起改）；
-3. `NetworkMonitor/CLI/CLIPageBridge.swift`：`handle(target:)` 里接上「怎么把页面打开」并返回目标窗口号；
-4. 页面若在独立窗口里，给它的控制器补一个 `windowNumberForCLI` 只读属性。
-5. 在 `TestRunner` 里补 `CLIPageTarget.parse` 的解析用例（纯逻辑，不需要起真机）。
+1. `NetworkMonitorUI/CLIPageTarget.swift:13`：`CLIPageTarget` 加 case——**只有新增一类窗口（如独立浮层）才加**，菜单分页与设置分类已由 `menu.<tab>` / `settings.<分类>` 覆盖；
+2. 同一文件 `:92` `CLIPageChannel.knownMenuTabIDs` / `:95` `knownSettingsSectionIDs`：让 `nmcli page list` 能列出来（与 App 层的枚举同源，改枚举时一起改）；
+3. `NetworkMonitor/CLI/CLIPageBridge.swift:42` `handle(rawTarget:request:)`：新 case 里把「怎么打开页面」与「算出目标 windowNumber」一起写掉；
+4. 页面在独立窗口里时**不给控制器加只读属性**（同族行数门禁只允许变小）：照剪贴板浮层的做法，在 `NSApp.windows` 里按类型找可见窗口（`CLIPageBridge.swift:49-53`）；
+5. 在 `NetworkMonitor/Sources/TestRunner/CLIPageTargetTests.swift` 补 `CLIPageTarget.parse` 的解析用例（纯逻辑，不需要起真机），并确认 `TestSuites+Pane.swift` 已登记。
+
+## 读旧文档时撞见的 `NM_*` 探针（对照表）
+
+`docs/设计/`、`docs/调研/`、`docs/踩坑/` 里的历史记录常写「用 NM_XXX 取证」。那批探针**已全部删除**
+（`Sources/NetworkMonitor/Debug/` 整目录 + 各 `+Snapshot` / `+Evidence` / `*Probe` 扩展 + `SnapshotClock`），
+今天再设这些环境变量不会有任何反应，也不要在新代码里复活它们：
+
+| 已删除 | 当时做什么 | 现在用什么 |
+|--------|-----------|-----------|
+| `NM_SNAPSHOT_DIR` + `NM_SNAPSHOT_FREEZE` / `NM_SNAPSHOT_SYSTEM_MODE` / `NM_SNAPSHOT_WIFI_MODE` / `NM_SNAPSHOT_CLIPBOARD_*` | 离屏渲染菜单面板 / 设置页各页成 PNG；`FREEZE` 冻结时钟让两次跑逐字节一致 | `nmcli page shot --out <file> --target menu.<tab>` / `settings.<分类>`：截**真页面** |
+| `NM_SHOW_PANEL` / `NM_EVIDENCE_TAB` / `NM_FORCE_APPEARANCE` / `NM_FORCE_EMPTY` | 让 app 自己展开 popover 停在指定分页、强制浅深或空态，供 `screencapture` 抓真实窗口 | 同上：开页面与回执窗口号已由通道负责，浅深由系统外观决定 |
+| `NM_DISPLAY_EVIDENCE` / `NM_EVIDENCE_SUITE` | 逐项写偏好验证「设置真的生效」，偏好写隔离 suite 不污染用户 | 已删除；偏好热生效的回归走 TestRunner 的纯逻辑断言（如 `SettingsOrderTests`） |
+| `NM_PANEL_PIN_PROBE` / `NM_PANEL_PIN_TRACE` / `NM_MEASURE_PANEL_OPEN` | 逐帧打印面板 frame、量展开宽度 | 已删除；面板几何由 `Sources/nmcli/PanelGeometry.swift` 直接读真实窗口 |
+| `NM_SNIP_TOOLBAR_SNAPSHOT_DIR` / `NM_SNIP_OVERLAY_SNAPSHOT_DIR` / `NM_SNIP_CROP_PROBE` / `NM_SNIP_VISIBLE_PROBE` / `NM_SNIP_DOCK_PROBE` / `NM_SNIP_*_DEMO` | 截图工具条与覆盖层的离屏渲染、裁剪像素逐点比对、Dock 条目自证 | 已删除；截图链路要开覆盖层，`nmcli page` 不覆盖它，改真机手测 + `TestRunner/SnipGeometryTests.swift` 等纯函数断言 |
+| `NM_DRAWN_PROBE` / `NM_DRAWN_INTERACTION_PROBE` / `NM_CLIPBOARD_CARD_PROBE` | 自绘组件的离屏样例图与交互自证 | 已删除；交互自证改用 `nmcli click` / `nmcli hover` + `nmcli shot` |
+| `NM_TOKEN_AUTOINDEX_PROBE` / `NM_WATCHDOG_STALL_MS` / `NM_UPDATE_PROBE` / `NM_UPDATE_PROBE_URL` | 打印自动索引轮次、人为卡主线程、造更新状态并出关于页快照 | 已删除；手动跑索引走设置页「Token 用量 → 按来源重新扫描」，更新链路自证走 TestRunner 的 `UpdateInstallSandbox` |
 
 ## 与「快照冻结」的关系
 

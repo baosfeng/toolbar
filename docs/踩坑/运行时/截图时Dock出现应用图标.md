@@ -42,9 +42,10 @@
 - 用户可见后果用 Dock 的 AX 树读：`AXUIElementCreateApplication(dock pid)` → 首个子项（`AXList`）
   → `AXChildren`，数 `AXTitle == AppIdentity.displayName` 的条目；
   钉住的那一项 `AXIsApplicationRunning == 0`，运行中出现的那一项为 `1`。
-- 自证探针：`NM_SNIP_DOCK_PROBE=1 <打包内的可执行文件>` 走完一次真实截图（含另存为面板），
-  逐相位打印 `policy` 与 `dockItems`，任一采样点不是 `.accessory` 或 Dock 条目变多即 exit 1。
-  `NM_SNIP_DOCK_PROBE=wait` 改为等外部真实按键取消；`=keys` 额外自证方向键真的改了选区。
+- 自证探针：当时用 `NM_SNIP_DOCK_PROBE=1 <打包内的可执行文件>` 走完一次真实截图（含另存为面板），
+  逐相位打印 `policy` 与 `dockItems`，任一采样点不是 `.accessory` 或 Dock 条目变多即 exit 1；
+  `=wait` 等外部真实按键取消、`=keys` 自证方向键改了选区。**该探针已随 `Debug/` 删除**，
+  今天复验只能手测（按一次 ⌃⇧S 走完另存为）并对照 Dock 的 AX 树；运行期判据另有 `SnipDockIconPolicyTests` 守着。
 
 ## 历史残留：修好之后 Dock 里仍有一条「一览」
 
@@ -85,7 +86,7 @@
 
 - `NetworkMonitor/Sources/NetworkMonitor/Snip/SnipForegroundPolicy.swift`
 - `NetworkMonitor/Sources/NetworkMonitorUI/SnipActivationPolicy.swift`（审计判据，可单测）
-- `NetworkMonitor/Sources/NetworkMonitor/Debug/SnipDockProbe.swift`（`NM_SNIP_DOCK_PROBE`）
+- ~~`NetworkMonitor/Sources/NetworkMonitor/Debug/SnipDockProbe.swift`~~（`NM_SNIP_DOCK_PROBE`，已随 `Debug/` 删除）
 - `NetworkMonitor/Sources/TestRunner/SnipDockIconPolicyTests.swift`（运行期判据 + 源码守卫）
 - `NetworkMonitor/Sources/NetworkMonitor/Snip/SnipOverlayWindow.swift`
 - `NetworkMonitor/Sources/NetworkMonitor/Snip/SnipController+Overlay.swift`

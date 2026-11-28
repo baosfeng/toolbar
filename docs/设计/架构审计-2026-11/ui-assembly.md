@@ -189,7 +189,7 @@
 
 ### 迁移顺序（低风险 → 高），影响面
 
-1. **只加不改行为**：把 `MenuPanelTab` 的 title/stableID/symbol 三个 switch 搬进 `PaneModuleDescriptor`，建 `PaneModuleRegistry`，`MenuTabBarView` 改为查表。影响 2 文件 + 1 新文件；行为等价可用现快照对比（`NM_DRAWN_PROBE`/`MenuPanelSnapshot`）。
+1. **只加不改行为**：把 `MenuPanelTab` 的 title/stableID/symbol 三个 switch 搬进 `PaneModuleDescriptor`，建 `PaneModuleRegistry`，`MenuTabBarView` 改为查表。影响 2 文件 + 1 新文件；行为等价当时用离屏快照对比（`NM_DRAWN_PROBE` / `MenuPanelSnapshot`，两者已随 `Debug/` 删除；现在用 `nmcli page shot --target menu.<tab>` 逐页对比）。
 2. **吃掉懒装配 switch**：`MenuPanelView+Panes.swift:50-57` 的 `ensurePaneLoaded` + `:35-43` 的 5 个属性改为 `registry.descriptor(for: tab)?.makePane()`；顺带把 `:78` 的 system 特判改成 `descriptor.onFirstAssemble`。影响 1 文件。
 3. **吃掉动作/首屏 switch**：`MenuPanelController.swift:221` 与 `+Actions.swift:106` 改为 `descriptor.bindActions` / `descriptor.firstDisplay`。影响 2 文件。
 4. **吃掉数据转发**：`MenuPanelView+DataUpdates.swift` 7 个方法 → `descriptor.applySnapshot`，控制器 tick 里按 `dataNeeds` 分发。影响 2 文件（含控制器 tick）。

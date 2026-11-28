@@ -111,7 +111,7 @@ Authorization: Bearer sk-…            # Go API Key，与推理同一把
 
 - `swift build --disable-sandbox --build-system native` 通过；
 - `swift run --disable-sandbox --build-system native TestRunner` 输出「🎉 所有测试通过！」；
-- 快照模式（`NM_SNAPSHOT_DIR`）产出 `menu-credits-opencode-go-{light,dark}.png`：三窗口并排、无用量摘要行、无展开箭头；上方预览即该产物；
+- 取证：当时用已移除的 `NM_SNAPSHOT_DIR` 离屏探针产出 `menu-credits-opencode-go-{light,dark}.png`（三窗口并排、无用量摘要行、无展开箭头；上方预览即该产物）。该通道已删除，现用 `nmcli page shot --out /tmp/x.png --target menu.credits` 对运行中的 app 出真页面图；
 - 真实 key 手工验证：三个窗口的剩余百分比与 `opencode.ai` 控制台一致（无 key 时只验证 401/403 分支）。
 
 ## 已知限制

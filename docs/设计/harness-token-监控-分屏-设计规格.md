@@ -78,4 +78,4 @@
 4. 缓存命中二级页 24 桶有空缺时：折线在缺口断开、纵轴写真实 min–max，不出现「0.0%」起点。
 5. 同一范围下，两屏数字与改造前对应区块一致（抽查 hero 总量、缓存命中率、工具 Top1）。
 6. 屏切换后键盘焦点不丢失、Esc 在二级页返回。
-7. 快照命令：`NM_SNAPSHOT_DIR=/tmp/nm-shots <包内可执行文件>`，产出 2 屏 × 2 外观 + `menu-token-screens.txt` 台账。
+7. 取证：当时用已移除的 `NM_SNAPSHOT_DIR` 离屏探针出 2 屏 × 2 外观与 `menu-token-screens.txt` 台账；该通道已删除，现用 `nmcli page shot --out /tmp/x.png --target menu.token` 逐屏出真页面图（历史台账数据见 `.open-design/token-ia-r1/README.md`）。

@@ -221,7 +221,7 @@ ad-hoc 签名 + 无崩溃收集 = 用户机器上的崩溃**不留任何应用�
 ### 6.1 组织
 
 - 导航：`docs/索引.md`（25 KB，唯一入口，AGENTS.md 指向它）。
-- 分层：`docs/开发指南/`（5 篇：构建与测试 / 提交规范 / 文档规范 / UI-自动化-CLI / 快照冻结通道）、`docs/设计/`（**27 篇**）、`docs/调研/`（17 篇）、`docs/踩坑/`（按 `构建 / 运行时 / 接口 / swift-并发` 四域，44 篇，有 `README.md` 索引）、`docs/发版记录.md`。
+- 分层：`docs/开发指南/`（当时 5 篇：构建与测试 / 提交规范 / 文档规范 / UI-自动化-CLI / 快照冻结通道；其中「快照冻结通道」已随 NM_* 探针删除，现为「CLI 页面输出」）、`docs/设计/`（**27 篇**）、`docs/调研/`（17 篇）、`docs/踩坑/`（按 `构建 / 运行时 / 接口 / swift-并发` 四域，44 篇，有 `README.md` 索引）、`docs/发版记录.md`。
 - `AGENTS.md`（21.7 KB）是会话自动注入入口；`CONTEXT.md`（10 KB）术语表；`CONTRIBUTING.md`、`README.md`（18.8 KB）。
 - **无 doc 生成**（无 jazzy / docc / DocC catalog，`grep 'jazzy\|docc' Package.swift .github Scripts` 空）。
 

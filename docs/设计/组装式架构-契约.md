@@ -35,7 +35,7 @@ public struct PaneModuleDescriptor: Sendable, Equatable {
     public let title: String         // 分段条文字
     public let symbolName: String    // 分段条图标
     public let snapshotSuffix: String // 快照文件名后缀
-    public let evidenceKey: String   // NM_SNAPSHOT_* / 取证环境变量键
+    public let evidenceKey: String   // 取证标识（历史上是 NM_EVIDENCE_TAB 的取值；探针已删除）
     public let sortIndex: Int        // 声明序 = 默认序
 }
 

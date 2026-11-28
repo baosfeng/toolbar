@@ -66,10 +66,12 @@ cd NetworkMonitor
 swift build --disable-sandbox --build-system native            # 0 error / 0 源码告警
 swift run --disable-sandbox --build-system native TestRunner   # 所有测试通过
 SKIP_INSTALL=1 ./Scripts/build-app.sh debug
-NM_SNIP_OVERLAY_SNAPSHOT_DIR=/tmp/nm-snip-shot dist/一览.app/Contents/MacOS/一览
 ```
 
-取证图（`/tmp/nm-snip-shot`）：
+覆盖层与工具条的画面当时由已移除的 `NM_SNIP_OVERLAY_SNAPSHOT_DIR` 离屏探针产出（`/tmp/nm-snip-shot`），该通道已删除；
+今天要核对这些观感只能在打好的 `.app` 里按 ⌃⇧S 手测（`nmcli page` 只出菜单面板 / 设置 / 剪贴板三类页面，不出截图覆盖层）。
+
+当时的取证图（`/tmp/nm-snip-shot`）：
 
 | 文件 | 核对内容 |
 |---|---|

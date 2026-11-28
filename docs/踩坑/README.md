@@ -27,7 +27,6 @@
 - [Swift 扩展不能有存储属性](构建/Swift扩展不能有存储属性.md) — 按门禁拆文件时，存储属性与 override 方法必须留在主类，跨文件成员需放宽为 internal
 - [发布说明在 GitHub 上「点不动」还挂了个假贡献者](构建/发布说明在GitHub上点不动.md) — compare 链接拼了 origin 的 codeup owner（404）、短 hash 不是链接、提交标题里的 `@Sendable` 被当成用户提及挂进 Contributors；回归脚本 `Scripts/test-release-notes.sh`
 - [Intel runner 打包超时被取消](构建/Intel-runner打包超时被取消.md) — 一半矩阵 success、另一半 `cancelled` 且耗时正好顶到 `timeout-minutes`，是 runner 侧被掐断而非代码失败；`cancelled` 的 job 取不到日志属正常，用 job 清单 + steps 时间戳取证，处置是 `rerun-failed-jobs` 而不是重打 tag
-- [快照取证需打包成 app](构建/快照取证需打包成app.md) — 裸二进制跑 `NM_SNAPSHOT_DIR` 必崩 `bundleProxyForCurrentProcess is nil`，须 `SKIP_INSTALL=1 ./Scripts/build-app.sh debug` 后跑包内可执行文件
 
 ### 运行时
 
@@ -53,8 +52,8 @@
 - [flipped 上下文里的位图绘制要翻正](运行时/flipped上下文里的位图绘制要翻正.md) — flipped 视图里位图（`NSImage.draw(in:from:operation:fraction:)`）不补偿坐标、文字却会自行翻正，所以翻正只挡位图不整段翻；绕法是 `DrawnUnflip` + `DrawnInk.withUnflippedIfNeeded`，验证靠离屏取样比对上下缘像素
 - [离屏快照里投影要靠像素差自证](运行时/离屏快照里投影要靠像素差自证.md) — 投影看不见有三种成因（裸图层无填充内容 / 宿主 `masksToBounds` 裁切 / 单图暗像素阈值假阴性）；判据是「有阴影 vs 无阴影」两图逐像素做差
 - [毛玻璃材质离屏不可辨](运行时/毛玻璃材质离屏不可辨.md) — `NSVisualEffectView` 的模糊由窗口服务器合成，`cacheDisplay` 只给近似底色（浅 255→228）；判据是结构自证（材质 / 圆角 / 内缩 / 层级 / hitTest）+ 真机确认
-- [面板随菜单栏宽度漂移](运行时/面板随菜单栏宽度漂移.md) — 横向：状态项宽度随网速文字每秒变化，NSPopover 按锚点重排使面板 x 漂 26pt；纵向：popover 保持底边不动、顶边随内容高度跑（切 tab 顶边跳 33…229）。两条都靠「展开时冻结锚点 + didMove/didResize 自愈」才恒定，切页坐标用 DEBUG 探针 NM_PANEL_PIN_PROBE 在进程内验收
-- [面板展开先居中再跳位](运行时/面板展开先居中再跳位.md) — 横向纠正与纵向共用了「动画结束才允许改」的闸门：前 240ms 停在 popover 自己摆的位置（x=955），随后一帧跳到目标位置。横向改为 show 后立刻钉，纵向仍等动画结束后取稳定顶边；用 DEBUG 探针 NM_PANEL_PIN_TRACE 逐帧取证
+- [面板随菜单栏宽度漂移](运行时/面板随菜单栏宽度漂移.md) — 横向：状态项宽度随网速文字每秒变化，NSPopover 按锚点重排使面板 x 漂 26pt；纵向：popover 保持底边不动、顶边随内容高度跑（切 tab 顶边跳 33…229）。两条都靠「展开时冻结锚点 + didMove/didResize 自愈」才恒定；切页坐标当时用已移除的 DEBUG 探针 `NM_PANEL_PIN_PROBE` 在进程内验收（通道已删除，现按页 `nmcli page shot` 取证）
+- [面板展开先居中再跳位](运行时/面板展开先居中再跳位.md) — 横向纠正与纵向共用了「动画结束才允许改」的闸门：前 240ms 停在 popover 自己摆的位置（x=955），随后一帧跳到目标位置。横向改为 show 后立刻钉，纵向仍等动画结束后取稳定顶边；当时用已移除的 DEBUG 探针 `NM_PANEL_PIN_TRACE` 逐帧取证（通道已删除）
 - [面板顶端三角只在窗口中心](运行时/面板顶端三角只在窗口中心.md) — 系统 beak 恒画在窗口水平中心（实测差 0.1px），`shouldHideAnchor` / `_maskImage` / 自绘叠加都藏不掉；右对齐状态项右边缘会让三角偏指左半截（偏 82pt），故横向改为「以状态项中心居中」，锚点仍是 1pt 窄矩形让窗口中心 = `bounds.midX`
 - [设置页的死开关](运行时/设置页的死开关.md) — 菜单栏「间隔」与系统页「采样周期」被渲染档抢走方向盘却仍留在 UI 上，「超限告警」三个偏好键从没有控件写过（消费端写好了、UI 没接）。判据：设置页每一行都要能回答「我写的键，谁在读」
 - [系统无 zstd 解码能力](运行时/系统无zstd解码能力.md) — macOS 没有 zstd 解码路径（Compression framework 无该算法 id、无系统 libzstd、libarchive 只是外部程序转发）的实测矩阵；现行做法是随包携带 libzstd 用 dlopen 流式解码（多帧拼接自动续帧），可执行文件降为备选

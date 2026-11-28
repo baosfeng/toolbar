@@ -126,7 +126,7 @@
 
 **体感验收（lead 自测）**
 
-1. `NM_SNAPSHOT_DIR=/tmp/nm-l3 <可执行>` 出图，逐张核对：面板材质两级、卡片阴影、选中态。
+1. 出图逐张核对面板材质两级、卡片阴影、选中态：当时用已移除的 `NM_SNAPSHOT_DIR=/tmp/nm-l3` 离屏探针，现用 `nmcli page shot --out /tmp/x.png --target clipboard` 截真浮层。
 2. 真机：开/收面板、悬停卡片看提亮、切选中项看底部详情区、收藏、删除、栈粘贴各一次，确认动效不卡顿且「减弱动态效果」开启时全部落终态。
 3. 声效默认静音；打开开关后复制/粘贴有提示音，连按不刷音。
 
@@ -148,13 +148,13 @@
 | A1 文件条目分类聚合摘要 | `NetworkMonitorCore/Infrastructure/Clipboard/ClipboardFileSummary.swift`、`NetworkMonitor/Clipboard/PasteboardWatcher.swift`、`TestRunner/ClipboardFileSummaryTests.swift` | 纯函数 `summarize(paths:)` 与带回落文本的 `summarize(paths:fallbackText:)`；采集只改 `preview` 生成处，`text` 列仍存原始路径 |
 | A2 缩略图多级兜底 + 失败可重试 | `NetworkMonitorCore/Infrastructure/Clipboard/ClipboardThumbnailRetryPolicy.swift`、`NetworkMonitor/Clipboard/ClipboardThumbnailLoader.swift`、`NetworkMonitorCore/Infrastructure/Clipboard/ClipboardThumbnailLoadGate.swift`、`NetworkMonitorCore/Infrastructure/Clipboard/ClipboardImageDecoder.swift`、`TestRunner/ClipboardThumbnailRetryPolicyTests.swift` | 策略负责冷却 30s 与上限 3 次；闸门只留并发 3 + 在途去重；解码在 ImageIO 之后接 `NSBitmapImageRep` → `thumbnail(from: CGImage)` 兜底，再退回原图直读 |
 | A3 卡片悬停（全文浮层已删除） | `NetworkMonitor/Clipboard/ClipboardCardView.swift`、`NetworkMonitor/Clipboard/ClipboardCardFlowView.swift`；替代落点 `NetworkMonitorUI/ClipboardPanelLayout.swift`、`NetworkMonitorUI/ClipboardDetailStrip.swift`、`NetworkMonitor/Clipboard/ClipboardDetailStripView.swift` | hover 走 trackingArea，只保留提亮 + 描边；完整内容改由面板底部的常驻详情区显示，四段几何与高度恒定口径见[剪贴板底部详情区](剪贴板底部详情区.md) |
-| A4 首次引导与快捷键帮助 | `NetworkMonitor/Clipboard/ClipboardPanelOverlays.swift`、`NetworkMonitor/Clipboard/ClipboardPanelSupport.swift`、`NetworkMonitor/Clipboard/ClipboardPanelController+Stack.swift`、`NetworkMonitor/Clipboard/ClipboardPreferences.swift`、`NetworkMonitor/Debug/SnapshotClipboardGuide.swift` | 引导态判定与一次性标记接线在控制器（库里有数据即视为已引导）；12 条键位是纯数据，界面与读屏共用一份；离屏取证入口 `NM_SNAPSHOT_CLIPBOARD_GUIDE` |
+| A4 首次引导与快捷键帮助 | `NetworkMonitor/Clipboard/ClipboardPanelOverlays.swift`、`NetworkMonitor/Clipboard/ClipboardPanelSupport.swift`、`NetworkMonitor/Clipboard/ClipboardPanelController+Stack.swift`、`NetworkMonitor/Clipboard/ClipboardPreferences.swift`、`NetworkMonitor/Debug/SnapshotClipboardGuide.swift` | 引导态判定与一次性标记接线在控制器（库里有数据即视为已引导）；12 条键位是纯数据，界面与读屏共用一份；当时的离屏取证入口 `NM_SNAPSHOT_CLIPBOARD_GUIDE`（`Debug/SnapshotClipboardGuide.swift`）已随探针删除，现按 `nmcli page shot --target clipboard` 看引导态 |
 | B1 统一动效基础设施 | `NetworkMonitorDesign/MotionKit.swift` | 时长令牌与 `TransferMotion` 同口径；跟随「减弱动态效果」，关闭时所有方法直接落终态 |
 | B2 面板与卡片动效接线 | `NetworkMonitor/Clipboard/ClipboardCardFlowView+Motion.swift`、`NetworkMonitor/Clipboard/ClipboardCardView.swift`、`NetworkMonitor/Clipboard/ClipboardPanelController.swift` | 卡片进场前 12 张错峰、选中与 hover 走 `crossFade`、收藏星与栈角标 `popIn`、删除 0.15s 缩小淡出；面板展开收起见下方偏差 |
 | B3 操作音效 | `NetworkMonitorFeatureFeedback/SoundFeedback.swift`、`NetworkMonitor/AppCoordinator+Feedback.swift`、`NetworkMonitor/Settings/SettingsClipboardPane+Feedback.swift` | 只用 `NSSound(named:)` 系统音、默认关闭、同 cue 200ms 去重；开关每次调用现读偏好 |
 | B4 触觉反馈 | `NetworkMonitorFeatureFeedback/HapticFeedback.swift`、`NetworkMonitorFeatureFeedback/ClipboardFeedback.swift`、`NetworkMonitor/Clipboard/ClipboardPanelController+Feedback.swift` | 选中切换 / 收藏切换 / 栈粘贴推进三个接点，默认开启，不做设备探测 |
 | B5 材质与渲染 | `NetworkMonitor/Clipboard/ClipboardCardBackgroundView.swift`、`NetworkMonitor/Clipboard/ClipboardCardHighlightView.swift`、`NetworkMonitor/Clipboard/ClipboardCardThumbnailView.swift`、`NetworkMonitor/Clipboard/ClipboardCardContentView.swift` | 卡片底色半透明内衬 + 独立状态叠色层 + 缩略图 0.2s 淡入；阴影走视图 backing layer 的 `CALayer.shadow*`，只在 hover 与选中时非 0（取证口径见[踩坑](../踩坑/运行时/离屏快照里投影要靠像素差自证.md)） |
-| P2-1 设置页存储管理 | `NetworkMonitor/Settings/SettingsClipboardPane+Storage.swift`、`NetworkMonitorCore/Infrastructure/Clipboard/ClipboardStorageUsage.swift`、`TestRunner/ClipboardStorageUsageTests.swift`、`NetworkMonitor/Debug/SettingsSnapshot.swift` | 占用（大小 + 条数）+ 打开目录 + 二次确认清空；统计只算目录第一层普通文件，清空后由组合根复用既有清空与孤儿清扫 |
+| P2-1 设置页存储管理 | `NetworkMonitor/Settings/SettingsClipboardPane+Storage.swift`、`NetworkMonitorCore/Infrastructure/Clipboard/ClipboardStorageUsage.swift`、`TestRunner/ClipboardStorageUsageTests.swift`（原 `NetworkMonitor/Debug/SettingsSnapshot.swift` 已随 `Debug/` 删除） | 占用（大小 + 条数）+ 打开目录 + 二次确认清空；统计只算目录第一层普通文件，清空后由组合根复用既有清空与孤儿清扫 |
 
 为守住单文件体积上限，本轮还拆出下列文件，属改动的文件边界而非独立规格项：
 `NetworkMonitor/Settings/SettingsClipboardPane+Permission.swift`（权限卡）、
@@ -189,7 +189,7 @@
 | G-3 `swift build -c release --disable-sandbox --build-system native` | exit 0，`Build complete! (26.69s)` |
 | G-4 `bash NetworkMonitor/Scripts/check-file-size.sh` | exit 0，已检查 556 个文件 |
 
-**快照与结构自证**（`NM_SNAPSHOT_DIR=/tmp/nm-l6-motion`；基线 `/tmp/nm-l6-baseline` 为改动前源码构建，已用 `strings` 核对不含 `ClipboardPanelSeparatorView`）
+**快照与结构自证**（当时用已移除的 `NM_SNAPSHOT_DIR=/tmp/nm-l6-motion` 探针；基线 `/tmp/nm-l6-baseline` 为改动前源码构建，已用 `strings` 核对不含 `ClipboardPanelSeparatorView`。探针删除后本节数字保留为历史证据，复跑改用 `nmcli page shot`）
 
 - 图：`panel-clipboard-light.png` / `panel-clipboard-dark.png` / `nm-corner-{light,dark}.png`（角部 8× 放大）
 - `structure.txt`：探针编译真实 `ClipboardPanelChrome.swift`，14 项运行时断言全 PASS —— material / blendingMode / state / 圆角 12 / 内缩 1pt / autoresizing / `hitTest == nil` / 640×260 与 520×200 两档 frame / 分隔线纵坐标 [32, 236]

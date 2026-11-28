@@ -53,6 +53,6 @@ env PATH=/usr/bin:/bin .build/arm64-apple-macosx/debug/TestRunner \
 
 ## 相关
 
-- 快照取证要在打包后的 .app 里跑，裸二进制会崩 `bundleProxyForCurrentProcess is nil`，
-  见 [快照取证需打包成 app](../构建/快照取证需打包成app.md)
+- 取证要在打包后的 .app 里跑：裸二进制会崩 `bundleProxyForCurrentProcess is nil`（`UserNotifications` 初始化处），
+  所以先 `SKIP_INSTALL=1 ./Scripts/build-app.sh debug` 再启动；页面取证现在走 [CLI 页面输出](../../开发指南/CLI-页面输出.md) 的 `nmcli page`，它只对运行中的 .app 生效（原《快照取证需打包成 app》一文已随 NM_* 探针删除）
 - 打包脚本的杀进程判据见 [打包脚本按名字杀进程连坐](../构建/打包脚本按名字杀进程连坐.md)

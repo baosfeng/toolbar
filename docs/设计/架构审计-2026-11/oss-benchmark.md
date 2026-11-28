@@ -128,7 +128,7 @@
 | `notificationEvent` | `(NotificationEvent, 默认开关, 提示音 cue, 可用提醒方式)` | 七类事件 + 偏好键 `notify.<event>.<field>` | P1 |
 | `menuBarMetric` | `(id, order, 单位, 采样闭包, 渲染闭包)` | 17 项菜单栏指标 | P1 |
 | `hookEventHandler` | `(event, priority, handler)` | AppEvents 热生效的散落订阅 | P2 |
-| `snapshotProbe` | `(screenID, 固定帧尺寸, 取数闭包)` | `NM_SNAPSHOT_FREEZE` 快照通道 | P2 |
+| `snapshotProbe` | `(screenID, 固定帧尺寸, 取数闭包)` | 当时的 `NM_SNAPSHOT_FREEZE` 快照通道（已删除；页面取证现走 `nmcli page`） | P2 |
 | `testSuite` | `(suiteID, 依赖的模块 id)` | TestRunner | P2 |
 
 ### 4.2 模块声明长什么样（20 行内示意）
