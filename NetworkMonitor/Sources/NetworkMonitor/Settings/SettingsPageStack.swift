@@ -22,6 +22,10 @@ final class SettingsPageStack: NSStackView {
     private enum ElementKind { case header, group, card, note }
     private var lastView: NSView?
     private var lastKind: ElementKind = .header
+    /// 可折叠分组（按出现顺序；点组头的箭头折叠本组卡片）
+    private var groups: [GroupState] = []
+    /// 当前分组：没有分组标题的卡片归到它
+    private var currentGroup: GroupState?
 
     init(section: SettingsSection) {
         titleLabel = MenuPanelLabel.text(section.title, font: SettingsTheme.pageTitleFont,
@@ -103,12 +107,47 @@ final class SettingsPageStack: NSStackView {
                  sectionTitle: String? = nil,
                  trailingAccessory: NSView? = nil) {
         if let sectionTitle {
-            let header = makeGroupHeader(title: sectionTitle, trailingAccessory: trailingAccessory)
+            let header = SettingsGroupHeaderView(title: sectionTitle, trailingAccessory: trailingAccessory)
+            let group = GroupState(header: header)
+            header.onToggle = { [weak self] in self?.toggle(group) }
+            groups.append(group)
+            currentGroup = group
             append(header, gapBefore: SettingsTheme.groupSpacingTop, kind: .group)
             append(card, gapBefore: SettingsTheme.groupSpacingBottom, kind: .card)
+            group.cards.append(card)
         } else {
             let gap = lastKind == .header ? SettingsTheme.groupSpacingTop : SettingsTheme.cardSpacing
             append(card, gapBefore: gap, kind: .card)
+            // 没有分组标题的卡片归到上一个分组，点组头时一起收起
+            currentGroup?.cards.append(card)
+        }
+    }
+
+    /// 一个可折叠分组：标题行 + 它的卡片（折叠时一起收，展开时逐张淡入）
+    private final class GroupState {
+        let header: SettingsGroupHeaderView
+        var cards: [SettingsCardView] = []
+        var isCollapsed = false
+        init(header: SettingsGroupHeaderView) { self.header = header }
+    }
+
+    /// 折叠 / 展开一个分组
+    ///
+    /// 动效口径：收起 0.12s 淡出后落 isHidden（高度跳变发生在看不见的时候），
+    /// 展开逐张淡入 + 上移 6pt（MotionKit.stagger 错峰）—— 与切页入场同一套语言。
+    private func toggle(_ group: GroupState) {
+        group.isCollapsed.toggle()
+        group.header.setCollapsed(group.isCollapsed)
+        if group.isCollapsed {
+            for card in group.cards {
+                MotionKit.fadeOut(card, duration: MotionKit.durations.close) { card.isHidden = true }
+            }
+        } else {
+            for (index, card) in group.cards.enumerated() {
+                card.isHidden = false
+                card.alphaValue = 0
+                MotionKit.fadeIn(card, offsetY: 6, delay: MotionKit.stagger(index: index))
+            }
         }
     }
 
@@ -202,35 +241,4 @@ final class SettingsPageStack: NSStackView {
         lastKind = kind
     }
 
-    /// 分组标题行 —— 11.5pt semibold 次级色，中文**不转大写**；左右内缩 2pt
-    ///
-    /// 为什么比面板多这一层：一屏 5 组内容需要分区，它的字号仍是面板
-    /// 「11pt 粗 + 次级色」的同一档，只是窗口尺度上调到 11.5。
-    private func makeGroupHeader(title: String, trailingAccessory: NSView?) -> NSView {
-        let label = MenuPanelLabel.text(title, font: SettingsTheme.sectionTitleFont,
-                                        color: SettingsTheme.textSecondary)
-        // 段标题前一条强调竖条：整页扫读时先看到「分了段」，再读段名
-        var views: [NSView] = [SettingsGroupMarker(), label]
-        if let trailingAccessory {
-            views.append(MenuPanelLabel.spacer())
-            views.append(trailingAccessory)
-        }
-        let row = NSStackView(views: views)
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 6
-        row.translatesAutoresizingMaskIntoConstraints = false
-
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(row)
-        NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: container.leadingAnchor,
-                                         constant: SettingsTheme.groupTitleInset),
-            row.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            row.topAnchor.constraint(equalTo: container.topAnchor),
-            row.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
-        return container
-    }
 }

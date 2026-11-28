@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorDesign
+import NetworkMonitorUI
 
 // MARK: - 设置页兼容层
 
@@ -144,6 +145,8 @@ final class SettingsRowView: NSView {
                                                  color: SettingsTheme.textPrimary)
     private let subtitleLabel = MenuPanelLabel.text("", font: SettingsTheme.rowSubtitleFont,
                                                     color: SettingsTheme.textTertiary)
+    /// 行首小图标（按 SettingsRowIconMap 白名单取；未命中就不画，不留空位）
+    private let iconView = NSImageView()
     /// 右侧控件容器（外部往里塞一个视图）
     let trailingStack = NSStackView()
 
@@ -164,13 +167,22 @@ final class SettingsRowView: NSView {
         labels.alignment = .leading
         labels.spacing = SettingsTheme.rowLabelSpacing
 
+        // 行首图标：14pt 符号放在 16pt 宽的槽里，没配图标的行整槽隐藏，不占宽
+        configureIcon(for: title)
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        let leading = NSStackView(views: [iconView, labels])
+        leading.orientation = .horizontal
+        leading.alignment = .centerY
+        leading.spacing = 8
+
         trailingStack.orientation = .horizontal
         trailingStack.alignment = .centerY
         trailingStack.spacing = 8
         trailingStack.setContentHuggingPriority(.required, for: .horizontal)
         trailingStack.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        let row = NSStackView(views: [labels, MenuPanelLabel.spacer(), trailingStack])
+        let row = NSStackView(views: [leading, MenuPanelLabel.spacer(), trailingStack])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 12
@@ -190,6 +202,19 @@ final class SettingsRowView: NSView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
+
+    /// 按 SettingsRowIconMap 的白名单给行配图标；没有对应符号时整槽隐藏（不留空位）
+    private func configureIcon(for title: String) {
+        guard let name = SettingsRowIconMap.symbol(for: title),
+              let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else {
+            iconView.isHidden = true
+            return
+        }
+        iconView.image = image
+        iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+        iconView.contentTintColor = SettingsTheme.ghost
+        iconView.isHidden = false
+    }
 
     // MARK: 悬停高亮
 
@@ -231,7 +256,10 @@ final class SettingsRowView: NSView {
 
     /// 覆盖标题与副标题（状态变化时复用同一行）
     func update(title: String? = nil, subtitle: String?) {
-        if let title { titleLabel.stringValue = title }
+        if let title {
+            titleLabel.stringValue = title
+            configureIcon(for: title)
+        }
         subtitleLabel.stringValue = subtitle ?? ""
         subtitleLabel.isHidden = subtitle == nil
         subtitleLabel.toolTip = subtitle
