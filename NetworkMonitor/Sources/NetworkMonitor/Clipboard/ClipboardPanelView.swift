@@ -102,6 +102,9 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     let cardFlow = ClipboardCardFlowView()
     /// 底部状态胶囊（暂停 / 权限 / 提示 / 多选 / 栈；浮在卡片之上，不占布局高度）
     let statusBand = ClipboardPanelStatusBand()
+
+    /// 工具条计数文案的三个数据源（总条数 / 收藏数 / Paste Stack 剩余）
+    var totalCount = 0, pinnedCount = 0, stackRemaining = 0
     /// 编辑浮层（只在 ⌘E / ⌘N 期间出现，覆盖卡片区下沿；平时隐藏）
     let detailStrip = ClipboardDetailStripView()
     /// 两级材质的里层内衬与发丝分隔线层（视图口径与布局接线见 ClipboardPanelChrome.swift）
@@ -176,7 +179,17 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     /// 更新栈进度（如「堆叠 2 条」；栈空时收起，不占位）
     func updateStack(remaining: Int, total: Int) {
         _ = total
-        statusBand.updateStack(remaining: remaining)
+        stackRemaining = max(0, remaining)
+        refreshCountsLabel()
+    }
+
+    /// 工具条计数：「N 条 · 收藏 M」＋ 栈剩余；胶囊只留给提示 / 暂停 / 多选 / 权限
+    func refreshCountsLabel() {
+        var text = ClipboardPanelFooterText.countsLabel(total: totalCount, pinned: pinnedCount)
+        if stackRemaining > 0 { text += " · 堆叠 \(stackRemaining) 条" }
+        countLabel.stringValue = text
+        countLabel.setAccessibilityLabel(text)
+        needsLayout = true
     }
 
     /// 更新辅助功能权限状态（无权限时高亮入口，不得静默）

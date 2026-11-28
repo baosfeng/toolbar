@@ -13,6 +13,15 @@ enum MenuBarPauseMenu {
     @MainActor
     static func make(target: MenuBarManager) -> NSMenu {
         let menu = NSMenu()
+        // 剪贴板历史是独立浮层，菜单面板里没有分页入口：这里必须留一项，
+        // 否则用户只剩全局快捷键 ⌥⌘V 一条路（齿轮菜单已收口到本菜单）
+        let historyItem = NSMenuItem(title: "剪贴板历史…",
+                                     action: #selector(MenuBarManager.openClipboardHistoryFromMenu),
+                                     keyEquivalent: "v")
+        historyItem.keyEquivalentModifierMask = [.command, .option]
+        historyItem.target = target
+        menu.addItem(historyItem)
+        menu.addItem(.separator())
         let settingsItem = NSMenuItem(title: "设置…", action: #selector(MenuBarManager.openSettingsFromMenu), keyEquivalent: ",")
         settingsItem.keyEquivalentModifierMask = [.command, .option]
         settingsItem.target = target

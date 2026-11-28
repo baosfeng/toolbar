@@ -193,9 +193,9 @@ extension ClipboardPanelView {
     /// 计数落在工具条右端、栈进度落在状态胶囊；读屏文案另给完整句子。
     func updateCounts(total: Int, pinned: Int) {
         countLabel.isHidden = false
-        countLabel.stringValue = ClipboardPanelFooterText.countsLabel(total: total, pinned: pinned)
-        countLabel.setAccessibilityLabel(ClipboardPanelFooterText.countsAccessibilityLabel(total: total, pinned: pinned))
-        needsLayout = true
+        totalCount = total
+        pinnedCount = pinned
+        refreshCountsLabel()
     }
 
     /// 右键菜单指令分发（菜单项 target 置空，沿响应链落到内容视图）

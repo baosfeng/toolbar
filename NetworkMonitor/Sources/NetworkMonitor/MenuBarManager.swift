@@ -164,6 +164,11 @@ final class MenuBarManager: NSObject {
         onOpenSettings?(nil)
     }
 
+    /// 菜单栏右键菜单「剪贴板历史…」：打开独立浮层（与全局快捷键同一条路径）
+    @objc func openClipboardHistoryFromMenu() {
+        onOpenClipboardHistory?()
+    }
+
     /// 菜单栏「暂停 / 恢复采集」：切换后立即重画状态栏（⏸ 前缀与菜单标题同源）
     @objc func toggleClipboardPause() {
         guard let capture = clipboardCapture else { return }

@@ -45,7 +45,6 @@ final class ClipboardPanelStatusBand: NSView {
     /// 多选条数（0…1 = 没有多选摘要）
     private var multiSelectionCount = 0
     /// 栈剩余条数（0 = 不在栈内）
-    private var stackRemaining = 0
     /// 辅助功能权限是否已授予
     private(set) var permissionGranted = true
 
@@ -90,7 +89,7 @@ final class ClipboardPanelStatusBand: NSView {
 
     /// 栈进度：0 条收起
     func updateStack(remaining: Int) {
-        stackRemaining = max(0, remaining)
+        _ = remaining
         refresh()
     }
 
@@ -163,7 +162,6 @@ final class ClipboardPanelStatusBand: NSView {
         if multiSelectionCount > 1 {
             return ClipboardMultiSelectionDetail.summaryLine(count: multiSelectionCount)
         }
-        if stackRemaining > 0 { return "堆叠 \(stackRemaining) 条" }
         return ""
     }
 

@@ -1,7 +1,7 @@
 Clipboard/ClipboardCardFlowView 494 4
 Clipboard/ClipboardCardView 813 6
 Clipboard/ClipboardPanelController 636 7
-Clipboard/ClipboardPanelView 506 2
+Clipboard/ClipboardPanelView 519 2
 Discovery/UdpDiscoveryService 425 2
 DrawnUI/DrawnRowList 489 2
 Harness/HarnessMultiSourceScanner 338 2
@@ -17,7 +17,7 @@ MenuPanel/TokenPaneView 904 5
 MenuPanel/TokenScreenContent 415 3
 NetworkMonitor/AppAssemblyStages 338 2
 NetworkMonitor/AppCoordinator 796 10
-NetworkMonitor/MenuBarManager 438 5
+NetworkMonitor/MenuBarManager 443 5
 NetworkMonitorCore/DatabaseManager 766 6
 NetworkMonitorFeatureBilling/BillingMonitor 596 5
 NetworkMonitorFeatureClipboard/PasteboardWatcher 466 3
