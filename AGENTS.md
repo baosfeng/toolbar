@@ -1,7 +1,7 @@
 # 一览（NetworkMonitor / macMonitor）— macOS 菜单栏监控
 
 ## 项目简介
-- **版本:** 1.32.0
+- **版本:** 1.33.0
 - **语言:** Swift 工具链 6.4 / `swift-tools-version` 6.3（本机实测 6.4；CI 与发版跑 6.3 —— `macos-26` / `macos-26-intel` 镜像默认 Xcode 26.6 内置 Swift 6.3.3，默认带 6.4 的 `xcode-27` 是 arm64-only 的 preview 镜像、切过去 x86_64 无处可跑，故包清单暂不抬到 6.4；CI 跑 6.3 时 6.4-only 语法禁止进主分支，见 [构建与测试](docs/开发指南/构建与测试.md) 的「CI 工具链」）
 - **类型:** 业务应用
 - **技术栈:** Swift 6（严格并发）, Swift PM, AppKit, macOS 14+, arm64 + x86_64
