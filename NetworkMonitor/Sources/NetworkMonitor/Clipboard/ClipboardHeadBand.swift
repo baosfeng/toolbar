@@ -58,7 +58,7 @@ extension ClipboardCardView {
         }
 
         // 右：「相对时间」贴着图标；宽度不够时先让时间消失，类型名必须完整
-        let time = DrawnTextRun(string: ClipboardRelativeTime.string(from: item.createdAt, now: SnapshotClock.now),
+        let time = DrawnTextRun(string: ClipboardRelativeTime.string(from: item.createdAt, now: Date()),
                                 font: Self.bandTimeFont, color: ink.withAlphaComponent(0.78))
         let type = DrawnTextRun(string: ClipboardItemKindLabel.label(for: item),
                                 font: Self.bandFont, color: ink)

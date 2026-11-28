@@ -73,31 +73,3 @@ extension MenuPanelController {
         logger.info("渲染档已应用：\(RenderTierLogic.summary(for: tier))")
     }
 }
-
-#if DEBUG
-
-// MARK: - 结构自证（仅 DEBUG：被 MenuBarManager+Evidence 与 Debug/AppearanceEvidence 调用）
-
-/// 面板玻璃 / 基色层的运行时结构 —— 材质类改动的**主判据**
-///
-/// 离屏 `cacheDisplay` 画不出窗口服务器的模糊合成（见 `docs/踩坑/运行时/毛玻璃材质离屏不可辨.md`），
-/// 所以「玻璃有没有真的挂上」不能看图，只能读结构：类型、圆角、基色层 alpha、层级顺序。
-extension MenuPanelController {
-
-    /// 面板实际生效的档位（与偏好可能分叉，自证就靠这个差）
-    var currentTierForEvidence: RenderTier { currentRenderTier }
-
-    /// 当前中频刷新间隔（切档自证用）
-    var midIntervalForEvidence: TimeInterval { midInterval }
-
-    /// 当前折线采样点上限（切档自证用）
-    var historyPointsForEvidence: Int { maxHistory }
-
-    /// 返回（玻璃层类型名, 圆角, 基色层 alpha, 玻璃是否在最底层）
-    func backdropStructureForEvidence() -> (glassType: String, cornerRadius: CGFloat,
-                                            veilAlpha: CGFloat, glassIsBottom: Bool) {
-        content.backdropStructureForEvidence()
-    }
-}
-
-#endif

@@ -93,33 +93,6 @@ final class TokenDistroRowView: NSView {
         setAccessibilityLabel("\(row.rank) " + provider + row.name + " " + row.amount
             + " " + TokenFormatting.percent(row.share))
     }
-
-#if DEBUG
-    /// 快照自证：当前挂上去的悬停文案（复验「两行同名模型 tip 不同」）
-    var toolTipForSnapshot: String { toolTip ?? "" }
-
-    /// 快照自证：名称 / 数值标签的实到宽度与「完整显示所需宽度」（needed > available 即截断）
-    ///
-    /// 另给行宽 / 行高 / 名称实到高度：名称高过行高即「压行」，行宽用于复算可用宽度。
-    func metricsForSnapshot(in reference: NSView)
-        -> (available: CGFloat, needed: CGFloat, text: String, value: String,
-            rowWidth: CGFloat, rowHeight: CGFloat, nameHeight: CGFloat,
-            valueAvailable: CGFloat, valueNeeded: CGFloat) {
-        layoutSubtreeIfNeeded()
-        // 用「文字区宽度 vs 纯文本宽度」判定截断：NSTextField 的 cell 内边距会把
-        // intrinsicContentSize 撑大 4pt，拿 frame 宽度直接比会漏判「刚好差 2pt」的省略。
-        let nameFrame = nameLabel.convert(nameLabel.bounds, to: reference)
-        return (snapshotTextArea(nameLabel),
-                snapshotTextWidth(nameLabel.stringValue, font: nameLabel.font),
-                nameLabel.stringValue,
-                valueLabel.stringValue,
-                bounds.width,
-                bounds.height,
-                nameFrame.height,
-                snapshotTextArea(valueLabel),
-                snapshotTextWidth(valueLabel.stringValue, font: valueLabel.font))
-    }
-#endif
 }
 
 /// 今日 vs 昨日对比行：名称 + 两条横条 + 数值
@@ -239,40 +212,4 @@ final class TokenKeyRowView: NSView {
         valueLabel.textColor = color
         setAccessibilityLabel(title + " " + value)
     }
-
-#if DEBUG
-    /// 快照自证：标题 / 数值的可用与所需宽度（needed > available 即截断）
-    ///
-    /// titleHeight > rowHeight 即标题被压行；rowWidth 用于复算可用宽度。
-    func metricsForSnapshot(in reference: NSView)
-        -> (title: String, titleAvailable: CGFloat, titleNeeded: CGFloat,
-            value: String, valueAvailable: CGFloat, valueNeeded: CGFloat,
-            rowWidth: CGFloat, rowHeight: CGFloat, titleHeight: CGFloat) {
-        layoutSubtreeIfNeeded()
-        let titleFrame = titleLabel.convert(titleLabel.bounds, to: reference)
-        return (titleLabel.stringValue,
-                snapshotTextArea(titleLabel),
-                snapshotTextWidth(titleLabel.stringValue, font: titleLabel.font),
-                valueLabel.stringValue,
-                snapshotTextArea(valueLabel),
-                snapshotTextWidth(valueLabel.stringValue, font: valueLabel.font),
-                bounds.width,
-                bounds.height,
-                titleFrame.height)
-    }
-#endif
 }
-
-#if DEBUG
-/// 标签的可绘制文字宽度（去掉 cell 内边距）
-/// 本文件内多个行视图（分布行 / 列表行）共用同一份度量口径，故保持 internal
-@MainActor func snapshotTextArea(_ label: NSTextField) -> CGFloat {
-    label.cell?.drawingRect(forBounds: label.bounds).width ?? label.bounds.width
-}
-
-/// 完整显示所需文字宽度（按当前字体量纯文本）
-func snapshotTextWidth(_ text: String, font: NSFont?) -> CGFloat {
-    let size = (text as NSString).size(withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 10.5)])
-    return (size.width * 100).rounded(.up) / 100
-}
-#endif

@@ -248,29 +248,4 @@ final class TokenPaneView: MenuPanelPaneView {
         }
         render()
     }
-
-#if DEBUG
-    /// 快照自证专用（仅 DEBUG）：切换范围 / 小时归属 / 主图形态（堆叠·对比）
-    ///
-    /// 天趋势形态随「天趋势」独立屏一起下线，取证入口不再接收它：
-    /// 收了也没有第二处读它，只会让每个调用点多写一个恒定实参。
-    func applyStateForSnapshot(range: TokenRange, hourScope: TokenHourScope,
-                               hourView: TokenHourView? = nil, metric: TokenChartMetric? = nil) {
-        self.range = range
-        self.hourScope = hourScope
-        if let hourView { self.hourView = hourView }
-        if let metric { self.metric = metric }
-        if snapshot != nil { render() }
-    }
-
-    /// 快照自证专用（仅 DEBUG）：打开指定二级页（取证用）
-    func openDetailForSnapshot(_ kind: TokenDetailKind, selection: TokenBucketSelection? = nil) {
-        openDetail(kind, selection: selection)
-    }
-
-    /// 快照自证专用（仅 DEBUG）：切到指定屏（2 屏 × 浅/深取证）
-    func selectScreenForSnapshot(_ screen: TokenScreen) {
-        selectScreen(screen)
-    }
-#endif
 }

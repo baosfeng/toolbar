@@ -61,7 +61,7 @@ public enum ClipboardDetailStrip {
     /// - Parameters:
     ///   - item: 当前选中条目（nil = 无选中）
     ///   - now: 相对时间的参照点（快照冻结时固定）
-    public static func content(for item: ClipboardItem?, now: Date = SnapshotClock.now) -> Content {
+    public static func content(for item: ClipboardItem?, now: Date = Date()) -> Content {
         guard let item else {
             return Content(body: emptyText, meta: "", isEmpty: true)
         }
@@ -95,7 +95,7 @@ public enum ClipboardDetailStrip {
     }
 
     /// 元信息：复制次数 · 类型 · 相对时间 · 来源 App（缺项自动跳过，不留空档）
-    public static func metaText(for item: ClipboardItem, now: Date = SnapshotClock.now) -> String {
+    public static func metaText(for item: ClipboardItem, now: Date = Date()) -> String {
         var parts = ["复制 \(item.copyCount) 次", ClipboardItemKindLabel.label(for: item)]
         parts.append(ClipboardRelativeTime.string(from: item.createdAt, now: now))
         let source = item.sourceAppName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

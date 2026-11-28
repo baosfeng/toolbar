@@ -72,55 +72,34 @@ extension MenuPanelController {
         lastMidRefresh = Date()
         beginContentBatch()
         defer { endContentBatch() }
-        PanelOpenProbe.mark("B1 sampleHistory")
         sampleHistory()
-        PanelOpenProbe.mark("B2 updateSpeeds")
         content.updateSpeeds(down: max(monitor.downloadSpeed, 0),
                              up: max(monitor.uploadSpeed, 0),
                              downHistory: downHistory,
                              upHistory: upHistory)
-        PanelOpenProbe.mark("B3 refreshMidFrequency")
         refreshMidFrequency()
         // 系统页：打开面板立即采一帧再渲染（首帧 CPU/磁盘速率为 nil，显示「—」）
-        PanelOpenProbe.mark("B5 systemMonitor.poll")
         systemMonitor?.poll()
-        PanelOpenProbe.mark("B6 refreshSystem")
         refreshSystem()
         // 传送页：收起期间只记账不推视图，这里补推一次（否则开面板会看到旧状态带）
-        PanelOpenProbe.mark("B6.5 transfer.refreshNow")
         transferController?.refreshNow()
         // 额度页：打开面板强制刷新一次（monitor 内部处理未配置/退避）
-        PanelOpenProbe.mark("B7 billing.refresh(force)")
         billingMonitor?.refresh(force: true)
         // Token 页：先用库里已有快照渲染，再触发后台增量索引（不阻塞面板）
-        PanelOpenProbe.mark("B8 refreshToken")
         refreshToken()
-        PanelOpenProbe.mark("B9 updateContentSize(force)")
         updateContentSize(force: true)
-        PanelOpenProbe.mark("B10 refreshAll 结束")
     }
 
     /// 中频刷新：今日流量 / 近 6 日柱状图 / 活跃进程 / 系统信息
     func refreshMidFrequency() {
-        PanelOpenProbe.mark("B3.1 trafficTracker.update")
         trafficTracker.update()
-        let bars = PanelOpenProbe.bucket("recentDays") {
-            MenuPanelMetrics.recentDays(entries: trafficTracker.weekEntries, limit: 6)
-        }
-        PanelOpenProbe.mark("B3.2 updateTraffic")
+        let bars = MenuPanelMetrics.recentDays(entries: trafficTracker.weekEntries, limit: 6)
         content.updateTraffic(todayRx: trafficTracker.todayRx,
                               todayTx: trafficTracker.todayTx,
                               dailyBars: bars)
-        PanelOpenProbe.mark("B3.3 updateProcesses")
-#if DEBUG
-        content.updateProcesses(forceEmptyDataForEvidence ? [] : processMonitor.processSpeeds)
-#else
         content.updateProcesses(processMonitor.processSpeeds)
-#endif
-        PanelOpenProbe.mark("B3.4 launchAtStartup")
         content.launchAtStartupEnabled = isLaunchAtStartupSaved
         // 额度：中频分支 5 秒调用一次，monitor 内部 60 秒节流，不会打满 provider 限流
-        PanelOpenProbe.mark("B3.5 billing(中频)")
         billingMonitor?.refresh()
     }
 
@@ -166,18 +145,14 @@ extension MenuPanelController {
 
     /// 真正跑一次布局并按结果调 popover 高度（高度没变就不赋值）
     private func applyContentHeight(force: Bool) {
-        PanelOpenProbe.bucket("updateContentSize") {
-            // desiredContentHeight 只布局当前页子树（不再跑整棵面板）
-            let needed = PanelOpenProbe.bucket("desiredContentHeight") { content.desiredContentHeight }
-            let height = min(max(needed, 180), MenuPanelStyle.maxHeight)
-            guard force || abs(popover.contentSize.height - height) > 0.5 else { return }
-            PanelOpenProbe.bucket("popover.contentSize 赋值") {
-                popover.contentSize = NSSize(width: MenuPanelStyle.panelWidth, height: height)
-                // 高度变了必然带来纵向位移（popover 保持底边不动）：立刻按记住的顶边补钉一次，
-                // 否则切页 / 进出二级详情时面板顶边会跟着高度上下跳
-                PanelWindowPin.repinAfterContentSizeChange(logger: logger)
-            }
-        }
+        // desiredContentHeight 只布局当前页子树（不再跑整棵面板）
+        let needed = content.desiredContentHeight
+        let height = min(max(needed, 180), MenuPanelStyle.maxHeight)
+        guard force || abs(popover.contentSize.height - height) > 0.5 else { return }
+        popover.contentSize = NSSize(width: MenuPanelStyle.panelWidth, height: height)
+        // 高度变了必然带来纵向位移（popover 保持底边不动）：立刻按记住的顶边补钉一次，
+        // 否则切页 / 进出二级详情时面板顶边会跟着高度上下跳
+        PanelWindowPin.repinAfterContentSizeChange(logger: logger)
     }
 
     /// 节流窗口内的多次请求合并成一次补算（窗口内最多补一次，不堆积）

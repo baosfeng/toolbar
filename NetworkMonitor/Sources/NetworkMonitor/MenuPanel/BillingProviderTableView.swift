@@ -210,24 +210,6 @@ final class BillingProviderTableView: NSView {
             hasBalance: state.balance.map { !$0.isEmpty } ?? false)
     }
 
-#if DEBUG
-    /// 快照自证专用（仅 DEBUG）：各行的实测高度（验收「四行等高」用）
-    func snapshotRowHeights() -> [(id: String, height: CGFloat)] {
-        layoutSubtreeIfNeeded()
-        return order.compactMap { id in
-            if let row = usageRows[id] {
-                row.layoutSubtreeIfNeeded()
-                return (id, row.fittingSize.height)
-            }
-            if let row = balanceRows[id] {
-                row.layoutSubtreeIfNeeded()
-                return (id, row.fittingSize.height)
-            }
-            return nil
-        }
-    }
-#endif
-
     /// 金额文案（nil = 无限制 Key）
     static func amountText(_ amount: Double?) -> String? {
         guard let amount else { return nil }

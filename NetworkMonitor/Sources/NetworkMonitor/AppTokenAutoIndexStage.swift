@@ -12,8 +12,7 @@ extension AppCoordinator {
     /// 建并启动自动监控调度器（屏幕活动监听单槽，调度器链式包一层）
     func startTokenAutoIndexScheduler(service: any HarnessUsageServicing) -> TokenAutoIndexScheduler {
         let scheduler = TokenAutoIndexScheduler(service: service,
-                                                storage: AppContext.shared.storage,
-                                                logger: logger)
+                                                storage: AppContext.shared.storage)
         if let screenActivity {
             scheduler.bind(to: screenActivity)
         }

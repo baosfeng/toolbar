@@ -27,7 +27,7 @@ extension TokenPaneView {
     /// 否则索引一开跑就显形，快速索引时会看到文字闪一下。
     private func noteIndexingWindow(for snapshot: HarnessUsageSnapshot) {
         if snapshot.indexingState.isIndexing {
-            if indexingStartedAt == nil { indexingStartedAt = SnapshotClock.now }
+            if indexingStartedAt == nil { indexingStartedAt = Date() }
         } else {
             indexingStartedAt = nil
         }
@@ -106,7 +106,7 @@ extension TokenPaneView {
         } else if indexing, let progress,
                   TokenPaneDisplayPolicy.showsIndexNote(isIndexing: indexing,
                                                         startedAt: indexingStartedAt,
-                                                        now: SnapshotClock.now) {
+                                                        now: Date()) {
             // 延迟 1s 才把会话数改写成进度：快速索引时页头那一格一个字都不该变
             setIndexNote("索引中 \(progress.completedFiles)/\(progress.totalFiles)"
                 + " · " + String(progress.linesRead) + " 行", isWarning: false)

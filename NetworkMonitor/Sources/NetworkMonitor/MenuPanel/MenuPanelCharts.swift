@@ -193,14 +193,6 @@ final class MenuPanelBarsView: NSView {
         needsDisplay = true
     }
 
-#if DEBUG
-    /// 快照自证专用（仅 DEBUG）：强制悬停某根柱，用于渲染 tooltip 取证
-    func forceHoverForSnapshot(_ index: Int?) {
-        hoveredIndex = index
-        needsDisplay = true
-    }
-#endif
-
     /// 悬停气泡：深色底 + 反色文字，贴边自动钳制
     private func drawTooltip(_ text: String, barIndex: Int,
                              layout: (width: CGFloat, leftInset: CGFloat),

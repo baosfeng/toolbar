@@ -139,17 +139,4 @@ final class SettingsAboutInstallCard: NSView {
         footnoteLabel.textColor = (state.stage == .readyToRelaunch || state.stage == .failed)
             ? SettingsTheme.warnInk : SettingsTheme.textTertiary
     }
-
-    #if DEBUG
-    /// 取证：安装卡可见真值（离屏快照读不到按钮态与提示文案）
-    var debugProbeText: String {
-        let parts = ["status=\(statusLabel.stringValue)",
-                     "button=\(installButton.title)",
-                     "enabled=\(installButton.isEnabled)",
-                     "auto=\(autoSwitch.state == .on)",
-                     "note=\(footnoteLabel.stringValue)",
-                     "progress=[\(progressRow.debugProbeText)]"]
-        return parts.joined(separator: " ")
-    }
-    #endif
 }

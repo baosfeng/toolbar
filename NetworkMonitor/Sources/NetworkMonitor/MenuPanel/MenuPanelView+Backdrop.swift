@@ -66,20 +66,6 @@ final class MenuPanelBackdropView: NSView {
         super.viewDidChangeEffectiveAppearance()
         veil.needsDisplay = true
     }
-
-    #if DEBUG
-    /// 结构自证：玻璃类型 / 圆角 / 基色层 alpha / 玻璃是否在最底层
-    func structureForEvidence() -> (glassType: String, cornerRadius: CGFloat,
-                                   veilAlpha: CGFloat, glassIsBottom: Bool) {
-        let glassType = glass.map { String(describing: type(of: $0)) } ?? "无（降级为纯实色）"
-        var radius = glass?.layer?.cornerRadius ?? 0
-        if #available(macOS 26.0, *), let glassView = glass as? NSGlassEffectView {
-            radius = glassView.cornerRadius
-        }
-        let bottom = glass.map { subviews.first === $0 } ?? true
-        return (glassType, radius, veil.veilAlpha, bottom)
-    }
-    #endif
 }
 
 // MARK: - 基色层
@@ -130,14 +116,6 @@ extension MenuPanelView {
         backdrop.refresh()
         needsDisplay = true
     }
-
-    #if DEBUG
-    /// 玻璃 / 基色层结构自证（见 `MenuPanelController.backdropStructureForEvidence`）
-    func backdropStructureForEvidence() -> (glassType: String, cornerRadius: CGFloat,
-                                           veilAlpha: CGFloat, glassIsBottom: Bool) {
-        backdrop.structureForEvidence()
-    }
-    #endif
 
     /// 递归重绘整棵子树（切主题后把所有动态色重新解析一遍）
     ///

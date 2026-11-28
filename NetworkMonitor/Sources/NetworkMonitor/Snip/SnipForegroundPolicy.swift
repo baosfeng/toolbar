@@ -22,24 +22,6 @@ import NetworkMonitorUI
 @MainActor
 enum SnipForegroundPolicy {
 
-    /// 策略采样（仅 DEBUG 探针使用；Release 下不收集，避免白占内存）
-    private(set) static var samples: [SnipPolicySample] = []
-
-    /// 当前是否仍是菜单栏态
-    static var isMenuBar: Bool { NSApp.activationPolicy() == .accessory }
-
-    /// 记录一次采样（探针与审计共用同一份口径）
-    static func record(_ phase: SnipPolicyPhase) {
-        #if DEBUG
-        samples.append(SnipPolicySample(phase: phase, isAccessory: isMenuBar))
-        #endif
-    }
-
-    /// 清空采样（每次探针流程开始前调用）
-    static func resetSamples() {
-        samples.removeAll()
-    }
-
     /// 结束 App 内正在进行的模态会话（`NSOpenPanel` / `NSSavePanel` / `NSAlert` 的 `runModal`）
     ///
     /// 为什么必须做：app-modal 期间 AppKit 只把**鼠标**事件派给模态窗口。实测（macOS 27，

@@ -66,21 +66,3 @@ extension TokenBarsView {
         return NSRect(x: x, y: plotRect.minY, width: columnWidth, height: plotRect.height)
     }
 }
-
-#if DEBUG
-extension TokenBarsView {
-
-    /// 快照自证（仅 DEBUG）：强制悬停某列，导出该列 toolTip
-    ///
-    /// 走 `applyHover` 而不是直接写 hoveredIndex：取证要证明的正是
-    /// 「鼠标落在这一列时用户看到的那句文案」，绕过写入口就证明不了。
-    func forceHoverForSnapshot(_ index: Int?) -> String? {
-        hoveredIndex = nil
-        applyHover(index)
-        return toolTip
-    }
-
-    /// 快照自证（仅 DEBUG）：当前列数（取证按「首列 / 中间列 / 末列」逐条导出悬停文案）
-    var bucketCountForSnapshot: Int { buckets.count }
-}
-#endif

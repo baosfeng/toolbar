@@ -72,11 +72,6 @@ extension SnipController {
             return
         }
         logger.info("截图覆盖层已就绪，共 \(overlays.count) 屏")
-        #if DEBUG
-        if SnipVisibleProbe.isRequested {
-            SnipVisibleProbe.capture(logger: logger)
-        }
-        #endif
     }
 
     /// 收掉全部覆盖层并恢复菜单栏激活策略
@@ -99,7 +94,6 @@ extension SnipController {
     /// 覆盖层本身是 .nonactivatingPanel + canBecomeKey，不需要 App 变成可激活应用。
     func claimForegroundForCapture() async {
         SnipForegroundPolicy.claimForeground()
-        SnipForegroundPolicy.record(.captureBegin)
         // 抓屏本身要几百毫秒，这段空档里前台自然落稳；没落稳也不阻塞，
         // 覆盖层上屏后还有一轮有限重试（SnipOverlayWindow.scheduleActivationRetry）
         let deadline = Date().addingTimeInterval(0.6)
@@ -115,6 +109,5 @@ extension SnipController {
     /// 退出截图态：兜底确保 App 回到菜单栏态（正常路径下全程没有借出过 .regular）
     func restoreMenuBarPolicy() {
         SnipForegroundPolicy.restoreMenuBar()
-        SnipForegroundPolicy.record(.captureEnded)
     }
 }

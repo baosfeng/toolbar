@@ -16,18 +16,8 @@ extension AppCoordinator {
     /// User-Agent 用「应用名/版本」：匿名请求只需让 GitHub 能分辨调用方类型，
     /// 不带任何用户标识（机器名 / 用户名 / 安装 ID 一律不进请求头）。
     func makeUpdateCheckService() -> UpdateCheckService {
-#if DEBUG
-        // 取证钩子：探针用 NM_UPDATE_PROBE_URL 指向本地失败端点，验证失败路径的界面文案。
-        // 两条通道共用同一个基址：清单通道拼 {base}/{repo}/releases/latest/download/update.json，
-        // API 通道拼 {base}/repos/{repo}/releases/latest，指向本地坏端点时两条都会失败
-        let probeBase = ProcessInfo.processInfo.environment["NM_UPDATE_PROBE_URL"]
-            .flatMap { $0.isEmpty ? nil : URL(string: $0) }
-        let manifestBase = probeBase ?? StaticManifestUpdateChecker.defaultBaseURL
-        let apiBase = probeBase ?? GitHubUpdateChecker.defaultBaseURL
-#else
         let manifestBase = StaticManifestUpdateChecker.defaultBaseURL
         let apiBase = GitHubUpdateChecker.defaultBaseURL
-#endif
         // 与额度 provider 共用同一个传输层实例（组合根持有）
         //
         // 通道顺序：静态清单优先（一条 URL、走 CDN、不吃 API 额度），

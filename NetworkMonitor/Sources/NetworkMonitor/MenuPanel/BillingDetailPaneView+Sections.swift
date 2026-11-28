@@ -107,13 +107,6 @@ extension BillingDetailPaneView {
         }
     }
 
-#if DEBUG
-    /// 快照自证专用（仅 DEBUG）：强制悬停某根柱
-    func forceHoverForSnapshot(_ index: Int?) {
-        barsView.forceHoverForSnapshot(index)
-    }
-#endif
-
     /// 右侧口径：最近刷新时间（成功过给时分，否则说明为什么没有）
     static func metaText(_ state: BillingMonitor.ProviderState) -> String {
         if let updated = state.lastUpdated { return BillingTimeFormat.string(updated) }

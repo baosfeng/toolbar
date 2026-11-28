@@ -48,38 +48,4 @@ extension SettingsAboutPane {
     }
 
     // MARK: - 取证
-
-#if DEBUG
-    /// 快照 / 探针取证：把「检查更新」区可见文本、说明区行数与四个按钮的无障碍信息打出来
-    ///
-    /// 离屏快照看不出滚动区里的内容与按钮的可读名，取证以这里打印的真值为准。
-    func debugLogUpdateSection(_ tag: String) {
-        print("[update-probe][\(tag)] 当前版本=\(currentVersionLabel.stringValue)"
-              + " | 最新版本=\(latestVersionLabel.stringValue)"
-              + " | 发布时间=\(publishedLabel.stringValue)"
-              + " | 安装包=\(packageLabel.stringValue)"
-              + " | 状态=\(statusLabel.stringValue)"
-              + " | 说明区 \(notesRow.notesView.debugProbeText)")
-        print("[update-probe][\(tag)] 安装卡 \(installCard.debugProbeText)")
-        debugLogButton("checkButton", checkButton, tag: tag)
-        debugLogButton("releaseButton", releaseButton, tag: tag)
-        debugLogButton("installButton", installCard.installButton, tag: tag)
-    }
-
-    /// 按钮的读屏真值：role / label / 是否是无障碍元素 / 能否键盘聚焦 / 有没有 press 动作
-    private func debugLogButton(_ name: String, _ button: NSButton, tag: String) {
-        print("[update-probe][\(tag)] \(name) title=\(button.title)"
-              + " role=\(button.accessibilityRole()?.rawValue ?? "nil")"
-              + " isElement=\(button.isAccessibilityElement())"
-              + " label=\(button.accessibilityLabel() ?? "nil")"
-              + " enabled=\(button.isEnabled)"
-              + " keyboard=\(button.acceptsFirstResponder)"
-              + " press=\(button.responds(to: NSSelectorFromString("accessibilityPerformPress")))")
-    }
-
-    /// 取证：从无障碍层按一次「检查更新」，证明按钮默认动作真的走到 action
-    func debugPerformAccessibilityPress() {
-        checkButton.accessibilityPerformPress()
-    }
-#endif
 }

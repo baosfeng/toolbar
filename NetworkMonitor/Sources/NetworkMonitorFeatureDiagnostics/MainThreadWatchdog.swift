@@ -51,9 +51,6 @@ public final class MainThreadWatchdog: @unchecked Sendable {
             self?.heartbeat()
             return event
         }
-#if DEBUG
-        scheduleStallEvidenceIfRequested()
-#endif
     }
 
     // MARK: - 看护节拍
@@ -95,28 +92,3 @@ public final class MainThreadWatchdog: @unchecked Sendable {
                                                         indexingState: stall.indexingState))
     }
 }
-
-#if DEBUG
-
-// MARK: - 取证入口（仅 DEBUG）
-
-extension MainThreadWatchdog {
-
-    /// 取证开关：`NM_WATCHDOG_STALL_MS=3000` 时启动 3 s 后人为阻塞主线程一次
-    ///
-    /// 用途：证明「主线程停顿 → 看门狗日志真的落下来」（`log show --predicate 'process == "一览"'`）。
-    /// 生产构建不包含本分支。
-    public static let stallEvidenceEnvKey = "NM_WATCHDOG_STALL_MS"
-
-    public func scheduleStallEvidenceIfRequested() {
-        guard let raw = ProcessInfo.processInfo.environment[Self.stallEvidenceEnvKey],
-              let milliseconds = Int(raw), milliseconds > 0 else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            AppContext.shared.logger.info("看门狗取证：主线程将阻塞 \(milliseconds) ms")
-            Thread.sleep(forTimeInterval: Double(milliseconds) / 1000)
-            AppContext.shared.logger.info("看门狗取证：主线程阻塞结束")
-        }
-    }
-}
-
-#endif

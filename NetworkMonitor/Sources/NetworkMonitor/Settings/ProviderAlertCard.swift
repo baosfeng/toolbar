@@ -152,32 +152,6 @@ extension SettingsProvidersPane {
         showToast(sender.state == .on ? "额度回升提醒已开启" : "额度回升提醒已关闭")
     }
 
-    #if DEBUG
-    /// 把偏好真值与勾选框状态并排落盘（离屏快照看不出勾选态）
-    ///
-    /// 与通知事件卡同一处置：版面靠图核对，勾选真值靠这份文本核对。
-    func debugLogWindowStates() {
-        guard let path = ProcessInfo.processInfo.environment["NM_SNAPSHOT_DIR"], !path.isEmpty else {
-            return
-        }
-        var lines: [String] = []
-        for (instanceID, checks) in windowChecks.sorted(by: { $0.key < $1.key }) {
-            for (kind, box) in checks.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
-                let preference = alertPreferences.isRecoveredWindowEnabled(providerID: instanceID,
-                                                                           windowKind: kind)
-                let ui = box.state == .on
-                lines.append("providers \(instanceID) \(kind.rawValue) "
-                             + "pref=\(preference ? "on" : "off") ui=\(ui ? "on" : "off") "
-                             + "一致=\(preference == ui)")
-            }
-        }
-        lines.append("providers recovered_total=\(alertPreferences.isRecoveredNotificationEnabled)")
-        let url = URL(fileURLWithPath: path, isDirectory: true)
-            .appendingPathComponent("settings-providers-window-checks.txt")
-        try? (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
-    }
-    #endif
-
     @objc func changeRecoveryMinimum(_ sender: NSPopUpButton) {
         guard let percent = sender.selectedItem?.representedObject as? Double else { return }
         alertPreferences.setRecoveryMinimumPercent(percent)

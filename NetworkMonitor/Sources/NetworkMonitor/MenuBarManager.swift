@@ -116,23 +116,11 @@ final class MenuBarManager: NSObject {
         panel.onOpenSettings = { [weak self] section in self?.onOpenSettings?(section) }
         setupTimer(interval: appearance.renderProfile.tickInterval)
         observeDisplayPreferenceChanges()
-#if DEBUG
-        runStatusEvidenceIfRequested()
-#endif
     }
 
     /// 菜单栏偏好存储：默认走全局注入（`AppContext.shared.storage`）
-    ///
-    /// 仅 DEBUG 取证可变：设置 `NM_EVIDENCE_SUITE` 时改用隔离 suite，
-    /// 避免取证脚本改写用户真实的菜单栏 / 面板分页偏好。
     static func preferredStorage() -> any KeyValueStorage {
-#if DEBUG
-        if let suite = ProcessInfo.processInfo.environment["NM_EVIDENCE_SUITE"], !suite.isEmpty,
-           let defaults = UserDefaults(suiteName: suite) {
-            return UserDefaultsStorage(defaults: defaults)
-        }
-#endif
-        return AppContext.shared.storage
+        AppContext.shared.storage
     }
 
     nonisolated deinit {
@@ -195,8 +183,6 @@ final class MenuBarManager: NSObject {
     ///
     /// 延后 1.2 秒：等定时器、首轮采样、Token 索引启动稳定，避免和启动路径抢主线程。
     func schedulePrewarm() {
-        // 性能测量模式由测量器自己控制预热时序，这里不抢跑（否则「首次打开」那一轮测不准）
-        guard !PanelOpenProbe.requested else { return }
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 1_200_000_000)
             self?.prewarmPanel()

@@ -156,6 +156,9 @@ let package = Package(
         // 不依赖 cua、零第三方依赖，用法见 docs/开发指南/UI-自动化-CLI.md
         .executableTarget(
             name: "nmcli",
+            // 页面通道的目标解析与常量与 app 共用一份（NetworkMonitorUI 是不依赖 AppKit 的纯逻辑库），
+            // 否则 nmcli 里再抄一套字符串，改名时两边静默分叉
+            dependencies: ["NetworkMonitorUI"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("ApplicationServices"),

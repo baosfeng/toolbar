@@ -103,7 +103,6 @@ extension SnipController {
         // 这里只 activate（不切 .regular）——实测 `.accessory` 下 NSSavePanel 照样成为 key window、
         // 能正常接收键盘；切 `.regular` 会在 Dock 里闪出本应用图标，是用户报的「截图时 Dock 出现软件」的另一处。
         SnipForegroundPolicy.claimForeground()
-        SnipForegroundPolicy.record(.savePanel)
         defer { restoreMenuBarPolicy() }
         let panel = NSSavePanel()
         // 只允许当前格式：早期这里写死 .png，用户选了 JPEG 也存不出 jpg

@@ -42,7 +42,7 @@
 
 ## 开发指南
 → [UI 自动化 CLI](docs/开发指南/UI-自动化-CLI.md)（`nmcli`：给菜单栏 app 做程序化验收，一条命令跑完整套面板巡览）
-→ [快照冻结通道](docs/开发指南/快照冻结通道.md)（`NM_SNAPSHOT_FREEZE`：Token / 额度页逐像素回归的基座）
+→ [CLI 页面输出](docs/开发指南/CLI-页面输出.md)（`nmcli page`：对运行中的 app 打开页面并截图，不重启不退出）
 → [编码规范 skill](.agents/skills/toolbar-coding-standards/SKILL.md)（规范权威来源，**规范更新一律写入 skill，不另建独立规范文档**）
 → UI/原型类工作用 `open-design` 原型 skill 产出原型，定稿后再实现
 → [构建与测试](docs/开发指南/构建与测试.md)

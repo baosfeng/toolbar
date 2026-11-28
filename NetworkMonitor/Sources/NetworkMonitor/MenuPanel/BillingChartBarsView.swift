@@ -211,27 +211,4 @@ final class BillingChartBarsView: NSView {
         } ?? ""
         setAccessibilityLabel("用量柱状图，" + detail + (detail.isEmpty ? "" : "，" + unit + "粒度"))
     }
-
-#if DEBUG
-    /// 快照自证专用（仅 DEBUG）：强制悬停某根柱
-    func forceHoverForSnapshot(_ index: Int?) {
-        hoveredIndex = index
-        toolTip = index.flatMap {
-            points.indices.contains($0) ? Self.caption(points[$0], granularity: granularity, metric: metric) : nil
-        }
-        needsDisplay = true
-    }
-
-    /// 快照自证专用（仅 DEBUG）：柱区几何读数（柱宽 / 首末柱位置 / 最高柱高）
-    func columnMetricsForSnapshot() -> (width: CGFloat, firstX: CGFloat, lastMaxX: CGFloat,
-                                        tallestHeight: CGFloat, gutter: CGFloat) {
-        layoutSubtreeIfNeeded()
-        let list = columns
-        return (list.first?.frame.width ?? 0,
-                list.first?.frame.minX ?? 0,
-                list.last?.frame.maxX ?? 0,
-                list.map(\.bar.height).max() ?? 0,
-                plotRect.minX - bounds.minX)
-    }
-#endif
 }

@@ -278,36 +278,6 @@ final class SettingsNotificationEventCard: NSObject {
     }
 
     // MARK: - 自证（仅 DEBUG）
-
-    #if DEBUG
-    /// 把偏好真值与控件显示态并排落盘（离屏快照看不出开关与下拉选中项）
-    /// - Parameter tag: 文件名后缀，用所在页的 `fileSuffix`（一页一个文件）
-    func debugLogStates(_ tag: String) {
-        guard let path = ProcessInfo.processInfo.environment["NM_SNAPSHOT_DIR"], !path.isEmpty else {
-            return
-        }
-        var lines: [String] = []
-        for event in events {
-            let pref = context.preferences.config(for: event)
-            let row = controls[event]
-            let ui = row?.toggle.state == .on
-            let presentationUI: String
-            if let row, row.presentation.isEnabled,
-               NotificationPresentation.allCases.indices.contains(row.presentation.indexOfSelectedItem) {
-                presentationUI = NotificationPresentation.allCases[row.presentation.indexOfSelectedItem].rawValue
-            } else {
-                presentationUI = "disabled"
-            }
-            lines.append("\(tag) \(event.rawValue) enabled=\(pref.enabled)/\(ui ? "on" : "off") "
-                         + "sound=\(pref.sound.storageValue) presentation=\(pref.presentation.rawValue)/\(presentationUI) "
-                         + "haptic=\(pref.haptic.rawValue) 一致=\(pref.enabled == ui)")
-        }
-        guard !lines.isEmpty else { return }
-        let url = URL(fileURLWithPath: path, isDirectory: true)
-            .appendingPathComponent("settings-notification-events-\(tag).txt")
-        try? (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
-    }
-    #endif
 }
 
 // MARK: - 含事件卡的设置页

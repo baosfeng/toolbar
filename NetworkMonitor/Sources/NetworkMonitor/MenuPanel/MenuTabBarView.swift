@@ -209,20 +209,6 @@ final class MenuTabBarView: NSView {
                                      withAttributes: attributes)
     }
 
-#if DEBUG
-    /// 快照自证专用：各段标题在各自可用宽度下的实测内容宽度（pt）
-    static func segmentMetrics() -> [(title: String, content: CGFloat, available: CGFloat)] {
-        let barWidth = MenuPanelStyle.contentWidth - 32
-        let segmentWidth = barWidth / CGFloat(MenuPanelTab.allCases.count)
-        let available = segmentWidth - 3
-        let probe = MenuTabBarView()
-        return MenuPanelTab.allCases.map { tab in
-            let metrics = probe.layout(tab: tab, isSelected: true, availableWidth: available)
-            return (tab.title, metrics.iconSize + metrics.gap + metrics.titleSize.width, available)
-        }
-    }
-#endif
-
     /// 生成着色后的 SF Symbol（palette 配置直接决定颜色，避免模板色歧义）
     private func tabIcon(_ tab: MenuPanelTab, color: NSColor) -> NSImage? {
         guard let base = NSImage(systemSymbolName: tab.symbolName, accessibilityDescription: tab.title) else {

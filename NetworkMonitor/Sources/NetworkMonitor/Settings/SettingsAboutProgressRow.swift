@@ -174,14 +174,4 @@ final class SettingsAboutProgressRow: NSView {
         }
         return result
     }
-
-    #if DEBUG
-    /// 取证：进度区当前可见文本（离屏快照读不到内嵌 label 的真值）
-    var debugProbeText: String {
-        "hidden=\(isHidden) steps=\(stepsLabel.stringValue)"
-            + " percent=\(percentLabel.isHidden ? "—" : percentLabel.stringValue)"
-            + " detail=\(detailLabel.isHidden ? "—" : detailLabel.stringValue)"
-            + " bar=\(bar.isIndeterminate ? "indeterminate" : String(format: "%.3f", bar.doubleValue))"
-    }
-    #endif
 }

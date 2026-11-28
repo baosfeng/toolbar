@@ -30,8 +30,6 @@ struct TokenLegendItem {
 final class TokenLegendRowView: NSView {
 
     private let stack = NSStackView()
-    /// 最近一次渲染的项（供 #if DEBUG 的快照自证读取）
-    private var lastItems: [TokenLegendItem] = []
 
     init() {
         super.init(frame: .zero)
@@ -55,7 +53,6 @@ final class TokenLegendRowView: NSView {
 
     /// 项数完全由调用方给的 items 决定（对比态两项、堆叠态三条）——这里不写死数量
     func update(items: [TokenLegendItem]) {
-        lastItems = items
         for view in stack.arrangedSubviews {
             stack.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -86,16 +83,6 @@ final class TokenLegendRowView: NSView {
         toolTip = rowTip.isEmpty ? nil : rowTip
         setAccessibilityLabel(items.map { $0.title + " " + $0.value }.joined(separator: "，"))
     }
-
-#if DEBUG
-    /// 快照自证：当前图例项（标题 / 数值 / 是否虚线色块），用于核对「项数与数据一致」
-    func itemsForSnapshot() -> [(title: String, value: String, dashed: Bool)] {
-        lastItems.map { ($0.title, $0.value, $0.dashed) }
-    }
-
-    /// 快照自证：整行挂上去的悬停文案（逐项拼接）
-    var toolTipForSnapshot: String { toolTip ?? "" }
-#endif
 
 }
 

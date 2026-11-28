@@ -120,10 +120,6 @@ final class MenuPanelController: NSObject, NSPopoverDelegate {
     /// 当前渲染档位（切档后由 `applyRenderTier` 更新，tick 据此判定是否停摆）
     var currentRenderTier: RenderTier = .standard
     var lastMidRefresh: Date = .distantPast
-#if DEBUG
-    /// 取证专用（仅 DEBUG）：强制进程/剪贴板空态，用于核对空态字号
-    var forceEmptyDataForEvidence = false
-#endif
     /// 最近一次收起时间 — 用于吞掉「点击状态栏按钮先触发 transient 收起、再触发按钮动作」的重复开合
     // 放宽为 internal：toggle / popoverDidClose 已拆到 MenuPanelController+Open.swift
     var lastCloseDate: Date = .distantPast

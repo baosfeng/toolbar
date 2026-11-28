@@ -182,23 +182,6 @@ final class UpdateCheckService {
     /// 本构建是否支持自动安装（不支持时界面只留「打开发布页」）
     var canInstall: Bool { installer != nil }
 
-#if DEBUG
-    /// 取证专用：把界面打进指定的安装态（进度区在真实链路上只有几秒，截图/快照抓不到）
-    ///
-    /// 只在 `UpdateCheckProbe` 里被调用，release 构建里不存在这个方法。
-    func debugInjectInstallState(_ state: UpdateInstallState,
-                                 release: UpdateRelease,
-                                 subStep: UpdateUnpackStep? = nil) {
-        latestRelease = release
-        releasePageURL = release.htmlURL
-        self.state = .available(latest: "1.32.0", notes: release.notes)
-        installState = state
-        installSubStep = subStep
-        notify()
-        notifyInstall()
-    }
-#endif
-
     // MARK: 私有
 
     /// Core 的阶段 → 界面阶段（保留已拿到的下载进度与子步骤）

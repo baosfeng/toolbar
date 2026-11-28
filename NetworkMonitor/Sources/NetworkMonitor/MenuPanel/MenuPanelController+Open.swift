@@ -3,7 +3,7 @@ import NetworkMonitorCore
 
 // MARK: - 菜单面板（显示 / 收起 / 预热）
 
-/// 面板生命周期 — 展开 / 收起 / 预热，打开路径要逐阶段打点（见 PanelOpenProbe）
+/// 面板生命周期 — 展开 / 收起 / 预热
 ///
 /// 刷新链路的动作在 `MenuPanelController+Refresh.swift`，「要不要刷新」的判定在
 /// NetworkMonitorUI 的 `PanelRefreshPolicy` / `PanelContentSizing`；本文件只管开合本身。
@@ -27,21 +27,15 @@ extension MenuPanelController {
     func show(relativeTo rect: NSRect, of view: NSView) {
         // 【时序敏感】必须在 popover 成为 key window 之前同步记录目标 App，
         // 否则 frontmost 会变成本 App，合成的 ⌘V 永远落回自己（见 ClipboardPaster 注释）。
-        PanelOpenProbe.mark("01 recordTargetApplication")
         paster.recordTargetApplication()
-        PanelOpenProbe.mark("02 refreshAll")
         refreshAll()
-        PanelOpenProbe.mark("03 popover.show")
         popover.show(relativeTo: rect, of: view, preferredEdge: .minY)
         // 挂上「窗口被挪动就按状态项中心纠正」的观察者（见 PanelWindowPin 的说明）
         PanelWindowPin.attach(to: popover, anchorView: view, logger: logger)
-        PanelOpenProbe.mark("04 updateContentSize(force)")
         updateContentSize(force: true)
-        PanelOpenProbe.mark("05 makeFirstResponder")
         if let window = popover.contentViewController?.view.window {
             window.makeFirstResponder(content)
         }
-        PanelOpenProbe.mark("06 show 返回")
     }
 
     // MARK: - 预热

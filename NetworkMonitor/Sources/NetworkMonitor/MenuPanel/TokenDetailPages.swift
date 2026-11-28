@@ -223,28 +223,6 @@ final class TokenDetailPaneView: NSView {
         return document.frame.height > scrollView.contentView.bounds.height + 0.5
     }
 
-#if DEBUG
-    /// 快照自证专用：返回（文档高度, 滚动视口高度）
-    func snapshotScrollMetrics() -> (document: CGFloat, viewport: CGFloat) {
-        layoutSubtreeIfNeeded()
-        return (document.frame.height, scrollView.contentView.bounds.height)
-    }
-
-    /// 快照自证专用：压低视口高度，制造「内容高过视口」以证明滚动生效
-    func setViewportHeightForSnapshot(_ height: CGFloat) {
-        paneHeightConstraint?.constant = height
-        layoutSubtreeIfNeeded()
-    }
-
-    /// 快照自证专用：滚到内容最底部
-    func scrollToBottomForSnapshot() {
-        layoutSubtreeIfNeeded()
-        let maxY = max(0, document.frame.height - scrollView.contentView.bounds.height)
-        scrollView.contentView.scroll(to: NSPoint(x: 0, y: maxY))
-        scrollView.reflectScrolledClipView(scrollView.contentView)
-    }
-#endif
-
     private func clearContent() {
         for view in content.arrangedSubviews {
             content.removeArrangedSubview(view)

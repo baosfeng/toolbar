@@ -12,9 +12,6 @@ extension SnipOverlayView {
     // MARK: - 鼠标
 
     override func mouseMoved(with event: NSEvent) {
-        #if DEBUG
-        if debugPointerFrozen { return }
-        #endif
         pointer = localPoint(of: event)
         if state.phase == .idle {
             updateHoveredWindow()

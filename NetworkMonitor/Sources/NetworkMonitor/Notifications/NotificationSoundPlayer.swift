@@ -25,10 +25,6 @@ final class NotificationSoundPlayer {
     private var lastPlayed: [NotificationCue: TimeInterval] = [:]
     /// 正在播放的实例：NSSound 被释放就停播，必须强持有到播完
     private var playing: [NSSound] = []
-    #if DEBUG
-    /// 自证用：最近一次真正起播的声音名（系统音名 / 内建文件名 / 自定义文件名）
-    private(set) var debugLastPlayedName = ""
-    #endif
 
     init(preferences: NotificationPreferences,
          library: NotificationSoundLibrary,
@@ -83,29 +79,25 @@ final class NotificationSoundPlayer {
                 logger.debug("内建音效读取失败：\(targetCue.rawValue)（cue=\(cue.rawValue)）")
                 return
             }
-            start(sound, debugName: "builtin:\(targetCue.rawValue)")
+            start(sound)
         case .system(let name):
             guard let sound = NSSound(named: name) else {
                 logger.debug("系统音效缺失：\(name)（cue=\(cue.rawValue)）")
                 return
             }
-            start(sound, debugName: "system:\(name)")
+            start(sound)
         case .customFile(let file):
             guard let url = library.url(forCustomFile: file), let sound = NSSound(contentsOf: url, byReference: true) else {
                 logger.debug("自定义音效读取失败：\(file)（cue=\(cue.rawValue)）")
                 return
             }
-            start(sound, debugName: "custom:\(file)")
+            start(sound)
         }
     }
 
     /// 起播并强持有实例（最多保留 4 个，避免长时间运行堆积）
-    private func start(_ sound: NSSound, debugName: String) {
+    private func start(_ sound: NSSound) {
         sound.volume = Float(preferences.inAppVolume)
-        #if DEBUG
-        // 记「解析出来的目标」而不是 sound.name：自定义文件用 NSSound(contentsOf:) 打开时 name 为 nil
-        debugLastPlayedName = debugName
-        #endif
         sound.play()
         playing.append(sound)
         if playing.count > 4 { playing.removeFirst(playing.count - 4) }

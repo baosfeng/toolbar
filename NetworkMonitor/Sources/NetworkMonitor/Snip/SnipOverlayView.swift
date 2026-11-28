@@ -50,8 +50,6 @@ final class SnipOverlayView: NSView {
     private(set) var sizeEditor: SizeEditorField? {
         didSet { textEditingDidChange() }
     }
-    /// 放宽为 internal：DEBUG 取证时冻结指针位置
-    var debugPointerFrozen = false
     /// 当前标注工具；nil 表示仍在操作选区
     var activeTool: SnipTool?
     /// 已完成的标注（栈一变就把「能不能撤销 / 重做」灌给工具条：加 / 删 / 改 /

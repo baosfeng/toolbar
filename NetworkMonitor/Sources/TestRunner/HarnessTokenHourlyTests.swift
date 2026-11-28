@@ -152,16 +152,3 @@ func runHarnessTokenHourlyTests() {
     testHourlySumMatchesToday()
     print("✅ Harness token 按小时聚合 works")
 }
-
-// MARK: - 小时明细输出（供 --harness-index 真实数据核对）
-
-func printHarnessHourly(snapshot: HarnessUsageSnapshot) {
-    print("=== today_hourly (Asia/Shanghai) ===")
-    for slot in snapshot.todayHourly {
-        guard let usage = slot.usage else { continue }
-        print(String(
-            format: "H%02d in=%d out=%d cache=%d n=%d",
-            slot.hour, usage.uncachedInput, usage.output, usage.cacheRead, usage.requestCount
-        ))
-    }
-}

@@ -253,13 +253,4 @@ final class TokenRankingScreenView: NSStackView {
 
     /// 键盘可达：维度分段可聚焦（行本身是只读文本，不做点击）；隐藏的段不进焦点链
     var focusableRows: [MenuPanelRow] { dimSegment.focusableRows.filter { !$0.isHidden } }
-#if DEBUG
-    /// 快照自证：直接切维度（不回调，避免取证过程触发整页刷新）
-    ///
-    /// 留在主类里是因为它要写 private(set) 的 dimension；其余快照接口
-    /// 只读，拆在 TokenScreenContent+Ranking+Snapshot.swift。
-    func setDimensionForSnapshot(_ dimension: TokenDistroDimension) {
-        self.dimension = dimension
-    }
-#endif
 }

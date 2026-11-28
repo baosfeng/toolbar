@@ -290,33 +290,3 @@ final class TokenBarsView: NSView {
         if onSelect != nil { addCursorRect(bounds, cursor: .pointingHand) }
     }
 }
-
-#if DEBUG
-extension TokenBarsView {
-
-    /// 快照自证（仅 DEBUG）：归一化基准 / 绘图区高度 / 每列柱高（pt）
-    ///
-    /// 柱高算式与 drawColumns 共用 resolvedScale() 与 barValue()，两处口径不会漂移。
-    func columnMetricsForSnapshot()
-        -> (shape: String, scale: Int, plotHeight: CGFloat,
-            columns: [(index: Int, value: Int, height: CGFloat)]) {
-        layoutSubtreeIfNeeded()
-        let scale = resolvedScale()
-        let plotHeight = bounds.height
-        let columns = buckets.indices.map { index -> (index: Int, value: Int, height: CGFloat) in
-            let value = barValue(buckets[index])
-            return (index, value, CGFloat(Double(value) / Double(scale) * Double(plotHeight)))
-        }
-        return (shapeName, scale, plotHeight, columns)
-    }
-
-    /// 形态名（供度量文本标记）
-    private var shapeName: String {
-        switch shape {
-        case .stack: return "stack"
-        case .request: return "request"
-        case .pair: return "pair"
-        }
-    }
-}
-#endif

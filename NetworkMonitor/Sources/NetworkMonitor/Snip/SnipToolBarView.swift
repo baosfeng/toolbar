@@ -89,12 +89,6 @@ final class SnipToolBarView: NSView {
     }
 
     /// 仅 DEBUG：离屏取证时设置已选中的颜色 / 线宽
-    #if DEBUG
-    func debugSetStyle(_ newStyle: SnipAnnotationStyle) {
-        style = newStyle
-        needsDisplay = true
-    }
-    #endif
 
     /// 工具条上可选的颜色与线宽（二级面板的内容与工具条当前值的来源，只此一份）
     static let colors: [SnipAnnotationColor] = [.red, .orange, .yellow, .green, .blue, .black, .white]

@@ -175,29 +175,6 @@ extension SettingsCapturePane {
         applyToolBarConfiguration(config)
     }
 
-    #if DEBUG
-    /// 仅 DEBUG：把工具条卡片的控件勾选态与偏好真值落盘，用于核对「界面显示 vs 实际配置」
-    /// （离屏快照里 NSSwitch 的 on/off 只能靠这份文本确认，肉眼看不出状态是否灌对了）
-    func debugLogToolBarControlStates(_ tag: String) {
-        let config = currentToolBarConfiguration()
-        let groupStates = SnipToolBarGroup.allCases.map { group in
-            let state = toolBarGroupToggles[group]?.state == .on ? "on" : "off"
-            return "\(group.rawValue)=\(config.isVisible(group))/\(state)"
-        }.joined(separator: " ")
-        let actionStates = SnipBarAction.allOrderCases.map { action in
-            let state = toolBarActionCard?.toggles[action]?.state == .on ? "on" : "off"
-            return "\(action.rawValue)=\(config.visibleActions.contains(action))/\(state)"
-        }.joined(separator: " ")
-        let toolStates = SnipTool.allCases.map { tool in
-            let state = toolBarPrimaryToolCard?.toggles[tool]?.state == .on ? "on" : "off"
-            return "\(tool.rawValue)=\(config.primaryTools.contains(tool))/\(state)"
-        }.joined(separator: " ")
-        let line = "[\(tag)] mode=\(config.labelMode.rawValue) groups: \(groupStates) "
-            + "actions: \(actionStates) tools: \(toolStates)"
-        SnapshotEvidenceLine.write(line, tag: tag, fileName: "settings-toolbar-states.txt")
-    }
-    #endif
-
     // MARK: - 工具
 
     /// 文字提示档副标题（写出实际效果，避免「选了却看不出变化」）

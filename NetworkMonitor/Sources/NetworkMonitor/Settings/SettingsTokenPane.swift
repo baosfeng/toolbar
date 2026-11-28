@@ -211,15 +211,6 @@ final class SettingsTokenPane: SettingsPaneView {
         clearButton.isEnabled = summary.eventCount != 0
     }
 
-#if DEBUG
-    /// 取证专用：离屏渲染前同步补齐事件数（运行期不调用）
-    func debugPrefillEventCount() {
-        guard var summary = lastSummary else { return }
-        summary.eventCount = controller.debugEventCount()
-        apply(summary)
-    }
-#endif
-
     /// 「最近扫描」文案（索引中优先说明正在进行，避免把旧时间当成当前状态）
     static func scanTimeText(_ date: Date?, indexing: Bool) -> String {
         if indexing { return "索引中…" }

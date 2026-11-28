@@ -91,20 +91,4 @@ final class TokenHeroView: NSView {
             label.toolTip = toolTip
         }
     }
-
-#if DEBUG
-    /// 快照自证：Hero 各行的字号 / frame / 完整显示所需宽度
-    func metricsForSnapshot(in reference: NSView) -> [(name: String, fontSize: CGFloat, frame: NSRect,
-                                                       needed: CGFloat, text: String)] {
-        layoutSubtreeIfNeeded()
-        let items: [(String, NSTextField)] = [
-            ("hero-title", titleLabel), ("hero-value", valueLabel), ("hero-unit", unitLabel),
-            ("hero-delta", deltaLabel), ("hero-clock", clockLabel),
-        ]
-        return items.map { name, label in
-            (name, label.font?.pointSize ?? 0, label.convert(label.bounds, to: reference),
-             label.intrinsicContentSize.width, label.stringValue)
-        }
-    }
-#endif
 }

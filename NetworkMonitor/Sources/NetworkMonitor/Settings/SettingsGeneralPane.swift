@@ -156,13 +156,6 @@ final class SettingsGeneralPane: SettingsPaneView, SettingsNotificationEventHost
         alertCard.refresh()
     }
 
-#if DEBUG
-    /// 取证：鼠标滚轮平滑卡的控件态与偏好真值（离屏快照看不出勾选态）
-    func debugLogSmoothScrollStates(_ tag: String) {
-        smoothScrollCard.debugLogStates(tag)
-    }
-#endif
-
     // MARK: - 动作
 
     /// 开机自启动切换：失败时服务已回滚偏好并把原因记进 lastFailureReason，

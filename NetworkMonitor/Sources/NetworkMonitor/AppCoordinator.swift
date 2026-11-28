@@ -131,13 +131,6 @@ public final class AppCoordinator {
         logger.info("AppCoordinator 初始化中...")
     }
 
-#if DEBUG
-    /// 快照钩子专用（仅 DEBUG）：暴露数据库以便渲染真实剪贴板条目
-    var snapshotClipboardRepository: (any ClipboardRepository)? { database }
-    /// 快照钩子专用（仅 DEBUG）：暴露 Token 服务以便用真实索引结果渲染快照
-    var snapshotHarnessService: (any HarnessUsageServicing)? { harnessUsageService }
-#endif
-
     /// 启动所有服务
     ///
     /// 只做两件事：声明装配阶段（顺序与依赖见 `AppAssemblyPlan`）、交给装配器执行。
@@ -161,6 +154,8 @@ public final class AppCoordinator {
             logger.error(message)
             preconditionFailure(message)
         }
+        // CLI 页面输出通道（nmcli page）：对运行中的进程生效，不重启、不退出
+        CLIPageBridge.shared.start(coordinator: self)
         logger.info("AppCoordinator 启动完成")
         return manager
     }

@@ -237,11 +237,6 @@ final class TokenStackBarView: NSView {
         needsDisplay = true
     }
 
-#if DEBUG
-    /// 快照自证：当前挂上去的悬停文案
-    var toolTipForSnapshot: String { toolTip ?? "" }
-#endif
-
     override func draw(_ dirtyRect: NSRect) {
         let radius = bounds.height / 2
         TokenPaneStyle.trackColor.setFill()

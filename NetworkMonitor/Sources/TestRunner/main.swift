@@ -7,10 +7,6 @@ import Foundation
 // 新增测试文件 = 在对应域的登记函数里加一行，**不需要改本文件**——本文件不再随测试增长；
 // 未登记的套件由 TestSuiteRegistrationTests 判红（登记表可校验，不靠人记）。
 
-// MARK: - 人工触发的探针入口（按天清理 / 内置解码 / 索引基准 / 网络）
-// 参数解析集中在 ManualProbes.swift，命中即执行并退出，不参与默认测试流程
-runManualProbesIfRequested()
-
 // MARK: - Core 域：格式化 / 配置 / 事件总线 / 通知 / 凭据 / 数据库队列 / 版本与偏好迁移
 runCoreSuites()
 

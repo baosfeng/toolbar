@@ -272,9 +272,6 @@ final class PinWindow: NSPanel {
     /// 选择器映射与各菜单动作在 PinWindow+Menu.swift（同一个类的扩展）。
     /// 危险项位置由顺序决定，误点风险由视觉兜：菜单里用红色文字标出「关闭 / 销毁」。
     override func rightMouseDown(with event: NSEvent) {
-#if DEBUG
-        PinDragProbe.recordContextMenu()
-#endif
         let menu = NSMenu()
         let order = PinMenuOrderResolver.load(storage: storage)
         let separators = PinMenuDivider.leadingSeparators(for: order)

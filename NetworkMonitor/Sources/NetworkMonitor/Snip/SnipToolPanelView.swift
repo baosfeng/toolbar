@@ -111,12 +111,4 @@ final class SnipToolPanelView: NSView {
             return
         }
     }
-
-    #if DEBUG
-    /// 仅 DEBUG：程序化摆出悬停态（离屏取证用）
-    func debugHover(index: Int) {
-        hoveredIndex = itemRects.indices.contains(index) ? index : -1
-        needsDisplay = true
-    }
-    #endif
 }

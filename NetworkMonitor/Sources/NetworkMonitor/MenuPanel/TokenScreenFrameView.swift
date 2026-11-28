@@ -83,14 +83,6 @@ final class TokenScreenFrameView: NSView {
         layoutSubtreeIfNeeded()
         return document.frame.height > scrollView.contentView.bounds.height + 0.5
     }
-
-#if DEBUG
-    /// 快照自证：返回（内容高, 视口高）
-    func snapshotScrollMetrics() -> (document: CGFloat, viewport: CGFloat) {
-        layoutSubtreeIfNeeded()
-        return (document.frame.height, scrollView.contentView.bounds.height)
-    }
-#endif
 }
 
 /// 屏内滚动文档 — flipped，作为 NSScrollView.documentView 时初始停在顶部

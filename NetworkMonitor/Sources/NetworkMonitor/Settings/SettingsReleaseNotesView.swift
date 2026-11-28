@@ -138,12 +138,4 @@ final class SettingsReleaseNotesView: NSView {
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return label
     }
-
-    #if DEBUG
-    /// 取证：说明区当前展示的行数与首行文本（离屏快照读不到滚动区内容）
-    var debugProbeText: String {
-        let rows = contentStack.arrangedSubviews.compactMap { ($0 as? NSTextField)?.stringValue }
-        return "rows=\(rows.count) first=\(rows.first ?? "—")"
-    }
-    #endif
 }

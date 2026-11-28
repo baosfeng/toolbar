@@ -41,18 +41,11 @@ enum TokenAutoIndexTrigger: String, Sendable {
 /// 线程模型：全部状态与定时器都在私有串行队列 `queue` 上，`setActive` / `trigger` / `start`
 /// 从任意线程进来只做一次 async 投递；定时器是 `DispatchSourceTimer` 且挂在这条队列上，
 /// 不占主线程（索引重活在服务的队列里）。
-///
-/// `NM_TOKEN_AUTOINDEX_PROBE=1` 时输出启停与每轮触发的来源 / 耗时（走 logger，不用 print）。
 final class TokenAutoIndexScheduler: @unchecked Sendable {
-
-    /// 探针环境变量（与 NM_SNAPSHOT_FREEZE / NM_DRAWN_PROBE 同一惯例）
-    static let probeEnvironmentKey = "NM_TOKEN_AUTOINDEX_PROBE"
 
     private let service: any HarnessUsageServicing
     private let storage: any KeyValueStorage
-    private let logger: LoggingService
     private let queue = DispatchQueue(label: "com.bsfeng.yilan.tokenAutoIndex", qos: .utility)
-    private let probeEnabled: Bool
 
     /// 队列内状态
     private var timer: DispatchSourceTimer?
@@ -65,13 +58,9 @@ final class TokenAutoIndexScheduler: @unchecked Sendable {
     @MainActor private var previousOnChange: ((Bool) -> Void)?
 
     init(service: any HarnessUsageServicing,
-         storage: any KeyValueStorage,
-         logger: LoggingService,
-         environment: [String: String] = ProcessInfo.processInfo.environment) {
+         storage: any KeyValueStorage) {
         self.service = service
         self.storage = storage
-        self.logger = logger
-        self.probeEnabled = environment[Self.probeEnvironmentKey] == "1"
     }
 
     // MARK: - 生命周期
@@ -81,9 +70,6 @@ final class TokenAutoIndexScheduler: @unchecked Sendable {
         queue.async { [weak self] in
             guard let self, !self.isStopped else { return }
             let enabled = TokenSourcePreferences.autoIndexEnabled(self.storage)
-            let interval = TokenSourcePreferences.autoIndexInterval(self.storage)
-            self.probe("启动：自动监控" + (enabled ? "已开启" : "关闭（不排定时器）")
-                       + "，间隔 " + Self.format(interval) + "s")
             guard enabled, !self.isPaused else { return }
             self.scheduleTimer(after: TokenAutoIndexSchedule.firstFireDelay)
         }
@@ -97,7 +83,6 @@ final class TokenAutoIndexScheduler: @unchecked Sendable {
             self.pendingTrigger = nil
             self.timer?.cancel()
             self.timer = nil
-            self.probe("停止：定时器已取消")
         }
     }
 
@@ -121,14 +106,12 @@ final class TokenAutoIndexScheduler: @unchecked Sendable {
             if active {
                 guard self.isPaused else { return }
                 self.isPaused = false
-                self.probe("恢复可用：补跑一轮")
                 self.enqueue(.wake)
             } else {
                 guard !self.isPaused else { return }
                 self.isPaused = true
                 self.timer?.cancel()
                 self.timer = nil
-                self.probe("锁屏 / 休眠：暂停定时器")
             }
         }
     }
@@ -174,16 +157,10 @@ final class TokenAutoIndexScheduler: @unchecked Sendable {
     /// 跑一轮（服务侧串行队列负责真正的单飞，这里只跟踪状态与耗时）
     private func run(_ reason: TokenAutoIndexTrigger) {
         isRunning = true
-        let sources = enabledSourcesText()
-        let startedAt = Date()
-        probe("触发（" + reason.displayName + "）：来源 " + sources)
         service.refreshIfNeeded { [weak self] in
             guard let self else { return }
             self.queue.async {
-                let elapsed = Date().timeIntervalSince(startedAt)
                 self.isRunning = false
-                self.probe("完成（" + reason.displayName + "）：来源 " + sources
-                           + "，耗时 " + Self.format(elapsed) + "s；" + self.sourceTotalsText())
                 self.scheduleNextRoundIfEnabled()
                 // 本轮期间攒下的触发：合并成一轮立刻补跑（不丢请求）
                 if let pending = self.pendingTrigger, !self.isStopped, !self.isPaused {
@@ -218,40 +195,5 @@ final class TokenAutoIndexScheduler: @unchecked Sendable {
         }
         timer.resume()
         self.timer = timer
-    }
-
-    // MARK: - 日志
-
-    /// 已启用且已实现的来源（多来源扫描器按同一偏好过滤，这里只用于日志）
-    private func enabledSourcesText() -> String {
-        let sources = TokenSourcePreferences.enabledSources(storage).filter(\.hasIndexer)
-        guard !sources.isEmpty else { return "无（全部关闭）" }
-        return sources.map(\.displayName).joined(separator: " + ")
-    }
-
-    /// 各来源的落库数字（探针用：一轮跑完直接把 bySource 打出来，省得再查库对账）
-    private func sourceTotalsText() -> String {
-        let bySource = service.snapshot().bySource
-        guard !bySource.isEmpty else { return "各来源无数据" }
-        let parts = bySource.keys.sorted { $0.rawValue < $1.rawValue }.compactMap { source -> String? in
-            guard let item = bySource[source] else { return nil }
-            return source.rawValue + " " + String(item.usage.totalTokens) + " tok / "
-                + String(item.sessionCount) + " 会话"
-        }
-        let total = service.snapshot().totals.allTime.totalTokens
-        let sum = bySource.values.reduce(0) { $0 + $1.usage.totalTokens }
-        return "各来源：" + parts.joined(separator: "，")
-            + "；全量 " + String(total) + " = 单源之和 " + String(sum)
-    }
-
-    /// 探针日志（只在 NM_TOKEN_AUTOINDEX_PROBE=1 时输出）
-    private func probe(_ message: String) {
-        guard probeEnabled else { return }
-        logger.info("[TOKEN-AUTOINDEX] " + message)
-    }
-
-    /// 秒数格式化（两位小数，日志口径统一）
-    private static func format(_ seconds: TimeInterval) -> String {
-        String(format: "%.2f", seconds)
     }
 }

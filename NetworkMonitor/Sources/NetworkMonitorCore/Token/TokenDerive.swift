@@ -20,7 +20,7 @@ package enum TokenDerive {
     /// 最近 N 天（含今日）按天桶；无数据日补 0 桶并保留日期标签
     package static func dailyBuckets(_ snapshot: HarnessUsageSnapshot, days: Int) -> [TokenBucket] {
         let map = dayMap(snapshot)
-        let lastDay = HarnessTokenTimeWindow.dayKey(for: SnapshotClock.now)
+        let lastDay = HarnessTokenTimeWindow.dayKey(for: Date())
         return TokenFormat.dayKeys(lastDay: lastDay, days: days).map { key in
             TokenBucket(label: TokenFormatting.mmdd(key), usage: map[key])
         }
@@ -29,7 +29,7 @@ package enum TokenDerive {
     /// 上一周期按天桶（7 / 30 天窗口的对照；索引只回溯 33 天时可能为空）
     package static func previousDailyBuckets(_ snapshot: HarnessUsageSnapshot, days: Int) -> [TokenBucket] {
         let map = dayMap(snapshot)
-        let lastDay = HarnessTokenTimeWindow.dayKey(for: SnapshotClock.now)
+        let lastDay = HarnessTokenTimeWindow.dayKey(for: Date())
         let anchor = TokenFormat.dayKey(offsetDays: -days, from: lastDay)
         return TokenFormat.dayKeys(lastDay: anchor, days: days).map { key in
             TokenBucket(label: TokenFormatting.mmdd(key), usage: map[key])

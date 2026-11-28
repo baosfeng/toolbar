@@ -255,28 +255,6 @@ final class BillingPaneView: MenuPanelPaneView {
     }
 }
 
-#if DEBUG
-extension BillingPaneView {
-
-    /// 快照自证专用（仅 DEBUG）：进入指定 provider 的二级页（nil = 回主表）
-    ///
-    /// 保留旧名 expandForPreview：Debug 目录的取证脚本不在本任务 write scope 内，
-    /// 改名会让它们编译失败；语义已从「展开用量区」变为「进入二级页」。
-    func expandForPreview(_ providerID: String?) {
-        if let providerID, snapshot?.state(for: providerID) != nil {
-            showDetail(providerID)
-        } else {
-            showOverview()
-        }
-    }
-
-    /// 快照自证专用（仅 DEBUG）：强制悬停某根柱（二级页内）
-    func forceChartHoverForSnapshot(_ index: Int?) {
-        detailView.forceHoverForSnapshot(index)
-    }
-}
-#endif
-
 extension BillingPaneView {
 
     /// provider 状态快照 → Hero 输入（按注册顺序、同 provider 内按窗口声明顺序）

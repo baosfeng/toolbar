@@ -46,4 +46,5 @@ func runPaneSuites() {
     runPanelAnchorTests()  // 面板锚点贴状态项中心（beak 恒在窗口中心），不随按钮宽度漂移
     runAppearancePreferencesTests()
     runSettingsThemeTests()
+    runCLIPageTargetTests()  // nmcli page 的目标解析（错目标必须报错，不许猜一个页面输出假证据）
 }

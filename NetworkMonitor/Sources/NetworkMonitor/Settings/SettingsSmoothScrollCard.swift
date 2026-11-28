@@ -164,27 +164,6 @@ final class SettingsSmoothScrollCard {
         stepValue.stringValue = String(format: "%.2f 行", parameters.minStep)
     }
 
-#if DEBUG
-    /// 取证：控件态 / 偏好真值 / 从属控件可用性并排落盘
-    ///
-    /// 离屏快照看不出开关的勾选态与滑块的置灰态（窗口不 key 时系统控件一律灰），
-    /// 所以「界面上是不是真的跟着偏好走」只能靠这行文本对账。
-    func debugLogStates(_ tag: String) {
-        let parameters = settings.parameters
-        let line = "[\(tag)] 开关=\(masterSwitch.state == .on ? "on" : "off")/\(parameters.enabled ? "on" : "off") "
-            + "增益=\(Self.format(gainSlider.doubleValue))/\(Self.format(parameters.speedGain)) "
-            + "时长=\(Self.format(durationSlider.doubleValue))/\(Self.format(parameters.duration)) "
-            + "步长=\(Self.format(stepSlider.doubleValue))/\(Self.format(parameters.minStep)) "
-            + "反向=\(reverseSwitch.state == .on)/\(parameters.reverseDirection) "
-            + "从属可用=\(gainSlider.isEnabled)/\(stepSlider.isEnabled) 状态行=\(stateText())"
-        SnapshotEvidenceLine.write(line, tag: tag, fileName: "settings-smoothing-states.txt")
-    }
-
-    private static func format(_ value: Double) -> String {
-        String(format: "%.2f", value)
-    }
-#endif
-
     // MARK: - 动作（写偏好 → 刷新显示 → 通知引擎）
 
     @objc private func masterChanged() {

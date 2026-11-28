@@ -18,7 +18,8 @@ nonisolated(unsafe) let handlers: [String: (Args) throws -> Void] = [
     "shot": Commands.shot,
     "wait": Commands.wait,
     "wait-window": Commands.waitWindow,
-    "menubar": Commands.menubar
+    "menubar": Commands.menubar,
+    "page": PageCommand.run
 ]
 
 let usage = """
@@ -41,6 +42,10 @@ nmcli — 一览（菜单栏 App）UI 自动化 CLI
   nmcli menubar <app>                     菜单栏状态项（title / 实时 bounds / actions）
   nmcli run "<step>; <step>; …"           一串步骤跑完（set k=v / $(k) 插值 / assert）
   nmcli scenario panel-tour --out-dir DIR 预置剧本：面板巡览全套证据
+  nmcli page list                         列出 page 命令可打开的目标页面
+  nmcli page open <target>                让运行中的 app 打开页面（不重启、不退出）
+  nmcli page shot --out <file> [--target <target>]
+                                          打开目标页面并截图输出 PNG（默认 target=current）
 
 说明：
   · app 参数接受 pid / bundleId / 本地化名 / 可执行名，只匹配运行中进程，从不新启实例

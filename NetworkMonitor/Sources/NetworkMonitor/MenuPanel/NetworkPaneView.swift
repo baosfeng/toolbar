@@ -82,12 +82,6 @@ final class NetworkPaneView: MenuPanelPaneView {
     var lastTodayRx: UInt64 = 0
     var lastTodayTx: UInt64 = 0
 
-#if DEBUG
-    /// 快照自证专用（仅 DEBUG）：临时抬高进程行上限，用来构造「内容高于 520pt」的场景；
-    /// 发布路径固定 Top5（`MenuPanelMetrics.topProcesses(..., limit: 5)`）。
-    var processRowLimitOverride: Int?
-#endif
-
     // MARK: - 初始化
 
     init() {
@@ -199,12 +193,7 @@ final class NetworkPaneView: MenuPanelPaneView {
 
     /// 更新活跃进程 Top5（5 秒一次）
     func updateProcesses(_ processes: [ProcessNetUsage]) {
-#if DEBUG
-        let limit = processRowLimitOverride ?? 5
-#else
-        let limit = 5
-#endif
-        let top = MenuPanelMetrics.topProcesses(processes, limit: limit)
+        let top = MenuPanelMetrics.topProcesses(processes, limit: 5)
         processHeader.updateTrailing("\(top.count) 个")
         let countText = "\(top.count) 个"
         if processCountText != countText {

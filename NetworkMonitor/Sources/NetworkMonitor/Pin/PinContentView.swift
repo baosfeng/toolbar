@@ -49,9 +49,6 @@ final class PinContentView: NSView {
     // MARK: - 按下
 
     override func mouseDown(with event: NSEvent) {
-#if DEBUG
-        PinDragProbe.recordMouseDown()
-#endif
         switch PinClickIntent.outcome(buttonNumber: event.buttonNumber, clickCount: event.clickCount) {
         case .closeWindow:
             onCloseRequest?()
@@ -80,9 +77,6 @@ final class PinContentView: NSView {
         (window as? PinWindow)?.setDraggingWindow(true)
         dragSession = PinDragSession(startOrigin: window.frame.origin,
                                      startMouse: NSEvent.mouseLocation)
-#if DEBUG
-        PinDragProbe.noteDragStart(origin: window.frame.origin, mouse: NSEvent.mouseLocation)
-#endif
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -93,11 +87,8 @@ final class PinContentView: NSView {
         let mouse = NSEvent.mouseLocation
         // 未越过拖动阈值时当作单击：手一抖不该把贴图挪走半像素
         guard session.isDragBeyondThreshold(mouse: mouse) else { return }
+        // 拖动只改原点，**不得**动 alphaValue（用户反馈「拖动时越来越透明」）
         window.setFrameOrigin(session.origin(forMouse: mouse))
-#if DEBUG
-        // 拖动只改原点，**不得**动 alphaValue（用户反馈「拖动时越来越透明」，这里逐帧采样自证）
-        PinDragProbe.recordDragFrame(window.frame, alpha: window.alphaValue)
-#endif
     }
 
     override func mouseUp(with event: NSEvent) {

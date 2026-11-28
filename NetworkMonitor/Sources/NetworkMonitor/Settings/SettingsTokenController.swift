@@ -57,14 +57,6 @@ final class SettingsTokenController {
                        isIndexing: snapshot.indexingState.isIndexing)
     }
 
-#if DEBUG
-    /// 取证专用：同步查一次事件数（只给离屏快照用，运行期一律走异步 loadSummary）
-    ///
-    /// 离屏渲染是一次性的：不同步补这一笔，快照里「索引事件」永远停在「…」，
-    /// 读图的人无法确认这行接得对不对。
-    func debugEventCount() -> Int { store.harnessEventCount() }
-#endif
-
     /// 读取完整摘要（事件数要查库，放后台；结果回主线程）
     func loadSummary(completion: @escaping @MainActor (Summary) -> Void) {
         let snapshot = harness.snapshot()
