@@ -75,30 +75,13 @@ final class SettingsCardView: NSView {
     required init?(coder: NSCoder) { nil }
 
     /// 卡片底直接 draw：离屏渲染换外观 / 换主题时动态语义色仍正确，圆角与描边也稳定可见
+    ///
+    /// 卡片**不做 hover 提亮**：整卡提亮一层再叠上行的提亮，滚一遍设置页就会留下
+    /// 一片「滑过的痕迹」（enter/exit 在滚动与重排时丢事件，状态清不掉）。
+    /// 指针反馈只留给行（见 SettingsRowView 的 isMouseInside，按真实鼠标位置现算）。
     override func draw(_ dirtyRect: NSRect) {
-        SettingsTheme.drawCardBackground(in: bounds, hovered: isHovered)
+        SettingsTheme.drawCardBackground(in: bounds)
     }
-
-    // MARK: 悬停提亮
-
-    /// 鼠标在卡片上：底色微亮一档，让「这一块是可以操作的」有可见反馈
-    private var isHovered = false {
-        didSet { if isHovered != oldValue { needsDisplay = true } }
-    }
-    private var hoverTracking: NSTrackingArea?
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let hoverTracking { removeTrackingArea(hoverTracking) }
-        let area = NSTrackingArea(rect: bounds,
-                                  options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
-                                  owner: self, userInfo: nil)
-        addTrackingArea(area)
-        hoverTracking = area
-    }
-
-    override func mouseEntered(with event: NSEvent) { isHovered = true }
-    override func mouseExited(with event: NSEvent) { isHovered = false }
 
     /// 清空全部行（整卡重建：重排时避免挪单行把自动补的分隔线搞乱；实例增删后同样走这里，
     /// 分隔线随 arrangedSubviews 一起移除）
@@ -218,27 +201,53 @@ final class SettingsRowView: NSView {
 
     // MARK: 悬停高亮
 
-    /// 指针在哪一行：整行淡淡提亮 —— 一屏十几行时「我现在看的是哪一项」要靠它
-    private var isRowHovered = false {
-        didSet { if isRowHovered != oldValue { needsDisplay = true } }
+    /// 鼠标是否真的停在这一行 —— 每次绘制现算，不用 enter/exit 维护的布尔
+    ///
+    /// 为什么不用 mouseExited 维护：滚动、卡片重排、切页都会让行在鼠标底下被挪走，
+    /// 系统不保证补发 exited，状态就永远停在 hover 上 —— 用户看到的正是
+    /// 「鼠标早滑走了，这一片还亮着」（滚一遍设置页会留下一条亮痕）。
+    private var isMouseInside: Bool {
+        guard let window, window.isVisible else { return false }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        return bounds.contains(point)
     }
+
     private var rowHoverTracking: NSTrackingArea?
+    /// 所在滚动视图的偏移变化（滚动时行会从鼠标底下滑走，必须重绘以重算 hover）
+    private var scrollObserver: NSObjectProtocol?
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let rowHoverTracking { removeTrackingArea(rowHoverTracking) }
         let area = NSTrackingArea(rect: bounds,
-                                  options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                                  options: [.mouseEnteredAndExited, .mouseMoved, .activeInActiveApp, .inVisibleRect],
                                   owner: self, userInfo: nil)
         addTrackingArea(area)
         rowHoverTracking = area
     }
 
-    override func mouseEntered(with event: NSEvent) { isRowHovered = true }
-    override func mouseExited(with event: NSEvent) { isRowHovered = false }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let scrollObserver {
+            NotificationCenter.default.removeObserver(scrollObserver)
+            self.scrollObserver = nil
+        }
+        guard let clip = enclosingScrollView?.contentView else { return }
+        clip.postsBoundsChangedNotifications = true
+        scrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: clip,
+            queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.needsDisplay = true }
+            }
+    }
+
+    override func mouseEntered(with event: NSEvent) { needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { needsDisplay = true }
+    override func mouseMoved(with event: NSEvent) { needsDisplay = true }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard isRowHovered else { return }
+        guard isMouseInside else { return }
         SettingsTheme.accent.withAlphaComponent(0.035).setFill()
         NSBezierPath(roundedRect: bounds.insetBy(dx: SettingsTheme.cardPaddingX - 4, dy: 1),
                      xRadius: 5, yRadius: 5).fill()

@@ -221,15 +221,10 @@ enum SettingsTheme {
     /// 与面板 `ThemeStyle.drawCard` 的唯一差别是底色**不乘 `cardFillAlpha`**：
     /// 设置窗口是普通窗口（不套玻璃），卡底必须是主题实色；
     /// 乘了半透明会让窗口底透上来，像素上既不是 cardFill 也不是 surface。
-    /// - Parameter hovered: 鼠标悬停时底色叠一层极淡强调色（卡片是「活的」，不是静态表格）
-    static func drawCardBackground(in bounds: NSRect, hovered: Bool = false) {
+    static func drawCardBackground(in bounds: NSRect) {
         let path = NSBezierPath(roundedRect: bounds, xRadius: cardRadius, yRadius: cardRadius)
         cardFill.setFill()
         path.fill()
-        if hovered {
-            accent.withAlphaComponent(0.04).setFill()
-            path.fill()
-        }
 
         // 顶部 1pt 高光：裁到卡片路径里画，圆角处不会溢出
         if bounds.height > 2, cardHighlightAlpha > 0, let context = NSGraphicsContext.current {
