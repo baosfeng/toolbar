@@ -27,11 +27,11 @@ extension ClipboardCardView {
     /// 非激活面板的首次点击必须由视图放行（面板打开即列卡片，用户第一次点就该生效）
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    /// 单击选中、双击粘贴（与改造前一致：双击同时也会先走一次选中）
+    /// 按下只做两件事：记拖拽起点、按修饰键改选中集合
     ///
-    /// 修饰键口径交给卡片流：⌘ 切换该条、⇧ 从焦点范围选，其余按替换处理。
+    /// 粘贴延迟到 mouseUp（见 ClipboardCardDrag）：按下就贴的话，用户按下去想拖一下会先被粘走；
+    /// mouseUp 用「起拖时已清空 pressAnchor」区分点击与拖拽。⌘/⇧ 是选择意图，不粘贴。
     override func mouseDown(with event: NSEvent) {
-        // 记起点：拖动扩展据此判断位移是否够起拖（不足阈值时单击行为完全不变）
         pressAnchor = convert(event.locationInWindow, from: nil)
         let region = hitRegion(at: pressAnchor ?? .zero)
         let action = ClipboardCardHitTest.action(for: region,
@@ -42,7 +42,8 @@ extension ClipboardCardView {
             ? .extend
             : (flags.contains(.command) ? .toggle : .replace)
         if action == .select || action == .paste { onClickWithModifiers?(self, click) }
-        if event.clickCount >= 2 { onDoubleClick?(self) }
+        // 双击的第二次按下不再粘贴：第一次 mouseUp 已经粘过，面板此时正在收起
+        if event.clickCount >= 2 { pressAnchor = nil }
     }
 
     // MARK: hover

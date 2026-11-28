@@ -230,7 +230,7 @@ final class ClipboardCardFlowView: NSView {
             guard let self, let index = self.cardViews.firstIndex(of: card) else { return }
             self.onSelect?(self.windowStart + index, click)
         }
-        card.onDoubleClick = { [weak self] card in
+        card.onClickPaste = { [weak self] card in
             guard let self, let index = self.cardViews.firstIndex(of: card) else { return }
             self.onActivate?(self.windowStart + index)
         }

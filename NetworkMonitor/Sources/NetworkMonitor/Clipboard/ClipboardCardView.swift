@@ -92,8 +92,8 @@ final class ClipboardCardView: NSView {
 
     /// 点击（选中）回调 —— 带修饰键语义，⌘ / ⇧ 由卡片流换算成多选变换
     var onClickWithModifiers: ((ClipboardCardView, ClipboardSelectionModel.Click) -> Void)?
-    /// 双击（粘贴）回调
-    var onDoubleClick: ((ClipboardCardView) -> Void)?
+    /// 单击（无修饰键）直接粘贴回调 —— 与 Paste 同款：点一下就进剪贴板并粘到前台 App
+    var onClickPaste: ((ClipboardCardView) -> Void)?
     /// 右键「贴到屏幕」回调
     var onPin: ((ClipboardCardView) -> Void)?
 

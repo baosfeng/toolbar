@@ -1,5 +1,5 @@
 Clipboard/ClipboardCardFlowView 466 4
-Clipboard/ClipboardCardView 802 6
+Clipboard/ClipboardCardView 803 6
 Clipboard/ClipboardPanelController 636 7
 Clipboard/ClipboardPanelView 542 2
 Discovery/UdpDiscoveryService 425 2
@@ -20,7 +20,6 @@ NetworkMonitor/AppCoordinator 796 10
 NetworkMonitor/MenuBarManager 438 5
 NetworkMonitorCore/DatabaseManager 766 6
 NetworkMonitorFeatureBilling/BillingMonitor 596 5
-NetworkMonitorFeatureClipboard/ClipboardPaster 344 2
 NetworkMonitorFeatureClipboard/PasteboardWatcher 466 3
 NetworkMonitorFeatureSmoothScroll/ScrollSmoothingEngine 507 3
 NetworkMonitorFeatureSystemMetrics/SystemMonitor 370 2

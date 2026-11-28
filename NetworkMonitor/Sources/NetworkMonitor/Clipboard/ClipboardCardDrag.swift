@@ -18,10 +18,15 @@ extension ClipboardCardView: NSDraggingSource {
     /// 多份拖动图像的依次错开量（堆叠手感）
     static let draggingStackOffset: CGFloat = 8
 
-    /// 拖拽结束的收尾：卡片保持选中（选中态由面板维持），不触发任何粘贴动作
+    /// 松开：没起拖（pressAnchor 还在）就是一次点击 —— 无修饰键时直接粘贴
+    /// 单击即粘贴（Paste 同款）：改造前单击只选中、要双击或再按 ⌘V，正是「点了没反应」的来源。
     override func mouseUp(with event: NSEvent) {
+        let wasClick = pressAnchor != nil
         pressAnchor = nil
         super.mouseUp(with: event)
+        guard wasClick else { return }
+        guard event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty else { return }
+        onClickPaste?(self)
     }
 
     /// 位移过阈值才起拖；不过阈值时交回父类（自绘卡片没有子视图，实际什么都不发生）
