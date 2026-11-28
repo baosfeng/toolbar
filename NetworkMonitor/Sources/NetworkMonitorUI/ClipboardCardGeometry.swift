@@ -58,13 +58,13 @@ public enum ClipboardCardGeometry {
     /// 改造前 176 × 198（0.89）是竖长条：卡身能塞的正文行数少、卡头那行字挤。
     /// 换成接近 Paste 的横长比例后，同样的卡高能多放两行正文，页脚两行也松得开。
     public static let baseCardWidth: CGFloat = 227
-    /// 卡片宽度上限：只防超大屏（6K）上单张卡长得像海报，不再参与常规屏的宽度决策
+    /// 卡片宽度上限：只防超大屏（6K）与「面板被拉到 480」时单张卡长得像海报
     ///
     /// 上一档写 260 时，366pt 高的面板会先算出 316pt 的卡高、再被 260 截断宽度，
     /// 结果是一张 260×316 的**竖卡**——设计基准给的 1.15 横卡比例在默认面板高度下根本没生效。
     /// 放开到 360 后宽度重新由「卡高 × 比例」决定，一屏张数交给面板高度（高度三档）去调，
     /// 这两个旋钮不再互相踩。
-    public static let maxCardWidth: CGFloat = 360
+    public static let maxCardWidth: CGFloat = 320
     /// 卡片宽高比（宽 / 高）——只由设计基准给出，面板高度变化时按它等比缩放
     public static var aspectRatio: CGFloat { baseCardWidth / baseCardHeight }
     /// 卡片区顶部留白：卡片贴卡片区上沿，只留 8pt 呼吸
@@ -95,7 +95,12 @@ public enum ClipboardCardGeometry {
     /// 想一屏多张就切面板高度档位（ClipboardPanelSize），而不是压缩宽度把卡片挤成竖条。
     /// 宽度封顶后不反推高度：反推会让面板一高，卡片就缩成「上下各留一大截」的孤岛。
     public static func cardSize(forCardAreaHeight height: CGFloat) -> CGSize {
-        let h = cardHeight(forCardAreaHeight: height).rounded()
+        // 先按「高度吃满卡片区」起算，再用宽度上限**反推高度**：
+        // 面板被拉到很高时卡片不会长成 260×316 那种竖条，而是停在 320×279 继续等比，
+        // 多出来的高度留在底部（状态胶囊那条带）。只封宽度不封高度 = 比例在最高档失真。
+        let heightLimit = min(cardHeight(forCardAreaHeight: height),
+                              (maxCardWidth / aspectRatio).rounded())
+        let h = heightLimit.rounded()
         let w = min((h * aspectRatio).rounded(), maxCardWidth)
         return CGSize(width: w, height: h)
     }
@@ -211,80 +216,5 @@ public enum ClipboardCardGeometry {
     public static func shortcutText(number: Int?) -> String? {
         guard let number, (1...9).contains(number) else { return nil }
         return "⌘\(number)"
-    }
-}
-
-// MARK: - 命中区域
-
-/// 卡片内被点中的区域（自绘后没有子视图可分配事件，命中判定要自己重做）
-public enum ClipboardCardHitRegion: Equatable, Sendable {
-    /// 卡身（图片卡的缩略图 / 文本卡正文）
-    case thumbnail
-    /// 卡脚标题行里的收藏星
-    case star
-    /// Paste Stack 角标
-    case badge
-    /// 卡脚（标题 + 来源）
-    case meta
-    /// 卡头带（类型 + 时间 + 来源图标）
-    case headBand
-    /// 卡身（文本卡）
-    case body
-}
-
-/// 命中后的卡片动作
-public enum ClipboardCardHitAction: Equatable, Sendable {
-    /// 单击：选中该条
-    case select
-    /// 单击星标：收藏 / 取消收藏（不选中、不粘贴）
-    case togglePin
-    /// 双击：直接粘贴
-    case paste
-    /// 右键：弹出五项菜单
-    case showMenu
-}
-
-/// 卡片命中测试 —— 纯函数，与绘制共用同一套几何口径
-///
-/// 语义与改造前的视图树一致：星标 / 角标 / 卡头 / 卡身 / 卡脚都是**整卡的一部分**，
-/// 双击都粘贴、右键都弹菜单；唯一的例外是**星标单击**——它是「点一下就收藏」的独立入口
-/// （对标 Paste hover 出的 ⊕），点它既不选中也不粘贴。
-/// 区域本身仍要区分：读屏焦点框、缩略图占位、以及将来给这些区域单独挂动作时都靠它。
-public enum ClipboardCardHitTest {
-
-    /// 点所在的区域
-    ///
-    /// - Parameters:
-    ///   - point: 卡片内坐标（flipped）
-    ///   - badgeSize: 角标实测尺寸（不显示时 .zero）
-    ///   - isImage: 是否为图片条目（决定卡身是 .thumbnail 还是 .body）
-    public static func region(at point: CGPoint, in bounds: CGRect,
-                              badgeSize: CGSize = .zero,
-                              isImage: Bool, metrics: ClipboardCardGeometry.Metrics = .standard)
-    -> ClipboardCardHitRegion {
-        guard bounds.contains(point) else { return .body }
-        // 星标 / 角标压在卡上：按优先级查表（顺序即优先级，空矩形不参与命中）
-        // 星标用放大后的命中框：11pt 的图形直接当热区，鼠标要精确到半个字才点得中
-        let star = ClipboardCardGeometry.starHitRect(in: bounds, metrics: metrics)
-        let badge = badgeSize.width > 0 && badgeSize.height > 0
-            ? ClipboardCardGeometry.badgeRect(in: bounds, badgeSize: badgeSize, metrics: metrics) : .zero
-        if let index = DrawnHitRegions.priorityIndex(at: point, in: [star, badge]) {
-            return index == 0 ? .star : .badge
-        }
-        if point.y < ClipboardCardGeometry.headBandRect(in: bounds).maxY { return .headBand }
-        if point.y >= ClipboardCardGeometry.footerRect(in: bounds, metrics: metrics).minY { return .meta }
-        return isImage ? .thumbnail : .body
-    }
-
-    /// 区域 + 点击次数 + 按键 → 动作
-    ///
-    /// 右键永远优先（连点两下再右键仍是菜单）；双击永远粘贴（星标上双击也算「就要这条」）；
-    /// 星标单击是唯一与其它区域不同的动作：收藏切换。
-    public static func action(for region: ClipboardCardHitRegion,
-                              clickCount: Int,
-                              isContextMenu: Bool) -> ClipboardCardHitAction {
-        if isContextMenu { return .showMenu }
-        if clickCount >= 2 { return .paste }
-        return region == .star ? .togglePin : .select
     }
 }

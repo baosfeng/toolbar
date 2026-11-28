@@ -101,10 +101,10 @@ func runClipboardDetailStripTests() {
 
     assertEqual(ClipboardPanelLayout.minPanelHeight,
                 Double(ClipboardPanelLayout.toolbarHeight
-                       + ClipboardCardGeometry.baseCardHeight + ClipboardCardGeometry.cardSlack),
-                "下限 = 工具条 + 整卡 + 卡片区留白（没有详情区、没有提示行）")
+                       + ClipboardCardGeometry.minCardHeight + ClipboardCardGeometry.cardSlack),
+                "下限 = 工具条 + 最矮整卡 + 卡片区留白（没有详情区、没有提示行）")
     assertEqual(ClipboardPanelLayout.defaultPanelHeight > ClipboardPanelLayout.minPanelHeight, true,
-                "默认高度高于下限：卡片按比例长到 240pt 以上")
+                "默认高度高于下限：默认档给的是基准卡 198pt，不是压扁的最低档")
 
     let size = CGSize(width: 640, height: 400)
     let sections = ClipboardPanelLayout.sections(in: size)
@@ -129,15 +129,18 @@ func runClipboardDetailStripTests() {
                 ClipboardCardGeometry.maxCardHeight, "卡片区过高时卡片有上限")
     let defaultCard = ClipboardCardGeometry.cardSize(forCardAreaHeight:
         CGFloat(ClipboardPanelLayout.defaultPanelHeight - ClipboardPanelLayout.toolbarHeight))
-    assertEqual(defaultCard.height > ClipboardCardGeometry.baseCardHeight, true,
-                "默认高度下卡片比设计基准大一档（高度还给了内容）")
-    // 宽度封顶后比例会变（面板拉高时卡片不再无限变宽），但高度必须仍然吃满卡片区；
-    // 没触发封顶的区间里仍按基准比例等比缩放
-    assertEqual(defaultCard.width <= ClipboardCardGeometry.maxCardWidth, true,
-                "卡片宽度不超过上限（一屏至少放得下 5 张）")
-    let midCard = ClipboardCardGeometry.cardSize(forCardAreaHeight: 180)
-    assertEqual(abs(midCard.width / midCard.height - ClipboardCardGeometry.aspectRatio) < 0.01, true,
-                "未触发宽度上限时按基准比例等比缩放")
+    assertEqual(defaultCard.height, ClipboardCardGeometry.baseCardHeight,
+                "默认档的卡片正好是设计基准卡（227×198，与 Paste 243×212 同量级）")
+    assertEqual(defaultCard.width, ClipboardCardGeometry.baseCardWidth,
+                "默认档的卡片宽度 = 基准宽（不再被上限截成竖卡）")
+    // 宽度上限改成「反推高度」后，任何面板高度下比例都不失真：宽封顶 → 高也停住
+    for cardAreaHeight in [180.0, 400.0, 1000.0] {
+        let card = ClipboardCardGeometry.cardSize(forCardAreaHeight: CGFloat(cardAreaHeight))
+        assertEqual(abs(card.width / card.height - ClipboardCardGeometry.aspectRatio) < 0.01, true,
+                    "卡片区 \(cardAreaHeight) 下仍按基准比例等比（宽度封顶时高度一起停）")
+        assertEqual(card.width <= ClipboardCardGeometry.maxCardWidth, true,
+                    "卡片宽度不超过上限")
+    }
     assertEqual(ClipboardCardGeometry.cardSize(forCardAreaHeight: 0).height,
                 ClipboardCardGeometry.minCardHeight, "卡片区为 0 时也给出下限尺寸")
 
@@ -147,7 +150,7 @@ func runClipboardDetailStripTests() {
                 "低于下限抬到下限（否则整卡被裁）")
     assertEqual(ClipboardPanelLayout.clampedHeight(10_000), ClipboardPanelLayout.maxPanelHeight,
                 "高于上限压到上限")
-    assertEqual(ClipboardPanelLayout.clampedHeight(420), 420, "区间内原样返回")
+    assertEqual(ClipboardPanelLayout.clampedHeight(300), 300, "区间内原样返回")
     assertEqual(ClipboardPanelLayout.clampedHeight(0), ClipboardPanelLayout.defaultPanelHeight,
                 "0（未设置）回落默认高度")
 

@@ -19,7 +19,9 @@ func runClipboardPanelSizeTests() {
 
         // 高度：递增、落在合法区间内
         assertEqual(ClipboardPanelSize.compact.height, ClipboardPanelLayout.minPanelHeight,
-                    "紧凑档 = 几何下限（卡片区刚好一张基准卡）")
+                    "紧凑档 = 几何下限（卡片区刚好一张最矮整卡）")
+        assertEqual(ClipboardPanelSize.standard.height, 264, "标准档 264（卡片 227×198，一屏约 6 张）")
+        assertEqual(ClipboardPanelSize.roomy.height, 320, "宽松档 320（卡片 291×254，一屏约 5 张）")
         assertEqual(ClipboardPanelSize.standard.height, ClipboardPanelLayout.defaultPanelHeight,
                     "标准档 = 默认高度（两个值同源，不是一个数抄两遍）")
         assertEqual(ClipboardPanelSize.roomy.height > ClipboardPanelSize.standard.height, true,
@@ -36,9 +38,10 @@ func runClipboardPanelSizeTests() {
         assertEqual(ClipboardPanelSize.nearest(to: ClipboardPanelSize.standard.height), .standard, "标准高度 → 标准档")
         assertEqual(ClipboardPanelSize.nearest(to: ClipboardPanelSize.compact.height), .compact, "下限高度 → 紧凑档")
         assertEqual(ClipboardPanelSize.nearest(to: ClipboardPanelSize.roomy.height), .roomy, "宽松高度 → 宽松档")
-        assertEqual(ClipboardPanelSize.nearest(to: 270), .compact, "270 更靠近紧凑（264）")
-        assertEqual(ClipboardPanelSize.nearest(to: 360), .standard, "360 更靠近标准（320）")
-        assertEqual(ClipboardPanelSize.nearest(to: 400), .roomy, "400 更靠近宽松（420）")
+        assertEqual(ClipboardPanelSize.nearest(to: 220), .compact, "220 更靠近紧凑档")
+        assertEqual(ClipboardPanelSize.nearest(to: 280), .standard, "280 更靠近标准档（264）")
+        assertEqual(ClipboardPanelSize.nearest(to: 310), .roomy, "310 更靠近宽松档（320）")
+        assertEqual(ClipboardPanelSize.nearest(to: 480), .roomy, "超出三档的自定义高度归到最近的宽松档")
         assertEqual(ClipboardPanelSize.nearest(to: 0), .standard, "高度缺失 / 0 → 标准档")
         assertEqual(ClipboardPanelSize.nearest(to: -.infinity), .standard, "非有限高度 → 标准档")
 

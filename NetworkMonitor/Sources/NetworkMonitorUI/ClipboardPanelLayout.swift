@@ -33,9 +33,12 @@ public enum ClipboardPanelLayout {
     /// 条数计数最大宽（超出的部分尾部省略）
     public static let countMaxWidth: CGFloat = 96
 
-    /// 面板高度下限：卡片区刚好容下整卡（再矮就把卡片裁掉）
+    /// 面板高度下限：卡片区刚好容下「最矮的整卡」（再矮就把卡片裁掉）
+    ///
+    /// 用 `minCardHeight`（150）而不是基准卡高（198）：下限的意义是「卡片不被裁」，
+    /// 拿基准卡高当下限会把紧凑档锁死在 264，多出来那 48pt 全是没用上的高度。
     public static var minPanelHeight: Double {
-        Double(toolbarHeight + cardHeight + cardSlack)
+        Double(toolbarHeight + ClipboardCardGeometry.minCardHeight + cardSlack)
     }
     /// 面板默认高度：标准档（卡片按 1.15 比例长到 254pt 上下，一屏约 5 张）
     ///
@@ -43,7 +46,11 @@ public enum ClipboardPanelLayout {
     /// 读同一个数，不会出现「点一次档位按钮，高度反而变成另一个值」。
     public static var defaultPanelHeight: Double { ClipboardPanelSize.standard.height }
     /// 面板高度上限（设置页高度滑块同口径）
-    public static let maxPanelHeight: Double = 480
+    ///
+    /// 不是随便取的值：卡片宽度封顶 320 后高度停在同一比例上（320 / 1.146 ≈ 279），
+    /// 再高的面板只会把「卡片下沿到面板下沿」那段空白越拉越长（480 时留白 135pt）。
+    /// 360 = 工具条 34 + 卡片 279 + 上下留白 47，再往上加已经没有可长的东西了。
+    public static let maxPanelHeight: Double = 360
 
     /// 两段矩形（翻转坐标，y 向下）
     public struct Sections: Equatable, Sendable {

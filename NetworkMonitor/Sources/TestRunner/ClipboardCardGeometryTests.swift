@@ -121,10 +121,16 @@ func runClipboardCardGeometryTests() {
     assertEqual(ClipboardCardGeometry.cardSlack, 32, "上下留白合计 32")
 
     // 卡片尺寸：宽度由「卡高 × 比例」给出，1.15 的横卡比例必须在默认面板高度下真的生效
+    // 卡片区 332pt（面板 398）：超过宽度上限后高度要一起停住，否则又变竖卡
     let bigCard = ClipboardCardGeometry.cardSize(forCardAreaHeight: 332)
-    assertEqual(bigCard.height, 300, "332pt 卡片区 − 32pt 留白 = 300pt 卡高")
-    assertEqual(bigCard.width, 344, "300 × 1.146 取整 = 344pt 卡宽（不再被 260 截成竖卡）")
-    assertEqual(bigCard.width > bigCard.height, true, "默认面板高度下是横卡，不是竖卡")
+    assertEqual(bigCard.width, ClipboardCardGeometry.maxCardWidth,
+                "拉高面板时卡片先长到宽度上限 320")
+    assertEqual(bigCard.height, 279, "高度按 320 / 1.146 反推为 279（宽高比不失真）")
+    assertEqual(bigCard.width > bigCard.height, true, "任何面板高度下都是横卡，不是竖卡")
+    // 默认档面板 264 − 工具条 34 = 卡片区 230；230 − 32 = 198 = 设计基准卡高
+    let standardCard = ClipboardCardGeometry.cardSize(forCardAreaHeight: 230)
+    assertEqual(standardCard.height, 198, "默认档卡片区 230 − 32 = 198pt 卡高")
+    assertEqual(standardCard.width, 227, "198 × 1.146 = 227pt 卡宽（基准卡）")
     let tinyCard = ClipboardCardGeometry.cardSize(forCardAreaHeight: 120)
     assertEqual(tinyCard.height, ClipboardCardGeometry.minCardHeight, "卡片区过矮时夹到卡高下限")
 }

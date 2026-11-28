@@ -134,13 +134,16 @@ final class ClipboardPreferences: Sendable {
     static let heightRange: ClosedRange<Double> =
         ClipboardPanelLayout.minPanelHeight...ClipboardPanelLayout.maxPanelHeight
 
-    /// 分段几何版本：2 = 面板只剩「工具条 + 卡片区」（详情区退成编辑浮层、提示行改为状态胶囊）
-    static let panelHeightLayoutVersion = 2
+    /// 分段几何版本：2 = 面板只剩「工具条 + 卡片区」（详情区退成编辑浮层、提示行改为状态胶囊）；
+    /// 3 = 高度三档整体下移一档（旧默认 320 → 新标准 264），同一块屏多放一张卡
+    static let panelHeightLayoutVersion = 3
     /// v1 分段里被删掉的固定高度：详情区 102 + 提示行 24
     ///
     /// 这里刻意写字面量而不是引用现常量 —— 它是**历史分段**的冻结值，跟现在的几何没关系；
     /// 引用现常量会让「以后调详情区高度」连带改写老用户的迁移结果。
     private static let legacyChromeHeight: Double = 126
+    /// v2 时代的默认高度（冻结值）：它不是用户选出来的，是「没设过」的回退值
+    private static let legacyDefaultHeight: Double = 320
 
     /// 面板高度（默认由分段几何给出：工具条 + 整卡）
     ///
@@ -163,8 +166,15 @@ final class ClipboardPreferences: Sendable {
 
     /// 旧分段高度 → 新分段高度：扣掉已删除的详情区与提示行，卡片尺寸保持不变
     static func migratedHeight(_ stored: Double, storedVersion: Int) -> Double {
-        guard stored > 0, storedVersion < panelHeightLayoutVersion else { return stored }
-        return stored - legacyChromeHeight
+        guard stored > 0 else { return stored }
+        var height = stored
+        if storedVersion < 2 { height -= legacyChromeHeight }
+        // v3：旧默认 320 是「没人主动选过」的回退值，直接落到新标准档；
+        // 用户自己拖出来的自定义高度（任何 ≠320 的值）原样保留，只做区间夹紧。
+        if storedVersion < panelHeightLayoutVersion, abs(height - legacyDefaultHeight) < 0.5 {
+            height = ClipboardPanelSize.standard.height
+        }
+        return height
     }
 
     // MARK: 图片文字识别

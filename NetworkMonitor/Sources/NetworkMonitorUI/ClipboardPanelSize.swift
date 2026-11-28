@@ -13,22 +13,26 @@ import Foundation
 /// 用户在设置页把滑块拖到档位之外的自定义高度时，档位只是「最接近的那一档」，
 /// 不会被吸附或改写 —— 否则用户拖到 350 再打开面板会莫名变成 320。
 public enum ClipboardPanelSize: String, CaseIterable, Sendable {
-    /// 紧凑：卡片区刚好容下基准卡（一屏约 6 张）
+    /// 紧凑：面板压到几何下限（卡片 172×150，一屏约 8 张）
     case compact
-    /// 标准：默认档（一屏约 5 张）
+    /// 标准：默认档（卡片 227×198，一屏约 6 张）
     case standard
-    /// 宽松：卡片更大、每张能多读几行（一屏约 4 张）
+    /// 宽松：卡片更大、每张能多读几行（卡片 291×254，一屏约 5 张）
     case roomy
 
     /// 档位对应的高度（pt）
     ///
-    /// 紧凑档直接取几何下限：卡片区扣掉上下留白后正好是一张基准卡，
-    /// 改基准卡高时这里自动跟着变，不再出现「档位比下限还低、被夹紧后两张档位长得一样」。
+    /// 三档按「一屏张数」排开：8 / 6 / 5 张。改前三档是 6 / 5 / 4 张，
+    /// 默认档的卡片 291×254 里常常只放着一行正文、其余全是空白 —— 空间利用率太低，
+    /// 因此整体下移一档：默认回到基准卡 227×198（正好是 Paste 243×212 的量级）。
+    ///
+    /// 紧凑档直接取几何下限（改最小卡高时自动跟着变），不会再出现「档位比下限还低、
+    /// 夹紧后两张档位长得一样」。
     public var height: Double {
         switch self {
         case .compact: return ClipboardPanelLayout.minPanelHeight
-        case .standard: return 320
-        case .roomy: return 420
+        case .standard: return 264
+        case .roomy: return 320
         }
     }
 
