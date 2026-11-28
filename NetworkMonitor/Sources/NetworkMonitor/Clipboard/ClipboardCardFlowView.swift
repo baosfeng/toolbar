@@ -32,6 +32,8 @@ final class ClipboardCardFlowView: NSView {
     var onSelect: ((Int, ClipboardSelectionModel.Click) -> Void)?
     /// 卡片右键「贴到屏幕」回调（索引为全量列表下标）
     var onPin: ((Int) -> Void)?
+    /// 卡片星标被点（收藏切换；索引为全量列表下标）
+    var onTogglePin: ((Int) -> Void)?
     /// 卡片被双击（参数同上）
     var onActivate: ((Int) -> Void)?
     /// 选中项发生切换（面板控制器在此接触觉反馈；未注入时静默）
@@ -57,16 +59,16 @@ final class ClipboardCardFlowView: NSView {
     var cardViews: [ClipboardCardView] = []
     /// 全部匹配项（视图只覆盖 windowStart 起的一段；internal：动效扩展要比对旧列表）
     var items: [ClipboardItem] = []
-    /// 窗口起点（items 中的全局下标）
-    private(set) var windowStart = 0
+    /// 窗口起点（items 中的全局下标；internal setter：布局扩展在另一文件里改它）
+    var windowStart = 0
     /// 当前选中下标（internal：多选渲染与动效扩展都要读写焦点）
     var selectedIndex = -1
     /// 当前选中条目集合（多选态可能有多个；空集合 = 没有任何卡片选中）
     var selectedIDs: Set<UUID> = []
     /// 当前搜索查询（空串 = 不高亮）——每次落地渲染时同步给窗口内每张卡
     private(set) var highlightQuery: String = ""
-    /// 当前卡片尺寸（随卡片区高度自适应；布局时写入，滚动跟随与新建视图都读它）
-    private(set) var cardSize: CGSize = ClipboardCardGeometry.baseSize
+    /// 当前卡片尺寸（随卡片区高度自适应；布局扩展写入，滚动跟随与新建视图都读它）
+    var cardSize: CGSize = ClipboardCardGeometry.baseSize
 
     /// 设置搜索高亮查询：只在变化时重绘（清空查询即回到无高亮）
     func setHighlightQuery(_ query: String) {
@@ -139,46 +141,7 @@ final class ClipboardCardFlowView: NSView {
         layoutCards()
     }
 
-    /// 单行横向摆放：卡片 frame 由全局下标决定，容器宽度覆盖全部条目；卡片在可视高度内垂直居中
-    func layoutCards() {
-        let contentSize = scrollView.contentSize
-        // 按「滚动视图真正能显示的高度」算：滚动条常显时它会切走底部一条，用 bounds 算会被裁卡脚
-        let visibleHeight = contentSize.height > 1 ? min(bounds.height, contentSize.height) : bounds.height
-        let cardSize = ClipboardCardGeometry.cardSize(forCardAreaHeight: visibleHeight)
-        self.cardSize = cardSize
-        let count = visibleCount()
-        let cardY = max(0, (contentSize.height - cardSize.height) / 2)
-        for (slot, card) in cardViews.enumerated() where slot < count {
-            card.frame = NSRect(x: Self.insetX + CGFloat(windowStart + slot) * (cardSize.width + Self.spacing),
-                                y: cardY, width: cardSize.width, height: cardSize.height)
-        }
-        // 容器宽度必须覆盖「全部匹配项」而非当前窗口：窗口滑动后卡片仍按全局下标摆放
-        let allWidth = Self.insetX * 2
-            + CGFloat(items.count) * (cardSize.width + Self.spacing)
-            - (items.isEmpty ? 0 : Self.spacing)
-        cardsContainer.frame = NSRect(x: 0, y: 0,
-                                      width: max(contentSize.width, allWidth),
-                                      height: max(contentSize.height, cardSize.height))
-        emptyView.frame = cardsContainer.bounds
-        refreshShadows()
-    }
 
-    /// 改写窗口起点（滚动跟随扩展用：windowStart 在本文件是 private(set)）
-    ///
-    /// 只有「自由横向滚动」这一条路径该改它；方向键 / 点击 / 打开面板仍走 slideWindow。
-    func setWindowStart(_ value: Int) {
-        windowStart = max(0, value)
-    }
-
-    /// 把「hover 或选中的可见卡片」交给容器绘制投影（未选中的卡片不投影，避免整屏噪声）
-    ///
-    /// 阴影由容器统一画（见 ClipboardCardFlowContainer）：卡片自身的 draw 画不到卡外，
-    /// 而卡片 backing layer 的阴影在离屏快照路径里不参与合成。
-    func refreshShadows() {
-        cardsContainer.shadowRects = cardViews
-            .filter { !$0.isHidden && !$0.isRemoving && ($0.isSelected || $0.isHovering) }
-            .map { $0.frame }
-    }
 
     /// 窗口滑动：选中项接近窗口边缘时把窗口重新居中到选中项，保证任意下标都能走到
     ///
@@ -233,6 +196,10 @@ final class ClipboardCardFlowView: NSView {
         card.onPin = { [weak self] card in
             guard let self, let index = self.cardViews.firstIndex(where: { $0 === card }) else { return }
             self.onPin?(self.windowStart + index)
+        }
+        card.onTogglePin = { [weak self] card in
+            guard let self, let index = self.cardViews.firstIndex(of: card) else { return }
+            self.onTogglePin?(self.windowStart + index)
         }
         card.onClickWithModifiers = { [weak self] card, click in
             guard let self, let index = self.cardViews.firstIndex(of: card) else { return }

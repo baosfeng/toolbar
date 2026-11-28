@@ -2,8 +2,6 @@ import Foundation
 
 // MARK: - 套件登记：Clipboard 域
 //
-// 覆盖：仓储 / 搜索 / 卡片 / 图片 / 清理
-//
 // 本域全部测试入口的**唯一登记处**：新增本域测试文件时只在这里加一行调用，
 // 不必改 main.swift（它只剩域调度、不再随测试增长，不会贴到 500 行门禁线）。
 // 顺序即执行顺序；行尾注释是该套件覆盖的口径。忘了登记不会编译报错，
@@ -50,6 +48,7 @@ func runClipboardSuites() {
     runClipboardPollScheduleTests()
     runClipboardPauseTests()
     runClipboardCardGeometryTests()
+    runClipboardPanelSizeTests()  // 面板高度三档（最近档位 / 循环 / 图标与提示）
     runClipboardDetailStripTests()
     runClipboardFilterTokenTests()
     runClipboardSearchHighlightTests()

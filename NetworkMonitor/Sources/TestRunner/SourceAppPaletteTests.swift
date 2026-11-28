@@ -18,6 +18,22 @@ func runSourceAppPaletteTests() {
     let wechatUpper = SourceAppPalette.tint(bundleID: "com.tencent.xinWeChat", appName: nil)
     assertEqual(wechatUpper.color.hexString, "#07C160", "bundleID 大小写不敏感，微信取品牌绿")
 
+
+    // 命中：宿主 App 的真实 bundleID（1.32 起是 com.deepseek.dsh）与旧写法都要染同一块品牌色
+    assertEqual(SourceAppPalette.tint(bundleID: "com.deepseek.dsh", appName: "DeepSeek Harness").color.hexString,
+                "#5B5BD6", "宿主 App 真实 bundleID 命中品牌紫")
+    assertEqual(SourceAppPalette.tint(bundleID: "com.deepseek.harness", appName: nil).color.hexString,
+                "#5B5BD6", "早期版本写下的旧 bundleID 照常命中（老历史不褪色）")
+
+    // 别名归一化：中间夹双空格 / 不间断空格 / 全角空格都要认（localizedName 实测出现过）
+    assertEqual(SourceAppPalette.normalizedAppName("  DeepSeek   Harness "), "deepseek harness",
+                "首尾空白去掉、中间连续空白折叠成一个空格")
+    assertEqual(SourceAppPalette.normalizedAppName("DeepSeek\u{00A0}Harness"), "deepseek harness",
+                "不间断空格按空白折叠（否则同一家会被判成未知来源、卡头回落成灰）")
+    assertEqual(SourceAppPalette.tint(bundleID: nil, appName: "DEEPSEEK  HARNESS").isFallback, false,
+                "大小写 + 双空格变体仍命中别名")
+    assertEqual(SourceAppPalette.normalizedAppName(nil), "", "空入参归一化为空串")
+
     // 命中：bundleID 缺失时退回 App 名（中英文别名都认）
     assertEqual(SourceAppPalette.tint(bundleID: nil, appName: "终端").color.hexString,
                 "#1C1C1E", "中文别名「终端」命中 Terminal")

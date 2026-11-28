@@ -37,8 +37,11 @@ public enum ClipboardPanelLayout {
     public static var minPanelHeight: Double {
         Double(toolbarHeight + cardHeight + cardSlack)
     }
-    /// 面板默认高度：比下限高出一档，让卡片按比例长到 240pt 上下（一屏约 6 张）
-    public static let defaultPanelHeight: Double = 320
+    /// 面板默认高度：标准档（卡片按 1.15 比例长到 254pt 上下，一屏约 5 张）
+    ///
+    /// 与 `ClipboardPanelSize.standard.height` 同源：档位按钮、设置页滑块与默认值三处
+    /// 读同一个数，不会出现「点一次档位按钮，高度反而变成另一个值」。
+    public static var defaultPanelHeight: Double { ClipboardPanelSize.standard.height }
     /// 面板高度上限（设置页高度滑块同口径）
     public static let maxPanelHeight: Double = 480
 
@@ -97,22 +100,25 @@ extension ClipboardPanelLayout {
         public let count: CGRect
         /// 「?」快捷键帮助（纯图标按钮）
         public let help: CGRect
+        /// 面板高度档位（紧凑 / 标准 / 宽松；图标随档位换，点按循环）
+        public let size: CGRect
         /// 「采集当前剪贴板」（纯图标按钮 + tooltip）
         public let capture: CGRect
 
         public init(chipRow: ClipboardFilterChipRow.Metrics, search: CGRect,
                     boardRow: ClipboardBoardRow.Metrics, count: CGRect,
-                    help: CGRect, capture: CGRect) {
+                    help: CGRect, size: CGRect, capture: CGRect) {
             self.chipRow = chipRow
             self.search = search
             self.boardRow = boardRow
             self.count = count
             self.help = help
+            self.size = size
             self.capture = capture
         }
     }
 
-    /// 工具条：芯片行贴左 → 搜索框 → 板胶囊 → 计数 →「?」→ 采集（后两者贴右）
+    /// 工具条：芯片行贴左 → 搜索框 → 板胶囊 → 计数 →「?」→ 高度档位 → 采集（后三者贴右）
     ///
     /// - Parameters:
     ///   - width: 面板宽
@@ -126,7 +132,10 @@ extension ClipboardPanelLayout {
         let controlY = (toolbarHeight - toolbarControlHeight) / 2
         let capture = CGRect(x: max(0, width - paddingX - iconButtonWidth), y: controlY,
                              width: iconButtonWidth, height: toolbarControlHeight)
-        let help = CGRect(x: capture.minX - iconGap - iconButtonWidth, y: controlY,
+        // 三个图标按钮贴右成组：高度档位夹在「?」与采集之间（采集是动作、档位与「?」是面板级开关）
+        let size = CGRect(x: capture.minX - iconGap - iconButtonWidth, y: controlY,
+                          width: iconButtonWidth, height: toolbarControlHeight)
+        let help = CGRect(x: size.minX - iconGap - iconButtonWidth, y: controlY,
                           width: iconButtonWidth, height: toolbarControlHeight)
 
         // 计数：贴「?」左侧，超宽尾部省略；面板太窄时整段让位（计数是状态，不是入口）
@@ -157,7 +166,7 @@ extension ClipboardPanelLayout {
             chips: boardChips, originX: boardX, rowY: 0,
             available: max(0, laneEnd - boardX), rowHeight: toolbarHeight)
         return ToolbarMetrics(chipRow: chipRow, search: search, boardRow: boardRow,
-                              count: count, help: help, capture: capture)
+                              count: count, help: help, size: size, capture: capture)
     }
 
     /// 筛选芯片行可用的横向预算

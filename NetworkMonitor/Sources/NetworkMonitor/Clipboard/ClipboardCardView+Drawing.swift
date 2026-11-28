@@ -7,8 +7,8 @@ import NetworkMonitorUI
 
 /// ClipboardCardView 的整卡绘制 —— 一次 draw 画完卡底、描边、卡头带、卡身、卡脚、缩略图与角标
 ///
-/// 层序（自下而上）：卡底 → 常态描边 → hover 提亮 → 选中内描边 → 卡头带 → 卡身 → 卡脚 →
-/// 缩略图 → 收藏星 → 栈角标。
+/// 层序（自下而上）：卡底 → 常态描边 → hover 提亮 → 卡头带 → 卡身 → 卡脚 →
+/// 缩略图 → 收藏星 → 栈角标 → **选中内描边**（必须最上，否则被卡头色带盖掉）。
 ///
 /// 选中态与 hover 态的分工（对标 Paste）：选中 = **2pt 蓝色内描边**，不叠色、不提亮、不缩放；
 /// hover = 只做一层轻微提亮，不再额外加描边 —— 两处都改色会让人分不清「选中」和「指到」。
@@ -32,23 +32,25 @@ extension ClipboardCardView {
               stroke: .clear,
               fill: PaneCardStyle.primaryText.withAlphaComponent(Self.hoverFillAlpha),
               alpha: hoverBlend.value).draw()
-        // 选中：2pt 强调色内描边，不叠色
+        if let item {
+            drawHeadBand(item: item, in: bounds)
+            let body = ClipboardCardGeometry.bodyRect(in: bounds)
+            if item.kind == .image {
+                drawImageBody(item: item, in: body)
+            } else {
+                drawTextBody(item: item, in: body)
+            }
+            drawFooter(item: item, in: bounds)
+            if item.kind == .image { drawThumbnailImage(in: body) }
+            drawStar(item: item, in: bounds)
+            drawStackBadge(item: item, in: bounds)
+        }
+        // 选中描边**最后**画：2pt 强调色内描边必须压在卡头色带之上，
+        // 先画会被整条色带盖掉，表现为「选中卡只有左右和下有条蓝线、顶上没有」
         layer(inset: Self.activeBorderWidth / 2, width: Self.activeBorderWidth,
               stroke: PaneCardStyle.accentText,
               fill: nil,
               alpha: selectionBlend.value).draw()
-        guard let item else { return }
-        drawHeadBand(item: item, in: bounds)
-        let body = ClipboardCardGeometry.bodyRect(in: bounds)
-        if item.kind == .image {
-            drawImageBody(item: item, in: body)
-        } else {
-            drawTextBody(item: item, in: body)
-        }
-        drawFooter(item: item, in: bounds)
-        if item.kind == .image { drawThumbnailImage(in: body) }
-        drawStar(item: item, in: bounds)
-        drawStackBadge(item: item, in: bounds)
     }
 
     // MARK: 叠色与描边层

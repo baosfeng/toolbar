@@ -104,6 +104,28 @@ extension ClipboardPanelView {
         addSubview(helpButton)
     }
 
+    /// 工具条「面板高度档位」按钮：一次点击循环 紧凑 → 标准 → 宽松
+    ///
+    /// 三档对标 Paste 的「高度三档」：档位只决定面板高度，卡片尺寸继续由高度推出来
+    /// （ClipboardCardGeometry.cardSize），不存在「档位直接改卡片尺寸」的第二套口径。
+    func buildSizeButton() {
+        sizeButton.isBordered = false
+        sizeButton.controlSize = .small
+        sizeButton.refusesFirstResponder = true
+        sizeButton.imagePosition = .imageOnly
+        sizeButton.target = self
+        sizeButton.action = #selector(cyclePanelSize)
+        updatePanelSize(.standard)
+        addSubview(sizeButton)
+    }
+
+    /// 同步档位按钮：图标随档位换，tooltip 与读屏都说清「现在是什么 / 点一下变什么」
+    func updatePanelSize(_ size: ClipboardPanelSize) {
+        sizeButton.image = symbolImage(named: size.symbolName, color: .secondaryLabelColor, pointSize: 13)
+        sizeButton.toolTip = size.switchHint
+        sizeButton.setAccessibilityLabel(size.switchHint)
+    }
+
     /// 条数计数（「N 条 · 收藏 M」）：工具条右端的一行状态文本，不是按钮
     func buildCountLabel() {
         countLabel.font = NSFont.systemFont(ofSize: 10.5)
@@ -169,6 +191,10 @@ extension ClipboardPanelView {
         cardFlow.onPin = { [weak self] index in
             guard let self else { return }
             self.delegate?.panelView(self, didRequestPinAt: index)
+        }
+        cardFlow.onTogglePin = { [weak self] index in
+            guard let self else { return }
+            self.delegate?.panelView(self, didRequestTogglePinAt: index)
         }
         // 选中切换的触觉在视图层直接打：方向键连按时这条路径最敏感，
         // 不必绕回控制器再打一次（控制器只负责业务，反馈依赖已注入本视图）

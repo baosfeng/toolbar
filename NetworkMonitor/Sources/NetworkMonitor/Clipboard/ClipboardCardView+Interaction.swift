@@ -32,11 +32,19 @@ extension ClipboardCardView {
     /// 粘贴延迟到 mouseUp（见 ClipboardCardDrag）：按下就贴的话，用户按下去想拖一下会先被粘走；
     /// mouseUp 用「起拖时已清空 pressAnchor」区分点击与拖拽。⌘/⇧ 是选择意图，不粘贴。
     override func mouseDown(with event: NSEvent) {
-        pressAnchor = convert(event.locationInWindow, from: nil)
-        let region = hitRegion(at: pressAnchor ?? .zero)
+        let point = convert(event.locationInWindow, from: nil)
+        let region = hitRegion(at: point)
         let action = ClipboardCardHitTest.action(for: region,
                                                  clickCount: event.clickCount,
                                                  isContextMenu: false)
+        // 星标单击 = 收藏切换：清掉按压起点，mouseUp 那条「单击即粘贴」就不会再走一遍，
+        // 否则点个收藏顺手把这条粘出去（Paste 的 ⊕ 也一样不粘贴）
+        if action == .togglePin {
+            pressAnchor = nil
+            onTogglePin?(self)
+            return
+        }
+        pressAnchor = point
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let click: ClipboardSelectionModel.Click = flags.contains(.shift)
             ? .extend
@@ -44,6 +52,12 @@ extension ClipboardCardView {
         if action == .select || action == .paste { onClickWithModifiers?(self, click) }
         // 双击的第二次按下不再粘贴：第一次 mouseUp 已经粘过，面板此时正在收起
         if event.clickCount >= 2 { pressAnchor = nil }
+    }
+
+    /// 星标命中区显示手型光标：卡上唯一有独立动作的小热区，不给光标提示就没人会发现它能点
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(ClipboardCardGeometry.starHitRect(in: bounds), cursor: .pointingHand)
     }
 
     // MARK: hover
@@ -57,6 +71,16 @@ extension ClipboardCardView {
                                   owner: self, userInfo: nil)
         addTrackingArea(area)
         hoverTrackingArea = area
+    }
+
+    /// 布局变化后校正 hover：面板改高 / 横向重排 / 滚动都会把卡片挪到鼠标之外，
+    /// 而系统只在鼠标真正跨过 tracking area 边界时补发 mouseExited —— 卡片被代码搬走时它不知道。
+    /// 不校正的表现是「手早就移开了，那张卡还一直亮着星标与提亮」。
+    override func layout() {
+        super.layout()
+        guard isHovering, let window else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        if !bounds.contains(point) { cancelHover() }
     }
 
     override func mouseEntered(with event: NSEvent) {

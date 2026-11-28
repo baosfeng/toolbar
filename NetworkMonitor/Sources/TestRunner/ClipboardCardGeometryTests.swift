@@ -92,16 +92,39 @@ func runClipboardCardGeometryTests() {
     assertEqual(ClipboardCardHitTest.region(at: CGPoint(x: 500, y: 500), in: bounds, isImage: false),
                 .body, "卡片外按 body 兜底（事件本就不会到这）")
 
-    // 命中动作：所有区域口径一致 —— 单击选中 / 双击粘贴 / 右键菜单
+    // 命中动作：星标单击是唯一例外（收藏切换），其余区域单击选中；双击与右键全区域一致
     let regions: [ClipboardCardHitRegion] = [.thumbnail, .star, .badge, .meta, .headBand, .body]
     for region in regions {
+        let expectedClick: ClipboardCardHitAction = region == .star ? .togglePin : .select
         assertEqual(ClipboardCardHitTest.action(for: region, clickCount: 1, isContextMenu: false),
-                    .select, "\(region) 单击 → 选中")
+                    expectedClick, "\(region) 单击 → \(expectedClick)")
         assertEqual(ClipboardCardHitTest.action(for: region, clickCount: 2, isContextMenu: false),
-                    .paste, "\(region) 双击 → 粘贴")
+                    .paste, "\(region) 双击 → 粘贴（星标上双击也是「就要这条」）")
         assertEqual(ClipboardCardHitTest.action(for: region, clickCount: 1, isContextMenu: true),
                     .showMenu, "\(region) 右键 → 菜单")
         assertEqual(ClipboardCardHitTest.action(for: region, clickCount: 2, isContextMenu: true),
                     .showMenu, "\(region) 右键优先于双击")
     }
+
+    // 星标命中框：11pt 的星扩到 24pt 见方，且不越出卡脚（贴右边缘时向左收、不砍面积）
+    let starHit = ClipboardCardGeometry.starHitRect(in: bounds)
+    assertEqual(starHit.width, 24, "星标命中框 24pt 宽")
+    assertEqual(starHit.height, 24, "星标命中框 24pt 高")
+    assertEqual(starHit.midX, star.midX, "命中框与星标同心（未被卡脚边界挤压时）")
+    assertEqual(starHit.midY, star.midY, "命中框与星标同心（纵向）")
+    assertEqual(starHit.maxX <= bounds.maxX, true, "命中框不越出卡片右边缘")
+    assertEqual(starHit.minY >= footer.minY, true, "命中框不越出卡脚上沿")
+
+    // 卡片区留白：顶部 8 / 底部 24（底部那条带留给状态胶囊）
+    assertEqual(ClipboardCardGeometry.cardInsetTop, 8, "卡片区顶部留白 8")
+    assertEqual(ClipboardCardGeometry.cardInsetBottom, 24, "卡片区底部留白 24")
+    assertEqual(ClipboardCardGeometry.cardSlack, 32, "上下留白合计 32")
+
+    // 卡片尺寸：宽度由「卡高 × 比例」给出，1.15 的横卡比例必须在默认面板高度下真的生效
+    let bigCard = ClipboardCardGeometry.cardSize(forCardAreaHeight: 332)
+    assertEqual(bigCard.height, 300, "332pt 卡片区 − 32pt 留白 = 300pt 卡高")
+    assertEqual(bigCard.width, 344, "300 × 1.146 取整 = 344pt 卡宽（不再被 260 截成竖卡）")
+    assertEqual(bigCard.width > bigCard.height, true, "默认面板高度下是横卡，不是竖卡")
+    let tinyCard = ClipboardCardGeometry.cardSize(forCardAreaHeight: 120)
+    assertEqual(tinyCard.height, ClipboardCardGeometry.minCardHeight, "卡片区过矮时夹到卡高下限")
 }

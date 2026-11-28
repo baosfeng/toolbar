@@ -5,11 +5,13 @@ import NetworkMonitorUI
 
 /// 工具条横向分配的守门测试 —— 单行版式（对标 Paste 顶栏一行到底）
 ///
+/// 右端三个图标按钮成组：计数 →「?」→ 高度档位 → 采集。
+///
 /// 钉住五件事：
 /// 1. 工具条只有一行：筛选芯片 → 搜索框 → 板胶囊 → 计数 →「?」→ 采集图标；
 /// 2. 芯片行永不溢出可用宽、搜索框永不被压到下限以下；
 /// 3. 板胶囊永远保住「全部 + ＋」的下限，放不下时整节让位而不是画到搜索框上；
-/// 4. 两个图标按钮贴右边缘、同一档宽（纯图标 + tooltip）；
+/// 4. 三个图标按钮贴右边缘、同一档宽（纯图标 + tooltip）；
 /// 5. 条数计数是状态文本，可隐藏、可省略，绝不抢搜索框与板胶囊的位置。
 func runClipboardToolbarLayoutTests() {
     print("🧪 Testing clipboard toolbar layout (single row)...")
@@ -25,8 +27,11 @@ func runClipboardToolbarLayoutTests() {
         assertEqual(wide.search.width, ClipboardPanelLayout.searchMaxWidth, "面板够宽时搜索框取上限 360")
         assertEqual(wide.capture.maxX, 1200 - ClipboardPanelLayout.paddingX, "采集图标贴右内边距")
         assertEqual(wide.capture.width, ClipboardPanelLayout.iconButtonWidth, "采集图标定宽 24")
-        assertEqual(wide.help.maxX, wide.capture.minX - ClipboardPanelLayout.iconGap,
-                    "「?」在采集图标左侧一个窄间距处")
+        assertEqual(wide.size.maxX, wide.capture.minX - ClipboardPanelLayout.iconGap,
+                    "高度档位在采集图标左侧一个窄间距处")
+        assertEqual(wide.size.width, ClipboardPanelLayout.iconButtonWidth, "档位与采集同档宽")
+        assertEqual(wide.help.maxX, wide.size.minX - ClipboardPanelLayout.iconGap,
+                    "「?」在档位左侧一个窄间距处")
         assertEqual(wide.help.width, ClipboardPanelLayout.iconButtonWidth, "「?」与采集同档宽")
         assertEqual(wide.count.maxX, wide.help.minX - ClipboardPanelLayout.toolbarGap,
                     "计数在「?」左侧一个控件间距处")
@@ -70,8 +75,10 @@ func runClipboardToolbarLayoutTests() {
                     "搜索框不压到「?」按钮（不溢出可用宽）")
         assertEqual(narrow.boardRow.addButton.width, ClipboardBoardRow.addButtonWidth,
                     "窄面板下「＋」新建仍未被挤掉")
-        assertEqual(narrow.help.maxX, narrow.capture.minX - ClipboardPanelLayout.iconGap,
-                    "窄面板下「?」仍在采集左侧")
+        assertEqual(narrow.size.maxX, narrow.capture.minX - ClipboardPanelLayout.iconGap,
+                    "窄面板下档位仍在采集左侧")
+        assertEqual(narrow.help.maxX, narrow.size.minX - ClipboardPanelLayout.iconGap,
+                    "窄面板下「?」仍在档位左侧")
 
         // 极窄：板胶囊整节让位（绝不画到搜索框上），搜索框与两个图标仍在
         let tiny = ClipboardPanelLayout.toolbarMetrics(width: 420, countWidth: 0)

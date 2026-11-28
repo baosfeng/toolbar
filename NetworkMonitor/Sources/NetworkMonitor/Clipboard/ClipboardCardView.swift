@@ -94,6 +94,8 @@ final class ClipboardCardView: NSView {
     var onClickPaste: ((ClipboardCardView) -> Void)?
     /// 右键「贴到屏幕」回调
     var onPin: ((ClipboardCardView) -> Void)?
+    /// 点星标回调（收藏 / 取消收藏）—— 卡上唯一「点一下就改状态」的热区，不经过选中
+    var onTogglePin: ((ClipboardCardView) -> Void)?
 
     // MARK: 状态
 

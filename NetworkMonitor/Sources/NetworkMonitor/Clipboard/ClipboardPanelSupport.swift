@@ -53,21 +53,34 @@ enum ClipboardPanelGeometry {
         return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? fallback
     }
 
-    /// 面板 frame：目标屏 visibleFrame 底部，宽 = width - 40（下限 420），底边距 12pt；
-    /// 鼠标位置策略下贴到鼠标附近，并夹紧在可见区域内
+    /// 贴屏面板的底部留白（对标 Paste：面板底边离屏幕下沿 8pt，不贴死、也不悬在半空）
+    static let bottomGap: CGFloat = 8
+    /// 鼠标位置策略下的面板宽上限（该模式不是通栏，宽了会盖住半屏）
+    static let floatingMaxWidth: CGFloat = 720
+    /// 面板圆角（对标 Paste 的 24pt：比改前的 14 更圆，横条两端不显得方）
+    static let panelCornerRadius: CGFloat = 24
+
+    /// 面板 frame
     ///
-    /// 高度上限用「屏高 − 上下各 12pt 留白」而不是屏高的三分之一：按三分之一压扁会让卡片区
+    /// - 鼠标所在屏 / 主屏：**通栏横条** —— 左右贴齐 visibleFrame、底边距 8pt，高度取档位高度
+    ///   （对标 Paste 的底部横条；改前左右各留 20pt，看起来像一块悬浮窗而不是一条横条）。
+    /// - 鼠标位置：贴在鼠标附近的小窗（宽上限 720pt），并夹紧在可见区域内。
+    ///
+    /// 高度上限用「屏高 − 上下各 16pt 留白」而不是屏高的三分之一：按三分之一压扁会让卡片区
     /// 露不出整卡（面板高度下限就是「工具条 + 整卡」），不能为了贴屏而被裁。
     static func panelFrame(visible: NSRect, panelHeight: Double,
                            position: ClipboardPanelPosition, mouse: NSPoint) -> NSRect {
-        let width = max(420, visible.width - 40)
-        let height = min(CGFloat(panelHeight), max(0, visible.height - 24))
-        var origin = NSPoint(x: visible.minX + 20, y: visible.minY + 12)
-        if position == .mouseLocation {
-            origin = NSPoint(x: min(max(mouse.x - width / 2, visible.minX + 10), visible.maxX - width - 10),
-                             y: min(max(mouse.y - height - 10, visible.minY + 10), visible.maxY - height - 10))
+        let height = min(CGFloat(panelHeight), max(0, visible.height - 32))
+        switch position {
+        case .mouseScreen, .primaryScreen:
+            return NSRect(x: visible.minX, y: visible.minY + bottomGap,
+                          width: max(0, visible.width), height: height)
+        case .mouseLocation:
+            let width = min(floatingMaxWidth, max(420, visible.width - 40))
+            let x = min(max(mouse.x - width / 2, visible.minX + 10), visible.maxX - width - 10)
+            let y = min(max(mouse.y - height - 10, visible.minY + 10), visible.maxY - height - 10)
+            return NSRect(x: x, y: y, width: width, height: height)
         }
-        return NSRect(x: origin.x, y: origin.y, width: width, height: height)
     }
 }
 

@@ -16,8 +16,8 @@ import AppKit
 @MainActor
 final class ClipboardPanelInnerMaterialView: NSVisualEffectView {
 
-    /// 内衬圆角（外层 14pt，小 2pt 才能在内缩后留出完整的一圈外层材质）
-    static let cornerRadius: CGFloat = 12
+    /// 内衬圆角（外层 24pt，小 2pt 才能在内缩后留出完整的一圈外层材质）
+    static var cornerRadius: CGFloat { ClipboardPanelGeometry.panelCornerRadius - 2 }
 
     /// 相对面板边界的内缩（两级材质之间那圈 1pt）
     static let inset: CGFloat = 1

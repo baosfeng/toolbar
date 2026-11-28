@@ -17,7 +17,8 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         static let offsetY: CGFloat = 14
     }
 
-    private let panel: ClipboardPanel
+    /// internal：档位切换要读 isVisible 并重排 frame（ClipboardPanelController+PanelSize.swift）
+    let panel: ClipboardPanel
     let content: ClipboardPanelView
     let repository: any ClipboardRepository
     let captureService: any ClipboardCaptureService   // 放宽为 internal：暂停切换与状态同步在 ClipboardPauseControl
@@ -94,7 +95,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         content.delegate = self; content.autoresizingMask = [.width, .height]
 
         // 面板底（弹窗层的玻璃）：macOS 26+ 且玻璃开启时走 NSGlassEffectView，
-        // 否则回落原 `.hudWindow` 材质路径（视觉不塌）。圆角按 Paste 的量级取 20pt（原 14 偏方）。
+        // 否则回落原 `.hudWindow` 材质路径（视觉不塌）。圆角按 Paste 的量级取 24pt（原 14 偏方）。
         let background = makePanelBackground()
         content.frame = background.bounds
         background.addSubview(content)
@@ -116,7 +117,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
             glass.frame = frame
             glass.autoresizingMask = [.width, .height]
             glass.wantsLayer = true
-            glass.layer?.cornerRadius = 20
+            glass.layer?.cornerRadius = ClipboardPanelGeometry.panelCornerRadius
             glass.layer?.masksToBounds = true
             return glass
         }
@@ -125,7 +126,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         effect.blendingMode = .behindWindow
         effect.state = .active
         effect.wantsLayer = true
-        effect.layer?.cornerRadius = 20
+        effect.layer?.cornerRadius = ClipboardPanelGeometry.panelCornerRadius
         effect.layer?.masksToBounds = true
         effect.autoresizingMask = [.width, .height]
         return effect
@@ -157,6 +158,8 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         expireTimedPauseIfNeeded()   // 定时暂停到点即恢复（宿主节拍之外的补位）
         syncPauseState()   // 暂停态最后落定：不被上一次的临时提示盖掉
         positionPanel()
+        // 工具条档位图标与真实高度对齐（设置页拖过滑块 / 换了屏幕后，档位可能已经不是上次点的那一档）
+        content.updatePanelSize(ClipboardPanelSize.nearest(to: preferences.panelHeight))
         let finalFrame = panel.frame
         // 起始态先进 MotionKit：允许动效是「透明 + 下移 14pt」，减弱动态效果时直接落终态
         MotionKit.stageWindowEntrance(panel, fromOffsetY: Motion.offsetY, toFrame: finalFrame)
@@ -190,7 +193,8 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
     func windowDidResignKey(_ notification: Notification) { hide(animated: true) }
 
     /// 定位：几何计算见 ClipboardPanelGeometry（目标屏 visibleFrame 底部；高度夹紧口径在偏好层）
-    private func positionPanel() {
+    /// internal：档位切换要按新高度重新定位（ClipboardPanelController+PanelSize.swift）
+    func positionPanel() {
         let mouse = NSEvent.mouseLocation, position = preferences.panelPosition
         let visible = ClipboardPanelGeometry.targetScreen(position: position, mouse: mouse).visibleFrame
         panel.setFrame(ClipboardPanelGeometry.panelFrame(visible: visible, panelHeight: preferences.panelHeight,
@@ -232,16 +236,6 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         guard !message.isEmpty else { return }
         logger.info("剪贴板粘贴：\(message)")
         if panel.isVisible { content.showHint(message) } else { pendingHint = message }
-    }
-
-    func togglePin() {
-        guard let item = selectedItem else { return }
-        let target = !item.isPinned
-        repository.setClipboardItemPinned(id: item.id, isPinned: target)
-        // 反馈只在此处打一次：卡片刷新只重建视图，不再重复触发
-        reportPinToggled(to: target)
-        AppEvents.postClipboardChanged()
-        reloadItems(preferredID: item.id)
     }
 
     func panelViewDidRequestCapture(_ view: ClipboardPanelView) { captureNowUnlessPaused() }

@@ -20,6 +20,10 @@ protocol ClipboardPanelViewDelegate: AnyObject {
     func panelView(_ view: ClipboardPanelView, didActivate index: Int)
     /// 卡片右键「贴到屏幕」
     func panelView(_ view: ClipboardPanelView, didRequestPinAt index: Int)
+    /// 卡片星标被点（收藏 / 取消收藏；星标单击不选中也不粘贴）
+    func panelView(_ view: ClipboardPanelView, didRequestTogglePinAt index: Int)
+    /// 工具条「面板高度档位」被点（紧凑 → 标准 → 宽松 循环）
+    func panelViewDidRequestCyclePanelSize(_ view: ClipboardPanelView)
     /// 卡片右键菜单其余指令（复制 / 粘贴为纯文本 / 收藏 / 删除）；按条目 ID 定位，不依赖卡片视图位置。
     /// 「移到板…」另走下面的通道：子菜单项还要带目标板，不能只带条目 ID
     func panelView(_ view: ClipboardPanelView, didRequestMenuCommand command: ClipboardCardMenuCommand, itemID: UUID)
@@ -93,6 +97,8 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     let captureButton = NSButton()
     /// 工具条「?」快捷键帮助按钮
     let helpButton = NSButton()
+    /// 工具条「面板高度档位」按钮（图标随档位换，点按循环三档）
+    let sizeButton = NSButton()
     /// 首次引导态 / 快捷键帮助浮层（构建见 ClipboardPanelView+Subviews，视图定义见 ClipboardPanelOverlays）
     let guideView = ClipboardGuideView()
     let helpOverlay = ClipboardShortcutHelpOverlay()
@@ -111,14 +117,14 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     let innerMaterial = ClipboardPanelInnerMaterialView()
     let separatorView = ClipboardPanelSeparatorView()
 
-    /// 当前搜索串
-    private(set) var query: String = ""
-    /// 当前生效的筛选芯片（空数组 = 不过滤）
-    private(set) var filterTokens: [ClipboardFilterToken] = []
+    /// 当前搜索串（internal：状态更新在 ClipboardPanelView+State.swift，跨文件写入需要写权限）
+    var query: String = ""
+    /// 当前生效的筛选芯片（空数组 = 不过滤；internal 原因同上）
+    var filterTokens: [ClipboardFilterToken] = []
     /// 「＋筛选」里来源 App 的候选数据源：视图不查库，由控制器在每次重载时按同一份数据灌入
     var filterSourceItems: [ClipboardItem] = []
-    /// 当前选中下标
-    private(set) var selectedIndex = -1
+    /// 当前选中下标（internal：状态更新在 ClipboardPanelView+State.swift）
+    var selectedIndex = -1
 
     /// 操作反馈（音效 / 触觉）— 构造器注入，未装配时用 .silent（快照与独立预览）
     /// 放宽 internal：ClipboardPanelView+Subviews.swift 的卡片流回调要在视图层接触觉
@@ -141,6 +147,7 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         buildBoardRow()
         buildCaptureButton()
         buildHelpButton()
+        buildSizeButton()
         buildCountLabel()
         buildCardFlow()
         buildDetailStrip()
@@ -150,102 +157,7 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("不支持从 nib 初始化") }
-
-    // MARK: 对外状态更新
-
-    /// 重建卡片流：交给卡片流视图做「视图池复用 + 滑动窗口」，此处不建任何卡片
-    func render(items: [ClipboardItem], selectedIndex: Int, selectedIDs: Set<UUID>? = nil) {
-        self.selectedIndex = selectedIndex
-        let ids = selectedIDs ?? ClipboardCardFlowView.singleSelection(items: items, index: selectedIndex)
-        cardFlow.render(items: items, selectedIndex: selectedIndex, selectedIDs: ids)
-        // 多选摘要改由底部状态胶囊承担（详情区已退成编辑浮层）
-        statusBand.updateMultiSelection(count: ids.count)
-    }
-
-    /// 仅切换选中态（方向键移动时不重建卡片视图）
-    func updateSelection(_ index: Int, item: ClipboardItem?, selectedIDs: Set<UUID>? = nil) {
-        _ = item
-        selectedIndex = index
-        let ids = selectedIDs ?? ClipboardCardFlowView.singleSelection(items: cardFlow.items, index: index)
-        cardFlow.updateSelection(index, selectedIDs: ids)
-        statusBand.updateMultiSelection(count: ids.count)
-    }
-
-    /// 多选态：底部胶囊改成「已选 N 条」摘要（单条详情在空格预览里看）
-    func updateMultiSelection(count: Int) {
-        statusBand.updateMultiSelection(count: count)
-    }
-
-    /// 更新栈进度（如「堆叠 2 条」；栈空时收起，不占位）
-    func updateStack(remaining: Int, total: Int) {
-        _ = total
-        stackRemaining = max(0, remaining)
-        refreshCountsLabel()
-    }
-
-    /// 工具条计数：「N 条 · 收藏 M」＋ 栈剩余；胶囊只留给提示 / 暂停 / 多选 / 权限
-    func refreshCountsLabel() {
-        var text = ClipboardPanelFooterText.countsLabel(total: totalCount, pinned: pinnedCount)
-        if stackRemaining > 0 { text += " · 栈 \(stackRemaining)" }
-        countLabel.stringValue = text
-        countLabel.setAccessibilityLabel(text)
-        needsLayout = true
-    }
-
-    /// 更新辅助功能权限状态（无权限时高亮入口，不得静默）
-    func updatePermission(accessibilityGranted: Bool) {
-        statusBand.updatePermission(granted: accessibilityGranted)
-    }
-
-    /// 临时提示（降级路径必须让用户看见）：底部胶囊显示 4 秒后自动收起
-    func showHint(_ text: String) {
-        statusBand.showHint(text)
-    }
-
-    /// 透出暂停态：胶囊常驻「采集已暂停（点此恢复）」，定时暂停带出截止时刻
-    func revealPauseState(_ isPaused: Bool, until pausedUntil: Date = .distantPast, now: Date = Date()) {
-        let text = ClipboardPauseLogic.footerHint(isPaused: isPaused, pausedUntil: pausedUntil,
-                                                  now: now, idleHint: Self.keyHint)
-        statusBand.revealPause(isPaused, text: isPaused ? text : "")
-        statusBand.setAccessibilityLabel(isPaused ? "采集已暂停，点按或按 ⌘P 恢复采集" : "面板状态")
-    }
-
-    /// 暂停胶囊的点击恢复
-    @objc func resumeFromPauseBanner() { onRequestTogglePause?() }
-
-    /// 替换全部筛选芯片（增删 / ⇧Tab 循环 / 清空都走这里）：视图只回传新数组，匹配交给控制器；
-    /// 芯片宽度依赖字体，换完要重排工具条。
-    func setFilterTokens(_ tokens: [ClipboardFilterToken]) {
-        guard tokens != filterTokens else { return }
-        filterTokens = tokens
-        chipRowView.update(tokens: tokens)
-        needsLayout = true
-        delegate?.panelView(self, didChangeFilterTokens: tokens)
-    }
-
-    /// 让搜索框成为第一响应者（面板打开即可输入）
-    func focusSearchField() {
-        window?.makeFirstResponder(searchField)
-    }
-
-    // MARK: NSSearchFieldDelegate
-
-    func controlTextDidChange(_ obj: Notification) {
-        query = searchField.stringValue
-        // 高亮只跟搜索态走：查询清空后立即回落无高亮（不等下一次重排）
-        cardFlow.setHighlightQuery(query)
-        delegate?.panelView(self, didChangeQuery: query)
-    }
-
-    /// 外部（控制器 / 快照）改写搜索串：同步搜索框、卡片高亮与查询态
-    func setQuery(_ text: String) {
-        guard searchField.stringValue != text else { return }
-        searchField.stringValue = text
-        query = text
-        cardFlow.setHighlightQuery(text)
-        delegate?.panelView(self, didChangeQuery: text)
-    }
-
+    // MARK: 对外状态更新（render / 选中态 / 计数 / 提示 / 筛选 / 搜索全部在 ClipboardPanelView+State.swift）
     // MARK: 布局
 
     override func layout() {
@@ -266,6 +178,7 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
         searchField.frame = toolbar.search
         countLabel.frame = toolbar.count
         helpButton.frame = toolbar.help
+        sizeButton.frame = toolbar.size
         captureButton.frame = toolbar.capture
 
         cardFlow.frame = sections.cards
@@ -290,6 +203,9 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     @objc func captureNow() {
         delegate?.panelViewDidRequestCapture(self)
     }
+
+    /// 面板高度档位按钮：委托控制器循环到下一档（高度是偏好，视图不自己写）
+    @objc func cyclePanelSize() { delegate?.panelViewDidRequestCyclePanelSize(self) }
 
     /// 「?」按钮：开合帮助浮层（再次点击收起）
     @objc func toggleShortcutHelp() {

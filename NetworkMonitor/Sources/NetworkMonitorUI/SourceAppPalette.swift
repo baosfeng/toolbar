@@ -74,6 +74,10 @@ public enum SourceAppPalette {
         Source(bundleID: "com.tencent.xinWeChat.Work", aliases: ["wecom", "企业微信"], hex: 0x2F7DF6),
         // 设计 / 本项目宿主
         Source(bundleID: "com.figma.Desktop", aliases: ["figma"], hex: 0xF24E1E),
+        // 宿主 App：真实 bundleID 是 com.deepseek.dsh（1.32 起）；旧写法 com.deepseek.harness
+        // 一并留在表里，是为了让「早期版本复制过的历史条目」也能染上同一块品牌色
+        Source(bundleID: "com.deepseek.dsh",
+               aliases: ["deepseek harness", "deepseek", "dsh"], hex: 0x5B5BD6),
         Source(bundleID: "com.deepseek.harness",
                aliases: ["deepseek harness", "deepseek", "dsh"], hex: 0x5B5BD6),
     ]
@@ -104,7 +108,9 @@ public enum SourceAppPalette {
                             kind: ClipboardItemKind? = nil,
                             isDark: Bool = false) -> Tint {
         let bundle = bundleID?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
-        let name = appName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        // App 名归一化：小写 + 连续空白折叠成一个空格。有的 App 的 localizedName 中间夹不间断空格 /
+        // 双空格（实测出现过），不归一化就会「看着是同一家、卡头却回落成灰色」
+        let name = normalizedAppName(appName)
         if !bundle.isEmpty,
            let hit = sources.first(where: { $0.bundleID.lowercased() == bundle }) {
             return Tint(color: hit.color, isFallback: false)
@@ -119,6 +125,14 @@ public enum SourceAppPalette {
             return Tint(color: typeColor, isFallback: true)
         }
         return Tint(color: fallbackColor(isDark: isDark), isFallback: true)
+    }
+
+    /// App 名归一化：去首尾空白 → 小写 → 连续空白折叠成一个半角空格（空串原样返回空串）
+    public static func normalizedAppName(_ appName: String?) -> String {
+        guard let appName else { return "" }
+        return appName.lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
     }
 
     /// 未知来源的类型色（图片 / 文件 / 链接各一档暖冷对比，文本仍用中性灰）

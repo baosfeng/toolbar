@@ -1,7 +1,7 @@
-Clipboard/ClipboardCardFlowView 494 4
-Clipboard/ClipboardCardView 813 6
-Clipboard/ClipboardPanelController 636 7
-Clipboard/ClipboardPanelView 519 2
+Clipboard/ClipboardCardFlowView 513 5
+Clipboard/ClipboardCardView 841 6
+Clipboard/ClipboardPanelController 678 8
+Clipboard/ClipboardPanelView 566 3
 Discovery/UdpDiscoveryService 425 2
 DrawnUI/DrawnRowList 489 2
 Harness/HarnessMultiSourceScanner 338 2
@@ -39,6 +39,6 @@ Settings/SettingsWindow 446 2
 Snip/SnipController 1299 7
 Snip/SnipOverlayView 1347 7
 Snip/SnipToolBarView 449 3
-TestRunner/TestSuites 393 8
+TestRunner/TestSuites 392 8
 Token/TokenDerive 705 4
 Transfer/TransferController 383 2

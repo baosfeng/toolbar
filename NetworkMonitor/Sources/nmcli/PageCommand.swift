@@ -66,6 +66,10 @@ enum PageCommand {
             throw CLIError("目标页面没有可用窗口（\(target.rawValue)）")
         }
         try waitUntilStable(windowNumber: windowNumber)
+        // 窗口尺寸稳定 ≠ 画面对齐：面板与卡片有 0.18~0.35s 的进场动效（淡入 + 位移 + 卡片错峰），
+        // 尺寸在第一帧就定了，此时截图会拍到半透明的卡片（表现为「某几张卡卡头颜色发灰」）。
+        // 这里固定再等一档动效时长，让取证图落到静止态。
+        usleep(500_000)
         let result = try Capture.shot(.window(windowNumber), to: out)
         Out.line(result.describe)
     }
