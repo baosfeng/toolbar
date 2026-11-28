@@ -17,7 +17,7 @@ MenuPanel/TokenPaneView 904 5
 MenuPanel/TokenScreenContent 415 3
 NetworkMonitor/AppAssemblyStages 338 2
 NetworkMonitor/AppCoordinator 796 10
-NetworkMonitor/MenuBarManager 443 5
+NetworkMonitor/MenuBarManager 498 5
 NetworkMonitorCore/DatabaseManager 766 6
 NetworkMonitorFeatureBilling/BillingMonitor 596 5
 NetworkMonitorFeatureClipboard/PasteboardWatcher 466 3
@@ -39,6 +39,6 @@ Settings/SettingsWindow 455 2
 Snip/SnipController 1305 7
 Snip/SnipOverlayView 1357 7
 Snip/SnipToolBarView 449 3
-TestRunner/TestSuites 394 8
+TestRunner/TestSuites 395 8
 Token/TokenDerive 705 4
 Transfer/TransferController 383 2

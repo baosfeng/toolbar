@@ -21,6 +21,8 @@ final class SettingsMenuBarLabelEditor {
     /// key → 输入框（key = metric rawValue；磁盘 I/O 的写片段用
     /// `MenuBarLabelResolver.diskWriteKey`）
     private var fields: [String: NSTextField] = [:]
+    /// metric → 「用图标」开关（磁盘 I/O 的写片段不参与图标化）
+    private var iconToggles: [MenuBarMetric: NSButton] = [:]
 
     init(preferences: MenuBarDisplayPreferences, onSave: @escaping () -> Void) {
         self.preferences = preferences
@@ -33,10 +35,12 @@ final class SettingsMenuBarLabelEditor {
     /// - Parameter sheetParent: 设置窗口；nil = 独立模态
     func present(sheetParent: NSWindow?) {
         fields.removeAll()
+        iconToggles.removeAll()
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = "逐项自定义菜单栏前缀"
         alert.informativeText = "留空 = 跟随上面的「标签」档；灰色字是该项的默认写法。"
+            + "勾「图标」= 这一项改用图标（数值照常显示），单行布局下生效。"
             + "改哪一项就只影响哪一项，重启后保留。"
         alert.addButton(withTitle: "保存")
         alert.addButton(withTitle: "取消")
@@ -69,7 +73,8 @@ final class SettingsMenuBarLabelEditor {
                 fallback: MenuBarLabelResolver.primaryLabel(for: metric,
                                                             style: preferences.labelStyle,
                                                             customLabels: [:]),
-                current: preferences.customLabel(for: metric)))
+                current: preferences.customLabel(for: metric),
+                iconMetric: metric))
         }
         stack.addArrangedSubview(makeRow(
             title: "磁盘 I/O · 写",
@@ -77,9 +82,10 @@ final class SettingsMenuBarLabelEditor {
             fallback: MenuBarLabelResolver.secondaryLabel(for: .diskIO,
                                                           style: preferences.labelStyle,
                                                           customLabels: [:]) ?? "W ",
-            current: preferences.diskWriteLabel))
+            current: preferences.diskWriteLabel,
+            iconMetric: nil))
 
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 380, height: 300))
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 420, height: 300))
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         let document = NSView()
@@ -90,16 +96,20 @@ final class SettingsMenuBarLabelEditor {
             stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -4),
             stack.topAnchor.constraint(equalTo: document.topAnchor, constant: 4),
             stack.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -4),
-            document.widthAnchor.constraint(equalToConstant: 372),
+            document.widthAnchor.constraint(equalToConstant: 412),
         ])
         scroll.documentView = document
         return scroll
     }
 
-    private func makeRow(title: String, key: String, fallback: String, current: String) -> NSView {
+    private func makeRow(title: String,
+                         key: String,
+                         fallback: String,
+                         current: String,
+                         iconMetric: MenuBarMetric?) -> NSView {
         let label = MenuPanelLabel.text(title, font: SettingsTheme.rowValueFont,
                                         color: SettingsTheme.textPrimary)
-        label.widthAnchor.constraint(equalToConstant: 108).isActive = true
+        label.widthAnchor.constraint(equalToConstant: 100).isActive = true
         let field = NSTextField(frame: .zero)
         field.stringValue = current
         // 占位写默认值：用户一眼看出「不填会长成什么样」
@@ -107,11 +117,21 @@ final class SettingsMenuBarLabelEditor {
         field.font = SettingsTheme.rowValueFont
         field.setAccessibilityLabel(title + "前缀")
         fields[key] = field
-        let row = NSStackView(views: [label, field])
+        var views: [NSView] = [label, field]
+        if let iconMetric {
+            let toggle = NSButton(checkboxWithTitle: "图标", target: nil, action: nil)
+            toggle.font = SettingsTheme.rowSubtitleFont
+            toggle.state = preferences.iconMetrics.contains(iconMetric) ? .on : .off
+            toggle.toolTip = "这一项改用图标代替文字前缀，数值照常显示"
+            toggle.setAccessibilityLabel(title + "用图标")
+            iconToggles[iconMetric] = toggle
+            views.append(toggle)
+        }
+        let row = NSStackView(views: views)
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 8
-        field.widthAnchor.constraint(equalToConstant: 232).isActive = true
+        field.widthAnchor.constraint(equalToConstant: 210).isActive = true
         return row
     }
 
@@ -129,6 +149,11 @@ final class SettingsMenuBarLabelEditor {
             } else if let metric = MenuBarMetric(rawValue: key) {
                 preferences.setCustomLabel(text, for: metric)
             }
+        }
+        for (metric, toggle) in iconToggles {
+            let wantsIcon = toggle.state == .on
+            guard wantsIcon != preferences.iconMetrics.contains(metric) else { continue }
+            preferences.setIcon(wantsIcon, for: metric)
         }
         onSave()
     }

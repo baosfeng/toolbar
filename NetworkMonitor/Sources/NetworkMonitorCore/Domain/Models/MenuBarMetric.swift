@@ -136,9 +136,8 @@ public enum MenuBarMetric: String, CaseIterable, Sendable {
     /// 17 项各出一枚图标、还要与 ⚠️ / ⏸ 前缀逐片段混排，只能自绘整条状态栏图 —— 属另一件事，
     /// 见设置页「菜单栏标签」行的副标题说明。
     ///
-    /// **当前没有渲染消费者**（菜单栏只渲染文本、逐项自定义弹窗目前也只出文本行）：
-    /// 保留它是为了让「自定义符号」这条需求在模型层已有表达——弹窗行图标与将来自绘状态栏图
-    /// 都能直接取用，删掉再加回来成本反而更高。
+    /// 消费者：MenuBarStatusRenderer（设置页逐项勾选「图标」后，菜单栏整条内容自绘，
+    /// 该项的前缀换成这枚符号、数值保留）。未勾选的项仍走纯文本路径。
     public var symbolName: String? {
         switch self {
         case .upSpeed: return "arrow.up"

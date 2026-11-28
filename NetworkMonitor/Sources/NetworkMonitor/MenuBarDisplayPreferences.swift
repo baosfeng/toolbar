@@ -39,6 +39,7 @@ final class MenuBarDisplayPreferences {
         static let unit = "menuBar.unitStyle"
         static let labelStyle = "menuBar.labelStyle"
         static let customLabels = "menuBar.customLabels"
+        static let iconMetrics = "menuBar.metricIcons"
         static let interval = "menuBar.refreshInterval"
         static let template = "menuBar.template"
         static let alertsEnabled = "menuBar.alertsEnabled"
@@ -169,6 +170,42 @@ final class MenuBarDisplayPreferences {
     func setDiskWriteLabel(_ text: String) {
         setCustomLabel(text, forKey: MenuBarLabelResolver.diskWriteKey)
     }
+
+    // MARK: - 逐项图标
+
+    /// 用图标代替标签前缀的指标集合（偏好键 menuBar.metricIcons，逗号分隔的稳定 id）
+    ///
+    /// 缺键 = 空集 = 全部走文本，升级零外观变化。
+    /// 未知 id 直接丢弃（删掉一个指标后旧键残留不会炸）。
+    var iconMetrics: Set<MenuBarMetric> {
+        get {
+            guard let raw = storage.string(forKey: Key.iconMetrics) else { return [] }
+            let ids = raw.split(separator: ",").map(String.init)
+            return Set(ids.compactMap { MenuBarMetric(rawValue: $0) })
+        }
+        set {
+            if newValue.isEmpty {
+                storage.removeObject(forKey: Key.iconMetrics)
+            } else {
+                let ids = newValue.map { $0.rawValue }.sorted()
+                storage.set(ids.joined(separator: ","), forKey: Key.iconMetrics)
+            }
+        }
+    }
+
+    /// 切换某一项的「用图标」状态
+    func setIcon(_ enabled: Bool, for metric: MenuBarMetric) {
+        var current = iconMetrics
+        if enabled {
+            current.insert(metric)
+        } else {
+            current.remove(metric)
+        }
+        iconMetrics = current
+    }
+
+    /// 是否有任何一项走图标（状态栏渲染据此决定要不要走自绘路径）
+    var hasIconMetrics: Bool { !iconMetrics.isEmpty }
 
     /// 某一项当前的自定义值（空 = 未自定义）
     func customLabel(for metric: MenuBarMetric) -> String {

@@ -47,5 +47,6 @@ func runPaneSuites() {
     runAppearancePreferencesTests()
     runSettingsThemeTests()
     runSettingsRowIconMapTests()  // 设置行图标白名单：符号名逐条可解析、未登记不猜
+    runMenuBarIconLabelTests()  // 菜单栏图标化：只替换前缀、数值保留、前缀对不上不换
     runCLIPageTargetTests()  // nmcli page 的目标解析（错目标必须报错，不许猜一个页面输出假证据）
 }

@@ -256,17 +256,27 @@ final class MenuBarManager: NSObject {
             }
         }
         // 布局偏好：单行 / 两行（card 在菜单栏高度受限时按两行呈现）
-        let body = MenuBarDisplayLogic.statusTitle(
-            parts: parts,
-            layout: MenuBarDisplayLogic.layout(fromRawValue: displayPreferences.layout.rawValue),
-            separator: separator)
+        let layout = MenuBarDisplayLogic.layout(fromRawValue: displayPreferences.layout.rawValue)
         // 暂停态给一个可辨识的前缀（图标改动成本高：状态栏文本是唯一稳定的呈现面）
-        let text = alertPrefix + ClipboardPauseLogic.statusPrefix(isPaused: clipboardCapture?.isPaused ?? false) + body
-        let title = NSAttributedString(string: text)
-        if statusItem.button?.attributedTitle.string != text {
-            statusItem.button?.attributedTitle = title
+        let pausePrefix = ClipboardPauseLogic.statusPrefix(isPaused: clipboardCapture?.isPaused ?? false)
+        // 图标路径优先（实现在 MenuBarIconStatus.swift），接管了就直接收尾
+        if applyIconStatusIfNeeded(enabled: enabled,
+                                   alertPrefix: alertPrefix,
+                                   pausePrefix: pausePrefix,
+                                   separator: separator,
+                                   layout: layout,
+                                   todayTraffic: trafficTracker.todayRx + trafficTracker.todayTx,
+                                   weekTraffic: weekTraffic) {
+            finishUpdateTick()
+            return
         }
+        applyTextStatus(parts: parts, alertPrefix: alertPrefix, pausePrefix: pausePrefix,
+                        layout: layout, separator: separator)
+        finishUpdateTick()
+    }
 
+    /// update() 的收尾（两条渲染路径共用）：采样节拍 / Token 索引 / 面板 tick
+    private func finishUpdateTick() {
         // 采样节拍跟随面板可见性（实现见 MenuBarManager+Sampling.swift）
         let now = Date()
         pollSamplingIfNeeded(now: now)
