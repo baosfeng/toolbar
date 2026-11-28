@@ -75,8 +75,29 @@ final class SettingsCardView: NSView {
 
     /// 卡片底直接 draw：离屏渲染换外观 / 换主题时动态语义色仍正确，圆角与描边也稳定可见
     override func draw(_ dirtyRect: NSRect) {
-        SettingsTheme.drawCardBackground(in: bounds)
+        SettingsTheme.drawCardBackground(in: bounds, hovered: isHovered)
     }
+
+    // MARK: 悬停提亮
+
+    /// 鼠标在卡片上：底色微亮一档，让「这一块是可以操作的」有可见反馈
+    private var isHovered = false {
+        didSet { if isHovered != oldValue { needsDisplay = true } }
+    }
+    private var hoverTracking: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverTracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false }
 
     /// 清空全部行（整卡重建：重排时避免挪单行把自动补的分隔线搞乱；实例增删后同样走这里，
     /// 分隔线随 arrangedSubviews 一起移除）
@@ -122,7 +143,7 @@ final class SettingsRowView: NSView {
     private let titleLabel = MenuPanelLabel.text("", font: SettingsTheme.rowTitleFont,
                                                  color: SettingsTheme.textPrimary)
     private let subtitleLabel = MenuPanelLabel.text("", font: SettingsTheme.rowSubtitleFont,
-                                                    color: SettingsTheme.textSecondary)
+                                                    color: SettingsTheme.textTertiary)
     /// 右侧控件容器（外部往里塞一个视图）
     let trailingStack = NSStackView()
 
@@ -132,6 +153,11 @@ final class SettingsRowView: NSView {
         titleLabel.stringValue = title
         subtitleLabel.stringValue = subtitle ?? ""
         subtitleLabel.isHidden = subtitle == nil
+        // 副标题默认单行截断 + 悬停出全文气泡：设置页 11 页里绝大多数说明只有一句，
+        // 全文铺开正是「密密麻麻全是字」的来源；需要两行的行（权限行）走 subtitleAllowsTwoLines()。
+        subtitleLabel.maximumNumberOfLines = 1
+        subtitleLabel.lineBreakMode = .byTruncatingTail
+        subtitleLabel.toolTip = subtitle
 
         let labels = NSStackView(views: [titleLabel, subtitleLabel])
         labels.orientation = .vertical
@@ -165,6 +191,34 @@ final class SettingsRowView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
+    // MARK: 悬停高亮
+
+    /// 指针在哪一行：整行淡淡提亮 —— 一屏十几行时「我现在看的是哪一项」要靠它
+    private var isRowHovered = false {
+        didSet { if isRowHovered != oldValue { needsDisplay = true } }
+    }
+    private var rowHoverTracking: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let rowHoverTracking { removeTrackingArea(rowHoverTracking) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        rowHoverTracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { isRowHovered = true }
+    override func mouseExited(with event: NSEvent) { isRowHovered = false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard isRowHovered else { return }
+        SettingsTheme.accent.withAlphaComponent(0.035).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: SettingsTheme.cardPaddingX - 4, dy: 1),
+                     xRadius: 5, yRadius: 5).fill()
+    }
+
     /// 允许副标题折成两行（权限行的副标题要装「用途 + 处置办法」两句）
     ///
     /// 行高由内容撑开：默认单行在 760pt 窗口里会被截断成「重启 ...」，
@@ -172,6 +226,7 @@ final class SettingsRowView: NSView {
     func subtitleAllowsTwoLines() {
         subtitleLabel.maximumNumberOfLines = 2
         subtitleLabel.lineBreakMode = .byWordWrapping
+        subtitleLabel.toolTip = nil
     }
 
     /// 覆盖标题与副标题（状态变化时复用同一行）
@@ -179,6 +234,7 @@ final class SettingsRowView: NSView {
         if let title { titleLabel.stringValue = title }
         subtitleLabel.stringValue = subtitle ?? ""
         subtitleLabel.isHidden = subtitle == nil
+        subtitleLabel.toolTip = subtitle
         if let title { setAccessibilityLabel(title) }
     }
 }

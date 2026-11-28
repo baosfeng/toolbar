@@ -26,18 +26,21 @@ public enum SettingsSkeletonMetrics {
     /// 卡片上下内边距
     public static let cardPaddingY: CGFloat = 6
     /// 相邻卡片间距
-    public static let cardSpacing: CGFloat = 10
+    ///
+    /// 10 → 14：卡片之间只隔 10pt 时整页读起来像一张连续的长表，
+    /// 用户口径「密密麻麻全是字」多半来自这里——分组之间有节奏才扫得动。
+    public static let cardSpacing: CGFloat = 14
 
     // MARK: 分组与行
 
-    /// 分组标题上方间距
-    public static let groupSpacingTop: CGFloat = 12
-    /// 分组标题下方间距
-    public static let groupSpacingBottom: CGFloat = 6
-    /// 行最小高
-    public static let rowHeight: CGFloat = 32
-    /// 行上下内边距
-    public static let rowPaddingY: CGFloat = 2
+    /// 分组标题上方间距（12 → 18：分组是页内的视觉分段，段前留白要明显大于段内）
+    public static let groupSpacingTop: CGFloat = 18
+    /// 分组标题下方间距（6 → 8：与上方 18 拉开层次，标题不再贴着卡片）
+    public static let groupSpacingBottom: CGFloat = 8
+    /// 行最小高（32 → 34：12pt 标题 + 11pt 副标题两行在 32 里挤成一坨）
+    public static let rowHeight: CGFloat = 34
+    /// 行上下内边距（2 → 3：配合 rowHeight 34，行与行之间才有一点呼吸）
+    public static let rowPaddingY: CGFloat = 3
 
     // MARK: 安装进度区（关于页）
 
@@ -52,8 +55,8 @@ public enum SettingsSkeletonMetrics {
 
     // MARK: 内容区与侧栏
 
-    /// 内容区左右内边距
-    public static let contentInset: CGFloat = 16
+    /// 内容区左右内边距（16 → 18：卡片不再顶着侧栏与窗口边缘）
+    public static let contentInset: CGFloat = 18
     /// 侧栏宽度
     public static let sidebarWidth: CGFloat = 168
     /// 侧栏导航项高

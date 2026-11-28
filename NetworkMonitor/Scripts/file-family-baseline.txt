@@ -35,7 +35,7 @@ Settings/SettingsProviderRowView 528 2
 Settings/SettingsProvidersPane 456 4
 Settings/SettingsTokenPane 308 2
 Settings/SettingsTransferPane 413 3
-Settings/SettingsWindow 446 2
+Settings/SettingsWindow 455 2
 Snip/SnipController 1305 7
 Snip/SnipOverlayView 1357 7
 Snip/SnipToolBarView 449 3

@@ -242,6 +242,11 @@ final class SettingsSidebarItemView: NSView {
         NSBezierPath(roundedRect: bounds,
                      xRadius: SettingsTheme.sidebarItemRadius,
                      yRadius: SettingsTheme.sidebarItemRadius).fill()
+        // 选中的左侧强调条：扫一眼就知道「现在在哪一页」，不必读文字颜色
+        guard isSelected else { return }
+        SettingsTheme.accent.setFill()
+        let bar = NSRect(x: bounds.minX + 1.5, y: bounds.midY - 7, width: 3, height: 14)
+        NSBezierPath(roundedRect: bar, xRadius: 1.5, yRadius: 1.5).fill()
     }
 
     private func updateAppearance() {

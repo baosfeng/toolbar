@@ -50,17 +50,20 @@ final class SettingsPageStack: NSStackView {
         subtitleLabel.maximumNumberOfLines = 2
         subtitleLabel.lineBreakMode = .byWordWrapping
 
-        // 标题行：标题 + 状态胶囊（贴在标题右侧，不推到最右——胶囊属于标题而不是右侧操作）
-        let titleRow = NSStackView(views: [titleLabel, statusChipView, MenuPanelLabel.spacer()])
+        // 标题行：图标徽章 + 标题 + 状态胶囊（胶囊属于标题而不是右侧操作）
+        // 图标让每页开场就有一个「这是什么功能」的视觉锚点，而不是一整片文字
+        let iconBadge = SettingsPageIconView(symbolName: section.symbolName)
+        let titleRow = NSStackView(views: [iconBadge, titleLabel, statusChipView, MenuPanelLabel.spacer()])
         titleRow.orientation = .horizontal
         titleRow.alignment = .centerY
-        titleRow.spacing = SettingsTheme.statusChipSpacing
+        titleRow.spacing = 9
+        titleRow.setCustomSpacing(SettingsTheme.statusChipSpacing, after: titleLabel)
         titleRow.translatesAutoresizingMaskIntoConstraints = false
 
         let header = NSStackView(views: [titleRow, subtitleLabel])
         header.orientation = .vertical
         header.alignment = .leading
-        header.spacing = 3
+        header.spacing = 4
         header.translatesAutoresizingMaskIntoConstraints = false
 
         addArrangedSubview(contentStack)
@@ -141,6 +144,18 @@ final class SettingsPageStack: NSStackView {
         append(note, gapBefore: gap, kind: .note)
     }
 
+    // MARK: 入场动效
+
+    /// 切页入场：卡片逐张淡入 + 上移，按 MotionKit 的错峰口径排开
+    ///
+    /// 整页一次性淡入体感不够「这是新的一页」；卡片按顺序出现，视线自然从上往下带，
+    /// 一屏十几行也不会糊成一片。系统「减弱动态效果」或省电档时 MotionKit 直接落终态。
+    func animateEntrance() {
+        for (index, view) in contentStack.arrangedSubviews.enumerated() {
+            MotionKit.fadeIn(view, offsetY: 8, delay: MotionKit.stagger(index: index))
+        }
+    }
+
     // MARK: 滚动定位
 
     /// 把内容里的某个视图滚进可视区
@@ -194,7 +209,8 @@ final class SettingsPageStack: NSStackView {
     private func makeGroupHeader(title: String, trailingAccessory: NSView?) -> NSView {
         let label = MenuPanelLabel.text(title, font: SettingsTheme.sectionTitleFont,
                                         color: SettingsTheme.textSecondary)
-        var views: [NSView] = [label]
+        // 段标题前一条强调竖条：整页扫读时先看到「分了段」，再读段名
+        var views: [NSView] = [SettingsGroupMarker(), label]
         if let trailingAccessory {
             views.append(MenuPanelLabel.spacer())
             views.append(trailingAccessory)

@@ -131,8 +131,8 @@ enum SettingsTheme {
     static let cardMetaFont = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .regular)
     /// 行名（12pt）
     static let rowTitleFont = NSFont.systemFont(ofSize: 12, weight: .regular)
-    /// 行副名（11pt）
-    static let rowSubtitleFont = NSFont.systemFont(ofSize: 11, weight: .regular)
+    /// 行副名（10.5pt —— 11 → 10.5：说明是「附注」，不该与 12pt 行名抢注意力）
+    static let rowSubtitleFont = NSFont.systemFont(ofSize: 10.5, weight: .regular)
     /// 行值（11.5pt 等宽）
     ///
     /// 行值字体仍由 trailingStack 里的控件自己定（开关 / 下拉各有一套），
@@ -205,10 +205,13 @@ enum SettingsTheme {
         return value > 0 ? value : 0.55
     }
 
-    /// 卡片描边 alpha（兜底 0.10，理由同上）
+    /// 卡片描边 alpha（兜底 0.16，理由同上）
+    ///
+    /// 0.10 → 0.16：深色主题下卡片底与窗口底只差几个色阶，描边太弱时整页看起来是一张长表，
+    /// 而不是「若干块可操作的卡」。描边是这里唯一不引入新颜色的分层手段。
     static var cardStrokeAlpha: CGFloat {
         let value = CGFloat(ThemeStyle.current.material.strokeAlpha)
-        return value > 0 ? value : 0.10
+        return value > 0 ? max(value, 0.16) : 0.16
     }
 
     // MARK: - 绘制
@@ -218,10 +221,15 @@ enum SettingsTheme {
     /// 与面板 `ThemeStyle.drawCard` 的唯一差别是底色**不乘 `cardFillAlpha`**：
     /// 设置窗口是普通窗口（不套玻璃），卡底必须是主题实色；
     /// 乘了半透明会让窗口底透上来，像素上既不是 cardFill 也不是 surface。
-    static func drawCardBackground(in bounds: NSRect) {
+    /// - Parameter hovered: 鼠标悬停时底色叠一层极淡强调色（卡片是「活的」，不是静态表格）
+    static func drawCardBackground(in bounds: NSRect, hovered: Bool = false) {
         let path = NSBezierPath(roundedRect: bounds, xRadius: cardRadius, yRadius: cardRadius)
         cardFill.setFill()
         path.fill()
+        if hovered {
+            accent.withAlphaComponent(0.04).setFill()
+            path.fill()
+        }
 
         // 顶部 1pt 高光：裁到卡片路径里画，圆角处不会溢出
         if bounds.height > 2, cardHighlightAlpha > 0, let context = NSGraphicsContext.current {

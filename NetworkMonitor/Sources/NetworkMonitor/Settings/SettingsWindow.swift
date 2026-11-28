@@ -1,5 +1,6 @@
 import AppKit
 import NetworkMonitorCore
+import NetworkMonitorDesign
 import NetworkMonitorUI
 
 // MARK: - 统一设置窗口
@@ -147,6 +148,9 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
                                          constant: -SettingsTheme.contentInset),
         ])
         pane.refresh()
+        // 切页过渡：页头与卡片逐张淡入 + 上移（跟随「减弱动态效果」与渲染档，见 MotionKit）。
+        // 不做过渡时整块内容硬切，11 个分类之间切换会显得很「表格」。
+        pane.page.animateEntrance()
     }
 
     // MARK: - 跟随外观 / 渲染档
