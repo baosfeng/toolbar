@@ -53,8 +53,13 @@ public enum ClipboardCardGeometry {
 
     /// 设计基准卡高：面板高度下限时卡片正好是这个尺寸
     public static let baseCardHeight: CGFloat = 198
-    /// 设计基准卡宽（与基准卡高同一个比例：176 × 198）
-    public static let baseCardWidth: CGFloat = 176
+    /// 设计基准卡宽（227 × 198，比例 1.15 —— 对标 Paste 的 243 × 212）
+    ///
+    /// 改造前 176 × 198（0.89）是竖长条：卡身能塞的正文行数少、卡头那行字挤。
+    /// 换成接近 Paste 的横长比例后，同样的卡高能多放两行正文，页脚两行也松得开。
+    public static let baseCardWidth: CGFloat = 227
+    /// 卡片宽度上限：面板拉得很高时不让卡片无限变宽（1472pt 宽的面板仍要一屏 ≥5 张）
+    public static let maxCardWidth: CGFloat = 260
     /// 卡片宽高比（宽 / 高）——只由设计基准给出，面板高度变化时按它等比缩放
     public static var aspectRatio: CGFloat { baseCardWidth / baseCardHeight }
     /// 卡片区在整卡之外的上下留白合计（卡片在卡片区里垂直居中前先扣掉它；上下各 8pt）
@@ -79,7 +84,10 @@ public enum ClipboardCardGeometry {
     /// 只改尺寸、不改行数口径：卡片永远单行横向排列，一屏能放几张由面板宽与卡宽决定。
     public static func cardSize(forCardAreaHeight height: CGFloat) -> CGSize {
         let h = cardHeight(forCardAreaHeight: height).rounded()
-        return CGSize(width: (h * aspectRatio).rounded(), height: h)
+        // 高度始终吃满卡片区（上下只留 cardSlack），宽度按比例给、但不超过上限：
+        // 宽度封顶后不再反推高度，否则面板一高，卡片就缩成「上下各留 30pt」的一块孤岛
+        let w = min((h * aspectRatio).rounded(), maxCardWidth)
+        return CGSize(width: w, height: h)
     }
 
     // MARK: 卡头带

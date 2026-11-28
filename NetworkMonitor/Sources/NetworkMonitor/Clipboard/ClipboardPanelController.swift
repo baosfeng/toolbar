@@ -94,7 +94,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         content.delegate = self; content.autoresizingMask = [.width, .height]
 
         // 面板底（弹窗层的玻璃）：macOS 26+ 且玻璃开启时走 NSGlassEffectView，
-        // 否则回落原 `.hudWindow` 材质路径（视觉不塌）。圆角恒 14pt。
+        // 否则回落原 `.hudWindow` 材质路径（视觉不塌）。圆角按 Paste 的量级取 20pt（原 14 偏方）。
         let background = makePanelBackground()
         content.frame = background.bounds
         background.addSubview(content)
@@ -116,7 +116,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
             glass.frame = frame
             glass.autoresizingMask = [.width, .height]
             glass.wantsLayer = true
-            glass.layer?.cornerRadius = 14
+            glass.layer?.cornerRadius = 20
             glass.layer?.masksToBounds = true
             return glass
         }
@@ -125,7 +125,7 @@ final class ClipboardPanelController: NSObject, NSWindowDelegate, ClipboardPanel
         effect.blendingMode = .behindWindow
         effect.state = .active
         effect.wantsLayer = true
-        effect.layer?.cornerRadius = 14
+        effect.layer?.cornerRadius = 20
         effect.layer?.masksToBounds = true
         effect.autoresizingMask = [.width, .height]
         return effect

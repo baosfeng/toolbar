@@ -99,7 +99,10 @@ public enum SourceAppPalette {
     ///
     /// 未定义行为按回落处理（不抛异常、不返回 nil）：卡片头带是装饰，
     /// 宁可退成中性带底，也不能因为一条脏数据让整张卡画不出来。
-    public static func tint(bundleID: String?, appName: String?, isDark: Bool = false) -> Tint {
+    public static func tint(bundleID: String?,
+                            appName: String?,
+                            kind: ClipboardItemKind? = nil,
+                            isDark: Bool = false) -> Tint {
         let bundle = bundleID?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         let name = appName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         if !bundle.isEmpty,
@@ -110,7 +113,22 @@ public enum SourceAppPalette {
            let hit = sources.first(where: { $0.aliases.contains(name) }) {
             return Tint(color: hit.color, isFallback: false)
         }
+        // 没有来源信息时按条目类型给一档低饱和类型色：一片中性灰的图片卡
+        // 排在一排彩色卡里像「没加载出来」，类型色只做区分、不冒充品牌色（isFallback 仍为 true）
+        if let kind, let typeColor = typeColor(kind, isDark: isDark) {
+            return Tint(color: typeColor, isFallback: true)
+        }
         return Tint(color: fallbackColor(isDark: isDark), isFallback: true)
+    }
+
+    /// 未知来源的类型色（图片 / 文件 / 链接各一档暖冷对比，文本仍用中性灰）
+    public static func typeColor(_ kind: ClipboardItemKind, isDark: Bool) -> SystemPaletteRGB? {
+        switch kind {
+        case .image: return SystemPaletteRGB(hex: isDark ? 0x7C5A3E : 0xE7C6A4)
+        case .file:  return SystemPaletteRGB(hex: isDark ? 0x3E5A7C : 0xC2D6EE)
+        case .text:  return nil
+        case .rtf:   return nil
+        }
     }
 
     // MARK: 对比度

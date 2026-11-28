@@ -9,9 +9,10 @@ import NetworkMonitorUI
 
 /// 底部件数统计文案 — 纯字符串规则，语义与读屏口径各一份
 enum ClipboardPanelFooterText {
-    /// 可见文案「N 条 · 收藏 M」
+    /// 可见文案只留「N 条」：收藏数在卡片星标上本来就看得到，
+    /// 和栈剩余挤在一行会被工具条右端裁成「49 条 ·… 堆叠 1 条」
     static func countsLabel(total: Int, pinned: Int) -> String {
-        "\(total) 条 · 收藏 \(pinned)"
+        "\(total) 条"
     }
 
     /// 读屏文案「共 N 条，其中收藏 M 条」

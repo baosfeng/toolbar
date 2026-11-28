@@ -37,7 +37,8 @@ extension ClipboardCardView {
     func drawHeadBand(item: ClipboardItem, in bounds: CGRect) {
         let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         let tint = SourceAppPalette.tint(bundleID: item.sourceBundleID,
-                                         appName: item.sourceAppName, isDark: isDark)
+                                         appName: item.sourceAppName,
+                                         kind: item.kind, isDark: isDark)
         let rect = ClipboardCardGeometry.headBandRect(in: bounds)
         // 按卡体圆角裁切：头带与卡同宽，只有上两个角跟着卡一起圆
         NSGraphicsContext.saveGraphicsState()

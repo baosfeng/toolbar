@@ -186,7 +186,7 @@ final class ClipboardPanelView: NSView, NSSearchFieldDelegate {
     /// 工具条计数：「N 条 · 收藏 M」＋ 栈剩余；胶囊只留给提示 / 暂停 / 多选 / 权限
     func refreshCountsLabel() {
         var text = ClipboardPanelFooterText.countsLabel(total: totalCount, pinned: pinnedCount)
-        if stackRemaining > 0 { text += " · 堆叠 \(stackRemaining) 条" }
+        if stackRemaining > 0 { text += " · 栈 \(stackRemaining)" }
         countLabel.stringValue = text
         countLabel.setAccessibilityLabel(text)
         needsLayout = true
